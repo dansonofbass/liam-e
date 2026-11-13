@@ -152,6 +152,31 @@
         "title": "AttachmentOut",
         "type": "object"
       },
+      "ChatExtrasOut": {
+        "properties": {
+          "mails": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mails",
+            "type": "array"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "title": "ChatExtrasOut",
+        "type": "object"
+      },
       "ChatMessageOut": {
         "properties": {
           "content": {
@@ -167,17 +192,34 @@
             "title": "Created At",
             "type": "string"
           },
-          "draft_json": {
-            "title": "Draft Json",
-            "type": "string"
+          "extras": {
+            "$ref": "#/components/schemas/ChatExtrasOut"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Proposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposal_status": {
+            "title": "Proposal Status",
+            "type": "string"
+          },
           "role": {
             "title": "Role",
             "type": "string"
+          },
+          "stopped": {
+            "title": "Stopped",
+            "type": "boolean"
           },
           "tool_name": {
             "title": "Tool Name",
@@ -190,8 +232,11 @@
           "role",
           "content",
           "tool_name",
-          "draft_json",
-          "created_at"
+          "created_at",
+          "proposal",
+          "proposal_status",
+          "stopped",
+          "extras"
         ],
         "title": "ChatMessageOut",
         "type": "object"
@@ -488,6 +533,24 @@
         "title": "InsightOut",
         "type": "object"
       },
+      "ItemProblem": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code"
+        ],
+        "title": "ItemProblem",
+        "type": "object"
+      },
       "MailSummaryOut": {
         "properties": {
           "accounts": {
@@ -525,6 +588,24 @@
           "newsletter_senders"
         ],
         "title": "MailSummaryOut",
+        "type": "object"
+      },
+      "ManualStep": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "link"
+        ],
+        "title": "ManualStep",
         "type": "object"
       },
       "MessageActionIn": {
@@ -827,6 +908,272 @@
         "title": "OAuthAuthorizeOut",
         "type": "object"
       },
+      "Proposal": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SendDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "irreversible": {
+            "default": false,
+            "title": "Irreversible",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "send",
+              "archive",
+              "trash",
+              "mark_read",
+              "unsubscribe"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "reason",
+          "items"
+        ],
+        "title": "Proposal",
+        "type": "object"
+      },
+      "ProposalConfirmIn": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "selected_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "selected_ids"
+        ],
+        "title": "ProposalConfirmIn",
+        "type": "object"
+      },
+      "ProposalItem": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "mail",
+              "sender"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_read_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Read At"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "selected": {
+            "default": true,
+            "title": "Selected",
+            "type": "boolean"
+          },
+          "subtitle": {
+            "title": "Subtitle",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unread": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unread"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "subtitle"
+        ],
+        "title": "ProposalItem",
+        "type": "object"
+      },
+      "ProposalResult": {
+        "properties": {
+          "done": {
+            "default": 0,
+            "title": "Done",
+            "type": "integer"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/ItemProblem"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "manual": {
+            "items": {
+              "$ref": "#/components/schemas/ManualStep"
+            },
+            "title": "Manual",
+            "type": "array"
+          },
+          "undo_action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Undo Action Ids",
+            "type": "array"
+          }
+        },
+        "title": "ProposalResult",
+        "type": "object"
+      },
+      "SendDraft": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "cc": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cc",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "new",
+              "reply",
+              "reply_all",
+              "forward"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "reply_to_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply To Message Id"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "To",
+            "type": "array"
+          }
+        },
+        "required": [
+          "account_id",
+          "mode",
+          "to",
+          "cc",
+          "subject",
+          "body",
+          "quote",
+          "reply_to_message_id"
+        ],
+        "title": "SendDraft",
+        "type": "object"
+      },
       "SyncAllOut": {
         "properties": {
           "queued": {
@@ -1048,86 +1395,6 @@
         "summary": "List all chat conversations, newest first"
       }
     },
-    "/api/v1/chat/drafts/{draft_id}": {
-      "delete": {
-        "description": "Discard a pending draft without sending it \u2014 no mail is delivered.\n\n``draft_id`` identifies the draft chat message; it answers 404 when the id is not a draft\nand 409 when the draft was already handled (sent, failed or cancelled). The returned message\ncarries the draft with status ``cancelled``.",
-        "operationId": "chat_draft_cancel",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "draft_id",
-            "required": true,
-            "schema": {
-              "title": "Draft Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatMessageOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Cancel a pending draft"
-      }
-    },
-    "/api/v1/chat/drafts/{draft_id}/confirm": {
-      "post": {
-        "description": "Send the pending draft for real; this is the only path that actually sends a mail.\n\n``draft_id`` identifies the pending draft chat message, which is sent to its recipients via\nthe account that created it. On success the draft is stored with status ``sent`` and the\nprovider's send result; a send failure stores status ``failed`` with a safe error code.\nBlocked hosts answer 422 and other send failures 502. Unknown or already handled\ndrafts answer 404 and 409.",
-        "operationId": "chat_draft_confirm",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "draft_id",
-            "required": true,
-            "schema": {
-              "title": "Draft Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatMessageOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Send the confirmed draft for real"
-      }
-    },
     "/api/v1/chat/history": {
       "get": {
         "description": "Return every message of one conversation in conversation order.\n\n``conversation_id`` selects the conversation; an unknown id answers 404.",
@@ -1170,6 +1437,96 @@
           }
         },
         "summary": "All messages of one conversation, in order"
+      }
+    },
+    "/api/v1/chat/proposals/{proposal_id}/cancel": {
+      "post": {
+        "description": "Verwirft einen offenen Vorschlag, ohne seine Aktionen auszuf\u00fchren.",
+        "operationId": "chat_proposal_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel"
+      }
+    },
+    "/api/v1/chat/proposals/{proposal_id}/confirm": {
+      "post": {
+        "description": "F\u00fchrt die ausgew\u00e4hlten Eintr\u00e4ge eines offenen Vorschlags nach Best\u00e4tigung aus.",
+        "operationId": "chat_proposal_confirm",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalConfirmIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm"
       }
     },
     "/api/v1/mail/accounts": {

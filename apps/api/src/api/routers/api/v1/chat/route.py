@@ -38,5 +38,5 @@ async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return schemas.ChatTurnResponse(
         conversation_id=conversation.id,
-        messages=[schemas.ChatMessageOut.from_model(m) for m in new_messages],
+        messages=[schemas.to_message_out(m) for m in new_messages],
     )

@@ -5,8 +5,8 @@ import { z } from "zod";
 
 import {
   chatConversationsList,
-  chatDraftCancel,
-  chatDraftConfirm,
+  chatProposalCancel,
+  chatProposalConfirm,
   chatHistory,
   chatTurn,
 } from "../api/generated/sdk.gen";
@@ -19,14 +19,6 @@ export const Route = createFileRoute("/chat")({
   validateSearch: (input) => searchSchema.parse(input),
   component: ChatPage,
 });
-
-function draftInfo(message: ChatMessageOut): { status?: string; to?: string[]; subject?: string } | null {
-  try {
-    return JSON.parse(message.draft_json) as { status?: string; to?: string[]; subject?: string };
-  } catch {
-    return null;
-  }
-}
 
 function ChatPage() {
   const { conversation } = Route.useSearch();
@@ -66,13 +58,16 @@ function ChatPage() {
   });
 
   const confirmDraft = useMutation({
-    mutationFn: (draftId: string) => unwrap(chatDraftConfirm({ path: { draft_id: draftId } })),
+    mutationFn: (message: ChatMessageOut) => unwrap(chatProposalConfirm({
+      path: { proposal_id: message.id },
+      body: { selected_ids: message.proposal?.items.filter((item) => item.selected).map((item) => item.id) ?? [], body: null },
+    })),
     onSuccess: invalidateChat,
     onError: (err) => setError(err.message),
   });
 
   const cancelDraft = useMutation({
-    mutationFn: (draftId: string) => unwrap(chatDraftCancel({ path: { draft_id: draftId } })),
+    mutationFn: (proposalId: string) => unwrap(chatProposalCancel({ path: { proposal_id: proposalId } })),
     onSuccess: invalidateChat,
     onError: (err) => setError(err.message),
   });
@@ -115,13 +110,13 @@ function ChatPage() {
           <article key={message.id} className="rounded border px-3 py-2">
             <p className="text-xs text-gray-500">{message.role}</p>
             <p className="whitespace-pre-wrap">{message.content}</p>
-            {message.role === "draft" && draftInfo(message)?.status === "pending" && (
+            {message.proposal_status === "pending" && (
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
                   className="rounded border px-2 py-1 text-sm"
                   disabled={confirmDraft.isPending}
-                  onClick={() => confirmDraft.mutate(message.id)}
+                  onClick={() => confirmDraft.mutate(message)}
                 >
                   Senden bestätigen
                 </button>
@@ -135,8 +130,8 @@ function ChatPage() {
                 </button>
               </div>
             )}
-            {message.role === "draft" && draftInfo(message)?.status !== "pending" && (
-              <p className="mt-1 text-xs">Status: {draftInfo(message)?.status}</p>
+            {message.proposal && message.proposal_status !== "pending" && (
+              <p className="mt-1 text-xs">Status: {message.proposal_status}</p>
             )}
           </article>
         ))}

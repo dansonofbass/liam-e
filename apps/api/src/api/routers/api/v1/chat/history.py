@@ -27,4 +27,4 @@ async def history(
     if conversation is None:
         raise HTTPException(status_code=404, detail="Konversation nicht gefunden.")
     messages = await message_access.list_messages(conversation_id)
-    return [schemas.ChatMessageOut.from_model(m) for m in messages]
+    return [schemas.to_message_out(m) for m in messages]

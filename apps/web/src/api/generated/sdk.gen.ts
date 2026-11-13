@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChatConversationsListData, ChatConversationsListResponses, ChatDraftCancelData, ChatDraftCancelErrors, ChatDraftCancelResponses, ChatDraftConfirmData, ChatDraftConfirmErrors, ChatDraftConfirmResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
+import type { ChatConversationsListData, ChatConversationsListResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -52,30 +52,6 @@ export const chatTurn = <ThrowOnError extends boolean = false>(options: Options<
 export const chatConversationsList = <ThrowOnError extends boolean = false>(options?: Options<ChatConversationsListData, ThrowOnError>): RequestResult<ChatConversationsListResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ChatConversationsListResponses, unknown, ThrowOnError>({ url: '/api/v1/chat/conversations', ...options });
 
 /**
- * Cancel a pending draft
- *
- * Discard a pending draft without sending it — no mail is delivered.
- *
- * ``draft_id`` identifies the draft chat message; it answers 404 when the id is not a draft
- * and 409 when the draft was already handled (sent, failed or cancelled). The returned message
- * carries the draft with status ``cancelled``.
- */
-export const chatDraftCancel = <ThrowOnError extends boolean = false>(options: Options<ChatDraftCancelData, ThrowOnError>): RequestResult<ChatDraftCancelResponses, ChatDraftCancelErrors, ThrowOnError> => (options.client ?? client).delete<ChatDraftCancelResponses, ChatDraftCancelErrors, ThrowOnError>({ url: '/api/v1/chat/drafts/{draft_id}', ...options });
-
-/**
- * Send the confirmed draft for real
- *
- * Send the pending draft for real; this is the only path that actually sends a mail.
- *
- * ``draft_id`` identifies the pending draft chat message, which is sent to its recipients via
- * the account that created it. On success the draft is stored with status ``sent`` and the
- * provider's send result; a send failure stores status ``failed`` with a safe error code.
- * Blocked hosts answer 422 and other send failures 502. Unknown or already handled
- * drafts answer 404 and 409.
- */
-export const chatDraftConfirm = <ThrowOnError extends boolean = false>(options: Options<ChatDraftConfirmData, ThrowOnError>): RequestResult<ChatDraftConfirmResponses, ChatDraftConfirmErrors, ThrowOnError> => (options.client ?? client).post<ChatDraftConfirmResponses, ChatDraftConfirmErrors, ThrowOnError>({ url: '/api/v1/chat/drafts/{draft_id}/confirm', ...options });
-
-/**
  * All messages of one conversation, in order
  *
  * Return every message of one conversation in conversation order.
@@ -83,6 +59,27 @@ export const chatDraftConfirm = <ThrowOnError extends boolean = false>(options: 
  * ``conversation_id`` selects the conversation; an unknown id answers 404.
  */
 export const chatHistory = <ThrowOnError extends boolean = false>(options: Options<ChatHistoryData, ThrowOnError>): RequestResult<ChatHistoryResponses, ChatHistoryErrors, ThrowOnError> => (options.client ?? client).get<ChatHistoryResponses, ChatHistoryErrors, ThrowOnError>({ url: '/api/v1/chat/history', ...options });
+
+/**
+ * Cancel
+ *
+ * Verwirft einen offenen Vorschlag, ohne seine Aktionen auszuführen.
+ */
+export const chatProposalCancel = <ThrowOnError extends boolean = false>(options: Options<ChatProposalCancelData, ThrowOnError>): RequestResult<ChatProposalCancelResponses, ChatProposalCancelErrors, ThrowOnError> => (options.client ?? client).post<ChatProposalCancelResponses, ChatProposalCancelErrors, ThrowOnError>({ url: '/api/v1/chat/proposals/{proposal_id}/cancel', ...options });
+
+/**
+ * Confirm
+ *
+ * Führt die ausgewählten Einträge eines offenen Vorschlags nach Bestätigung aus.
+ */
+export const chatProposalConfirm = <ThrowOnError extends boolean = false>(options: Options<ChatProposalConfirmData, ThrowOnError>): RequestResult<ChatProposalConfirmResponses, ChatProposalConfirmErrors, ThrowOnError> => (options.client ?? client).post<ChatProposalConfirmResponses, ChatProposalConfirmErrors, ThrowOnError>({
+    url: '/api/v1/chat/proposals/{proposal_id}/confirm',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * List all connected mail accounts

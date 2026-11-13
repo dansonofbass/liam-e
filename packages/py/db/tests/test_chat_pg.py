@@ -41,6 +41,20 @@ def test_cancel_open_proposals(pg_db):
     asyncio.run(run())
 
 
+def test_cancel_proposal_only_from_pending(pg_db):
+    async def run():
+        from db.accessors import chat_message as m
+        row = await m.add_message(conversation_id="a", role="proposal", proposal_status="pending")
+        assert (await m.cancel_proposal(row.id)).proposal_status == "cancelled"
+        assert await m.cancel_proposal(row.id) is None
+        assert await m.cancel_proposal("missing") is None
+        for status in ("running", "done", "partial", "failed"):
+            await m.set_proposal(row.id, proposal_json="{}", proposal_status=status)
+            assert await m.cancel_proposal(row.id) is None
+            assert (await m.get_message(row.id)).proposal_status == status
+    asyncio.run(run())
+
+
 def test_conversation_and_message_fields(pg_db):
     async def run():
         from db.accessors import chat_conversation as c, chat_message as m

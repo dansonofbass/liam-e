@@ -48,6 +48,20 @@ async def claim_proposal(message_id: str) -> ChatMessage | None:
         return message
 
 
+async def cancel_proposal(message_id: str) -> ChatMessage | None:
+    """Cancel only a pending proposal; never interrupt an executing confirmation."""
+    async with get_session_maker()() as session:
+        result = await session.execute(
+            update(ChatMessage)
+            .where(ChatMessage.id == message_id, ChatMessage.proposal_status == "pending")
+            .values(proposal_status="cancelled")
+            .returning(ChatMessage)
+        )
+        message = result.scalar_one_or_none()
+        await session.commit()
+        return message
+
+
 async def set_proposal(message_id: str, *, proposal_json: str, proposal_status: str) -> ChatMessage | None:
     async with get_session_maker()() as session:
         result = await session.execute(
