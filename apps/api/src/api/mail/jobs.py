@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable
 from db.accessors import mail_account, mail_job, mail_sync_state
 from env.mail import env as mail_env
 
-from api.mail import sync
+from api.mail import insights, sync
 
 _handlers: dict[str, Callable[[dict[str, Any]], Awaitable[None]]] = {}
 
@@ -26,10 +26,17 @@ async def enqueue_insights(account_id: str) -> bool:
 
 
 async def _sync(payload: dict[str, Any]) -> None:
-    await sync.sync_account(payload["account_id"])
+    result = await sync.sync_account(payload["account_id"])
+    if result.status == "ok" and result.new_message_ids:
+        await enqueue_insights(payload["account_id"])
+
+
+async def _insights(payload: dict[str, Any]) -> None:
+    await insights.fill_missing(limit=mail_env.mail_insight_batch_limit, days=mail_env.mail_insight_days)
 
 
 register_handler("sync", _sync)
+register_handler("insights", _insights)
 
 
 async def run_once(now: datetime | None = None) -> bool:

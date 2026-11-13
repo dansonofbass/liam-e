@@ -313,6 +313,36 @@ export type ImapConnectRequest = {
 };
 
 /**
+ * InsightOut
+ */
+export type InsightOut = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Deadline
+     */
+    deadline: string | null;
+    /**
+     * Followups
+     */
+    followups: Array<string>;
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Needs Reply
+     */
+    needs_reply: boolean;
+    /**
+     * Points
+     */
+    points: Array<string>;
+};
+
+/**
  * MailSummaryOut
  */
 export type MailSummaryOut = {
@@ -1148,6 +1178,36 @@ export type MailMessageActionResponses = {
 };
 
 export type MailMessageActionResponse = MailMessageActionResponses[keyof MailMessageActionResponses];
+
+export type MailMessageInsightData = {
+    body?: never;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/mail/messages/{message_id}/insight';
+};
+
+export type MailMessageInsightErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailMessageInsightError = MailMessageInsightErrors[keyof MailMessageInsightErrors];
+
+export type MailMessageInsightResponses = {
+    /**
+     * Successful Response
+     */
+    200: InsightOut;
+};
+
+export type MailMessageInsightResponse = MailMessageInsightResponses[keyof MailMessageInsightResponses];
 
 export type MailSummaryData = {
     body?: never;

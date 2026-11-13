@@ -14,10 +14,10 @@ from db.models.mail_message import MailMessage
 from fastapi import APIRouter, HTTPException, Query
 
 from api.errors import refuse
-from api.mail import actions
+from api.mail import actions, insights
 from api.mail.headers import sender_name
 from api.mail.state import color_indexes
-from api.routers.api.v1.mail.schemas import MessageActionIn, MessageActionOut, MessageDetailOut, MessageListItemOut, MessagePageOut
+from api.routers.api.v1.mail.schemas import InsightOut, MessageActionIn, MessageActionOut, MessageDetailOut, MessageListItemOut, MessagePageOut
 
 router = APIRouter()
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -94,6 +94,19 @@ async def message_action(message_id: str, body: MessageActionIn) -> MessageActio
     insights = await insight_access.get_for_messages([message.id])
     colors = color_indexes(await account_access.list_accounts())
     return MessageActionOut(action_id=action.id, message=list_item(message, colors, insights.get(message.id)))
+
+
+@router.get("/{message_id}/insight", operation_id="mail_message_insight", summary="Get a concise mail insight")
+async def message_insight(message_id: str) -> InsightOut:
+    """Return the cached insight or generate it for this message."""
+    try:
+        row = await insights.get_or_compute(message_id)
+    except insights.MessageNotFound:
+        raise refuse(404, "message_not_found", "Diese Mail wurde nicht gefunden.") from None
+    except Exception:
+        raise refuse(503, "insight_unavailable", "Das Modell antwortet gerade nicht. Versuch es gleich noch mal.") from None
+    return InsightOut(points=json.loads(row.points_json), deadline=row.deadline, needs_reply=row.needs_reply,
+                      followups=json.loads(row.followups_json), model=row.model, created_at=row.created_at)
 
 
 @router.get("/{message_id}", operation_id="mail_message_get", summary="Read one synced message in full")

@@ -435,6 +435,59 @@
         "title": "ImapConnectRequest",
         "type": "object"
       },
+      "InsightOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "followups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Followups",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "needs_reply": {
+            "title": "Needs Reply",
+            "type": "boolean"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "points",
+          "deadline",
+          "needs_reply",
+          "followups",
+          "model",
+          "created_at"
+        ],
+        "title": "InsightOut",
+        "type": "object"
+      },
       "MailSummaryOut": {
         "properties": {
           "accounts": {
@@ -1715,6 +1768,46 @@
           }
         },
         "summary": "Apply an undoable message action"
+      }
+    },
+    "/api/v1/mail/messages/{message_id}/insight": {
+      "get": {
+        "description": "Return the cached insight or generate it for this message.",
+        "operationId": "mail_message_insight",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsightOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get a concise mail insight"
       }
     },
     "/api/v1/mail/summary": {
