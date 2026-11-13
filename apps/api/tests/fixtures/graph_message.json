@@ -1,0 +1,13 @@
+{
+  "id": "1",
+  "internetMessageId": "<id>",
+  "internetMessageHeaders": [
+    {
+      "name": "List-Unsubscribe",
+      "value": "<https://example.org>"
+    }
+  ],
+  "flag": {
+    "flagStatus": "flagged"
+  }
+}

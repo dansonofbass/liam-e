@@ -8,16 +8,8 @@ in ``mail_sync_state`` so a later run can continue from the provider cursor.
 from __future__ import annotations
 
 import asyncio
-import base64
-import email
 import imaplib
-import json
 import logging
-import re
-from datetime import UTC, datetime
-from email import policy
-from email.message import Message
-from email.utils import getaddresses, parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -28,66 +20,12 @@ from db.models.mail_account import MailAccount
 from env.mail import env as mail_env
 
 from api.mail import connectors, providers, service, transport
+from api.mail.sync_imap import parse_rfc822 as _parse_rfc822
+from api.mail.sync_gmail import parse_message as _parse_gmail
+from api.mail.sync_graph import parse_message as _parse_graph
+from api.mail.sync_connector import parse_message as _parse_connector_message
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_date(value: str) -> datetime | None:
-    try:
-        parsed = parsedate_to_datetime(value)
-    except (TypeError, ValueError):
-        return None
-    if parsed is None:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed
-
-
-def _part_text(part: Message) -> str:
-    """The decoded text of one part, or "" when its charset or payload cannot be decoded."""
-    try:
-        content = part.get_content()
-    except (LookupError, UnicodeError, ValueError):
-        return ""
-    return content if isinstance(content, str) else ""
-
-
-def _text_parts(msg: Message) -> tuple[str, bool]:
-    """Concatenated text/plain parts and whether any attachment part exists."""
-    parts: list[str] = []
-    has_attachments = False
-    for part in msg.walk():
-        if part.get_content_disposition() == "attachment":
-            has_attachments = True
-            continue
-        if part.get_content_type() != "text/plain":
-            continue
-        content = _part_text(part)
-        if content:
-            parts.append(content)
-    return "\n".join(parts), has_attachments
-
-
-def _parse_rfc822(raw: bytes, *, max_body_chars: int) -> dict[str, Any]:
-    msg = email.message_from_bytes(raw, policy=policy.default)
-    body, has_attachments = _text_parts(msg)
-    body = body[:max_body_chars]
-    recipients = [
-        addr
-        for _, addr in getaddresses(msg.get_all("to", []) + msg.get_all("cc", []))
-        if addr
-    ]
-    return {
-        "thread_id": str(msg.get("message-id", "")),
-        "subject": str(msg.get("subject", "")),
-        "sender": str(msg.get("from", "")),
-        "recipients_json": json.dumps(recipients),
-        "snippet": " ".join(body.split())[:500],
-        "body_text": body,
-        "internal_date": _parse_date(str(msg.get("date", ""))),
-        "has_attachments": has_attachments,
-    }
 
 
 def _fetch_imap(
@@ -143,54 +81,6 @@ def _fetch_imap(
     return messages, cursor
 
 
-def _gmail_body(payload: dict[str, Any]) -> str:
-    """The text/plain body of a Gmail payload, decoded from base64url, walking nested parts."""
-    if payload.get("mimeType", "").startswith("text/") and payload.get("body", {}).get(
-        "data"
-    ):
-        return base64.urlsafe_b64decode(payload["body"]["data"]).decode(
-            errors="replace"
-        )
-    for part in payload.get("parts", []):
-        if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
-            return base64.urlsafe_b64decode(part["body"]["data"]).decode(
-                errors="replace"
-            )
-        nested = _gmail_body(part)
-        if nested:
-            return nested
-    return ""
-
-
-def _parse_gmail(message: dict[str, Any], *, max_body_chars: int) -> dict[str, Any]:
-
-    headers = {
-        h["name"].lower(): h["value"]
-        for h in message.get("payload", {}).get("headers", [])
-    }
-    body = _gmail_body(message.get("payload", {}))[:max_body_chars]
-    internal_date = None
-    if message.get("internalDate"):
-        internal_date = datetime.fromtimestamp(
-            int(message["internalDate"]) / 1000, tz=UTC
-        )
-    return {
-        "folder": "INBOX",
-        "provider_uid": message["id"],
-        "thread_id": message.get("threadId", ""),
-        "subject": headers.get("subject", ""),
-        "sender": headers.get("from", ""),
-        "recipients_json": json.dumps([headers.get("to", "")]),
-        "snippet": " ".join((message.get("snippet") or body).split())[:500],
-        "body_text": body,
-        "internal_date": internal_date,
-        "has_attachments": any(
-            p.get("filename") for p in message.get("payload", {}).get("parts", [])
-        ),
-        "labels_json": json.dumps(message.get("labelIds", [])),
-    }
-
-
 async def _sync_gmail(
     token: str, *, folders: list[str], limit: int, max_body_chars: int
 ) -> tuple[list[dict[str, Any]], str]:
@@ -218,44 +108,6 @@ async def _sync_gmail(
     return messages, cursor
 
 
-def _strip_html(html: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
-
-
-def _parse_graph(
-    message: dict[str, Any], *, folder: str, max_body_chars: int
-) -> dict[str, Any]:
-
-    body = message.get("body", {})
-    content = body.get("content", "")
-    text = (
-        _strip_html(content)
-        if body.get("contentType", "").lower() == "html"
-        else content
-    )
-    text = text[:max_body_chars]
-    recipients = [
-        r["emailAddress"]["address"]
-        for r in message.get("toRecipients", []) + message.get("ccRecipients", [])
-    ]
-    received = message.get("receivedDateTime", "")
-    # Python >= 3.11 fromisoformat parses a trailing "Z" itself.
-    internal_date = datetime.fromisoformat(received) if received else None
-    return {
-        "folder": folder,
-        "provider_uid": message["id"],
-        "thread_id": message.get("conversationId", ""),
-        "subject": message.get("subject", ""),
-        "sender": message.get("from", {}).get("emailAddress", {}).get("address", ""),
-        "recipients_json": json.dumps(recipients),
-        "snippet": " ".join(text.split())[:500],
-        "body_text": text,
-        "internal_date": internal_date,
-        "has_attachments": bool(message.get("hasAttachments")),
-        "is_read": bool(message.get("isRead")),
-    }
-
-
 async def _sync_graph(
     token: str, *, folders: list[str], limit: int, max_body_chars: int
 ) -> tuple[list[dict[str, Any]], str]:
@@ -269,7 +121,7 @@ async def _sync_graph(
                 params={
                     "$top": limit,
                     "$orderby": "receivedDateTime desc",
-                    "$select": "id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments,isRead",
+                    "$select": "id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments,isRead,internetMessageId,internetMessageHeaders,flag",
                 },
                 headers=headers,
             )
@@ -277,42 +129,17 @@ async def _sync_graph(
             page = response.json()
             cursor = page.get("@odata.deltaLink", page.get("@odata.nextLink", cursor))
             for item in page.get("value", []):
+                if item.get("hasAttachments"):
+                    attachment_response = await client.get(
+                        f"/me/messages/{item['id']}/attachments",
+                        params={"$select": "name,size,contentType"}, headers=headers,
+                    )
+                    attachment_response.raise_for_status()
+                    item["attachments"] = attachment_response.json().get("value", [])
                 messages.append(
                     _parse_graph(item, folder=folder, max_body_chars=max_body_chars)
                 )
     return messages, cursor
-
-
-def _parse_connector_message(
-    message: dict[str, Any], *, thread_id: str, folder: str, max_body_chars: int
-) -> dict[str, Any]:
-    """Map one message of a connector ``get_thread`` result onto a ``mail_message`` upsert."""
-    body = message.get("plaintextBody") or _strip_html(message.get("htmlBody") or "")
-    body = body[:max_body_chars]
-    labels = message.get("labelIds") or []
-    recipients = list(message.get("toRecipients") or []) + list(
-        message.get("ccRecipients") or []
-    )
-    internal_date = None
-    if message.get("date"):
-        try:
-            internal_date = datetime.fromisoformat(message["date"])
-        except ValueError:
-            internal_date = None
-    return {
-        "folder": folder,
-        "provider_uid": message["id"],
-        "thread_id": thread_id,
-        "subject": message.get("subject", ""),
-        "sender": message.get("sender", ""),
-        "recipients_json": json.dumps(recipients),
-        "snippet": " ".join((message.get("snippet") or body).split())[:500],
-        "body_text": body,
-        "internal_date": internal_date,
-        "has_attachments": bool(message.get("attachmentIds")),
-        "is_read": "UNREAD" not in labels,
-        "labels_json": json.dumps(labels),
-    }
 
 
 async def _sync_connector(
