@@ -172,6 +172,22 @@ async def set_state(message_id: str, *, folder: str | None = None, is_read: bool
         return row
 
 
+async def delete_duplicate(account_id: str, folder: str, provider_uid: str, *, keep_id: str, rfc_message_id: str) -> bool:
+    """Remove only a sync copy of the same identified message, never another mail."""
+    if not rfc_message_id:
+        return False
+    async with get_session_maker()() as session:
+        result = await session.execute(delete(MailMessage).where(
+            MailMessage.account_id == account_id,
+            MailMessage.folder == folder,
+            MailMessage.provider_uid == provider_uid,
+            MailMessage.id != keep_id,
+            MailMessage.rfc_message_id == rfc_message_id,
+        ))
+        await session.commit()
+        return bool(result.rowcount)
+
+
 async def newsletter_senders(*, account_ids: list[str] | None = None) -> list[NewsletterRow]:
     partition = (MailMessage.account_id, MailMessage.sender_address)
     date_key = func.coalesce(MailMessage.internal_date, datetime(1970, 1, 1, tzinfo=UTC))

@@ -37,11 +37,84 @@ def imap(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_imap_restore_keeps_inbox_uid_policy(imap, fake_store):
+    from api.mail import actions
+
+    fake_store.accounts["a"] = account()
+    fake_store.messages["m"] = message()
+    await actions.apply_action("m", "archive")
+    assert fake_store.messages["m"].provider_uid == "12"
+    await actions.apply_action("m", "restore")
+    assert fake_store.messages["m"].provider_uid == "91"
+    assert fake_store.messages["m"].folder == "INBOX"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("failed_command", ["STORE", "MOVE"])
+async def test_imap_revert_retry_uses_source_message_id(imap, failed_command):
+    calls = []
+    failed = False
+    def execute(command, *args):
+        nonlocal failed
+        calls.append(command)
+        if command == failed_command and not failed:
+            failed = True
+            return "NO", []
+        return "OK", [b"91"] if command == "SEARCH" else []
+    imap.uid.side_effect = execute
+    backend = backends.backend_for(account())
+    row = message(folder="ARCHIVE")
+    previous = {"folder": "INBOX", "is_read": False}
+    with pytest.raises(RuntimeError):
+        await backend.revert(row, previous)
+    calls.clear()
+    assert (await backend.revert(row, previous))["provider_uid"] == "91"
+    assert calls == ["SEARCH", "STORE", "MOVE"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("provider", ["microsoft", "google"])
+async def test_http_retry_after_partial_failure(monkeypatch, provider):
+    calls = []
+    failed = False
+    def handle(request):
+        nonlocal failed
+        calls.append((request.method, request.url.path))
+        fail_step = request.method == "PATCH" if provider == "microsoft" else request.url.path.endswith("/modify")
+        if fail_step and not failed:
+            failed = True
+            return httpx.Response(503)
+        return httpx.Response(200, json={"id": "new-id"})
+    client = httpx.AsyncClient
+    monkeypatch.setattr(backends.httpx, "AsyncClient", lambda **kw: client(transport=httpx.MockTransport(handle), **kw))
+    monkeypatch.setattr(backends, "_headers", AsyncMock(return_value={}))
+    backend = backends.backend_for(account(provider, "oauth2"))
+    row = message(folder="TRASH", labels_json='["TRASH"]')
+    previous = {"folder": "INBOX", "is_read": False, "labels_json": "[]"}
+    with pytest.raises(httpx.HTTPStatusError):
+        await backend.revert(row, previous)
+    assert not any(path.endswith("/move") for _, path in calls)
+    calls.clear()
+    await backend.revert(row, previous)
+    if provider == "microsoft":
+        assert calls[0][0] == "PATCH" and calls[0][1].endswith("/12")
+        assert calls[1][1].endswith("/12/move")
+    else:
+        assert [path.rsplit("/", 1)[1] for _, path in calls] == ["untrash", "modify"]
+
+
+@pytest.mark.anyio
+async def test_gmail_trash_has_no_followup_modify(http):
+    await backends.backend_for(account("google", "oauth2")).apply(message(), "trash")
+    assert len(http) == 1 and http[0][1].endswith("/trash")
+
+
+@pytest.mark.anyio
 async def test_imap_backend_prefers_special_use_folder(imap):
     result = await backends.backend_for(account()).apply(message(), "archive")
     imap.list.assert_called_once_with('""', '"*"')
     assert any(call.args == ("MOVE", "12", '"Archiv"') for call in imap.uid.call_args_list)
-    assert result["provider_uid"] == "91"
+    assert result["provider_uid"] == "12"
 
 
 @pytest.mark.anyio
@@ -67,6 +140,15 @@ async def test_imap_restore_searches_inbox_when_copyuid_missing(imap):
     result = await backends.backend_for(account()).apply(message(folder="ARCHIVE"), "restore")
     imap.select.assert_any_call('"INBOX"')
     assert result["provider_uid"] == "91"
+
+
+@pytest.mark.anyio
+async def test_imap_outside_inbox_never_uses_stored_uid(imap):
+    row = message(folder="ARCHIVE")
+    row.rfc_message_id = ""
+    with pytest.raises(ActionUnsupportedError):
+        await backends.backend_for(account()).apply(row, "mark_read")
+    imap.uid.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -139,7 +221,7 @@ async def test_gmail_archive_and_restore_labels(http):
     assert http[-1][2]["removeLabelIds"] == ["INBOX"]
     await backend.apply(message(folder="TRASH", labels_json='["TRASH"]'), "restore")
     assert any(path.endswith("/untrash") for _, path, _ in http)
-    assert http[-1][2]["addLabelIds"] == ["INBOX"]
+    assert http[-1][2]["addLabelIds"] == ["INBOX", "UNREAD"]
 
 
 @pytest.mark.anyio
@@ -152,8 +234,20 @@ async def test_graph_revert_uses_current_id_and_preserves_it_for_read_only_undo(
     assert http[-1][2] == {"isRead": False}
     result = await backend.revert(message(folder="TRASH"), previous)
     assert result["provider_uid"] == "new-id"
-    assert http[-2][2] == {"destinationId": "inbox"}
-    assert http[-1][1].endswith("/new-id")
+    assert http[-2][0] == "PATCH" and http[-2][1].endswith("/12")
+    assert http[-1][2] == {"destinationId": "inbox"}
+
+
+@pytest.mark.anyio
+async def test_connector_retry_repeats_idempotent_labels(monkeypatch):
+    call = AsyncMock(side_effect=["{}", RuntimeError(), "{}", "{}"])
+    monkeypatch.setattr(connectors, "call_write_tool", call)
+    backend = backends.backend_for(account("gmail", connectors.CONNECTOR))
+    row = message(labels_json='["INBOX"]')
+    with pytest.raises(RuntimeError):
+        await backend.apply(row, "trash")
+    await backend.apply(row, "trash")
+    assert call.await_args_list[:2] == call.await_args_list[2:]
 
 
 @pytest.mark.anyio

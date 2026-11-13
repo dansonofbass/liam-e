@@ -25,6 +25,30 @@ def test_account_lookup_ignores_case_and_selects_first_deterministically(pg_db):
     asyncio.run(run())
 
 
+def test_delete_duplicate_only_merges_same_identified_mail(pg_db):
+    async def run():
+        from db.accessors import mail_message as m
+        from sqlalchemy.exc import IntegrityError
+
+        keep = await m.upsert_message(account_id="a", folder="INBOX", provider_uid="old", rfc_message_id="<same>")
+        copy = await m.upsert_message(account_id="a", folder="INBOX", provider_uid="new", rfc_message_id="<same>")
+        with pytest.raises(IntegrityError):
+            await m.set_state(keep.id, provider_uid="new")
+        for account, folder, uid, keep_id, rfc in [
+            ("a", "INBOX", "new", keep.id, ""),
+            ("a", "INBOX", "new", keep.id, "<other>"),
+            ("b", "INBOX", "new", keep.id, "<same>"),
+            ("a", "ARCHIVE", "new", keep.id, "<same>"),
+            ("a", "INBOX", "new", copy.id, "<same>"),
+        ]:
+            assert not await m.delete_duplicate(account, folder, uid, keep_id=keep_id, rfc_message_id=rfc)
+            assert await m.get_message(copy.id) is not None
+        assert await m.delete_duplicate("a", "INBOX", "new", keep_id=keep.id, rfc_message_id="<same>")
+        assert await m.get_message(copy.id) is None
+        assert (await m.set_state(keep.id, provider_uid="new")).provider_uid == "new"
+    asyncio.run(run())
+
+
 def test_list_page_pages_with_cursor_without_gaps(pg_db):
     async def run():
         from db.accessors import mail_message as m

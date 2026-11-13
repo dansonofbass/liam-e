@@ -43,6 +43,59 @@ async def test_archive_updates_index_records_action_and_calls_provider(setup):
     backend.apply.assert_awaited_once()
 
 
+def test_optimistic_write_conflict_returns_502_and_changes_nothing(client, setup):
+    store, backend = setup
+    store.messages["other"] = MailMessage(id="other", account_id="a", folder="ARCHIVE", provider_uid="uid")
+    response = client.post("/api/v1/mail/messages/m/actions", json={"kind": "archive"})
+    assert response.status_code == 502
+    assert store.messages["m"].folder == "INBOX"
+    backend.apply.assert_not_awaited()
+    assert not store.actions
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("undo", [False, True])
+async def test_post_provider_duplicate_from_sync_is_merged(setup, undo):
+    store, backend = setup
+    store.messages["m"].rfc_message_id = "<same>"
+    action = await actions.apply_action("m", "archive") if undo else None
+    folder = "INBOX" if undo else "ARCHIVE"
+    store.messages["copy"] = MailMessage(id="copy", account_id="a", folder=folder, provider_uid="new", rfc_message_id="<same>")
+    if undo:
+        backend.revert.return_value = {"provider_uid": "new"}
+        assert (await actions.undo_actions([action.id], now=datetime.now(UTC))).restored == [action.id]
+    else:
+        backend.apply.return_value = {"provider_uid": "new"}
+        action = await actions.apply_action("m", "archive")
+    assert "copy" not in store.messages
+    assert store.messages["m"].provider_uid == "new"
+    assert action.id in store.actions
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("undo", [False, True])
+async def test_post_provider_conflict_with_other_mail_is_raised(setup, undo, caplog):
+    from sqlalchemy.exc import IntegrityError
+
+    store, backend = setup
+    store.messages["m"].rfc_message_id = "<same>"
+    action = await actions.apply_action("m", "archive") if undo else None
+    store.messages["copy"] = MailMessage(id="copy", account_id="a", folder="INBOX" if undo else "ARCHIVE", provider_uid="new", rfc_message_id="<different>")
+    backend.apply.return_value = backend.revert.return_value = {"provider_uid": "new"}
+    with pytest.raises(IntegrityError):
+        if undo:
+            await actions.undo_actions([action.id], now=datetime.now(UTC))
+        else:
+            await actions.apply_action("m", "archive")
+    assert "copy" in store.messages
+    assert "IntegrityError" in caplog.text
+    assert store.messages["m"].folder == "ARCHIVE"
+    if undo:
+        assert store.actions[action.id].undone_at is not None
+    else:
+        assert not store.actions
+
+
 def test_provider_failure_restores_index_and_returns_502(client, setup, caplog):
     store, backend = setup
     backend.apply.side_effect = RuntimeError("private provider diagnostic")

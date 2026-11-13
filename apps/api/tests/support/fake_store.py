@@ -1,6 +1,7 @@
 """In-memory accessor replacement for mail tests, scoped to each fixture invocation."""
 
 import json
+from sqlalchemy.exc import IntegrityError
 from db.accessors import mail_account, mail_action, mail_credential, mail_sync_state, mail_job, mail_message
 from db.models.mail_action import MailAction
 from db.models.mail_job import MailJob
@@ -21,6 +22,7 @@ class FakeStore:
             monkeypatch.setattr(mail_action, name, getattr(self, "action_" + name))
         monkeypatch.setattr(mail_message, "get_message", self.get_message)
         monkeypatch.setattr(mail_message, "set_state", self.set_message_state)
+        monkeypatch.setattr(mail_message, "delete_duplicate", self.delete_duplicate)
         for name in ("enqueue", "claim_next", "finish", "fail", "latest_for_account", "delete_for_account"):
             monkeypatch.setattr(mail_job, name, getattr(self, "job_" + name))
         monkeypatch.setattr(mail_message, "count_unread", self.count_unread)
@@ -47,11 +49,22 @@ class FakeStore:
     async def set_message_state(self, message_id, **kwargs):
         row = self.messages.get(message_id)
         if row:
+            folder = kwargs.get("folder", row.folder)
+            uid = kwargs.get("provider_uid", row.provider_uid)
+            if any(other.id != row.id and (other.account_id, other.folder, other.provider_uid) == (row.account_id, folder, uid) for other in self.messages.values()):
+                raise IntegrityError("unique", {}, Exception())
             for key, value in kwargs.items():
                 if value is not None:
                     setattr(row, key, value)
             return row.model_copy()
         return None
+
+    async def delete_duplicate(self, account_id, folder, provider_uid, *, keep_id, rfc_message_id):
+        for key, row in list(self.messages.items()):
+            if key != keep_id and rfc_message_id and (row.account_id, row.folder, row.provider_uid, row.rfc_message_id) == (account_id, folder, provider_uid, rfc_message_id):
+                del self.messages[key]
+                return True
+        return False
 
     async def action_record(self, **kwargs):
         row = MailAction(**kwargs)

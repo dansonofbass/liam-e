@@ -54,7 +54,7 @@ class LabelBackend:
         elif kind == "trash":
             desired = sorted((current - {"INBOX"}) | {"TRASH"})
         elif kind == "restore":
-            desired = sorted((current - {"TRASH"}) | {"INBOX"})
+            desired = sorted((current - {"TRASH"}) | {"INBOX"} | (set() if message.is_read else {"UNREAD"}))
         elif kind == "mark_read":
             current.add("UNREAD")
             desired = sorted(current - {"UNREAD"})
@@ -85,6 +85,7 @@ class LabelBackend:
                 if kind == "trash" or ("TRASH" in added):
                     response = await client.post(path + "/trash")
                     response.raise_for_status()
+                    return {"labels_json": json.dumps(sorted(desired))}
                 elif "TRASH" in removed or (kind == "restore" and message.folder == "TRASH"):
                     response = await client.post(path + "/untrash")
                     response.raise_for_status()
@@ -106,6 +107,9 @@ class GraphBackend:
         uid = message.provider_uid
         updates = {}
         async with httpx.AsyncClient(timeout=30, base_url=providers.GRAPH_API, headers=headers) as client:
+            if is_read is not None:
+                response = await client.patch(f"/me/messages/{quote(uid, safe='')}", json={"isRead": is_read})
+                response.raise_for_status()
             if folder is not None and folder != message.folder:
                 destination = {"INBOX": "inbox", "ARCHIVE": "archive", "TRASH": "deleteditems"}.get(folder)
                 if destination is None:
@@ -116,9 +120,6 @@ class GraphBackend:
                 if not isinstance(uid, str) or not uid:
                     raise RuntimeError("Missing Graph message id")
                 updates["provider_uid"] = uid
-            if is_read is not None:
-                response = await client.patch(f"/me/messages/{quote(uid, safe='')}", json={"isRead": is_read})
-                response.raise_for_status()
         return updates
 
     async def apply(self, message: MailMessage, kind: ActionKind) -> dict:
@@ -217,9 +218,12 @@ class ImapBackend:
                 # Undo must be able to locate the message after its folder UID changes.
                 raise ActionUnsupportedError()
             _ok(connection.select(_quoted(source)))
-            uid = _search(connection, message) if message.rfc_message_id and (undo or message.folder != "INBOX") else message.provider_uid
+            uid = _search(connection, message) if undo or message.folder != "INBOX" else message.provider_uid
             if not uid.isdigit():
                 raise ActionUnsupportedError()
+            if is_read is not None:
+                _ok(connection.uid("STORE", uid, "+FLAGS" if is_read else "-FLAGS", "(\\Seen)"))
+            inbox_uid = message.provider_uid
             if moving:
                 _ok(connection.uid("MOVE" if "MOVE" in capabilities else "COPY", uid, _quoted(target)))
                 _, copy_data = connection.response("COPYUID")
@@ -231,16 +235,14 @@ class ImapBackend:
                 if "MOVE" not in capabilities:
                     _ok(connection.uid("STORE", uid, "+FLAGS", "(\\Deleted)"))
                     _ok(connection.uid("EXPUNGE", uid))
-                if copied_uid is not None:
-                    uid = copied_uid
-                elif folder == "INBOX" or is_read is not None:
-                    _ok(connection.select(_quoted(target)))
-                    uid = _search(connection, message)
-                if is_read is not None:
-                    _ok(connection.select(_quoted(target)))
-            if is_read is not None:
-                _ok(connection.uid("STORE", uid, "+FLAGS" if is_read else "-FLAGS", "(\\Seen)"))
-            return {"provider_uid": uid}
+                if folder == "INBOX":
+                    if copied_uid is not None:
+                        inbox_uid = copied_uid
+                    else:
+                        _ok(connection.select(_quoted(target)))
+                        inbox_uid = _search(connection, message)
+            # Outside INBOX the index retains its former INBOX UID, like sync.
+            return {"provider_uid": inbox_uid}
         finally:
             try:
                 connection.logout()
