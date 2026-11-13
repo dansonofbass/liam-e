@@ -1,0 +1,1779 @@
+{
+  "components": {
+    "schemas": {
+      "AccountOut": {
+        "properties": {
+          "auth_type": {
+            "title": "Auth Type",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email_address": {
+            "title": "Email Address",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "auth_type",
+          "email_address",
+          "display_name",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AccountOut",
+        "type": "object"
+      },
+      "AccountSummaryOut": {
+        "properties": {
+          "color_index": {
+            "title": "Color Index",
+            "type": "integer"
+          },
+          "connection": {
+            "enum": [
+              "connector",
+              "oauth",
+              "imap"
+            ],
+            "title": "Connection",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email_address": {
+            "title": "Email Address",
+            "type": "string"
+          },
+          "error_code": {
+            "title": "Error Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "syncing",
+              "auth_expired",
+              "error",
+              "never"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "email_address",
+          "provider",
+          "connection",
+          "color_index",
+          "unread",
+          "state",
+          "error_code",
+          "last_sync_at"
+        ],
+        "title": "AccountSummaryOut",
+        "type": "object"
+      },
+      "AttachmentOut": {
+        "properties": {
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "size",
+          "content_type"
+        ],
+        "title": "AttachmentOut",
+        "type": "object"
+      },
+      "ChatMessageOut": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "draft_json": {
+            "title": "Draft Json",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "role",
+          "content",
+          "tool_name",
+          "draft_json",
+          "created_at"
+        ],
+        "title": "ChatMessageOut",
+        "type": "object"
+      },
+      "ChatTurnRequest": {
+        "properties": {
+          "conversation_id": {
+            "default": "",
+            "description": "Leer lassen f\u00fcr eine neue Konversation",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ChatTurnRequest",
+        "type": "object"
+      },
+      "ChatTurnResponse": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "messages"
+        ],
+        "title": "ChatTurnResponse",
+        "type": "object"
+      },
+      "ConnectorOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "id"
+        ],
+        "title": "ConnectorOut",
+        "type": "object"
+      },
+      "ConnectorToolOut": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "input_schema"
+        ],
+        "title": "ConnectorToolOut",
+        "type": "object"
+      },
+      "ConversationOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationOut",
+        "type": "object"
+      },
+      "DependencyStatus": {
+        "properties": {
+          "configured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configured"
+          },
+          "reachable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reachable"
+          }
+        },
+        "title": "DependencyStatus",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "deployment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment"
+          },
+          "deps": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DependencyStatus"
+            },
+            "title": "Deps",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "degraded"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "deps"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "ImapConnectRequest": {
+        "properties": {
+          "email_address": {
+            "title": "Email Address",
+            "type": "string"
+          },
+          "imap_host": {
+            "default": "",
+            "title": "Imap Host",
+            "type": "string"
+          },
+          "imap_port": {
+            "default": 993,
+            "title": "Imap Port",
+            "type": "integer"
+          },
+          "password": {
+            "default": "",
+            "description": "IMAP app password (e.g. iCloud/Yahoo app-specific password). Exactly one of password / password_secret.",
+            "title": "Password",
+            "type": "string"
+          },
+          "password_secret": {
+            "default": "",
+            "description": "Name of a Mistral workspace secret holding the app password (lowercase, e.g. 'yahoo-app-password') \u2014 one secret per account. Only the reference is stored.",
+            "title": "Password Secret",
+            "type": "string"
+          },
+          "smtp_host": {
+            "default": "",
+            "title": "Smtp Host",
+            "type": "string"
+          },
+          "smtp_port": {
+            "default": 465,
+            "title": "Smtp Port",
+            "type": "integer"
+          },
+          "smtp_starttls": {
+            "default": false,
+            "title": "Smtp Starttls",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email_address"
+        ],
+        "title": "ImapConnectRequest",
+        "type": "object"
+      },
+      "MailSummaryOut": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AccountSummaryOut"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "newsletter_senders": {
+            "title": "Newsletter Senders",
+            "type": "integer"
+          },
+          "unread_total": {
+            "title": "Unread Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread_total",
+          "accounts",
+          "last_sync_at",
+          "newsletter_senders"
+        ],
+        "title": "MailSummaryOut",
+        "type": "object"
+      },
+      "MessageActionIn": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "archive",
+              "trash",
+              "mark_read",
+              "mark_unread",
+              "restore"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "MessageActionIn",
+        "type": "object"
+      },
+      "MessageActionOut": {
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/MessageListItemOut"
+          }
+        },
+        "required": [
+          "action_id",
+          "message"
+        ],
+        "title": "MessageActionOut",
+        "type": "object"
+      },
+      "MessageDetailOut": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentOut"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "body_text": {
+            "title": "Body Text",
+            "type": "string"
+          },
+          "can_unsubscribe": {
+            "title": "Can Unsubscribe",
+            "type": "boolean"
+          },
+          "cc": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cc",
+            "type": "array"
+          },
+          "color_index": {
+            "title": "Color Index",
+            "type": "integer"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "has_attachments": {
+            "title": "Has Attachments",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "internal_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Date"
+          },
+          "is_flagged": {
+            "title": "Is Flagged",
+            "type": "boolean"
+          },
+          "is_read": {
+            "title": "Is Read",
+            "type": "boolean"
+          },
+          "needs_reply": {
+            "title": "Needs Reply",
+            "type": "boolean"
+          },
+          "sender_address": {
+            "title": "Sender Address",
+            "type": "string"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "To",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "color_index",
+          "subject",
+          "sender_name",
+          "sender_address",
+          "snippet",
+          "internal_date",
+          "is_read",
+          "is_flagged",
+          "has_attachments",
+          "deadline",
+          "needs_reply",
+          "to",
+          "cc",
+          "body_text",
+          "attachments",
+          "thread_id",
+          "can_unsubscribe"
+        ],
+        "title": "MessageDetailOut",
+        "type": "object"
+      },
+      "MessageListItemOut": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "color_index": {
+            "title": "Color Index",
+            "type": "integer"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "has_attachments": {
+            "title": "Has Attachments",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "internal_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Date"
+          },
+          "is_flagged": {
+            "title": "Is Flagged",
+            "type": "boolean"
+          },
+          "is_read": {
+            "title": "Is Read",
+            "type": "boolean"
+          },
+          "needs_reply": {
+            "title": "Needs Reply",
+            "type": "boolean"
+          },
+          "sender_address": {
+            "title": "Sender Address",
+            "type": "string"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "color_index",
+          "subject",
+          "sender_name",
+          "sender_address",
+          "snippet",
+          "internal_date",
+          "is_read",
+          "is_flagged",
+          "has_attachments",
+          "deadline",
+          "needs_reply"
+        ],
+        "title": "MessageListItemOut",
+        "type": "object"
+      },
+      "MessagePageOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageListItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "MessagePageOut",
+        "type": "object"
+      },
+      "OAuthAuthorizeOut": {
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url",
+          "state"
+        ],
+        "title": "OAuthAuthorizeOut",
+        "type": "object"
+      },
+      "SyncAllOut": {
+        "properties": {
+          "queued": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Queued",
+            "type": "array"
+          }
+        },
+        "required": [
+          "queued"
+        ],
+        "title": "SyncAllOut",
+        "type": "object"
+      },
+      "SyncAllRequest": {
+        "properties": {
+          "only_if_older_than_minutes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Only If Older Than Minutes"
+          }
+        },
+        "title": "SyncAllRequest",
+        "type": "object"
+      },
+      "UndoIn": {
+        "properties": {
+          "action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Action Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action_ids"
+        ],
+        "title": "UndoIn",
+        "type": "object"
+      },
+      "UndoOut": {
+        "properties": {
+          "expired": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expired",
+            "type": "array"
+          },
+          "failed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "restored": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Restored",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "restored",
+          "expired",
+          "skipped",
+          "failed"
+        ],
+        "title": "UndoOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/health": {
+      "get": {
+        "description": "The app's status and each dependency's: whether Mistral is configured, whether each checked\nservice answers. ``degraded`` when one does not; the response is 200 either way.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Report dependency status; always answers 200"
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "description": "Send one chat message to the mail agent and return the messages it produced.\n\nPass an empty ``conversation_id`` to start a new conversation; the response returns the\nconversation id to continue with. The agent may create a pending draft, but this operation\nnever sends a mail by itself.",
+        "operationId": "chat_turn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatTurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatTurnResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send a message to the mail agent"
+      }
+    },
+    "/api/v1/chat/conversations": {
+      "get": {
+        "description": "List all chat conversations, most recently updated first.",
+        "operationId": "chat_conversations_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationOut"
+                  },
+                  "title": "Response Chat Conversations List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List all chat conversations, newest first"
+      }
+    },
+    "/api/v1/chat/drafts/{draft_id}": {
+      "delete": {
+        "description": "Discard a pending draft without sending it \u2014 no mail is delivered.\n\n``draft_id`` identifies the draft chat message; it answers 404 when the id is not a draft\nand 409 when the draft was already handled (sent, failed or cancelled). The returned message\ncarries the draft with status ``cancelled``.",
+        "operationId": "chat_draft_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel a pending draft"
+      }
+    },
+    "/api/v1/chat/drafts/{draft_id}/confirm": {
+      "post": {
+        "description": "Send the pending draft for real; this is the only path that actually sends a mail.\n\n``draft_id`` identifies the pending draft chat message, which is sent to its recipients via\nthe account that created it. On success the draft is stored with status ``sent`` and the\nprovider's send result; a send failure stores status ``failed`` with a safe error code.\nBlocked hosts answer 422 and other send failures 502. Unknown or already handled\ndrafts answer 404 and 409.",
+        "operationId": "chat_draft_confirm",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send the confirmed draft for real"
+      }
+    },
+    "/api/v1/chat/history": {
+      "get": {
+        "description": "Return every message of one conversation in conversation order.\n\n``conversation_id`` selects the conversation; an unknown id answers 404.",
+        "operationId": "chat_history",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatMessageOut"
+                  },
+                  "title": "Response Chat History",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "All messages of one conversation, in order"
+      }
+    },
+    "/api/v1/mail/accounts": {
+      "get": {
+        "description": "List all connected mail accounts with provider, auth type and e-mail address.\n\nCredentials are never part of the response.",
+        "operationId": "mail_accounts_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccountOut"
+                  },
+                  "title": "Response Mail Accounts List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List all connected mail accounts"
+      }
+    },
+    "/api/v1/mail/accounts/imap": {
+      "post": {
+        "description": "Connect an IMAP/SMTP account with an app password and store its credentials encrypted.\n\nExactly one of ``password`` or ``password_secret`` is required; ``password_secret`` names a\nworkspace secret (for example ``yahoo-app-password``) whose value is resolved now and re-read\nat runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP\nlogin is checked before the account is created; answers 201 with the new account.\nAn address already using another connection type answers 409 without changing credentials.",
+        "operationId": "mail_account_connect_imap",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImapConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect an IMAP/SMTP account"
+      }
+    },
+    "/api/v1/mail/accounts/oauth/{provider}/authorize": {
+      "get": {
+        "description": "Start the OAuth2 flow for ``google`` or ``microsoft`` and return the URL to open in a browser.\n\nThe response carries the ``authorization_url`` plus the signed ``state`` that the provider\nechoes back to the callback; nothing is redirected here. Answers 503 when that provider's\nOAuth client is not configured.",
+        "operationId": "mail_account_oauth_authorize",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "google",
+                "microsoft"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthAuthorizeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start the OAuth2 flow for google or microsoft; open the returned URL in the browser"
+      }
+    },
+    "/api/v1/mail/accounts/oauth/{provider}/callback": {
+      "get": {
+        "description": "OAuth2 redirect target: exchange the authorization code and store the encrypted tokens.\n\nThe signed ``state`` must match ``provider``; the provider's e-mail address decides which\nmail account is created or updated (auth type ``oauth2``) and returned.\nAn address already using another connection type answers 409 without changing credentials.",
+        "operationId": "mail_account_oauth_callback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "google",
+                "microsoft"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "OAuth2 redirect target: exchanges the code and stores the encrypted tokens"
+      }
+    },
+    "/api/v1/mail/accounts/{account_id}": {
+      "delete": {
+        "description": "Delete a mail account together with its credentials, synced messages and sync state.\n\n``account_id`` selects the account; the data cannot be restored. Answers 204 on success and\n404 for an unknown account.",
+        "operationId": "mail_account_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete an account and all its data"
+      }
+    },
+    "/api/v1/mail/accounts/{account_id}/sync": {
+      "post": {
+        "description": "Schedule a sync for an existing account, deduplicating open jobs.",
+        "operationId": "mail_account_sync",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Schedule an account sync"
+      }
+    },
+    "/api/v1/mail/actions/undo": {
+      "post": {
+        "description": "Undo up to 200 actions, newest first, within 24 hours; report individual failures.",
+        "operationId": "mail_actions_undo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UndoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UndoOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo recent mail actions"
+      }
+    },
+    "/api/v1/mail/connectors": {
+      "get": {
+        "description": "List the Mistral Studio connectors of this workspace as ``name``/``id`` pairs.\n\nThese are the connectors that can be registered as a mail account.",
+        "operationId": "mail_connectors_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectorOut"
+                  },
+                  "title": "Response Mail Connectors List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List the workspace's Mistral Studio connectors"
+      }
+    },
+    "/api/v1/mail/connectors/{name}/connect": {
+      "post": {
+        "description": "Register a Studio connector such as ``gmail`` as a mail account and return it.\n\nThe connector keeps the OAuth credentials inside Mistral, so the app stores no secret; the\naccount's e-mail address is derived from a one-message ``search_threads`` call when the\nconnector offers that tool and otherwise stays a placeholder. Answers 201.",
+        "operationId": "mail_account_connect_connector",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect a Studio connector (e.g. gmail) as a mail account"
+      }
+    },
+    "/api/v1/mail/connectors/{name}/tools": {
+      "get": {
+        "description": "List the tools of one Studio connector with name, description and input schema.\n\n``name`` is the connector name; an unknown connector answers 404.",
+        "operationId": "mail_connector_tools_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectorToolOut"
+                  },
+                  "title": "Response Mail Connector Tools List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List a connector's tools"
+      }
+    },
+    "/api/v1/mail/messages": {
+      "get": {
+        "description": "List messages with filters and an opaque cursor for the next page.",
+        "operationId": "mail_messages_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Account Id",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unread",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Unread",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "important",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Important",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attachments",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Attachments",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder",
+            "required": false,
+            "schema": {
+              "default": "INBOX",
+              "enum": [
+                "INBOX",
+                "ARCHIVE",
+                "TRASH"
+              ],
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagePageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List the synced inbox"
+      }
+    },
+    "/api/v1/mail/messages/{message_id}": {
+      "get": {
+        "description": "Return one indexed message or 404 if it does not exist.",
+        "operationId": "mail_message_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read one synced message in full"
+      }
+    },
+    "/api/v1/mail/messages/{message_id}/actions": {
+      "post": {
+        "description": "Update one message at its provider and retain its previous state for 24-hour undo.",
+        "operationId": "mail_message_action",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageActionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageActionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply an undoable message action"
+      }
+    },
+    "/api/v1/mail/summary": {
+      "get": {
+        "description": "Return unread inbox counts and sync status for all connected accounts.",
+        "operationId": "mail_summary",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mail Summary"
+      }
+    },
+    "/api/v1/mail/sync": {
+      "post": {
+        "description": "Queue active accounts, optionally only those last synced before the given age.",
+        "operationId": "mail_sync_all",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncAllRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncAllOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mail Sync All"
+      }
+    }
+  }
+}

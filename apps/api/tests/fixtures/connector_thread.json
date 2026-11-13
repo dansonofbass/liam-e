@@ -1,0 +1,25 @@
+{
+  "id": "18c2f0a9b7d41e55",
+  "messages": [
+    {
+      "id": "18c2f0a9b7d41e55",
+      "date": "2026-11-12T07:15:00+01:00",
+      "sender": "news@gartenmarkt.example",
+      "subject": "Nur heute: 20 % auf Pflanzkübel",
+      "snippet": "Hallo Mira, nur heute gibt es 20 % auf alle Pflanzkübel …",
+      "toRecipients": [
+        "mira.beispiel@example.org"
+      ],
+      "ccRecipients": null,
+      "labelIds": [
+        "CATEGORY_PROMOTIONS",
+        "UNREAD",
+        "INBOX"
+      ],
+      "plaintextBody": "Hallo Mira,\n\nnur heute gibt es 20 % auf alle Pflanzkübel.\n",
+      "htmlBody": "<p>Hallo Mira,</p><p>nur heute gibt es 20 % auf alle Pflanzkübel.</p>",
+      "attachmentIds": null,
+      "attachments": null
+    }
+  ]
+}

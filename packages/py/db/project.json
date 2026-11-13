@@ -31,6 +31,13 @@
         "command": "bash tools/db.sh test-pg-contract",
         "cwd": "{workspaceRoot}"
       }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync pytest packages/py/db/tests -q",
+        "cwd": "{workspaceRoot}"
+      }
     }
   }
 }

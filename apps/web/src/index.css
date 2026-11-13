@@ -1,4 +1,45 @@
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "./styles/tokens.css";
+@import "./styles/ds.css";
 @import "tailwindcss";
+
+@theme inline {
+  --breakpoint-tablet: 40rem;
+  --breakpoint-desktop: 64rem;
+  --breakpoint-wide: 90rem;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-surface-ground: var(--surface-ground);
+  --color-surface: var(--surface);
+  --color-surface-soft: var(--surface-soft);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-control-border: var(--control-border);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-warm: var(--warm);
+  --color-warm-soft: var(--warm-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-on-danger: var(--on-danger);
+  --color-tip-bg: var(--tip-bg);
+  --color-tip-ink: var(--tip-ink);
+  --color-acc-1: var(--acc-1);
+  --color-acc-2: var(--acc-2);
+  --color-acc-3: var(--acc-3);
+  --color-acc-4: var(--acc-4);
+  --color-on-acc: var(--on-acc);
+  --color-focus-ring: var(--focus-ring);
+  --color-scrim: var(--scrim);
+}
 
 @layer base {
   html,

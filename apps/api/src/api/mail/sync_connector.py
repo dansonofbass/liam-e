@@ -1,0 +1,140 @@
+"""Sync Studio inboxes and parse full-content messages without headers.
+
+Cursors are Unix seconds: newest, optionally followed by :gap_after:gap_before
+for an unfinished window. Window boundaries overlap by one second.
+"""
+
+import json
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from db.accessors import mail_message as message_access
+from db.models.mail_account import MailAccount
+
+from api.mail import connectors
+from api.mail.sync_types import SyncChanges, attachments, common, strip_html
+
+
+async def _search(provider: str, query: str) -> list[dict[str, Any]]:
+    threads = []
+    token = ""
+    while True:
+        args: dict[str, Any] = {"query": query, "pageSize": 50}
+        if token:
+            args["pageToken"] = token
+        page = await connectors.call_read_tool_json(provider, "search_threads", args)
+        threads.extend(page.get("threads", []))
+        token = page.get("nextPageToken") or ""
+        if not token:
+            return threads
+
+
+async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int) -> SyncChanges:
+    parts = cursor.split(":")
+    valid = len(parts) in (1, 3) and all(part.isdigit() for part in parts)
+    newest = int(parts[0]) if valid else 0
+    gap = (int(parts[1]), int(parts[2])) if valid and len(parts) == 3 else None
+    changes = SyncChanges(full_rebuild=not valid)
+    known = await message_access.known_uids(account.id, "INBOX")
+    seen = set(known) if valid else set()
+
+    async def scan(query: str, lower: int | None, upper: int | None) -> tuple[bool, int | None, int | None]:
+        token = ""
+        frontier = latest = None
+        for _ in range(10):
+            args: dict[str, Any] = {"query": query, "pageSize": 50}
+            if token:
+                args["pageToken"] = token
+            page = await connectors.call_read_tool_json(account.provider, "search_threads", args)
+            threads = page.get("threads", [])
+            for thread in threads:
+                if len(changes.upserts) >= limit and frontier is not None:
+                    return False, frontier, latest
+                full = await connectors.call_read_tool_json(account.provider, "get_thread", {"threadId": thread.get("id", ""), "messageFormat": "FULL_CONTENT"})
+                thread_id = full.get("id") or thread.get("id", "")
+                thread_latest = None
+                for message in full.get("messages", []):
+                    parsed = parse_message(message, thread_id=thread_id, folder="INBOX", max_body_chars=max_body_chars)
+                    date = parsed["internal_date"]
+                    if date is None:
+                        raise ValueError("Connector message has no valid date")
+                    stamp = int(date.timestamp())
+                    thread_latest = stamp if thread_latest is None else max(thread_latest, stamp)
+                    if (lower is not None and stamp <= lower) or (upper is not None and stamp >= upper):
+                        continue
+                    latest = stamp if latest is None else max(latest, stamp)
+                    labels = message.get("labelIds")
+                    if (labels is None or "INBOX" in labels) and parsed["provider_uid"] not in seen:
+                        changes.upserts.append(parsed)
+                        seen.add(parsed["provider_uid"])
+                if thread_latest is not None:
+                    frontier = min(thread_latest, upper) if upper is not None else thread_latest
+            token = page.get("nextPageToken") or ""
+            if not token:
+                return True, frontier, latest
+        return False, frontier, latest
+
+    old_newest = newest
+    done, frontier, latest = await scan(f"in:inbox after:{newest - 1}" if valid else "in:inbox", newest - 1 if valid else None, None)
+    if latest is not None:
+        newest = max(newest, latest)
+    if valid and not done and frontier is not None:
+        gap = (gap[0] if gap else old_newest, frontier)
+    if gap and gap[1] < gap[0]:
+        gap = None
+    if valid and gap and len(changes.upserts) < limit:
+        done, frontier, _ = await scan(f"in:inbox after:{gap[0] - 1} before:{gap[1] + 1}", gap[0] - 1, gap[1] + 1)
+        if done:
+            gap = None
+        elif frontier is not None:
+            gap = (gap[0], frontier)
+        if gap and gap[1] < gap[0]:
+            gap = None
+    changes.cursor = str(newest) + (f":{gap[0]}:{gap[1]}" if gap else "")
+    if valid:
+        threads = await _search(account.provider, "in:inbox newer_than:14d")
+        present = {thread["id"] for thread in threads}
+        labels_by_uid = {message["id"]: set(message["labelIds"])
+                         for thread in threads for message in (thread.get("messages") or [])
+                         if isinstance(message.get("labelIds"), list)}
+        fallback = {}
+        cutoff = datetime.now(UTC) - timedelta(days=14)
+        for uid, local_id in known.items():
+            message = await message_access.get_message(local_id)
+            if message is None:
+                continue
+            date = message.internal_date
+            if date is not None and (date.replace(tzinfo=UTC) if date.tzinfo is None else date) < cutoff:
+                continue
+            if uid in labels_by_uid:
+                labels = labels_by_uid[uid]
+                if "INBOX" not in labels:
+                    changes.moved_out.append(uid)
+                else:
+                    changes.read_updates[uid] = "UNREAD" not in labels
+            elif message.thread_id not in present:
+                changes.moved_out.append(uid)
+            else:
+                fallback[uid] = message.thread_id
+        if fallback:
+            unread = {thread["id"] for thread in await _search(account.provider, "is:unread in:inbox newer_than:14d")}
+            changes.read_updates.update({uid: thread_id not in unread for uid, thread_id in fallback.items()})
+    return changes
+
+
+def parse_message(message: dict[str, Any], *, thread_id: str, folder: str, max_body_chars: int) -> dict[str, Any]:
+    body = (message.get('plaintextBody') or strip_html(message.get('htmlBody') or ''))[:max_body_chars]
+    labels = message.get('labelIds') or []
+    sender = message.get('sender') or ''
+    try:
+        date = datetime.fromisoformat(message['date']) if message.get('date') else None
+    except ValueError:
+        date = None
+    files = attachments(message.get('attachments') or [])
+    return {**common(sender, {}), 'folder': folder, 'provider_uid': message['id'],
+            'thread_id': thread_id, 'subject': message.get('subject') or '', 'sender': sender,
+            'recipients_json': json.dumps(message.get('toRecipients') or []), 'cc_json': json.dumps(message.get('ccRecipients') or []),
+            'snippet': ' '.join((message.get('snippet') or body).split())[:500], 'body_text': body,
+            'internal_date': date, 'has_attachments': bool(message.get('attachmentIds') or files),
+            'attachments_json': json.dumps(files), 'is_read': 'UNREAD' not in labels,
+            'is_flagged': 'STARRED' in labels, 'labels_json': json.dumps(labels)}

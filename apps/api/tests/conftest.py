@@ -32,3 +32,16 @@ def build_app(
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(build_app())
+
+
+@pytest.fixture
+def fake_store(monkeypatch):
+    from support.fake_store import FakeStore
+
+    return FakeStore(monkeypatch)
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    """Run `@pytest.mark.anyio` tests on asyncio only (the app's event loop)."""
+    return "asyncio"
