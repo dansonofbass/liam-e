@@ -75,19 +75,23 @@ def parse_mailto(link: str | None) -> MailtoTarget | None:
     """Split a ``List-Unsubscribe`` mailto URI into a safe, bounded target.
 
     The recipient is validated, ``subject``/``body`` are sanitized and capped so a
-    hostile header cannot make the user's account send arbitrary text.
+    hostile header cannot make the user's account send arbitrary text. Never raises:
+    malformed URIs (e.g. an invalid IPv6 authority) yield ``None``.
     """
     if not link:
         return None
-    uri = urlsplit(link)
-    if uri.scheme.lower() != 'mailto':
+    try:
+        uri = urlsplit(link)
+        if uri.scheme.lower() != 'mailto':
+            return None
+        recipient = unquote(uri.path)
+        if not recipient or '@' not in recipient or any(c.isspace() or c == ',' for c in recipient):
+            return None
+        query: dict[str, str] = {}
+        for key, value in parse_qsl(uri.query, keep_blank_values=True):
+            query.setdefault(key.lower(), value)
+    except ValueError:
         return None
-    recipient = unquote(uri.path)
-    if not recipient or '@' not in recipient or any(c.isspace() or c == ',' for c in recipient):
-        return None
-    query: dict[str, str] = {}
-    for key, value in parse_qsl(uri.query, keep_blank_values=True):
-        query.setdefault(key.lower(), value)
     return MailtoTarget(recipient, _clean_mailto_text(query.get('subject')), _clean_mailto_text(query.get('body')))
 
 

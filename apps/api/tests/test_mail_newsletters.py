@@ -63,6 +63,10 @@ def test_parse_mailto_rejects_bad_recipient_and_scheme():
     assert newsletters.parse_mailto('https://x.test/u') is None
 
 
+def test_parse_mailto_returns_none_for_malformed_uri():
+    assert newsletters.parse_mailto('mailto://[invalid]/leave@list.example.test') is None
+
+
 def test_mailto_sends_sanitized_values(monkeypatch):
     send = AsyncMock()
     monkeypatch.setattr(newsletters.send, 'send_message', send)
@@ -80,6 +84,20 @@ def test_mailto_invalid_target_sends_nothing(monkeypatch):
     outcome = run(newsletters.unsubscribe(sender('mailto', 'mailto:a@b.test,c@d.test'), SimpleNamespace()))
     assert (outcome.status, outcome.error_code) == ('failed', 'unsubscribe_invalid')
     send.assert_not_called()
+
+
+def test_unsubscribe_malformed_mailto_fails_without_send_or_archive(monkeypatch):
+    send = AsyncMock()
+    monkeypatch.setattr(newsletters.send, 'send_message', send)
+    archive = AsyncMock()
+    monkeypatch.setattr(newsletters.actions, 'apply_action', archive)
+    archive_ids = AsyncMock(return_value=['1'])
+    monkeypatch.setattr(mail_message, 'message_ids_from_sender', archive_ids)
+    outcome = run(newsletters.unsubscribe(sender('mailto', 'mailto://[invalid]/leave@list.example.test'), SimpleNamespace()))
+    assert (outcome.status, outcome.error_code) == ('failed', 'unsubscribe_invalid')
+    send.assert_not_called()
+    archive_ids.assert_not_called()
+    archive.assert_not_called()
 
 
 def test_mailto_sends_through_the_account(monkeypatch):
