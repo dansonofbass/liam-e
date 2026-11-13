@@ -130,12 +130,9 @@ async def _sync_graph(
             cursor = page.get("@odata.deltaLink", page.get("@odata.nextLink", cursor))
             for item in page.get("value", []):
                 if item.get("hasAttachments"):
-                    attachment_response = await client.get(
-                        f"/me/messages/{item['id']}/attachments",
-                        params={"$select": "name,size,contentType"}, headers=headers,
-                    )
-                    attachment_response.raise_for_status()
-                    item["attachments"] = attachment_response.json().get("value", [])
+                    from api.mail.sync_graph import fetch_attachments
+
+                    item["attachments"] = await fetch_attachments(client, item["id"], headers)
                 messages.append(
                     _parse_graph(item, folder=folder, max_body_chars=max_body_chars)
                 )

@@ -6,12 +6,27 @@ from email.utils import parseaddr
 
 
 def sender_address(from_header: str) -> str:
-    return parseaddr(str(make_header(decode_header(from_header))))[1].lower()
+    try:
+        address = parseaddr(from_header)[1]
+        if not address:
+            candidates = re.findall(r"<([^<>\s]+@[^<>\s]+)>", from_header)
+            address = candidates[-1] if candidates else ""
+        return "" if "=?" in address else address.lower()
+    except Exception:
+        return ""
 
 
 def sender_name(from_header: str) -> str:
-    name, address = parseaddr(str(make_header(decode_header(from_header))))
-    return name or address.split('@', 1)[0]
+    try:
+        name = parseaddr(from_header)[0]
+        if not name:
+            return sender_address(from_header).split("@", 1)[0]
+        try:
+            return str(make_header(decode_header(name)))
+        except Exception:
+            return name
+    except Exception:
+        return ""
 
 
 def parse_list_unsubscribe(value: str) -> list[str]:

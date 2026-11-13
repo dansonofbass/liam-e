@@ -4,7 +4,30 @@ import json
 from datetime import datetime
 from typing import Any
 
+import httpx
+
 from api.mail.sync_types import attachments, common, strip_html
+
+
+async def fetch_attachments(
+    client: httpx.AsyncClient, message_id: str, headers: dict[str, str]
+) -> list[dict[str, Any]] | None:
+    url = f"/me/messages/{message_id}/attachments"
+    params: dict[str, str] | None = {"$select": "name,size,contentType"}
+    items: list[dict[str, Any]] = []
+    try:
+        for _ in range(5):
+            response = await client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            page = response.json()
+            items.extend(page.get("value", []))
+            url = page.get("@odata.nextLink")
+            if not url:
+                break
+            params = None
+    except httpx.HTTPError:
+        return None
+    return items
 
 
 def parse_message(message: dict[str, Any], *, folder: str, max_body_chars: int) -> dict[str, Any]:
