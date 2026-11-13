@@ -43,6 +43,52 @@ export type AccountOut = {
 };
 
 /**
+ * AccountSummaryOut
+ */
+export type AccountSummaryOut = {
+    /**
+     * Color Index
+     */
+    color_index: number;
+    /**
+     * Connection
+     */
+    connection: 'connector' | 'oauth' | 'imap';
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email Address
+     */
+    email_address: string;
+    /**
+     * Error Code
+     */
+    error_code: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Last Sync At
+     */
+    last_sync_at: string | null;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * State
+     */
+    state: 'ok' | 'syncing' | 'auth_expired' | 'error' | 'never';
+    /**
+     * Unread
+     */
+    unread: number;
+};
+
+/**
  * ChatMessageOut
  */
 export type ChatMessageOut = {
@@ -249,6 +295,28 @@ export type ImapConnectRequest = {
 };
 
 /**
+ * MailSummaryOut
+ */
+export type MailSummaryOut = {
+    /**
+     * Accounts
+     */
+    accounts: Array<AccountSummaryOut>;
+    /**
+     * Last Sync At
+     */
+    last_sync_at: string | null;
+    /**
+     * Newsletter Senders
+     */
+    newsletter_senders: number;
+    /**
+     * Unread Total
+     */
+    unread_total: number;
+};
+
+/**
  * MessageOut
  */
 export type MessageOut = {
@@ -325,25 +393,23 @@ export type OAuthAuthorizeOut = {
 };
 
 /**
- * SyncOut
+ * SyncAllOut
  */
-export type SyncOut = {
+export type SyncAllOut = {
     /**
-     * Cursor
+     * Queued
      */
-    cursor: string;
+    queued: Array<string>;
+};
+
+/**
+ * SyncAllRequest
+ */
+export type SyncAllRequest = {
     /**
-     * Error Code
+     * Only If Older Than Minutes
      */
-    error_code?: string;
-    /**
-     * Status
-     */
-    status: string;
-    /**
-     * Synced
-     */
-    synced: number;
+    only_if_older_than_minutes?: number | null;
 };
 
 /**
@@ -692,7 +758,7 @@ export type MailAccountSyncResponses = {
     /**
      * Successful Response
      */
-    200: SyncOut;
+    202: AccountSummaryOut;
 };
 
 export type MailAccountSyncResponse = MailAccountSyncResponses[keyof MailAccountSyncResponses];
@@ -848,3 +914,44 @@ export type MailMessageGetResponses = {
 };
 
 export type MailMessageGetResponse = MailMessageGetResponses[keyof MailMessageGetResponses];
+
+export type MailSummaryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/mail/summary';
+};
+
+export type MailSummaryResponses = {
+    /**
+     * Successful Response
+     */
+    200: MailSummaryOut;
+};
+
+export type MailSummaryResponse = MailSummaryResponses[keyof MailSummaryResponses];
+
+export type MailSyncAllData = {
+    body: SyncAllRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/mail/sync';
+};
+
+export type MailSyncAllErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailSyncAllError = MailSyncAllErrors[keyof MailSyncAllErrors];
+
+export type MailSyncAllResponses = {
+    /**
+     * Successful Response
+     */
+    202: SyncAllOut;
+};
+
+export type MailSyncAllResponse = MailSyncAllResponses[keyof MailSyncAllResponses];

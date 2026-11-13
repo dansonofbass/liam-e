@@ -51,6 +51,84 @@
         "title": "AccountOut",
         "type": "object"
       },
+      "AccountSummaryOut": {
+        "properties": {
+          "color_index": {
+            "title": "Color Index",
+            "type": "integer"
+          },
+          "connection": {
+            "enum": [
+              "connector",
+              "oauth",
+              "imap"
+            ],
+            "title": "Connection",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email_address": {
+            "title": "Email Address",
+            "type": "string"
+          },
+          "error_code": {
+            "title": "Error Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "syncing",
+              "auth_expired",
+              "error",
+              "never"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "email_address",
+          "provider",
+          "connection",
+          "color_index",
+          "unread",
+          "state",
+          "error_code",
+          "last_sync_at"
+        ],
+        "title": "AccountSummaryOut",
+        "type": "object"
+      },
       "ChatMessageOut": {
         "properties": {
           "content": {
@@ -334,6 +412,45 @@
         "title": "ImapConnectRequest",
         "type": "object"
       },
+      "MailSummaryOut": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AccountSummaryOut"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "newsletter_senders": {
+            "title": "Newsletter Senders",
+            "type": "integer"
+          },
+          "unread_total": {
+            "title": "Unread Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread_total",
+          "accounts",
+          "last_sync_at",
+          "newsletter_senders"
+        ],
+        "title": "MailSummaryOut",
+        "type": "object"
+      },
       "MessageOut": {
         "properties": {
           "account_id": {
@@ -444,32 +561,38 @@
         "title": "OAuthAuthorizeOut",
         "type": "object"
       },
-      "SyncOut": {
+      "SyncAllOut": {
         "properties": {
-          "cursor": {
-            "title": "Cursor",
-            "type": "string"
-          },
-          "error_code": {
-            "default": "",
-            "title": "Error Code",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "synced": {
-            "title": "Synced",
-            "type": "integer"
+          "queued": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Queued",
+            "type": "array"
           }
         },
         "required": [
-          "status",
-          "synced",
-          "cursor"
+          "queued"
         ],
-        "title": "SyncOut",
+        "title": "SyncAllOut",
+        "type": "object"
+      },
+      "SyncAllRequest": {
+        "properties": {
+          "only_if_older_than_minutes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Only If Older Than Minutes"
+          }
+        },
+        "title": "SyncAllRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -928,7 +1051,7 @@
     },
     "/api/v1/mail/accounts/{account_id}/sync": {
       "post": {
-        "description": "Sync one connected account's mail into the local index and return the result.\n\n``account_id`` selects the account; the response reports the ``status``, the number of\nmessages ``synced`` and the new ``cursor``. Provider failures do not raise \u2014 they return\nstatus ``error`` with ``error_code``.",
+        "description": "Schedule a sync for an existing account, deduplicating open jobs.",
         "operationId": "mail_account_sync",
         "parameters": [
           {
@@ -942,11 +1065,11 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SyncOut"
+                  "$ref": "#/components/schemas/AccountSummaryOut"
                 }
               }
             },
@@ -963,7 +1086,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Sync the account into the local mail index"
+        "summary": "Schedule an account sync"
       }
     },
     "/api/v1/mail/connectors": {
@@ -1180,6 +1303,64 @@
           }
         },
         "summary": "Read one synced message in full"
+      }
+    },
+    "/api/v1/mail/summary": {
+      "get": {
+        "description": "Return unread inbox counts and sync status for all connected accounts.",
+        "operationId": "mail_summary",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mail Summary"
+      }
+    },
+    "/api/v1/mail/sync": {
+      "post": {
+        "description": "Queue active accounts, optionally only those last synced before the given age.",
+        "operationId": "mail_sync_all",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncAllRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncAllOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mail Sync All"
       }
     }
   }

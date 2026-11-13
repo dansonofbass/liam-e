@@ -60,9 +60,14 @@ def _account(account_id: str):
     return cast(MailJob.payload_json, JSONB)["account_id"].astext == account_id
 
 
-async def latest_for_account(account_id: str) -> MailJob | None:
+async def latest_for_account(account_id: str, *, kind: str | None = None, open_only: bool = False) -> MailJob | None:
+    stmt = select(MailJob).where(_account(account_id))
+    if kind is not None:
+        stmt = stmt.where(MailJob.kind == kind)
+    if open_only:
+        stmt = stmt.where(MailJob.status.in_(("queued", "running")))
     async with get_session_maker()() as session:
-        return (await session.execute(select(MailJob).where(_account(account_id)).order_by(MailJob.created_at.desc(), MailJob.id.desc()).limit(1))).scalar_one_or_none()
+        return (await session.execute(stmt.order_by(MailJob.created_at.desc(), MailJob.id.desc()).limit(1))).scalar_one_or_none()
 
 
 async def delete_for_account(account_id: str) -> None:

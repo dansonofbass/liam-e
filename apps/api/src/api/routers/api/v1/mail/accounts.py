@@ -11,6 +11,7 @@ import httpx
 from db.accessors import mail_account as account_access
 from db.accessors import mail_credential as credential_access
 from db.accessors import mail_message as message_access
+from db.accessors import mail_job as job_access
 from db.accessors import mail_sync_state as sync_state_access
 from db.models.mail_account import MailAccount
 from env.mail import env as mail_env
@@ -20,7 +21,9 @@ from pydantic import BaseModel, Field, model_validator
 from api.errors import refuse
 from api.mail import crypto, providers, secrets, transport
 from api.mail.netguard import BlockedAddressError
-from api.mail import sync as sync_service
+from api.mail import jobs
+from api.routers.api.v1.mail.summary import AccountSummaryOut, account_summary
+from api.mail.state import color_indexes
 from api.mail.service import AccountConflictError, check_imap_login, upsert_account
 
 router = APIRouter()
@@ -81,13 +84,6 @@ class ImapConnectRequest(BaseModel):
 class OAuthAuthorizeOut(BaseModel):
     authorization_url: str
     state: str
-
-
-class SyncOut(BaseModel):
-    status: str
-    synced: int
-    cursor: str
-    error_code: str = ""
 
 
 def _redirect_base(request: Request) -> str:
@@ -308,22 +304,21 @@ async def delete_account(account_id: str) -> None:
     await credential_access.delete_for_account(account_id)
     await message_access.delete_for_account(account_id)
     await sync_state_access.delete_for_account(account_id)
+    await job_access.delete_for_account(account_id)
 
 
 @router.post(
     "/{account_id}/sync",
     operation_id="mail_account_sync",
-    summary="Sync the account into the local mail index",
+    status_code=202,
+    summary="Schedule an account sync",
 )
-async def sync_account(account_id: str) -> SyncOut:
-    """Sync one connected account's mail into the local index and return the result.
-
-    ``account_id`` selects the account; the response reports the ``status``, the number of
-    messages ``synced`` and the new ``cursor``. Provider failures do not raise — they return
-    status ``error`` with ``error_code``.
-    """
-    try:
-        result = await sync_service.sync_account(account_id)
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    return SyncOut(status=result.status, synced=result.synced, cursor=result.cursor, error_code=result.error_code)
+async def sync_account(account_id: str) -> AccountSummaryOut:
+    """Schedule a sync for an existing account, deduplicating open jobs."""
+    account = await account_access.get_account(account_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Konto nicht gefunden.")
+    await jobs.enqueue_sync(account_id)
+    accounts = await account_access.list_accounts()
+    unread = await message_access.count_unread(folder="INBOX")
+    return await account_summary(account, color_indexes(accounts), unread)

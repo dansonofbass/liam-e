@@ -1,6 +1,8 @@
 """In-memory accessor replacement for mail tests, scoped to each fixture invocation."""
 
-from db.accessors import mail_account, mail_credential, mail_sync_state
+import json
+from db.accessors import mail_account, mail_credential, mail_sync_state, mail_job, mail_message
+from db.models.mail_job import MailJob
 from db.models.mail_account import MailAccount
 from db.models.mail_sync_state import MailSyncState
 
@@ -10,6 +12,11 @@ class FakeStore:
         self.accounts = {}
         self.credentials = {}
         self.states = {}
+        self.jobs = {}
+        self.unread = {}
+        for name in ("enqueue", "claim_next", "finish", "fail", "latest_for_account", "delete_for_account"):
+            monkeypatch.setattr(mail_job, name, getattr(self, "job_" + name))
+        monkeypatch.setattr(mail_message, "count_unread", self.count_unread)
         for module, names in (
             (mail_account, ("list_accounts", "get_account", "get_account_by_email", "create_account", "touch_account", "delete_account")),
             (mail_credential, ("load_credential", "store_credential")),
@@ -25,6 +32,49 @@ class FakeStore:
             self.states.pop(account_id, None)
         monkeypatch.setattr(mail_credential, "delete_for_account", delete_credentials)
         monkeypatch.setattr(mail_sync_state, "delete_for_account", delete_state)
+
+    async def count_unread(self, *, folder="INBOX"):
+        return self.unread
+
+    async def job_enqueue(self, kind, payload, *, dedupe_key, run_after=None):
+        if any(j.dedupe_key == dedupe_key and j.status in ("queued", "running") for j in self.jobs.values()):
+            return None
+        job = MailJob(kind=kind, payload_json=json.dumps(payload), dedupe_key=dedupe_key)
+        if run_after is not None:
+            job.run_after = run_after
+        self.jobs[job.id] = job
+        return job
+
+    enqueue = job_enqueue
+
+    async def job_claim_next(self, now, *, stale_after):
+        eligible = [j for j in self.jobs.values() if (j.status == "queued" and j.run_after <= now) or (j.status == "running" and j.locked_at and j.locked_at < now - stale_after)]
+        if not eligible:
+            return None
+        job = min(eligible, key=lambda j: (j.run_after, j.id))
+        job.status, job.locked_at, job.attempts = "running", now, job.attempts + 1
+        return job
+
+    async def job_finish(self, job_id):
+        self.jobs[job_id].status = "done"
+        self.jobs[job_id].locked_at = None
+
+    async def job_fail(self, job_id, error_code, *, retry_at):
+        job = self.jobs[job_id]
+        job.status = "queued" if retry_at else "failed"
+        job.last_error = error_code
+        job.locked_at = None
+        if retry_at:
+            job.run_after = retry_at
+
+    async def job_latest_for_account(self, account_id, *, kind=None, open_only=False):
+        rows = [j for j in self.jobs.values() if json.loads(j.payload_json).get("account_id") == account_id and (kind is None or j.kind == kind) and (not open_only or j.status in ("queued", "running"))]
+        return max(rows, key=lambda j: (j.created_at, j.id), default=None)
+
+    async def job_delete_for_account(self, account_id):
+        for job in list(self.jobs.values()):
+            if json.loads(job.payload_json).get("account_id") == account_id:
+                del self.jobs[job.id]
 
     async def list_accounts(self, session=None):
         return list(self.accounts.values())

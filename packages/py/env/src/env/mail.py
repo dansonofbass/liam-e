@@ -32,6 +32,10 @@ class Env(BaseEnv):
 
     # Sync behavior: which folders to index, how many messages per run, and the body cap so one
     # huge mail cannot blow up the index.
+    mail_worker_enabled: bool = True
+    mail_worker_poll_seconds: float = 2.0
+    mail_sync_stale_minutes: int = 10
+    mail_sync_interval_minutes: int = 5
     mail_sync_enabled: bool = True
     mail_sync_folders: str = "INBOX"
     mail_sync_page_size: int = 100
