@@ -330,11 +330,11 @@ async def _sync_connector(
             }
             if page_token:
                 args["pageToken"] = page_token
-            data = await connectors.call_tool_json(
+            data = await connectors.call_read_tool_json(
                 account.provider, "search_threads", args
             )
             for thread in data.get("threads", []):
-                full = await connectors.call_tool_json(
+                full = await connectors.call_read_tool_json(
                     account.provider,
                     "get_thread",
                     {"threadId": thread.get("id", ""), "messageFormat": "FULL_CONTENT"},

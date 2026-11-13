@@ -95,7 +95,7 @@ async def send_message(
     """Send one message from ``account``. Raises on provider errors; the caller maps them to HTTP."""
     if account.auth_type == connectors.CONNECTOR:
         # The connector holds the OAuth credentials inside Mistral; we just call its send tool.
-        result = await connectors.call_tool(
+        result = await connectors.call_write_tool(
             account.provider, "send_email", {"to": to, "subject": subject, "body": body}
         )
         return {

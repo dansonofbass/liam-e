@@ -21,6 +21,10 @@ from db.models.mail_account import MailAccount
 from api.mail import crypto, providers, secrets, transport
 
 
+class AccountConflictError(ValueError):
+    """An address is already registered through another connection type."""
+
+
 class CredentialError(RuntimeError):
     """Raised when an account has no usable stored credential."""
 
@@ -32,7 +36,7 @@ def credential_kind(account: MailAccount) -> str:
 async def upsert_account(
     *, provider: str, auth_type: str, email_address: str
 ) -> MailAccount:
-    """Find the account by email or create it; re-connecting refreshes provider/auth_type."""
+    """Create or reconnect an account without changing its connection identity."""
     account = await account_access.get_account_by_email(email_address)
     if account is None:
         return await account_access.create_account(
@@ -41,8 +45,8 @@ async def upsert_account(
             email_address=email_address,
             display_name=email_address,
         )
-    account.provider = provider
-    account.auth_type = auth_type
+    if account.provider != provider or account.auth_type != auth_type:
+        raise AccountConflictError("Account already uses another connection type")
     account.is_active = True
     return await account_access.touch_account(account)
 

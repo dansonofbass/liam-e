@@ -347,28 +347,6 @@ export type SyncOut = {
 };
 
 /**
- * ToolCallRequest
- */
-export type ToolCallRequest = {
-    /**
-     * Arguments
-     */
-    arguments?: {
-        [key: string]: unknown;
-    };
-};
-
-/**
- * ToolCallResult
- */
-export type ToolCallResult = {
-    /**
-     * Content
-     */
-    content: string;
-};
-
-/**
  * ValidationError
  */
 export type ValidationError = {
@@ -798,40 +776,6 @@ export type MailConnectorToolsListResponses = {
 };
 
 export type MailConnectorToolsListResponse = MailConnectorToolsListResponses[keyof MailConnectorToolsListResponses];
-
-export type MailConnectorCallToolData = {
-    body: ToolCallRequest;
-    path: {
-        /**
-         * Name
-         */
-        name: string;
-        /**
-         * Tool
-         */
-        tool: string;
-    };
-    query?: never;
-    url: '/api/v1/mail/connectors/{name}/tools/{tool}';
-};
-
-export type MailConnectorCallToolErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type MailConnectorCallToolError = MailConnectorCallToolErrors[keyof MailConnectorCallToolErrors];
-
-export type MailConnectorCallToolResponses = {
-    /**
-     * Successful Response
-     */
-    200: ToolCallResult;
-};
-
-export type MailConnectorCallToolResponse = MailConnectorCallToolResponses[keyof MailConnectorCallToolResponses];
 
 export type MailMessagesSearchData = {
     body?: never;

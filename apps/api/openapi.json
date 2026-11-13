@@ -472,31 +472,6 @@
         "title": "SyncOut",
         "type": "object"
       },
-      "ToolCallRequest": {
-        "properties": {
-          "arguments": {
-            "additionalProperties": true,
-            "default": {},
-            "title": "Arguments",
-            "type": "object"
-          }
-        },
-        "title": "ToolCallRequest",
-        "type": "object"
-      },
-      "ToolCallResult": {
-        "properties": {
-          "content": {
-            "title": "Content",
-            "type": "string"
-          }
-        },
-        "required": [
-          "content"
-        ],
-        "title": "ToolCallResult",
-        "type": "object"
-      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -668,7 +643,7 @@
     },
     "/api/v1/chat/drafts/{draft_id}/confirm": {
       "post": {
-        "description": "Send the pending draft for real; this is the only path that actually sends a mail.\n\n``draft_id`` identifies the pending draft chat message, which is sent to its recipients via\nthe account that created it. On success the draft is stored with status ``sent`` and the\nprovider's send result; a send failure stores status ``failed`` with the error and answers\n502. Unknown or already handled drafts answer 404 and 409.",
+        "description": "Send the pending draft for real; this is the only path that actually sends a mail.\n\n``draft_id`` identifies the pending draft chat message, which is sent to its recipients via\nthe account that created it. On success the draft is stored with status ``sent`` and the\nprovider's send result; a send failure stores status ``failed`` with a safe error code.\nBlocked hosts answer 422 and other send failures 502. Unknown or already handled\ndrafts answer 404 and 409.",
         "operationId": "chat_draft_confirm",
         "parameters": [
           {
@@ -1096,65 +1071,6 @@
           }
         },
         "summary": "List a connector's tools"
-      }
-    },
-    "/api/v1/mail/connectors/{name}/tools/{tool}": {
-      "post": {
-        "description": "Call one tool of a Studio connector and return its text output.\n\n``name`` is the connector and ``tool`` the tool name, while ``body.arguments`` is passed to\nthe tool as its input. Unknown connectors answer 404 and other connector failures 502.",
-        "operationId": "mail_connector_call_tool",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "title": "Name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "tool",
-            "required": true,
-            "schema": {
-              "title": "Tool",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ToolCallRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ToolCallResult"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Call any tool of a Studio connector (e.g. gmail search_threads)"
       }
     },
     "/api/v1/mail/messages": {

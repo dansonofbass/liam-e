@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChatConversationsListData, ChatConversationsListResponses, ChatDraftCancelData, ChatDraftCancelErrors, ChatDraftCancelResponses, ChatDraftConfirmData, ChatDraftConfirmErrors, ChatDraftConfirmResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailConnectorCallToolData, MailConnectorCallToolErrors, MailConnectorCallToolResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessagesSearchData, MailMessagesSearchErrors, MailMessagesSearchResponses } from './types.gen';
+import type { ChatConversationsListData, ChatConversationsListResponses, ChatDraftCancelData, ChatDraftCancelErrors, ChatDraftCancelResponses, ChatDraftConfirmData, ChatDraftConfirmErrors, ChatDraftConfirmResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessagesSearchData, MailMessagesSearchErrors, MailMessagesSearchResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -69,8 +69,9 @@ export const chatDraftCancel = <ThrowOnError extends boolean = false>(options: O
  *
  * ``draft_id`` identifies the pending draft chat message, which is sent to its recipients via
  * the account that created it. On success the draft is stored with status ``sent`` and the
- * provider's send result; a send failure stores status ``failed`` with the error and answers
- * 502. Unknown or already handled drafts answer 404 and 409.
+ * provider's send result; a send failure stores status ``failed`` with a safe error code.
+ * Blocked hosts answer 422 and other send failures 502. Unknown or already handled
+ * drafts answer 404 and 409.
  */
 export const chatDraftConfirm = <ThrowOnError extends boolean = false>(options: Options<ChatDraftConfirmData, ThrowOnError>): RequestResult<ChatDraftConfirmResponses, ChatDraftConfirmErrors, ThrowOnError> => (options.client ?? client).post<ChatDraftConfirmResponses, ChatDraftConfirmErrors, ThrowOnError>({ url: '/api/v1/chat/drafts/{draft_id}/confirm', ...options });
 
@@ -181,23 +182,6 @@ export const mailAccountConnectConnector = <ThrowOnError extends boolean = false
  * ``name`` is the connector name; an unknown connector answers 404.
  */
 export const mailConnectorToolsList = <ThrowOnError extends boolean = false>(options: Options<MailConnectorToolsListData, ThrowOnError>): RequestResult<MailConnectorToolsListResponses, MailConnectorToolsListErrors, ThrowOnError> => (options.client ?? client).get<MailConnectorToolsListResponses, MailConnectorToolsListErrors, ThrowOnError>({ url: '/api/v1/mail/connectors/{name}/tools', ...options });
-
-/**
- * Call any tool of a Studio connector (e.g. gmail search_threads)
- *
- * Call one tool of a Studio connector and return its text output.
- *
- * ``name`` is the connector and ``tool`` the tool name, while ``body.arguments`` is passed to
- * the tool as its input. Unknown connectors answer 404 and other connector failures 502.
- */
-export const mailConnectorCallTool = <ThrowOnError extends boolean = false>(options: Options<MailConnectorCallToolData, ThrowOnError>): RequestResult<MailConnectorCallToolResponses, MailConnectorCallToolErrors, ThrowOnError> => (options.client ?? client).post<MailConnectorCallToolResponses, MailConnectorCallToolErrors, ThrowOnError>({
-    url: '/api/v1/mail/connectors/{name}/tools/{tool}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
 
 /**
  * Search the synced mail index across all accounts

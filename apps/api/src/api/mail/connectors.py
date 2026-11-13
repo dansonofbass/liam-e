@@ -76,7 +76,15 @@ async def list_tools(connector: str) -> list[dict[str, Any]]:
     ]
 
 
-async def call_tool(connector: str, tool: str, arguments: dict[str, Any]) -> str:
+READ_TOOLS = frozenset({"search_threads", "get_thread", "list_labels", "list_drafts"})
+WRITE_TOOLS = frozenset({"send_email", "label_message", "unlabel_message"})
+
+
+class ToolNotAllowedError(ValueError):
+    """Raised before dispatch when a tool is outside the requested capability."""
+
+
+async def _call_tool(connector: str, tool: str, arguments: dict[str, Any]) -> str:
     """Call one connector tool; returns the joined text content of the MCP-style result."""
     ref = quote(connector, safe="")
     data = await _post(
@@ -88,6 +96,20 @@ async def call_tool(connector: str, tool: str, arguments: dict[str, Any]) -> str
     )
 
 
-async def call_tool_json(connector: str, tool: str, arguments: dict[str, Any]) -> Any:
-    """Call one connector tool whose text result is JSON, and parse it."""
-    return json.loads(await call_tool(connector, tool, arguments))
+async def call_read_tool(connector: str, tool: str, arguments: dict[str, Any]) -> str:
+    """Call an explicitly allowed read-only tool."""
+    if tool not in READ_TOOLS:
+        raise ToolNotAllowedError("Tool is not a permitted read tool")
+    return await _call_tool(connector, tool, arguments)
+
+
+async def call_read_tool_json(connector: str, tool: str, arguments: dict[str, Any]) -> Any:
+    """Call an allowed read tool and parse its JSON text result."""
+    return json.loads(await call_read_tool(connector, tool, arguments))
+
+
+async def call_write_tool(connector: str, tool: str, arguments: dict[str, Any]) -> str:
+    """Call an allowed mutation; reserved for send and confirmed mail actions."""
+    if tool not in WRITE_TOOLS:
+        raise ToolNotAllowedError("Tool is not a permitted write tool")
+    return await _call_tool(connector, tool, arguments)

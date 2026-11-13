@@ -3,10 +3,12 @@
 Providers that exist as Studio connectors (gmail, outlook, ...) are connected through them — the
 connector holds the OAuth credentials inside Mistral, so the app needs no OAuth client of its own
 for them. ``POST /{name}/connect`` registers the connector as a mail account
-(``auth_type="mistral_connector"``); ``POST /{name}/tools/{tool}`` calls any connector tool.
+(``auth_type="mistral_connector"``). Tool execution is not exposed as a route.
 """
 
 import logging
+from datetime import datetime, timezone
+from email.utils import parseaddr
 from typing import Any
 
 import httpx
@@ -15,7 +17,8 @@ from pydantic import BaseModel
 
 from api.mail import connectors as connector_service
 from api.mail.connectors import CONNECTOR
-from api.mail.service import upsert_account
+from api.errors import refuse
+from api.mail.service import AccountConflictError, upsert_account
 from api.routers.api.v1.mail.accounts import AccountOut
 
 logger = logging.getLogger(__name__)
@@ -34,14 +37,6 @@ class ConnectorToolOut(BaseModel):
     input_schema: dict[str, Any]
 
 
-class ToolCallRequest(BaseModel):
-    arguments: dict[str, Any] = {}
-
-
-class ToolCallResult(BaseModel):
-    content: str
-
-
 def _http_error(error: Exception) -> HTTPException:
     response = getattr(error, "response", None)
     status = (
@@ -49,17 +44,11 @@ def _http_error(error: Exception) -> HTTPException:
         or getattr(error, "status_code", None)
         or 502
     )
-    detail = str(error)
     if status == 404:
-        return HTTPException(
-            status_code=404, detail=f"Connector nicht gefunden: {detail}"
-        )
+        return refuse(404, "connector_not_found", "Connector nicht gefunden.")
     if status == 401:
-        return HTTPException(
-            status_code=502,
-            detail="Der Connector hat keine Credentials für diese App — bitte in Mistral Studio authentifizieren (Connector → Auth).",
-        )
-    return HTTPException(status_code=502, detail=f"Connector-Fehler: {detail}")
+        return refuse(502, "connector_auth_required", "Authentifiziere den Connector in Mistral Studio unter Connector → Auth.")
+    return refuse(502, "connector_failed", "Der Connector antwortet nicht. Versuch es später noch mal.")
 
 
 @router.get(
@@ -113,42 +102,34 @@ async def connect_connector(name: str) -> AccountOut:
         tools = await connector_service.list_tools(name)
     except httpx.HTTPStatusError as error:
         raise _http_error(error) from error
-    # The account's email is cosmetic: derive it from a one-message search when possible.
+    # Only sent mail identifies the connected sender; inbox recipients are not identity.
     email_address = f"{name}@connector.mistral"
     if any(tool["name"] == "search_threads" for tool in tools):
         try:
-            data = await connector_service.call_tool_json(
-                name, "search_threads", {"pageSize": 1}
+            data = await connector_service.call_read_tool_json(
+                name, "search_threads", {"query": "in:sent", "pageSize": 1}
             )
-            for thread in data.get("threads", []):
-                for message in thread.get("messages", []):
-                    recipients = message.get("toRecipients") or []
-                    if recipients:
-                        email_address = recipients[0]
-                        break
+            messages = [message for thread in data.get("threads", []) for message in thread.get("messages", [])]
+            if messages:
+                def sent_at(message: dict[str, Any]) -> datetime:
+                    try:
+                        date = datetime.fromisoformat(message.get("date") or "")
+                        return date if date.tzinfo else date.replace(tzinfo=timezone.utc)
+                    except (TypeError, ValueError):
+                        return datetime.min.replace(tzinfo=timezone.utc)
+
+                latest = max(messages, key=sent_at)
+                _, address = parseaddr(latest.get("sender") or "")
+                if address.count("@") == 1 and all(address.split("@")) and not any(c.isspace() for c in address):
+                    email_address = address.lower()
         except Exception:
             logger.debug(
                 "Could not derive the account email from %s", name, exc_info=True
             )
-    account = await upsert_account(
-        provider=name, auth_type=CONNECTOR, email_address=email_address
-    )
-    return AccountOut.from_model(account)
-
-
-@router.post(
-    "/{name}/tools/{tool}",
-    operation_id="mail_connector_call_tool",
-    summary="Call any tool of a Studio connector (e.g. gmail search_threads)",
-)
-async def call_tool(name: str, tool: str, body: ToolCallRequest) -> ToolCallResult:
-    """Call one tool of a Studio connector and return its text output.
-
-    ``name`` is the connector and ``tool`` the tool name, while ``body.arguments`` is passed to
-    the tool as its input. Unknown connectors answer 404 and other connector failures 502.
-    """
     try:
-        content = await connector_service.call_tool(name, tool, body.arguments)
-    except httpx.HTTPStatusError as error:
-        raise _http_error(error) from error
-    return ToolCallResult(content=content)
+        account = await upsert_account(
+            provider=name, auth_type=CONNECTOR, email_address=email_address
+        )
+    except AccountConflictError as error:
+        raise refuse(409, "account_exists", "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.") from error
+    return AccountOut.from_model(account)
