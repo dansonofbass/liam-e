@@ -21,7 +21,7 @@ from api.errors import refuse
 from api.mail import crypto, providers, secrets, transport
 from api.mail.netguard import BlockedAddressError
 from api.mail import sync as sync_service
-from api.mail.service import check_imap_login, upsert_account
+from api.mail.service import AccountConflictError, check_imap_login, upsert_account
 
 router = APIRouter()
 
@@ -121,6 +121,7 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
     workspace secret (for example ``yahoo-app-password``) whose value is resolved now and re-read
     at runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP
     login is checked before the account is created; answers 201 with the new account.
+    An address already using another connection type answers 409 without changing credentials.
     """
     preset = providers.guess_imap_settings(body.email_address)
     imap_host = body.imap_host or (preset[0] if preset else "")
@@ -170,11 +171,17 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
             502, "login_failed",
             "Die Anmeldung beim Mailserver hat nicht geklappt. Prüfe deine Serveradresse und das App-Passwort und verbinde das Konto noch einmal.",
         ) from error
-    account = await upsert_account(
-        provider=providers.IMAP,
-        auth_type="imap_password",
-        email_address=body.email_address,
-    )
+    try:
+        account = await upsert_account(
+            provider=providers.IMAP,
+            auth_type="imap_password",
+            email_address=body.email_address,
+        )
+    except AccountConflictError as error:
+        raise refuse(
+            409, "account_exists",
+            "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.",
+        ) from error
     payload: dict[str, Any] = {
         "imap_host": imap_host,
         "imap_port": imap_port,
@@ -239,6 +246,7 @@ async def oauth_callback(
 
     The signed ``state`` must match ``provider``; the provider's e-mail address decides which
     mail account is created or updated (auth type ``oauth2``) and returned.
+    An address already using another connection type answers 409 without changing credentials.
     """
     try:
         payload = providers.verify_state(state)
@@ -265,9 +273,15 @@ async def oauth_callback(
         raise HTTPException(
             status_code=502, detail="Der Provider hat keine E-Mail-Adresse geliefert."
         )
-    account = await upsert_account(
-        provider=provider, auth_type="oauth2", email_address=email_address
-    )
+    try:
+        account = await upsert_account(
+            provider=provider, auth_type="oauth2", email_address=email_address
+        )
+    except AccountConflictError as error:
+        raise refuse(
+            409, "account_exists",
+            "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.",
+        ) from error
     await credential_access.store_credential(
         account_id=account.id,
         kind="oauth2_tokens",

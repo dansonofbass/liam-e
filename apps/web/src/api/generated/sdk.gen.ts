@@ -102,6 +102,7 @@ export const mailAccountsList = <ThrowOnError extends boolean = false>(options?:
  * workspace secret (for example ``yahoo-app-password``) whose value is resolved now and re-read
  * at runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP
  * login is checked before the account is created; answers 201 with the new account.
+ * An address already using another connection type answers 409 without changing credentials.
  */
 export const mailAccountConnectImap = <ThrowOnError extends boolean = false>(options: Options<MailAccountConnectImapData, ThrowOnError>): RequestResult<MailAccountConnectImapResponses, MailAccountConnectImapErrors, ThrowOnError> => (options.client ?? client).post<MailAccountConnectImapResponses, MailAccountConnectImapErrors, ThrowOnError>({
     url: '/api/v1/mail/accounts/imap',
@@ -130,6 +131,7 @@ export const mailAccountOauthAuthorize = <ThrowOnError extends boolean = false>(
  *
  * The signed ``state`` must match ``provider``; the provider's e-mail address decides which
  * mail account is created or updated (auth type ``oauth2``) and returned.
+ * An address already using another connection type answers 409 without changing credentials.
  */
 export const mailAccountOauthCallback = <ThrowOnError extends boolean = false>(options: Options<MailAccountOauthCallbackData, ThrowOnError>): RequestResult<MailAccountOauthCallbackResponses, MailAccountOauthCallbackErrors, ThrowOnError> => (options.client ?? client).get<MailAccountOauthCallbackResponses, MailAccountOauthCallbackErrors, ThrowOnError>({ url: '/api/v1/mail/accounts/oauth/{provider}/callback', ...options });
 

@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.mail import connectors, service
+from api.routers.api.v1.mail import accounts
 from api.routers.api.v1.mail import connectors as routes
 
 
@@ -60,3 +61,52 @@ async def test_upsert_refuses_to_switch_connection_of_existing_account(setup, mo
     with pytest.raises(service.AccountConflictError):
         await service.upsert_account(provider="imap", auth_type="oauth2", email_address=account.email_address)
     assert await service.upsert_account(provider="imap", auth_type="imap_password", email_address=account.email_address) is account
+
+
+@pytest.fixture
+def account_client():
+    app = FastAPI()
+    app.include_router(accounts.router, prefix="/accounts")
+    return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.mark.anyio
+async def test_imap_connect_refuses_address_of_connector_account(account_client, fake_store, monkeypatch):
+    account = await fake_store.create_account(provider="gmail", auth_type=connectors.CONNECTOR, email_address="max@example.org")
+    before = account.model_dump()
+    monkeypatch.setattr(accounts.transport, "check_mail_host", AsyncMock())
+    monkeypatch.setattr(accounts, "check_imap_login", AsyncMock())
+    response = account_client.post("/accounts/imap", json={
+        "email_address": account.email_address,
+        "password": "test-only",
+        "imap_host": "imap.example.org",
+        "smtp_host": "smtp.example.org",
+    })
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "account_exists",
+        "message": "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.",
+    }
+    assert account.model_dump() == before
+    assert fake_store.credentials == {}
+    assert list(fake_store.accounts) == [account.id]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("provider", ["google", "microsoft"])
+async def test_oauth_callback_refuses_address_of_imap_account(account_client, fake_store, monkeypatch, provider):
+    account = await fake_store.create_account(provider="imap", auth_type="imap_password", email_address="max@example.org")
+    await fake_store.store_credential(account_id=account.id, kind="imap_password", encrypted_payload="unchanged")
+    before = account.model_dump()
+    monkeypatch.setattr(accounts.providers, "verify_state", lambda state: {"provider": provider, "redirect_uri": "https://example.org/callback"})
+    monkeypatch.setattr(accounts.providers, "exchange_code", AsyncMock(return_value={"access_token": "test-only"}))
+    monkeypatch.setattr(accounts.providers, "fetch_account_email", AsyncMock(return_value=account.email_address))
+    response = account_client.get(f"/accounts/oauth/{provider}/callback", params={"code": "code", "state": "state"})
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "account_exists",
+        "message": "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.",
+    }
+    assert account.model_dump() == before
+    assert fake_store.credentials == {(account.id, "imap_password"): "unchanged"}
+    assert list(fake_store.accounts) == [account.id]

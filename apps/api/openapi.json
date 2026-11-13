@@ -750,7 +750,7 @@
     },
     "/api/v1/mail/accounts/imap": {
       "post": {
-        "description": "Connect an IMAP/SMTP account with an app password and store its credentials encrypted.\n\nExactly one of ``password`` or ``password_secret`` is required; ``password_secret`` names a\nworkspace secret (for example ``yahoo-app-password``) whose value is resolved now and re-read\nat runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP\nlogin is checked before the account is created; answers 201 with the new account.",
+        "description": "Connect an IMAP/SMTP account with an app password and store its credentials encrypted.\n\nExactly one of ``password`` or ``password_secret`` is required; ``password_secret`` names a\nworkspace secret (for example ``yahoo-app-password``) whose value is resolved now and re-read\nat runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP\nlogin is checked before the account is created; answers 201 with the new account.\nAn address already using another connection type answers 409 without changing credentials.",
         "operationId": "mail_account_connect_imap",
         "requestBody": {
           "content": {
@@ -833,7 +833,7 @@
     },
     "/api/v1/mail/accounts/oauth/{provider}/callback": {
       "get": {
-        "description": "OAuth2 redirect target: exchange the authorization code and store the encrypted tokens.\n\nThe signed ``state`` must match ``provider``; the provider's e-mail address decides which\nmail account is created or updated (auth type ``oauth2``) and returned.",
+        "description": "OAuth2 redirect target: exchange the authorization code and store the encrypted tokens.\n\nThe signed ``state`` must match ``provider``; the provider's e-mail address decides which\nmail account is created or updated (auth type ``oauth2``) and returned.\nAn address already using another connection type answers 409 without changing credentials.",
         "operationId": "mail_account_oauth_callback",
         "parameters": [
           {
