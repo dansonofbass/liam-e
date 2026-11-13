@@ -152,6 +152,34 @@
         "title": "AttachmentOut",
         "type": "object"
       },
+      "ChatConversationUpdateIn": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ChatConversationUpdateIn",
+        "type": "object"
+      },
       "ChatExtrasOut": {
         "properties": {
           "mails": {
@@ -241,11 +269,39 @@
         "title": "ChatMessageOut",
         "type": "object"
       },
+      "ChatModelOut": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "is_default"
+        ],
+        "title": "ChatModelOut",
+        "type": "object"
+      },
       "ChatTurnRequest": {
         "properties": {
           "conversation_id": {
             "default": "",
-            "description": "Leer lassen f\u00fcr eine neue Konversation",
+            "description": "Leer lassen f\u00fcr eine neue Unterhaltung",
             "title": "Conversation Id",
             "type": "string"
           },
@@ -334,6 +390,10 @@
             "title": "Id",
             "type": "string"
           },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -347,6 +407,7 @@
         "required": [
           "id",
           "title",
+          "model",
           "created_at",
           "updated_at"
         ],
@@ -1342,7 +1403,7 @@
     },
     "/api/v1/chat": {
       "post": {
-        "description": "Send one chat message to the mail agent and return the messages it produced.\n\nPass an empty ``conversation_id`` to start a new conversation; the response returns the\nconversation id to continue with. The agent may create a pending draft, but this operation\nnever sends a mail by itself.",
+        "description": "Run a complete chat turn and return its visible messages.",
         "operationId": "chat_turn",
         "requestBody": {
           "content": {
@@ -1402,6 +1463,56 @@
         "summary": "List all chat conversations, newest first"
       }
     },
+    "/api/v1/chat/conversations/{conversation_id}": {
+      "patch": {
+        "description": "Change the title or the model used for future turns.",
+        "operationId": "chat_conversation_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatConversationUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update a chat conversation"
+      }
+    },
     "/api/v1/chat/history": {
       "get": {
         "description": "Return every message of one conversation in conversation order.\n\n``conversation_id`` selects the conversation; an unknown id answers 404.",
@@ -1444,6 +1555,29 @@
           }
         },
         "summary": "All messages of one conversation, in order"
+      }
+    },
+    "/api/v1/chat/models": {
+      "get": {
+        "description": "Return available models that support chat and function calls.",
+        "operationId": "chat_models_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatModelOut"
+                  },
+                  "title": "Response Chat Models List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List available chat models"
       }
     },
     "/api/v1/chat/proposals/{proposal_id}/cancel": {

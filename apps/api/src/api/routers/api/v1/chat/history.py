@@ -6,6 +6,8 @@ from db.accessors import chat_conversation as conversation_access
 from db.accessors import chat_message as message_access
 from fastapi import APIRouter, HTTPException, Query
 
+from api.mail.agent import visible_messages
+
 from . import schemas
 
 router = APIRouter()
@@ -27,4 +29,4 @@ async def history(
     if conversation is None:
         raise HTTPException(status_code=404, detail="Konversation nicht gefunden.")
     messages = await message_access.list_messages(conversation_id)
-    return [schemas.to_message_out(m) for m in messages]
+    return [schemas.to_message_out(m) for m in visible_messages(messages)]

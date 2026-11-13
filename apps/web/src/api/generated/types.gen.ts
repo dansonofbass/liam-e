@@ -107,6 +107,20 @@ export type AttachmentOut = {
 };
 
 /**
+ * ChatConversationUpdateIn
+ */
+export type ChatConversationUpdateIn = {
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+};
+
+/**
  * ChatExtrasOut
  */
 export type ChatExtrasOut = {
@@ -165,13 +179,35 @@ export type ChatMessageOut = {
 };
 
 /**
+ * ChatModelOut
+ */
+export type ChatModelOut = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Default
+     */
+    is_default: boolean;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
  * ChatTurnRequest
  */
 export type ChatTurnRequest = {
     /**
      * Conversation Id
      *
-     * Leer lassen für eine neue Konversation
+     * Leer lassen für eine neue Unterhaltung
      */
     conversation_id?: string;
     /**
@@ -240,6 +276,10 @@ export type ConversationOut = {
      * Id
      */
     id: string;
+    /**
+     * Model
+     */
+    model: string;
     /**
      * Title
      */
@@ -884,6 +924,36 @@ export type ChatConversationsListResponses = {
 
 export type ChatConversationsListResponse = ChatConversationsListResponses[keyof ChatConversationsListResponses];
 
+export type ChatConversationUpdateData = {
+    body: ChatConversationUpdateIn;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/chat/conversations/{conversation_id}';
+};
+
+export type ChatConversationUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatConversationUpdateError = ChatConversationUpdateErrors[keyof ChatConversationUpdateErrors];
+
+export type ChatConversationUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationOut;
+};
+
+export type ChatConversationUpdateResponse = ChatConversationUpdateResponses[keyof ChatConversationUpdateResponses];
+
 export type ChatHistoryData = {
     body?: never;
     path?: never;
@@ -915,6 +985,24 @@ export type ChatHistoryResponses = {
 };
 
 export type ChatHistoryResponse = ChatHistoryResponses[keyof ChatHistoryResponses];
+
+export type ChatModelsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/chat/models';
+};
+
+export type ChatModelsListResponses = {
+    /**
+     * Response Chat Models List
+     *
+     * Successful Response
+     */
+    200: Array<ChatModelOut>;
+};
+
+export type ChatModelsListResponse = ChatModelsListResponses[keyof ChatModelsListResponses];
 
 export type ChatProposalCancelData = {
     body?: never;

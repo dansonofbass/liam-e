@@ -10,6 +10,7 @@ from pydantic import BaseModel
 class ConversationOut(BaseModel):
     id: str
     title: str
+    model: str
     created_at: datetime
     updated_at: datetime
 
@@ -18,6 +19,7 @@ class ConversationOut(BaseModel):
         return cls(
             id=conversation.id,
             title=conversation.title,
+            model=conversation.model,
             created_at=conversation.created_at,
             updated_at=conversation.updated_at,
         )

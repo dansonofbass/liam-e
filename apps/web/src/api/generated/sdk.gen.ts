@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChatConversationsListData, ChatConversationsListResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
+import type { ChatConversationsListData, ChatConversationsListResponses, ChatConversationUpdateData, ChatConversationUpdateErrors, ChatConversationUpdateResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatModelsListData, ChatModelsListResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -29,11 +29,7 @@ export const health = <ThrowOnError extends boolean = false>(options?: Options<H
 /**
  * Send a message to the mail agent
  *
- * Send one chat message to the mail agent and return the messages it produced.
- *
- * Pass an empty ``conversation_id`` to start a new conversation; the response returns the
- * conversation id to continue with. The agent may create a pending draft, but this operation
- * never sends a mail by itself.
+ * Run a complete chat turn and return its visible messages.
  */
 export const chatTurn = <ThrowOnError extends boolean = false>(options: Options<ChatTurnData, ThrowOnError>): RequestResult<ChatTurnResponses, ChatTurnErrors, ThrowOnError> => (options.client ?? client).post<ChatTurnResponses, ChatTurnErrors, ThrowOnError>({
     url: '/api/v1/chat',
@@ -52,6 +48,20 @@ export const chatTurn = <ThrowOnError extends boolean = false>(options: Options<
 export const chatConversationsList = <ThrowOnError extends boolean = false>(options?: Options<ChatConversationsListData, ThrowOnError>): RequestResult<ChatConversationsListResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ChatConversationsListResponses, unknown, ThrowOnError>({ url: '/api/v1/chat/conversations', ...options });
 
 /**
+ * Update a chat conversation
+ *
+ * Change the title or the model used for future turns.
+ */
+export const chatConversationUpdate = <ThrowOnError extends boolean = false>(options: Options<ChatConversationUpdateData, ThrowOnError>): RequestResult<ChatConversationUpdateResponses, ChatConversationUpdateErrors, ThrowOnError> => (options.client ?? client).patch<ChatConversationUpdateResponses, ChatConversationUpdateErrors, ThrowOnError>({
+    url: '/api/v1/chat/conversations/{conversation_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * All messages of one conversation, in order
  *
  * Return every message of one conversation in conversation order.
@@ -59,6 +69,13 @@ export const chatConversationsList = <ThrowOnError extends boolean = false>(opti
  * ``conversation_id`` selects the conversation; an unknown id answers 404.
  */
 export const chatHistory = <ThrowOnError extends boolean = false>(options: Options<ChatHistoryData, ThrowOnError>): RequestResult<ChatHistoryResponses, ChatHistoryErrors, ThrowOnError> => (options.client ?? client).get<ChatHistoryResponses, ChatHistoryErrors, ThrowOnError>({ url: '/api/v1/chat/history', ...options });
+
+/**
+ * List available chat models
+ *
+ * Return available models that support chat and function calls.
+ */
+export const chatModelsList = <ThrowOnError extends boolean = false>(options?: Options<ChatModelsListData, ThrowOnError>): RequestResult<ChatModelsListResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ChatModelsListResponses, unknown, ThrowOnError>({ url: '/api/v1/chat/models', ...options });
 
 /**
  * Cancel

@@ -23,11 +23,45 @@ class FakeMistral:
 
     async def stream_async(self, **kwargs):
         self.requests.append(kwargs)
-        for chunk in self.streams.pop(0):
-            if isinstance(chunk, str):
-                chunk = SimpleNamespace(data=SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=chunk, tool_calls=None))]))
-            yield chunk
+        chunks = self.streams.pop(0)
+        if isinstance(chunks, Exception):
+            raise chunks
+        return FakeStream(chunks)
 
     async def list_async(self, **kwargs):
         self.requests.append(kwargs)
-        return self.model_lists.pop(0)
+        result = self.model_lists.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+class FakeStream:
+    def __init__(self, chunks):
+        self.chunks = iter(chunks)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        await self.aclose()
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            chunk = next(self.chunks)
+        except StopIteration:
+            raise StopAsyncIteration from None
+        if isinstance(chunk, Exception):
+            raise chunk
+        if isinstance(chunk, str):
+            chunk = SimpleNamespace(data=SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=chunk, tool_calls=None))]))
+        return chunk
+
+    async def aclose(self):
+        pass
+
+    async def close(self):
+        await self.aclose()

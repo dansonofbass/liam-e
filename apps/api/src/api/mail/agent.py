@@ -1,300 +1,183 @@
-"""The chat agent: a Mistral tool loop over the synced mail index.
-
-Reading and searching are free. Sending only ever creates a *pending draft* (a ``chat_message``
-with role ``draft``) which the user confirms explicitly through the drafts endpoint — the agent can
-never send on its own (see AGENTS.md, "Beschlossene Anforderungen").
-"""
-
-from __future__ import annotations
-
+"""Stream chat turns, persisting tool history and confirmation-only proposals."""
+import asyncio
 import json
-from typing import Any
+import logging
+from collections.abc import AsyncIterator
+from datetime import date
 
-from db.accessors import chat_conversation as conversation_access
-from db.accessors import chat_message as message_access
-from db.accessors import mail_account as account_access
-from db.accessors import mail_message as mail_message_access
-from db.models.chat_conversation import ChatConversation
-from db.models.chat_message import ChatMessage
-from db.models.mail_message import MailMessage
+from db.accessors import chat_conversation as conversation_access, chat_message as message_access
+from db.accessors import mail_account, mail_insight, mail_message
 from env.mail import env as mail_env
 from utils.mistral import mistral_client
+from api.mail.agent_prompt import system_prompt
+from api.mail.agent_tools import TOOLS, TurnContext, execute_tool, tool_status
+from api.mail.chat_events import ChatEvent, StartEvent, StatusEvent, DeltaEvent, MailsEvent, MailRefOut, ProposalEvent, SuggestionsEvent, DoneEvent, ErrorEvent
+from api.mail.chat_schemas import ChatExtrasOut, to_message_out
+from api.mail import headers, state
 
-SYSTEM_PROMPT = (
-    "Du bist der Mail-Assistent der App liam-e. Der Nutzer hat mehrere Mail-Konten verbunden "
-    "(z.B. Gmail, Outlook, iCloud, Yahoo), die lokal synchronisiert sind. "
-    "Antworte auf Deutsch, kurz und präzise. "
-    "Nutze die Tools, um Mails zu suchen und zu lesen, bevor du antwortest. "
-    "Zum Versenden erstellst du ausschließlich einen Entwurf (create_draft) — die Mail wird erst "
-    "nach ausdrücklicher Bestätigung des Nutzers im Chat verschickt."
-)
-
-TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "list_accounts",
-            "description": "Alle verbundenen Mail-Konten auflisten (id, Anbieter, E-Mail-Adresse).",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_messages",
-            "description": "Volltextsuche über alle synchronisierten Mails (Betreff, Absender, Inhalt).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Suchbegriff: Absender, Stichwort oder Betreff-Teil",
-                    },
-                    "account_id": {
-                        "type": "string",
-                        "description": "Optional: nur in diesem Konto suchen",
-                    },
-                    "limit": {"type": "integer", "default": 10, "maximum": 50},
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_message",
-            "description": "Den vollständigen Inhalt einer Mail lesen (id aus search_messages).",
-            "parameters": {
-                "type": "object",
-                "properties": {"message_id": {"type": "string"}},
-                "required": ["message_id"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_draft",
-            "description": (
-                "Entwurf für eine neue Mail oder eine Antwort erstellen. Wird NICHT automatisch "
-                "gesendet — der Nutzer bestätigt den Entwurf im Chat."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "to": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Empfänger-Adressen",
-                    },
-                    "subject": {"type": "string"},
-                    "body": {"type": "string", "description": "Text der Mail"},
-                    "in_reply_to_message_id": {
-                        "type": "string",
-                        "description": "Optional: id der Mail, auf die geantwortet wird (legt das Absender-Konto fest)",
-                    },
-                },
-                "required": ["to", "subject", "body"],
-            },
-        },
-    },
-]
+logger = logging.getLogger(__name__)
 
 
-def _summary(message: MailMessage) -> dict[str, Any]:
-    return {
-        "id": message.id,
-        "account_id": message.account_id,
-        "folder": message.folder,
-        "subject": message.subject,
-        "sender": message.sender,
-        "internal_date": message.internal_date.isoformat()
-        if message.internal_date
-        else None,
-        "snippet": message.snippet,
-    }
+def _to_model_messages(history, *, prompt=None):
+    """Repair incomplete tool exchanges before sending history to the model."""
+    result = [{'role': 'system', 'content': prompt or system_prompt(today=date.today(), account_scope=None)}]
+    kept = set()
+    for i, row in enumerate(history):
+        if row.role == 'tool':
+            try: call_id = json.loads(row.tool_payload_json).get('tool_call_id')
+            except (ValueError, TypeError): continue
+            if call_id in kept:
+                result.append({'role':'tool', 'tool_call_id':call_id, 'name':row.tool_name, 'content':row.content})
+            continue
+        if row.role == 'assistant' and row.tool_payload_json:
+            try:
+                calls = json.loads(row.tool_payload_json)
+                later = set()
+                for other in history[i + 1:]:
+                    if other.role == 'tool':
+                        try: later.add(json.loads(other.tool_payload_json).get('tool_call_id'))
+                        except (ValueError, TypeError): pass
+                calls = [c for c in calls if c.get('id') in later]
+            except (ValueError, TypeError, AttributeError): calls = []
+            if calls:
+                kept.update(c['id'] for c in calls)
+                result.append({'role':'assistant', 'content':row.content, 'tool_calls':calls})
+            elif row.content:
+                result.append({'role':'assistant', 'content':row.content})
+        elif row.role in ('user', 'assistant', 'draft', 'proposal'):
+            result.append({'role':'user' if row.role == 'user' else 'assistant', 'content':row.content})
+    return result
 
 
-def _full(message: MailMessage) -> dict[str, Any]:
-    return {
-        **_summary(message),
-        "recipients": json.loads(message.recipients_json),
-        "body_text": message.body_text,
-        "has_attachments": message.has_attachments,
-        "is_read": message.is_read,
-    }
+def visible_messages(rows):
+    return [r for r in rows if r.role != 'tool' and not (r.role == 'assistant' and r.tool_payload_json)]
 
 
-async def _execute_tool(
-    name: str, arguments: dict[str, Any], *, conversation_id: str
-) -> str:
-    if name == "list_accounts":
-        accounts = await account_access.list_accounts()
-        return json.dumps(
-            [
-                {
-                    "id": a.id,
-                    "provider": a.provider,
-                    "email_address": a.email_address,
-                    "is_active": a.is_active,
-                }
-                for a in accounts
-            ],
-            ensure_ascii=False,
-        )
-    if name == "search_messages":
-        messages = await mail_message_access.search_messages(
-            query=str(arguments.get("query", "")),
-            account_id=str(arguments.get("account_id", "")),
-            limit=min(int(arguments.get("limit", 10)), 50),
-        )
-        return json.dumps([_summary(m) for m in messages], ensure_ascii=False)
-    if name == "get_message":
-        message = await mail_message_access.get_message(
-            str(arguments.get("message_id", ""))
-        )
-        if message is None:
-            return json.dumps({"error": "message not found"})
-        return json.dumps(_full(message), ensure_ascii=False)
-    if name == "create_draft":
-        to = [str(a) for a in arguments.get("to", [])]
-        subject = str(arguments.get("subject", ""))
-        body = str(arguments.get("body", ""))
-        in_reply_to = str(arguments.get("in_reply_to_message_id", ""))
-        account_id = ""
-        if in_reply_to:
-            replied = await mail_message_access.get_message(in_reply_to)
-            if replied is not None:
-                account_id = replied.account_id
-        if not account_id:
-            accounts = [a for a in await account_access.list_accounts() if a.is_active]
-            if not accounts:
-                return json.dumps({"error": "no connected mail account available"})
-            account_id = accounts[0].id
-        draft = {
-            "status": "pending",
-            "account_id": account_id,
-            "to": to,
-            "subject": subject,
-            "body": body,
-            "in_reply_to_message_id": in_reply_to,
-        }
-        message = await message_access.add_message(
-            conversation_id=conversation_id,
-            role="draft",
-            content=f"Entwurf an {', '.join(to)} — Betreff: {subject}",
-            draft_json=json.dumps(draft, ensure_ascii=False),
-        )
-        return json.dumps({"draft_id": message.id, **draft}, ensure_ascii=False)
-    return json.dumps({"error": f"unknown tool {name!r}"})
+async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, context_message_id: str | None = None) -> AsyncIterator[ChatEvent]:
+    if conversation_id:
+        conversation = await conversation_access.get_conversation(conversation_id)
+        if conversation is None: raise LookupError('conversation not found')
+    else:
+        conversation = await conversation_access.create_conversation(title=' '.join(text.split())[:60])
+    user = await message_access.add_message(conversation_id=conversation.id, role='user', content=text)
+    model = conversation.model or mail_env.mail_chat_model
+    all_text = ''
+    mails, suggestions = [], []
+    proposal_id = None
+    saved = False
 
+    async def save(stopped):
+        nonlocal saved
+        if saved: return None
+        row = await message_access.add_message(conversation_id=conversation.id, role='assistant', content=all_text, stopped=stopped, extras_json=ChatExtrasOut(mails=mails, suggestions=suggestions, model=model).model_dump_json())
+        saved = True
+        return row
 
-def _to_model_message(message: ChatMessage) -> dict[str, Any]:
-    if message.role == "tool":
-        tool_call_id = ""
-        if message.tool_payload_json:
-            tool_call_id = json.loads(message.tool_payload_json).get("tool_call_id", "")
-        return {
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "name": message.tool_name,
-            "content": message.content,
-        }
-    if message.role == "assistant" and message.tool_payload_json:
-        return {
-            "role": "assistant",
-            "content": message.content,
-            "tool_calls": json.loads(message.tool_payload_json),
-        }
-    # user and draft messages map to plain content messages; drafts carry no model-relevant content.
-    role = "assistant" if message.role == "draft" else message.role
-    return {"role": role, "content": message.content}
-
-
-async def run_turn(
-    conversation_id: str, user_text: str
-) -> tuple[ChatConversation, list[ChatMessage]]:
-    """Run one chat turn: persist the user message, loop the model with tools, persist everything new."""
-    conversation = await conversation_access.get_conversation(conversation_id)
-    if conversation is None:
-        raise LookupError(f"no chat conversation with id {conversation_id}")
-    await message_access.add_message(
-        conversation_id=conversation_id, role="user", content=user_text
-    )
-    history = await message_access.list_messages(conversation_id)
-    model_messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM_PROMPT}
-    ]
-    model_messages.extend(_to_model_message(m) for m in history)
-
-    new_messages: list[ChatMessage] = []
-    client = mistral_client()
-    for _ in range(mail_env.mail_chat_max_tool_rounds):
-        response = await client.chat.complete_async(
-            model=mail_env.mail_chat_model, messages=model_messages, tools=TOOLS
-        )
-        message = response.choices[0].message
-        tool_calls = list(message.tool_calls or [])
-        if not tool_calls:
-            persisted = await message_access.add_message(
-                conversation_id=conversation_id,
-                role="assistant",
-                content=message.content or "",
-            )
-            new_messages.append(persisted)
-            break
-        calls_payload = [
-            {
-                "id": call.id,
-                "type": "function",
-                "function": {
-                    "name": call.function.name,
-                    "arguments": call.function.arguments
-                    if isinstance(call.function.arguments, str)
-                    else json.dumps(call.function.arguments),
-                },
-            }
-            for call in tool_calls
-        ]
-        persisted = await message_access.add_message(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=message.content or "",
-            tool_payload_json=json.dumps(calls_payload),
-        )
-        new_messages.append(persisted)
-        model_messages.append(
-            {
-                "role": "assistant",
-                "content": message.content or "",
-                "tool_calls": calls_payload,
-            }
-        )
-        for call in tool_calls:
-            arguments = (
-                json.loads(call.function.arguments)
-                if isinstance(call.function.arguments, str)
-                else call.function.arguments
-            )
-            result = await _execute_tool(
-                call.function.name, arguments, conversation_id=conversation_id
-            )
-            persisted_tool = await message_access.add_message(
-                conversation_id=conversation_id,
-                role="tool",
-                content=result,
-                tool_name=call.function.name,
-                tool_payload_json=json.dumps({"tool_call_id": call.id}),
-            )
-            new_messages.append(persisted_tool)
-            model_messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call.id,
-                    "name": call.function.name,
-                    "content": result,
-                }
-            )
-    await conversation_access.touch_conversation(conversation)
-    return conversation, new_messages
+    try:
+        yield StartEvent(conversation_id=conversation.id, user_message_id=user.id)
+        yield StatusEvent(code='thinking')
+        account = await mail_account.get_account(account_id) if account_id else None
+        ctx = TurnContext(conversation.id, account.id if account else None, date.today())
+        history = await message_access.list_messages(conversation.id)
+        messages = _to_model_messages(history, prompt=system_prompt(today=ctx.today, account_scope=account.email_address if account else None))
+        if context_message_id and await mail_message.get_message(context_message_id):
+            messages.insert(1, {'role':'system', 'content':f'Die Bitte bezieht sich auf die Mail mit der ID {context_message_id}. Lies sie mit get_message, bevor du antwortest.'})
+        client = None
+        for round_index in range(max(1, mail_env.mail_chat_max_tool_rounds)):
+            calls = {}
+            round_text = ''
+            try:
+                kwargs = {'model':model, 'messages':messages, 'tools':TOOLS}
+                last = round_index == max(1, mail_env.mail_chat_max_tool_rounds) - 1
+                if last: kwargs['tool_choice'] = 'none'
+                if client is None:
+                    client = mistral_client()
+                stream = await client.chat.stream_async(**kwargs)
+                async with stream:
+                    async for event in stream:
+                        delta = event.data.choices[0].delta
+                        content = getattr(delta, 'content', None)
+                        if isinstance(content, list): content = ''.join(getattr(c, 'text', '') for c in content if isinstance(getattr(c, 'text', None), str))
+                        if isinstance(content, str) and content:
+                            all_text += content
+                            round_text += content
+                            yield DeltaEvent(text=content)
+                        tool_calls = getattr(delta, 'tool_calls', None)
+                        if not last and isinstance(tool_calls, list):
+                            for pos, call in enumerate(tool_calls):
+                                index = getattr(call, 'index', None)
+                                if not isinstance(index, int): index = pos
+                                item = calls.setdefault(index, {'id':'', 'type':'function', 'function':{'name':'', 'arguments':''}})
+                                id = getattr(call, 'id', None)
+                                function = getattr(call, 'function', None)
+                                name = getattr(function, 'name', None)
+                                args = getattr(function, 'arguments', None)
+                                if isinstance(id, str) and id: item['id'] = id
+                                if isinstance(name, str) and name: item['function']['name'] = name
+                                if isinstance(args, dict): args = json.dumps(args)
+                                if isinstance(args, str): item['function']['arguments'] += args
+            except (asyncio.CancelledError, GeneratorExit): raise
+            except Exception as error:
+                logger.warning('%s', type(error).__name__)
+                if all_text: await save(True)
+                yield ErrorEvent(code='model_unavailable')
+                return
+            if not calls:
+                answer = await save(False)
+                await conversation_access.touch_conversation(conversation)
+                if mails:
+                    accounts = await mail_account.list_accounts()
+                    colors = state.color_indexes(accounts)
+                    insight_map = await mail_insight.get_for_messages(mails)
+                    refs = []
+                    for id in mails:
+                        m = await mail_message.get_message(id)
+                        if m:
+                            insight = insight_map.get(id)
+                            refs.append(MailRefOut(id=m.id, account_id=m.account_id, color_index=colors.get(m.account_id, 0), subject=m.subject, sender_name=headers.sender_name(m.sender), internal_date=m.internal_date, deadline=insight.deadline if insight else None))
+                    if refs: yield MailsEvent(mails=refs)
+                if proposal_id:
+                    proposal = await message_access.get_message(proposal_id)
+                    if proposal: yield ProposalEvent(message=to_message_out(proposal))
+                if suggestions: yield SuggestionsEvent(items=suggestions)
+                yield DoneEvent(conversation_id=conversation.id, message_id=answer.id, stopped=False)
+                return
+            payload = [calls[i] for i in sorted(calls)]
+            await message_access.add_message(conversation_id=conversation.id, role='assistant', content='', tool_payload_json=json.dumps(payload))
+            messages.append({'role':'assistant', 'content':round_text, 'tool_calls':payload})
+            for call in payload:
+                name = call['function']['name']
+                try:
+                    args = json.loads(call['function']['arguments'] or '{}')
+                    if not isinstance(args, dict): raise ValueError
+                except (ValueError, TypeError):
+                    args = None
+                if args is None:
+                    content = json.dumps({'error':'invalid_arguments'})
+                else:
+                    try:
+                        status = await tool_status(name, args, ctx)
+                        if status: yield status
+                        outcome = await execute_tool(name, args, ctx)
+                        content = outcome.content
+                        for id in outcome.mails:
+                            if id not in mails and len(mails) < 10: mails.append(id)
+                        if name == 'suggest_followups': suggestions = outcome.suggestions
+                        if outcome.proposal_message: proposal_id = outcome.proposal_message.id
+                    except (asyncio.CancelledError, GeneratorExit): raise
+                    except Exception as error:
+                        logger.warning('%s', type(error).__name__)
+                        content = json.dumps({'error':'tool_failed'})
+                await message_access.add_message(conversation_id=conversation.id, role='tool', tool_name=name, tool_payload_json=json.dumps({'tool_call_id':call['id']}), content=content)
+                messages.append({'role':'tool', 'name':name, 'tool_call_id':call['id'], 'content':content})
+            yield StatusEvent(code='thinking')
+    except (asyncio.CancelledError, GeneratorExit):
+        if not saved:
+            task = asyncio.create_task(save(True))
+            try: await asyncio.shield(task)
+            except asyncio.CancelledError:
+                await asyncio.shield(task)
+        raise
+    except Exception as error:
+        logger.warning('%s', type(error).__name__)
+        yield ErrorEvent(code='internal')
