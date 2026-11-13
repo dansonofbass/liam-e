@@ -1,10 +1,59 @@
 {
   "components": {
     "schemas": {
+      "AccountOptionsOut": {
+        "properties": {
+          "gmail_connector": {
+            "title": "Gmail Connector",
+            "type": "boolean"
+          },
+          "google_oauth": {
+            "title": "Google Oauth",
+            "type": "boolean"
+          },
+          "imap_presets": {
+            "items": {
+              "$ref": "#/components/schemas/ImapPresetOut"
+            },
+            "title": "Imap Presets",
+            "type": "array"
+          },
+          "microsoft_oauth": {
+            "title": "Microsoft Oauth",
+            "type": "boolean"
+          },
+          "outlook_connector": {
+            "title": "Outlook Connector",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "gmail_connector",
+          "outlook_connector",
+          "google_oauth",
+          "microsoft_oauth",
+          "imap_presets"
+        ],
+        "title": "AccountOptionsOut",
+        "type": "object"
+      },
       "AccountOut": {
         "properties": {
           "auth_type": {
             "title": "Auth Type",
+            "type": "string"
+          },
+          "color_index": {
+            "title": "Color Index",
+            "type": "integer"
+          },
+          "connection": {
+            "enum": [
+              "connector",
+              "oauth",
+              "imap"
+            ],
+            "title": "Connection",
             "type": "string"
           },
           "created_at": {
@@ -20,6 +69,10 @@
             "title": "Email Address",
             "type": "string"
           },
+          "error_code": {
+            "title": "Error Code",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -28,9 +81,40 @@
             "title": "Is Active",
             "type": "boolean"
           },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "message_count": {
+            "title": "Message Count",
+            "type": "integer"
+          },
           "provider": {
             "title": "Provider",
             "type": "string"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "syncing",
+              "auth_expired",
+              "error",
+              "never"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
           },
           "updated_at": {
             "format": "date-time",
@@ -40,13 +124,20 @@
         },
         "required": [
           "id",
-          "provider",
-          "auth_type",
-          "email_address",
           "display_name",
+          "email_address",
+          "provider",
+          "connection",
+          "color_index",
+          "unread",
+          "state",
+          "error_code",
+          "last_sync_at",
+          "auth_type",
           "is_active",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "message_count"
         ],
         "title": "AccountOut",
         "type": "object"
@@ -127,6 +218,21 @@
           "last_sync_at"
         ],
         "title": "AccountSummaryOut",
+        "type": "object"
+      },
+      "AccountUpdateIn": {
+        "properties": {
+          "display_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "AccountUpdateIn",
         "type": "object"
       },
       "AttachmentOut": {
@@ -705,6 +811,29 @@
           "email_address"
         ],
         "title": "ImapConnectRequest",
+        "type": "object"
+      },
+      "ImapPresetOut": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "imap_host": {
+            "title": "Imap Host",
+            "type": "string"
+          },
+          "smtp_host": {
+            "title": "Smtp Host",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "imap_host",
+          "smtp_host"
+        ],
+        "title": "ImapPresetOut",
         "type": "object"
       },
       "InsightOut": {
@@ -2144,6 +2273,22 @@
               "title": "Provider",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Id"
+            }
           }
         ],
         "responses": {
@@ -2173,7 +2318,7 @@
     },
     "/api/v1/mail/accounts/oauth/{provider}/callback": {
       "get": {
-        "description": "OAuth2 redirect target: exchange the authorization code and store the encrypted tokens.\n\nThe signed ``state`` must match ``provider``; the provider's e-mail address decides which\nmail account is created or updated (auth type ``oauth2``) and returned.\nAn address already using another connection type answers 409 without changing credentials.",
+        "description": "Complete OAuth and redirect without exposing provider details.",
         "operationId": "mail_account_oauth_callback",
         "parameters": [
           {
@@ -2192,32 +2337,55 @@
           {
             "in": "query",
             "name": "code",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Code",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
             }
           },
           {
             "in": "query",
             "name": "state",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "State",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
             }
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccountOut"
-                }
-              }
-            },
-            "description": "Successful Response"
+          "303": {
+            "description": "Redirect to accounts"
           },
           "422": {
             "content": {
@@ -2230,7 +2398,26 @@
             "description": "Validation Error"
           }
         },
-        "summary": "OAuth2 redirect target: exchanges the code and stores the encrypted tokens"
+        "summary": "Complete OAuth and redirect to accounts"
+      }
+    },
+    "/api/v1/mail/accounts/options": {
+      "get": {
+        "description": "Return available account connection methods and IMAP presets.",
+        "operationId": "mail_account_options",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Account Options"
       }
     },
     "/api/v1/mail/accounts/{account_id}": {
@@ -2264,6 +2451,54 @@
           }
         },
         "summary": "Delete an account and all its data"
+      },
+      "patch": {
+        "description": "Rename an existing account.",
+        "operationId": "mail_account_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Account"
       }
     },
     "/api/v1/mail/accounts/{account_id}/sync": {

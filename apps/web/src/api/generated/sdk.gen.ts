@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChatConversationsListData, ChatConversationsListResponses, ChatConversationUpdateData, ChatConversationUpdateErrors, ChatConversationUpdateResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatModelsListData, ChatModelsListResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatStreamData, ChatStreamErrors, ChatStreamResponse, ChatStreamResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
+import type { ChatConversationsListData, ChatConversationsListResponses, ChatConversationUpdateData, ChatConversationUpdateErrors, ChatConversationUpdateResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatModelsListData, ChatModelsListResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatStreamData, ChatStreamErrors, ChatStreamResponse, ChatStreamResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOptionsData, MailAccountOptionsResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailAccountUpdateData, MailAccountUpdateErrors, MailAccountUpdateResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -153,15 +153,18 @@ export const mailAccountConnectImap = <ThrowOnError extends boolean = false>(opt
 export const mailAccountOauthAuthorize = <ThrowOnError extends boolean = false>(options: Options<MailAccountOauthAuthorizeData, ThrowOnError>): RequestResult<MailAccountOauthAuthorizeResponses, MailAccountOauthAuthorizeErrors, ThrowOnError> => (options.client ?? client).get<MailAccountOauthAuthorizeResponses, MailAccountOauthAuthorizeErrors, ThrowOnError>({ url: '/api/v1/mail/accounts/oauth/{provider}/authorize', ...options });
 
 /**
- * OAuth2 redirect target: exchanges the code and stores the encrypted tokens
+ * Complete OAuth and redirect to accounts
  *
- * OAuth2 redirect target: exchange the authorization code and store the encrypted tokens.
- *
- * The signed ``state`` must match ``provider``; the provider's e-mail address decides which
- * mail account is created or updated (auth type ``oauth2``) and returned.
- * An address already using another connection type answers 409 without changing credentials.
+ * Complete OAuth and redirect without exposing provider details.
  */
-export const mailAccountOauthCallback = <ThrowOnError extends boolean = false>(options: Options<MailAccountOauthCallbackData, ThrowOnError>): RequestResult<MailAccountOauthCallbackResponses, MailAccountOauthCallbackErrors, ThrowOnError> => (options.client ?? client).get<MailAccountOauthCallbackResponses, MailAccountOauthCallbackErrors, ThrowOnError>({ url: '/api/v1/mail/accounts/oauth/{provider}/callback', ...options });
+export const mailAccountOauthCallback = <ThrowOnError extends boolean = false>(options: Options<MailAccountOauthCallbackData, ThrowOnError>): RequestResult<unknown, MailAccountOauthCallbackErrors, ThrowOnError> => (options.client ?? client).get<unknown, MailAccountOauthCallbackErrors, ThrowOnError>({ url: '/api/v1/mail/accounts/oauth/{provider}/callback', ...options });
+
+/**
+ * Account Options
+ *
+ * Return available account connection methods and IMAP presets.
+ */
+export const mailAccountOptions = <ThrowOnError extends boolean = false>(options?: Options<MailAccountOptionsData, ThrowOnError>): RequestResult<MailAccountOptionsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<MailAccountOptionsResponses, unknown, ThrowOnError>({ url: '/api/v1/mail/accounts/options', ...options });
 
 /**
  * Delete an account and all its data
@@ -172,6 +175,20 @@ export const mailAccountOauthCallback = <ThrowOnError extends boolean = false>(o
  * 404 for an unknown account.
  */
 export const mailAccountDelete = <ThrowOnError extends boolean = false>(options: Options<MailAccountDeleteData, ThrowOnError>): RequestResult<MailAccountDeleteResponses, MailAccountDeleteErrors, ThrowOnError> => (options.client ?? client).delete<MailAccountDeleteResponses, MailAccountDeleteErrors, ThrowOnError>({ url: '/api/v1/mail/accounts/{account_id}', ...options });
+
+/**
+ * Update Account
+ *
+ * Rename an existing account.
+ */
+export const mailAccountUpdate = <ThrowOnError extends boolean = false>(options: Options<MailAccountUpdateData, ThrowOnError>): RequestResult<MailAccountUpdateResponses, MailAccountUpdateErrors, ThrowOnError> => (options.client ?? client).patch<MailAccountUpdateResponses, MailAccountUpdateErrors, ThrowOnError>({
+    url: '/api/v1/mail/accounts/{account_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Schedule an account sync

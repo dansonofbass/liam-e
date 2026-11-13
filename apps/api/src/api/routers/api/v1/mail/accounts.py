@@ -4,10 +4,14 @@ Credentials are stored encrypted (``api.mail.crypto``) and never returned by any
 """
 
 import imaplib
+import logging
+from urllib.parse import urlencode
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
 import httpx
+from db.accessors import mail_insight as insight_access
+from db.accessors import mail_action as action_access
 from db.accessors import mail_account as account_access
 from db.accessors import mail_credential as credential_access
 from db.accessors import mail_message as message_access
@@ -16,10 +20,11 @@ from db.accessors import mail_sync_state as sync_state_access
 from db.models.mail_account import MailAccount
 from env.mail import env as mail_env
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field, model_validator
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 from api.errors import refuse
-from api.mail import crypto, providers, secrets, transport
+from api.mail import connectors, crypto, providers, secrets, transport
 from api.mail.netguard import BlockedAddressError
 from api.mail import jobs
 from api.routers.api.v1.mail.summary import AccountSummaryOut, account_summary
@@ -27,30 +32,49 @@ from api.mail.state import color_indexes
 from api.mail.service import AccountConflictError, check_imap_login, upsert_account
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
-class AccountOut(BaseModel):
-    id: str
-    provider: str
+class AccountOut(AccountSummaryOut):
     auth_type: str
-    email_address: str
-    display_name: str
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    message_count: int
 
+
+async def account_out(account: MailAccount, accounts: list[MailAccount], unread: dict[str, int]) -> AccountOut:
+    summary = await account_summary(account, color_indexes(accounts), unread)
+    return AccountOut(**summary.model_dump(), auth_type=account.auth_type, is_active=account.is_active,
+                      created_at=account.created_at, updated_at=account.updated_at,
+                      message_count=await message_access.count_for_account(account.id))
+
+
+async def current_account_out(account: MailAccount) -> AccountOut:
+    return await account_out(account, await account_access.list_accounts(), await message_access.count_unread(folder="INBOX"))
+
+
+class AccountUpdateIn(BaseModel):
+    display_name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("display_name", mode="before")
     @classmethod
-    def from_model(cls, account: MailAccount) -> "AccountOut":
-        return cls(
-            id=account.id,
-            provider=account.provider,
-            auth_type=account.auth_type,
-            email_address=account.email_address,
-            display_name=account.display_name,
-            is_active=account.is_active,
-            created_at=account.created_at,
-            updated_at=account.updated_at,
-        )
+    def strip_name(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+
+class ImapPresetOut(BaseModel):
+    domain: str
+    imap_host: str
+    smtp_host: str
+
+
+class AccountOptionsOut(BaseModel):
+    gmail_connector: bool
+    outlook_connector: bool
+    google_oauth: bool
+    microsoft_oauth: bool
+    imap_presets: list[ImapPresetOut]
 
 
 class ImapConnectRequest(BaseModel):
@@ -101,7 +125,8 @@ async def list_accounts() -> list[AccountOut]:
     Credentials are never part of the response.
     """
     accounts = await account_access.list_accounts()
-    return [AccountOut.from_model(a) for a in accounts]
+    unread = await message_access.count_unread(folder="INBOX")
+    return [await account_out(a, accounts, unread) for a in accounts]
 
 
 @router.post(
@@ -194,7 +219,7 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
         kind="imap_password",
         encrypted_payload=crypto.encrypt_payload(payload),
     )
-    return AccountOut.from_model(account)
+    return await current_account_out(account)
 
 
 @router.get(
@@ -203,7 +228,7 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
     summary="Start the OAuth2 flow for google or microsoft; open the returned URL in the browser",
 )
 async def oauth_authorize(
-    provider: Literal["google", "microsoft"], request: Request
+    provider: Literal["google", "microsoft"], request: Request, account_id: str | None = None
 ) -> OAuthAuthorizeOut:
     """Start the OAuth2 flow for ``google`` or ``microsoft`` and return the URL to open in a browser.
 
@@ -211,15 +236,21 @@ async def oauth_authorize(
     echoes back to the callback; nothing is redirected here. Answers 503 when that provider's
     OAuth client is not configured.
     """
+    if account_id is not None:
+        account = await account_access.get_account(account_id)
+        if account is None:
+            raise refuse(404, "account_not_found", "Das Konto wurde nicht gefunden.")
+        if account.auth_type != "oauth2" or account.provider != provider:
+            raise refuse(422, "reconnect_unsupported", "Dieses Konto kannst du so nicht erneut verbinden.")
     if not providers.oauth_configured(provider):
-        raise HTTPException(
-            status_code=503,
-            detail=f"OAuth für {provider} ist nicht konfiguriert (MAIL_OAUTH_{provider.upper()}_CLIENT_ID/SECRET fehlt).",
-        )
+        raise refuse(503, "oauth_not_configured", "Die Anmeldung ist nicht eingerichtet. Prüfe die Einstellungen in Mistral Studio.")
     redirect_uri = (
         f"{_redirect_base(request)}/api/v1/mail/accounts/oauth/{provider}/callback"
     )
-    state = providers.sign_state({"provider": provider, "redirect_uri": redirect_uri})
+    payload = {"provider": provider, "redirect_uri": redirect_uri}
+    if account_id is not None:
+        payload["account_id"] = account_id
+    state = providers.sign_state(payload)
     return OAuthAuthorizeOut(
         authorization_url=providers.authorization_url(
             provider, redirect_uri=redirect_uri, state=state
@@ -231,59 +262,75 @@ async def oauth_authorize(
 @router.get(
     "/oauth/{provider}/callback",
     operation_id="mail_account_oauth_callback",
-    summary="OAuth2 redirect target: exchanges the code and stores the encrypted tokens",
+    summary="Complete OAuth and redirect to accounts",
+    response_class=RedirectResponse,
+    status_code=303,
+    responses={303: {"description": "Redirect to accounts"}},
 )
-async def oauth_callback(
-    provider: Literal["google", "microsoft"],
-    code: Annotated[str, Query()],
-    state: Annotated[str, Query()],
-) -> AccountOut:
-    """OAuth2 redirect target: exchange the authorization code and store the encrypted tokens.
+async def oauth_callback(provider: Literal["google", "microsoft"], code: str | None = None,
+                         state: str | None = None, error: str | None = None) -> RedirectResponse:
+    """Complete OAuth and redirect without exposing provider details."""
+    def redirect(key: str, value: str) -> RedirectResponse:
+        return RedirectResponse("/accounts?" + urlencode({key: value}), status_code=303)
 
-    The signed ``state`` must match ``provider``; the provider's e-mail address decides which
-    mail account is created or updated (auth type ``oauth2``) and returned.
-    An address already using another connection type answers 409 without changing credentials.
-    """
+    if error is not None:
+        return redirect("error", "oauth_denied")
     try:
-        payload = providers.verify_state(state)
-    except ValueError as error:
-        raise HTTPException(
-            status_code=400, detail=f"Ungültiger OAuth-State: {error}"
-        ) from error
-    if payload.get("provider") != provider:
-        raise HTTPException(
-            status_code=400, detail="OAuth-State passt nicht zum Provider."
-        )
+        payload = providers.verify_state(state or "")
+        if payload.get("provider") != provider:
+            raise ValueError("provider mismatch")
+    except (ValueError, TypeError):
+        return redirect("error", "oauth_state_invalid")
     try:
-        tokens = await providers.exchange_code(
-            provider, code=code, redirect_uri=payload["redirect_uri"]
-        )
-        email_address = await providers.fetch_account_email(
-            provider, access_token=tokens["access_token"]
-        )
-    except (httpx.HTTPStatusError, KeyError, ValueError) as error:
-        raise HTTPException(
-            status_code=502, detail=f"OAuth-Token-Austausch fehlgeschlagen: {error}"
-        ) from error
-    if not email_address:
-        raise HTTPException(
-            status_code=502, detail="Der Provider hat keine E-Mail-Adresse geliefert."
-        )
+        if not code:
+            raise ValueError("missing code")
+        tokens = await providers.exchange_code(provider, code=code, redirect_uri=payload["redirect_uri"])
+        email_address = await providers.fetch_account_email(provider, access_token=tokens["access_token"])
+        if not email_address:
+            raise ValueError("missing address")
+    except Exception as exc:
+        logger.warning("OAuth exchange failed: %s", type(exc).__name__)
+        return redirect("error", "oauth_exchange_failed")
+    account_id = payload.get("account_id")
+    if account_id is not None:
+        account = await account_access.get_account(account_id)
+        if account is None or account.provider != provider or account.auth_type != "oauth2":
+            return redirect("error", "oauth_state_invalid")
+        if account.email_address.lower() != email_address.lower():
+            return redirect("error", "oauth_account_mismatch")
+    else:
+        try:
+            account = await upsert_account(provider=provider, auth_type="oauth2", email_address=email_address)
+        except AccountConflictError:
+            return redirect("error", "account_exists")
+    await credential_access.store_credential(account_id=account.id, kind="oauth2_tokens", encrypted_payload=crypto.encrypt_payload(tokens))
+    await jobs.enqueue_sync(account.id)
+    return redirect("connected", account.id)
+
+
+@router.get("/options", operation_id="mail_account_options")
+async def account_options() -> AccountOptionsOut:
+    """Return available account connection methods and IMAP presets."""
     try:
-        account = await upsert_account(
-            provider=provider, auth_type="oauth2", email_address=email_address
-        )
-    except AccountConflictError as error:
-        raise refuse(
-            409, "account_exists",
-            "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.",
-        ) from error
-    await credential_access.store_credential(
-        account_id=account.id,
-        kind="oauth2_tokens",
-        encrypted_payload=crypto.encrypt_payload(tokens),
-    )
-    return AccountOut.from_model(account)
+        names = {item["name"] for item in await connectors.list_connectors()}
+    except Exception as exc:
+        logger.warning("Connector listing failed: %s", type(exc).__name__)
+        names = set()
+    gmail = bool(names & {"gmail", "google_mail"})
+    return AccountOptionsOut(gmail_connector=gmail, outlook_connector="outlook" in names,
+        google_oauth=providers.oauth_configured("google") and not gmail,
+        microsoft_oauth=providers.oauth_configured("microsoft"),
+        imap_presets=[ImapPresetOut(domain=domain, imap_host=preset[0], smtp_host=preset[2])
+                      for domain, preset in sorted(providers.IMAP_PRESETS.items())])
+
+
+@router.patch("/{account_id}", operation_id="mail_account_update")
+async def update_account(account_id: str, body: AccountUpdateIn) -> AccountOut:
+    """Rename an existing account."""
+    account = await account_access.update_display_name(account_id, body.display_name)
+    if account is None:
+        raise refuse(404, "account_not_found", "Das Konto wurde nicht gefunden.")
+    return await current_account_out(account)
 
 
 @router.delete(
@@ -300,11 +347,13 @@ async def delete_account(account_id: str) -> None:
     """
     deleted = await account_access.delete_account(account_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Konto nicht gefunden.")
-    await credential_access.delete_for_account(account_id)
+        raise refuse(404, "account_not_found", "Das Konto wurde nicht gefunden.")
+    await insight_access.delete_for_account(account_id)
     await message_access.delete_for_account(account_id)
-    await sync_state_access.delete_for_account(account_id)
+    await action_access.delete_for_account(account_id)
     await job_access.delete_for_account(account_id)
+    await credential_access.delete_for_account(account_id)
+    await sync_state_access.delete_for_account(account_id)
 
 
 @router.post(

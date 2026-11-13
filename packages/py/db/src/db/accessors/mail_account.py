@@ -58,6 +58,18 @@ async def touch_account(account: MailAccount) -> MailAccount:
         return account
 
 
+async def update_display_name(account_id: str, display_name: str) -> MailAccount | None:
+    async with get_session_maker()() as session:
+        account = await session.get(MailAccount, account_id)
+        if account is None:
+            return None
+        account.display_name = display_name
+        account.updated_at = utcnow()
+        session.add(account)
+        await session.commit()
+        return account
+
+
 async def delete_account(account_id: str) -> bool:
     async with get_session_maker()() as session:
         account = await session.get(MailAccount, account_id)

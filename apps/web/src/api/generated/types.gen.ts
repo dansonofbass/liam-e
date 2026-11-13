@@ -5,6 +5,32 @@ export type ClientOptions = {
 };
 
 /**
+ * AccountOptionsOut
+ */
+export type AccountOptionsOut = {
+    /**
+     * Gmail Connector
+     */
+    gmail_connector: boolean;
+    /**
+     * Google Oauth
+     */
+    google_oauth: boolean;
+    /**
+     * Imap Presets
+     */
+    imap_presets: Array<ImapPresetOut>;
+    /**
+     * Microsoft Oauth
+     */
+    microsoft_oauth: boolean;
+    /**
+     * Outlook Connector
+     */
+    outlook_connector: boolean;
+};
+
+/**
  * AccountOut
  */
 export type AccountOut = {
@@ -12,6 +38,14 @@ export type AccountOut = {
      * Auth Type
      */
     auth_type: string;
+    /**
+     * Color Index
+     */
+    color_index: number;
+    /**
+     * Connection
+     */
+    connection: 'connector' | 'oauth' | 'imap';
     /**
      * Created At
      */
@@ -25,6 +59,10 @@ export type AccountOut = {
      */
     email_address: string;
     /**
+     * Error Code
+     */
+    error_code: string;
+    /**
      * Id
      */
     id: string;
@@ -33,9 +71,25 @@ export type AccountOut = {
      */
     is_active: boolean;
     /**
+     * Last Sync At
+     */
+    last_sync_at: string | null;
+    /**
+     * Message Count
+     */
+    message_count: number;
+    /**
      * Provider
      */
     provider: string;
+    /**
+     * State
+     */
+    state: 'ok' | 'syncing' | 'auth_expired' | 'error' | 'never';
+    /**
+     * Unread
+     */
+    unread: number;
     /**
      * Updated At
      */
@@ -86,6 +140,16 @@ export type AccountSummaryOut = {
      * Unread
      */
     unread: number;
+};
+
+/**
+ * AccountUpdateIn
+ */
+export type AccountUpdateIn = {
+    /**
+     * Display Name
+     */
+    display_name: string;
 };
 
 /**
@@ -469,6 +533,24 @@ export type ImapConnectRequest = {
      * Smtp Starttls
      */
     smtp_starttls?: boolean;
+};
+
+/**
+ * ImapPresetOut
+ */
+export type ImapPresetOut = {
+    /**
+     * Domain
+     */
+    domain: string;
+    /**
+     * Imap Host
+     */
+    imap_host: string;
+    /**
+     * Smtp Host
+     */
+    smtp_host: string;
 };
 
 /**
@@ -1344,7 +1426,12 @@ export type MailAccountOauthAuthorizeData = {
          */
         provider: 'google' | 'microsoft';
     };
-    query?: never;
+    query?: {
+        /**
+         * Account Id
+         */
+        account_id?: string | null;
+    };
     url: '/api/v1/mail/accounts/oauth/{provider}/authorize';
 };
 
@@ -1374,15 +1461,19 @@ export type MailAccountOauthCallbackData = {
          */
         provider: 'google' | 'microsoft';
     };
-    query: {
+    query?: {
         /**
          * Code
          */
-        code: string;
+        code?: string | null;
         /**
          * State
          */
-        state: string;
+        state?: string | null;
+        /**
+         * Error
+         */
+        error?: string | null;
     };
     url: '/api/v1/mail/accounts/oauth/{provider}/callback';
 };
@@ -1396,14 +1487,21 @@ export type MailAccountOauthCallbackErrors = {
 
 export type MailAccountOauthCallbackError = MailAccountOauthCallbackErrors[keyof MailAccountOauthCallbackErrors];
 
-export type MailAccountOauthCallbackResponses = {
+export type MailAccountOptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/mail/accounts/options';
+};
+
+export type MailAccountOptionsResponses = {
     /**
      * Successful Response
      */
-    200: AccountOut;
+    200: AccountOptionsOut;
 };
 
-export type MailAccountOauthCallbackResponse = MailAccountOauthCallbackResponses[keyof MailAccountOauthCallbackResponses];
+export type MailAccountOptionsResponse = MailAccountOptionsResponses[keyof MailAccountOptionsResponses];
 
 export type MailAccountDeleteData = {
     body?: never;
@@ -1434,6 +1532,36 @@ export type MailAccountDeleteResponses = {
 };
 
 export type MailAccountDeleteResponse = MailAccountDeleteResponses[keyof MailAccountDeleteResponses];
+
+export type MailAccountUpdateData = {
+    body: AccountUpdateIn;
+    path: {
+        /**
+         * Account Id
+         */
+        account_id: string;
+    };
+    query?: never;
+    url: '/api/v1/mail/accounts/{account_id}';
+};
+
+export type MailAccountUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailAccountUpdateError = MailAccountUpdateErrors[keyof MailAccountUpdateErrors];
+
+export type MailAccountUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: AccountOut;
+};
+
+export type MailAccountUpdateResponse = MailAccountUpdateResponses[keyof MailAccountUpdateResponses];
 
 export type MailAccountSyncData = {
     body?: never;

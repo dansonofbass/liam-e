@@ -19,7 +19,7 @@ from api.mail import connectors as connector_service
 from api.mail.connectors import CONNECTOR
 from api.errors import refuse
 from api.mail.service import AccountConflictError, upsert_account
-from api.routers.api.v1.mail.accounts import AccountOut
+from api.routers.api.v1.mail.accounts import AccountOut, current_account_out
 
 logger = logging.getLogger(__name__)
 
@@ -137,4 +137,4 @@ async def connect_connector(name: str) -> AccountOut:
         )
     except AccountConflictError as error:
         raise refuse(409, "account_exists", "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.") from error
-    return AccountOut.from_model(account)
+    return await current_account_out(account)
