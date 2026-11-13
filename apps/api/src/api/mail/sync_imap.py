@@ -23,6 +23,8 @@ def _fetch(host: str, port: int, email_address: str, password: str, cursor: str,
     try:
         try:
             connection.login(email_address, password)
+        except imaplib.IMAP4.abort:
+            raise
         except imaplib.IMAP4.error as error:
             raise service.CredentialError("IMAP login rejected") from error
         status, _ = connection.select('"INBOX"', readonly=True)

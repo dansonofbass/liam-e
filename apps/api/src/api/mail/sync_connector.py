@@ -38,9 +38,9 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
     known = await message_access.known_uids(account.id, "INBOX")
     seen = set(known) if valid else set()
 
-    async def scan(query: str) -> tuple[bool, int | None, int | None]:
+    async def scan(query: str, lower: int | None, upper: int | None) -> tuple[bool, int | None, int | None]:
         token = ""
-        oldest = latest = None
+        frontier = latest = None
         for _ in range(10):
             args: dict[str, Any] = {"query": query, "pageSize": 50}
             if token:
@@ -48,38 +48,47 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
             page = await connectors.call_read_tool_json(account.provider, "search_threads", args)
             threads = page.get("threads", [])
             for thread in threads:
+                if len(changes.upserts) >= limit and frontier is not None:
+                    return False, frontier, latest
                 full = await connectors.call_read_tool_json(account.provider, "get_thread", {"threadId": thread.get("id", ""), "messageFormat": "FULL_CONTENT"})
                 thread_id = full.get("id") or thread.get("id", "")
+                thread_latest = None
                 for message in full.get("messages", []):
                     parsed = parse_message(message, thread_id=thread_id, folder="INBOX", max_body_chars=max_body_chars)
                     date = parsed["internal_date"]
                     if date is None:
                         raise ValueError("Connector message has no valid date")
                     stamp = int(date.timestamp())
-                    if parsed["provider_uid"] not in seen and len(changes.upserts) >= limit:
-                        return False, oldest, latest
-                    oldest = stamp if oldest is None else min(oldest, stamp)
+                    thread_latest = stamp if thread_latest is None else max(thread_latest, stamp)
+                    if (lower is not None and stamp <= lower) or (upper is not None and stamp >= upper):
+                        continue
                     latest = stamp if latest is None else max(latest, stamp)
                     if parsed["provider_uid"] not in seen:
                         changes.upserts.append(parsed)
                         seen.add(parsed["provider_uid"])
+                if thread_latest is not None:
+                    frontier = min(thread_latest, upper) if upper is not None else thread_latest
             token = page.get("nextPageToken") or ""
             if not token:
-                return True, oldest, latest
-        return False, oldest, latest
+                return True, frontier, latest
+        return False, frontier, latest
 
     old_newest = newest
-    done, oldest, latest = await scan(f"in:inbox after:{newest - 1}" if valid else "in:inbox")
+    done, frontier, latest = await scan(f"in:inbox after:{newest - 1}" if valid else "in:inbox", newest - 1 if valid else None, None)
     if latest is not None:
         newest = max(newest, latest)
-    if valid and not done and oldest is not None:
-        gap = (gap[0] if gap else old_newest, oldest)
+    if valid and not done and frontier is not None:
+        gap = (gap[0] if gap else old_newest, frontier)
+    if gap and gap[1] <= gap[0]:
+        gap = None
     if valid and gap and len(changes.upserts) < limit:
-        done, oldest, _ = await scan(f"in:inbox after:{gap[0] - 1} before:{gap[1] + 1}")
+        done, frontier, _ = await scan(f"in:inbox after:{gap[0] - 1} before:{gap[1] + 1}", gap[0] - 1, gap[1] + 1)
         if done:
             gap = None
-        elif oldest is not None:
-            gap = (gap[0], oldest)
+        elif frontier is not None:
+            gap = (gap[0], frontier)
+        if gap and gap[1] <= gap[0]:
+            gap = None
     changes.cursor = str(newest) + (f":{gap[0]}:{gap[1]}" if gap else "")
     if valid:
         present = {thread["id"] for thread in await _search(account.provider, "in:inbox newer_than:14d")}

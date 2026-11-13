@@ -303,3 +303,86 @@ async def test_sync_error_stores_code_not_provider_text(monkeypatch):
     result = await sync.sync_account("a")
     assert result.error_code == "provider_error"
     assert states[-1]["last_error"] == "provider_error"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("limit", [1, 2])
+async def test_connector_whole_thread_frontier_preserves_backlog(monkeypatch, limit):
+    from datetime import UTC, datetime
+    import re
+
+    threads = {"x": [("outside", 900), ("new", 2000)], "y": [("backlog", 1900)]}
+    known = {}
+    async def known_uids(*_): return dict(known)
+    async def get(_): return None
+    async def call(provider, tool, args):
+        if tool == "get_thread":
+            return {"messages": [{"id": uid, "date": datetime.fromtimestamp(ts, UTC).isoformat()} for uid, ts in threads[args["threadId"]]]}
+        query = args["query"]
+        if "newer_than" in query:
+            return {"threads": []}
+        after = re.search(r"after:(-?\d+)", query)
+        before = re.search(r"before:(-?\d+)", query)
+        matching = [(name, max(ts for _, ts in messages)) for name, messages in threads.items()
+                    if any((not after or ts > int(after.group(1))) and (not before or ts < int(before.group(1))) for _, ts in messages)]
+        return {"threads": [{"id": name} for name, _ in sorted(matching, key=lambda item: -item[1])]}
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", known_uids)
+    monkeypatch.setattr(sync_connector.message_access, "get_message", get)
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
+    cursor = "1000"
+    for _ in range(5):
+        changes = await sync_connector.fetch_changes(account("gmail", "connector"), cursor=cursor, folders=["INBOX"], limit=limit, max_body_chars=100)
+        known.update({m["provider_uid"]: m["provider_uid"] for m in changes.upserts})
+        cursor = changes.cursor
+        parts = cursor.split(":")
+        if len(parts) == 3:
+            assert int(parts[2]) >= int(parts[1])
+        else:
+            break
+    assert set(known) == {"new", "backlog"}
+    assert cursor == "2000"
+
+
+@pytest.mark.anyio
+async def test_connector_gap_skips_messages_outside_window_without_budget(monkeypatch):
+    from datetime import UTC, datetime
+
+    async def known(*_): return {}
+    async def call(provider, tool, args):
+        if tool == "get_thread":
+            stamps = [("above", 3000), ("inside", 1500)] if args["threadId"] == "x" else [("other", 1400)]
+            return {"messages": [{"id": uid, "date": datetime.fromtimestamp(ts, UTC).isoformat()} for uid, ts in stamps]}
+        query = args["query"]
+        if "before:" in query:
+            return {"threads": [{"id": "x"}, {"id": "y"}]}
+        return {"threads": []}
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", known)
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
+    result = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="2500:1000:2000", folders=["INBOX"], limit=2, max_body_chars=100)
+    assert {m["provider_uid"] for m in result.upserts} == {"inside", "other"}
+    assert result.cursor == "2500"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("exception_type", "code"), [(sync_imap.imaplib.IMAP4.abort, "unreachable"), (sync_imap.imaplib.IMAP4.readonly, "unreachable"), (sync_imap.imaplib.IMAP4.error, "auth_expired")])
+async def test_imap_login_error_classification(monkeypatch, exception_type, code):
+    states = []
+    class Server:
+        def login(self, *_): raise exception_type("login failed")
+        def logout(self): pass
+    async def get_account(_): return account()
+    async def get_state(_): return None
+    async def save_state(**kwargs): states.append(kwargs)
+    async def credentials(_): return {"imap_host": "example.org"}
+    async def password(_): return "placeholder"
+    async def check(_): pass
+    monkeypatch.setattr(sync.account_access, "get_account", get_account)
+    monkeypatch.setattr(sync.sync_state_access, "get_state", get_state)
+    monkeypatch.setattr(sync.sync_state_access, "save_state", save_state)
+    monkeypatch.setattr(sync_imap.service, "load_credentials", credentials)
+    monkeypatch.setattr(sync_imap.service, "imap_password", password)
+    monkeypatch.setattr(sync_imap.transport, "check_mail_host", check)
+    monkeypatch.setattr(sync_imap.transport, "open_imap", lambda *_: Server())
+    result = await sync.sync_account("a")
+    assert result.error_code == code
+    assert states[-1]["last_error"] == code

@@ -1,5 +1,6 @@
 """Apply incremental provider changes to the local inbox index."""
 
+import imaplib
 import logging
 
 import httpx
@@ -21,7 +22,7 @@ def _error_code(error: Exception) -> str:
         return "auth_expired"
     if isinstance(error, (transport.MailHostNotAllowedError, netguard.BlockedAddressError)):
         return "host_not_allowed"
-    if isinstance(error, (OSError, TimeoutError, httpx.TimeoutException, httpx.ConnectError)):
+    if isinstance(error, (OSError, TimeoutError, imaplib.IMAP4.abort, httpx.TimeoutException, httpx.ConnectError)):
         return "unreachable"
     return "provider_error"
 
