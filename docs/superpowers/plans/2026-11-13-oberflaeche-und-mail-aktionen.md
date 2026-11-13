@@ -452,7 +452,10 @@ def test_is_public_ip(ip, public): assert netguard.is_public_ip(ip) is public
 - Modify: `apps/api/src/api/routers/api/v1/mail/connectors.py` (Route
   `mail_connector_call_tool` und ihre Modelle löschen)
 - Modify: `apps/api/src/api/routers/api/v1/chat/drafts/[draft_id]/confirm.py`
-- Test: `apps/api/tests/test_mail_connectors_guard.py`, `apps/api/tests/test_chat_draft_confirm.py`
+- Modify: `apps/api/src/api/mail/service.py` (`upsert_account`),
+  `apps/api/src/api/routers/api/v1/mail/connectors.py` (`connect_connector`)
+- Test: `apps/api/tests/test_mail_connectors_guard.py`, `apps/api/tests/test_chat_draft_confirm.py`,
+  `apps/api/tests/test_mail_account_identity.py`
 
 **Interfaces:**
 
@@ -469,6 +472,18 @@ def test_is_public_ip(ip, public): assert netguard.is_public_ip(ip) is public
 - Verhalten:
   - `confirm_draft` lädt für Connector-Konten keine Zugangsdaten.
   - `send_message(account, …)` ohne `credentials` lädt sie nur für Nicht-Connector-Konten.
+  - Kontoidentität beim Verbinden eines Connectors (Befund der Sicherheitsprüfung vom
+    2026-11-13 zum Basis-Commit):
+    - `connect_connector` nimmt die Adresse aus dem Absender der neuesten Mail in
+      `search_threads(query="in:sent", pageSize=1)`. Den Feldnamen nennt das
+      Proben-Dokument (Task 2, Step 7). Empfänger von Mails im Posteingang werden dafür nie
+      gelesen. Ohne gesendete Mail gilt `{name}@connector.mistral`.
+    - `service.AccountConflictError(ValueError)`: `upsert_account` wirft sie, wenn es unter der
+      Adresse schon ein Konto mit anderem `provider` oder `auth_type` gibt, und ändert dieses
+      Konto nicht. Erneut verbinden mit derselben Verbindungsart bleibt erlaubt.
+    - Die Routen antworten darauf mit 409, Code `account_exists`: „Diese Adresse ist schon
+      über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung
+      wechseln willst.“
 
 - [ ] **Step 1: Failing Tests schreiben.**
   - `test_call_tool_route_is_gone`: `POST /api/v1/mail/connectors/gmail/tools/send_email` → 404
@@ -480,6 +495,13 @@ def test_is_public_ip(ip, public): assert netguard.is_public_ip(ip) is public
     `call_write_tool` kommt nur in `mail/connectors.py`, `mail/send.py` und `mail/actions.py` vor.
   - `test_confirm_sends_connector_draft_without_credentials`: Connector-Konto,
     `service.load_credentials` wirft beim Aufruf, `call_write_tool` als Fake → 200, Status `sent`.
+  - `test_connect_connector_takes_address_from_sent_mail`: Der Fake bekommt `query="in:sent"`;
+    der Absender `max@example.org` wird zur Kontoadresse.
+  - `test_connect_connector_ignores_inbox_recipients`: Eine Mail im Posteingang an
+    `liste@example.net` ändert die Kontoadresse nicht.
+  - `test_upsert_refuses_to_switch_connection_of_existing_account`: Ein IMAP-Konto unter
+    derselben Adresse → 409 mit `account_exists`; `provider`, `auth_type` und Zugangsdaten des
+    IMAP-Kontos bleiben unverändert.
 - [ ] **Step 2: Laufen lassen** → FAIL.
 - [ ] **Step 3: Implementieren.** Alte Seiten nur anpassen, falls sie `mailConnectorCallTool`
   nutzen.
