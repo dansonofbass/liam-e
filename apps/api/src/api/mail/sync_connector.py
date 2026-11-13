@@ -63,7 +63,7 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
                     if (lower is not None and stamp <= lower) or (upper is not None and stamp >= upper):
                         continue
                     latest = stamp if latest is None else max(latest, stamp)
-                    if parsed["provider_uid"] not in seen:
+                    if "INBOX" in (message.get("labelIds") or []) and parsed["provider_uid"] not in seen:
                         changes.upserts.append(parsed)
                         seen.add(parsed["provider_uid"])
                 if thread_latest is not None:
@@ -91,8 +91,11 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
             gap = None
     changes.cursor = str(newest) + (f":{gap[0]}:{gap[1]}" if gap else "")
     if valid:
-        present = {thread["id"] for thread in await _search(account.provider, "in:inbox newer_than:14d")}
-        unread = {thread["id"] for thread in await _search(account.provider, "is:unread in:inbox newer_than:14d")}
+        threads = await _search(account.provider, "in:inbox newer_than:14d")
+        present = {thread["id"] for thread in threads}
+        labels_by_uid = {message["id"]: set(message.get("labelIds") or [])
+                         for thread in threads for message in (thread.get("messages") or [])}
+        fallback = {}
         cutoff = datetime.now(UTC) - timedelta(days=14)
         for uid, local_id in known.items():
             message = await message_access.get_message(local_id)
@@ -101,10 +104,19 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
             date = message.internal_date
             if date is not None and (date.replace(tzinfo=UTC) if date.tzinfo is None else date) < cutoff:
                 continue
-            if message.thread_id not in present:
+            if uid in labels_by_uid:
+                labels = labels_by_uid[uid]
+                if "INBOX" not in labels:
+                    changes.moved_out.append(uid)
+                else:
+                    changes.read_updates[uid] = "UNREAD" not in labels
+            elif message.thread_id not in present:
                 changes.moved_out.append(uid)
             else:
-                changes.read_updates[uid] = message.thread_id not in unread
+                fallback[uid] = message.thread_id
+        if fallback:
+            unread = {thread["id"] for thread in await _search(account.provider, "is:unread in:inbox newer_than:14d")}
+            changes.read_updates.update({uid: thread_id not in unread for uid, thread_id in fallback.items()})
     return changes
 
 

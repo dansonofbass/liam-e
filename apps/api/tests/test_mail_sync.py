@@ -153,7 +153,7 @@ async def test_connector_paginates_past_empty_threads(monkeypatch):
     async def call(provider, tool, args):
         calls.append((tool, args.copy()))
         if tool == "get_thread":
-            return {"id": args["threadId"], "messages": [] if args["threadId"] == "empty" else [{"id": "m", "date": "2026-11-13T10:00:00+00:00"}]}
+            return {"id": args["threadId"], "messages": [] if args["threadId"] == "empty" else [{"id": "m", "date": "2026-11-13T10:00:00+00:00", "labelIds": ["INBOX"]}]}
         if not args.get("pageToken"):
             return {"threads": [{"id": "empty"}], "nextPageToken": "next"}
         return {"threads": [{"id": "full"}]}
@@ -210,7 +210,7 @@ async def test_connector_backlog_and_boundary_progress(monkeypatch):
         if tool == "get_thread":
             uid = args["threadId"]
             date = datetime.fromtimestamp(messages[uid], UTC).isoformat()
-            return {"id": uid, "messages": [{"id": uid, "date": date}]}
+            return {"id": uid, "messages": [{"id": uid, "date": date, "labelIds": ["INBOX"]}]}
         query = args["query"]
         if "newer_than" in query:
             return {"threads": []}
@@ -317,7 +317,7 @@ async def test_connector_whole_thread_frontier_preserves_backlog(monkeypatch, li
     async def get(_): return None
     async def call(provider, tool, args):
         if tool == "get_thread":
-            return {"messages": [{"id": uid, "date": datetime.fromtimestamp(ts, UTC).isoformat()} for uid, ts in threads[args["threadId"]]]}
+            return {"messages": [{"id": uid, "date": datetime.fromtimestamp(ts, UTC).isoformat(), "labelIds": ["INBOX"]} for uid, ts in threads[args["threadId"]]]}
         query = args["query"]
         if "newer_than" in query:
             return {"threads": []}
@@ -351,7 +351,7 @@ async def test_connector_gap_skips_messages_outside_window_without_budget(monkey
     async def call(provider, tool, args):
         if tool == "get_thread":
             stamps = [("above", 3000), ("inside", 1500)] if args["threadId"] == "x" else [("other", 1400)]
-            return {"messages": [{"id": uid, "date": datetime.fromtimestamp(ts, UTC).isoformat()} for uid, ts in stamps]}
+            return {"messages": [{"id": uid, "date": datetime.fromtimestamp(ts, UTC).isoformat(), "labelIds": ["INBOX"]} for uid, ts in stamps]}
         query = args["query"]
         if "before:" in query:
             return {"threads": [{"id": "x"}, {"id": "y"}]}
@@ -374,7 +374,7 @@ async def test_connector_one_second_gap_is_kept(monkeypatch):
     async def get(_): return None
     async def call(provider, tool, args):
         if tool == "get_thread":
-            return {"messages": [{"id": uid, "date": datetime.fromtimestamp(ts, UTC).isoformat()} for uid, ts in threads[args["threadId"]]]}
+            return {"messages": [{"id": uid, "date": datetime.fromtimestamp(ts, UTC).isoformat(), "labelIds": ["INBOX"]} for uid, ts in threads[args["threadId"]]]}
         query = args["query"]
         if "newer_than" in query:
             return {"threads": []}
@@ -417,3 +417,63 @@ async def test_imap_login_error_classification(monkeypatch, exception_type, code
     result = await sync.sync_account("a")
     assert result.error_code == code
     assert states[-1]["last_error"] == code
+
+
+@pytest.mark.anyio
+async def test_connector_skips_messages_without_inbox_label(monkeypatch):
+    async def known(*_): return {}
+    async def call(provider, tool, args):
+        if tool == "get_thread":
+            return {"id": "t", "messages": [
+                {"id": "in", "date": "1970-01-01T00:01:40+00:00", "labelIds": ["INBOX"]},
+                {"id": "sent", "date": "1970-01-01T00:03:20+00:00", "labelIds": ["SENT"]},
+            ]}
+        return {"threads": [{"id": "t"}]}
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", known)
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
+    result = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="", folders=["INBOX"], limit=10, max_body_chars=100)
+    assert [m["provider_uid"] for m in result.upserts] == ["in"]
+    assert result.cursor == "200"
+
+
+async def connector_reconciliation(monkeypatch, threads, unread_threads):
+    queries = []
+    async def known(*_): return {"a": "a", "b": "b"}
+    async def get(_): return SimpleNamespace(thread_id="t", internal_date=None)
+    async def call(provider, tool, args):
+        query = args["query"]
+        queries.append(query)
+        if "after:" in query: return {"threads": []}
+        if "is:unread" in query: return {"threads": unread_threads}
+        return {"threads": threads}
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", known)
+    monkeypatch.setattr(sync_connector.message_access, "get_message", get)
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
+    result = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="123", folders=["INBOX"], limit=10, max_body_chars=100)
+    return result, queries
+
+
+@pytest.mark.anyio
+async def test_connector_reconciles_read_state_per_message(monkeypatch):
+    result, queries = await connector_reconciliation(monkeypatch, [{"id": "t", "messages": [
+        {"id": "a", "labelIds": ["INBOX", "UNREAD"]}, {"id": "b", "labelIds": ["INBOX"]},
+    ]}], [{"id": "t"}])
+    assert result.read_updates == {"a": False, "b": True}
+    assert not any("is:unread" in query for query in queries)
+
+
+@pytest.mark.anyio
+async def test_connector_archived_sibling_is_moved_out(monkeypatch):
+    result, queries = await connector_reconciliation(monkeypatch, [{"id": "t", "messages": [
+        {"id": "a", "labelIds": ["INBOX"]}, {"id": "b", "labelIds": []},
+    ]}], [])
+    assert result.moved_out == ["b"]
+    assert result.read_updates == {"a": True}
+    assert not any("is:unread" in query for query in queries)
+
+
+@pytest.mark.anyio
+async def test_connector_falls_back_to_thread_state_without_messages(monkeypatch):
+    result, queries = await connector_reconciliation(monkeypatch, [{"id": "t"}], [{"id": "t"}])
+    assert result.read_updates == {"a": False, "b": False}
+    assert "is:unread in:inbox newer_than:14d" in queries
