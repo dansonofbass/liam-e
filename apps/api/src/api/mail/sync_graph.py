@@ -27,7 +27,11 @@ async def fetch_attachments(
             if not url:
                 break
             next_url = httpx.URL(url)
-            if next_url.scheme != "https" or next_url.host != httpx.URL(GRAPH_API).host or "@" in urlsplit(url).netloc:
+            base_url = httpx.URL(GRAPH_API)
+            next_port = next_url.port if next_url.port is not None else 443
+            base_port = base_url.port if base_url.port is not None else 443
+            if (next_url.scheme != "https" or next_url.host != base_url.host
+                    or next_port != base_port or "@" in urlsplit(url).netloc):
                 return None
             params = None
     except Exception:

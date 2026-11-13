@@ -18,18 +18,11 @@ def plain_address(address: str) -> str:
 
 def sender_address(from_header: str) -> str:
     try:
-        structured = Parser(policy=policy.default).parsestr("From: " + from_header + "\n\n")["From"]
-        if sum(bool(plain_address(item.addr_spec)) for item in structured.addresses) > 1:
+        value = from_header.replace("\r", " ").replace("\n", " ")
+        structured = Parser(policy=policy.default).parsestr("From: " + value + "\n\n")["From"]
+        if sum(bool(item.domain) for item in structured.addresses) > 1:
             return ""
-        address = plain_address(parseaddr(from_header)[1])
-        if address:
-            return address
-        encoded_word = r"=\?[^?\s]+\?[bq]\?[^?]*\?="
-        if any(re.search(r"<[^<>]*@[^<>]*>", word) for word in re.findall(encoded_word, from_header, re.IGNORECASE)):
-            return ""
-        cleaned = re.sub(encoded_word + r"|\"(?:\\.|[^\"\\])*\"", "", from_header, flags=re.IGNORECASE)
-        candidates = [plain_address(value) for value in re.findall(r"<([^<>]+)>", cleaned)]
-        candidates = [value for value in candidates if value]
+        candidates = [address for item in structured.addresses if (address := plain_address(item.addr_spec))]
         return candidates[0] if len(candidates) == 1 else ""
     except Exception:
         return ""

@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from api.mail import headers, sync_connector, sync_gmail, sync_graph, sync_imap
 
 
@@ -152,8 +154,44 @@ def test_graph_fetch_attachments_limits_pages():
 
 
 def test_sender_address_ignores_angle_address_inside_encoded_word():
-    assert headers.sender_address("Doe, John <real@sender.example> =?utf-8?q?_<victim@corp.example>?=") == ""
-    assert headers.sender_address("real@sender.example =?utf-8?q?_<victim@corp.example>?=") == ""
+    assert headers.sender_address("Doe, John <real@sender.example> =?utf-8?q?_<victim@corp.example>?=") == "real@sender.example"
+    assert headers.sender_address("real@sender.example =?utf-8?q?_<victim@corp.example>?=") == "real@sender.example"
+
+
+def test_sender_address_ignores_angle_address_inside_comment():
+    assert headers.sender_address("(Attacker <victim@corp.example>)") == ""
+    assert headers.sender_address("x (Attacker <victim@corp.example>)") == ""
+
+
+def test_sender_address_domain_bearing_invalid_mailbox_is_ambiguous():
+    assert headers.sender_address("\"evil x\"@attacker.example, Bank <service@bank.example>") == ""
+
+
+@pytest.mark.parametrize(("value", "expected"), [
+    ("=?utf-8?q?M=C3=BCller?= <Max.Mueller@Example.org>", "max.mueller@example.org"),
+    ("=?x-unknown?q?abc?= <a@b.org>", "a@b.org"),
+    ("=?utf-8?q?boss@corp.example?= <evil@attacker.example>", "evil@attacker.example"),
+    ("=?utf-8?q?boss@corp.example?=", ""),
+    ("Doe, John <john@example.org>", "john@example.org"),
+    ("\"Doe, John\" <john@example.org>", "john@example.org"),
+    ("=?utf-8?q?M=C3=BCller=2C_Max?= <max@example.org>", "max@example.org"),
+    ("Doe, John <real@sender.example> =?utf-8?q?_<victim@corp.example>?=", "real@sender.example"),
+    ("real@sender.example =?utf-8?q?_<victim@corp.example>?=", "real@sender.example"),
+    ("=?utf-8?q?_<victim@corp.example>?= <real@sender.example>", "real@sender.example"),
+    ("(Attacker <victim@corp.example>)", ""),
+    ("x (Attacker <victim@corp.example>)", ""),
+    ("a, b \"q <victim@corp.example>\"", ""),
+    ("\"x <victim@corp.example>\"", ""),
+    ("a@evil.example, Bank <service@bank.example>", ""),
+    ("\"evil x\"@attacker.example, Bank <service@bank.example>", ""),
+    ("plain@Example.ORG", "plain@example.org"),
+    ("<A@B.org>", "a@b.org"),
+    ("", ""),
+    ("Group: a@b.org, c@d.org;", ""),
+])
+def test_sender_paths_agree(value, expected):
+    raw = b"From: " + value.encode() + b"\r\nSubject: s\r\n\r\nx\r\n"
+    assert headers.sender_address(value) == sync_imap.parse_rfc822(raw, max_body_chars=100)["sender_address"] == expected
 
 
 def test_sender_address_ignores_angle_address_inside_quotes():
@@ -174,6 +212,11 @@ def test_sender_address_several_mailboxes_is_empty_on_both_paths():
 
 def test_graph_fetch_attachments_refuses_foreign_next_link():
     assert _graph_next_link("https://evil.example/collect") == (None, 1)
+
+
+def test_graph_fetch_attachments_refuses_other_port():
+    assert _graph_next_link("https://graph.microsoft.com:8443/v1.0/me/messages/1/attachments?$skip=1") == (None, 1)
+    assert _graph_next_link("https://graph.microsoft.com:0/next") == (None, 1)
 
 
 def test_graph_fetch_attachments_refuses_plain_http_next_link():
