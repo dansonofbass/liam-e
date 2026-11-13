@@ -54,7 +54,8 @@ def parse_rfc822(raw: bytes, *, max_body_chars: int) -> dict[str, Any]:
     sender_fields = common(raw_from, hdr)
     from_addresses = mailbox_addresses("from", include_invalid=True)
     if from_addresses is not None:
-        sender_fields["sender_address"] = plain_address(from_addresses[0]) if len(from_addresses) == 1 else ""
+        valid_from_addresses = [address for value in from_addresses if (address := plain_address(value))]
+        sender_fields["sender_address"] = valid_from_addresses[0] if len(valid_from_addresses) == 1 else ""
     to_addresses = mailbox_addresses("to")
     cc_addresses = mailbox_addresses("cc")
     return {**sender_fields, "thread_id": hdr.get("message-id", ""),

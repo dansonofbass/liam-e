@@ -161,6 +161,11 @@ def test_sender_address_ignores_angle_address_inside_quotes():
     assert headers.sender_address('"x <victim@corp.example>"') == ""
 
 
+def test_parse_rfc822_unquoted_comma_display_name():
+    raw = b"From: Doe, John <john@example.org>\r\n\r\n"
+    assert sync_imap.parse_rfc822(raw, max_body_chars=100)["sender_address"] == "john@example.org"
+
+
 def test_sender_address_several_mailboxes_is_empty_on_both_paths():
     value = "a@evil.example, Bank <service@bank.example>"
     assert headers.sender_address(value) == ""
