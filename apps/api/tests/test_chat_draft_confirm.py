@@ -56,7 +56,7 @@ async def test_confirm_maps_blocked_host_to_host_not_allowed(setup, monkeypatch,
     draft = json.loads(message.draft_json)
     assert draft["status"] == "failed"
     assert draft["error"] == code
-    assert "535" not in response.text + message.draft_json
+    assert "secret-ish" not in response.text + message.draft_json
 
 
 @pytest.mark.anyio
