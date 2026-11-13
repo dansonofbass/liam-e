@@ -364,6 +364,37 @@ async def test_connector_gap_skips_messages_outside_window_without_budget(monkey
 
 
 @pytest.mark.anyio
+async def test_connector_one_second_gap_is_kept(monkeypatch):
+    from datetime import UTC, datetime
+    import re
+
+    threads = {"t1": [("a", 1500)], "t2": [("1000b", 1000)], "t3": [("1000c", 1000)]}
+    known = {}
+    async def known_uids(*_): return dict(known)
+    async def get(_): return None
+    async def call(provider, tool, args):
+        if tool == "get_thread":
+            return {"messages": [{"id": uid, "date": datetime.fromtimestamp(ts, UTC).isoformat()} for uid, ts in threads[args["threadId"]]]}
+        query = args["query"]
+        if "newer_than" in query:
+            return {"threads": []}
+        after = re.search(r"after:(-?\d+)", query)
+        before = re.search(r"before:(-?\d+)", query)
+        matching = [name for name, messages in threads.items()
+                    if any((not after or ts > int(after.group(1))) and (not before or ts < int(before.group(1))) for _, ts in messages)]
+        return {"threads": [{"id": name} for name in sorted(matching, key=lambda name: -max(ts for _, ts in threads[name]))]}
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", known_uids)
+    monkeypatch.setattr(sync_connector.message_access, "get_message", get)
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
+    first = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="1000", folders=["INBOX"], limit=2, max_body_chars=100)
+    assert first.cursor == "1500:1000:1000"
+    known.update({m["provider_uid"]: m["provider_uid"] for m in first.upserts})
+    second = await sync_connector.fetch_changes(account("gmail", "connector"), cursor=first.cursor, folders=["INBOX"], limit=2, max_body_chars=100)
+    assert [m["provider_uid"] for m in second.upserts] == ["1000c"]
+    assert second.cursor == "1500"
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(("exception_type", "code"), [(sync_imap.imaplib.IMAP4.abort, "unreachable"), (sync_imap.imaplib.IMAP4.readonly, "unreachable"), (sync_imap.imaplib.IMAP4.error, "auth_expired")])
 async def test_imap_login_error_classification(monkeypatch, exception_type, code):
     states = []

@@ -79,7 +79,7 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
         newest = max(newest, latest)
     if valid and not done and frontier is not None:
         gap = (gap[0] if gap else old_newest, frontier)
-    if gap and gap[1] <= gap[0]:
+    if gap and gap[1] < gap[0]:
         gap = None
     if valid and gap and len(changes.upserts) < limit:
         done, frontier, _ = await scan(f"in:inbox after:{gap[0] - 1} before:{gap[1] + 1}", gap[0] - 1, gap[1] + 1)
@@ -87,7 +87,7 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
             gap = None
         elif frontier is not None:
             gap = (gap[0], frontier)
-        if gap and gap[1] <= gap[0]:
+        if gap and gap[1] < gap[0]:
             gap = None
     changes.cursor = str(newest) + (f":{gap[0]}:{gap[1]}" if gap else "")
     if valid:
