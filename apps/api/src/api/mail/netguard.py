@@ -16,6 +16,12 @@ import httpcore
 import httpx
 
 
+# Reject IPv4-embedding transition ranges regardless of Python's address tables.
+_BLOCKED_IPV6_NETWORKS = tuple(ipaddress.IPv6Network(cidr) for cidr in (
+    "64:ff9b::/96", "64:ff9b:1::/48", "2002::/16", "2001::/32", "::/96",
+))
+
+
 class BlockedAddressError(ValueError):
     """The destination cannot safely be used for an outbound request."""
 
@@ -28,8 +34,11 @@ def is_public_ip(address: str) -> bool:
         ip = ipaddress.ip_address(address)
     except ValueError:
         return False
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
+    if isinstance(ip, ipaddress.IPv6Address):
+        if any(ip in network for network in _BLOCKED_IPV6_NETWORKS):
+            return False
+        if ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
     return (
         ip.is_global
         and not ip.is_private

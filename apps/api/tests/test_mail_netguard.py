@@ -31,11 +31,28 @@ def dns(monkeypatch):
     ("::1", False), ("fe80::1", False), ("fd00::1", False),
     ("::ffff:127.0.0.1", False), ("224.0.0.1", False), ("ff02::1", False),
     ("240.0.0.1", False), ("::", False), ("::ffff:100.64.0.1", False),
+    ("64:ff9b::a9fe:a9fe", False), ("64:ff9b::808:808", False),
+    ("64:ff9b:1::a00:1", False),
+    ("2002:a9fe:a9fe::", False), ("2002:808:808::", False),
+    ("2001:0:4136:e378:8000:63bf:3fff:fdd2", False),
+    ("::127.0.0.1", False), ("::8.8.8.8", False),
     ("8.8.8.8", True), ("2a00:1450:4001::1", True),
     ("::ffff:8.8.8.8", True), ("invalid", False), ("fe80::1%eth0", False),
 ])
 def test_is_public_ip(ip, public):
     assert netguard.is_public_ip(ip) is public
+
+
+@pytest.mark.parametrize("ip", [
+    "64:ff9b::a9fe:a9fe", "64:ff9b::808:808", "64:ff9b:1::a00:1",
+    "2002:a9fe:a9fe::", "2002:808:808::",
+    "2001:0:4136:e378:8000:63bf:3fff:fdd2", "::127.0.0.1", "::8.8.8.8",
+])
+def test_ipv4_embedding_rejected_independently_of_stdlib_tables(ip, monkeypatch):
+    # Model permissive classifications across Python versions.
+    for name, value in (("is_global", True), ("is_private", False), ("is_reserved", False)):
+        monkeypatch.setattr(netguard.ipaddress.IPv6Address, name, value)
+    assert netguard.is_public_ip(ip) is False
 
 
 @pytest.mark.anyio
