@@ -52,8 +52,8 @@ members = [
     "apps/api",
     "packages/py/*",
 ]
-# `apps/web` is the only non-Python app matched by `apps/*`.
-exclude = ["apps/web"]
+# `apps/web` and `apps/chat-app` are the non-Python apps matched by `apps/*`.
+exclude = ["apps/web", "apps/chat-app"]
 
 [tool.uv.exclude-newer-package]
 "mistralai-capabilities-feature-observability" = false
