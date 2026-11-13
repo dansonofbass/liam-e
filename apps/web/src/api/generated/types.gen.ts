@@ -89,6 +89,24 @@ export type AccountSummaryOut = {
 };
 
 /**
+ * AttachmentOut
+ */
+export type AttachmentOut = {
+    /**
+     * Content Type
+     */
+    content_type: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Size
+     */
+    size: number;
+};
+
+/**
  * ChatMessageOut
  */
 export type ChatMessageOut = {
@@ -317,21 +335,37 @@ export type MailSummaryOut = {
 };
 
 /**
- * MessageOut
+ * MessageDetailOut
  */
-export type MessageOut = {
+export type MessageDetailOut = {
     /**
      * Account Id
      */
     account_id: string;
     /**
+     * Attachments
+     */
+    attachments: Array<AttachmentOut>;
+    /**
      * Body Text
      */
     body_text: string;
     /**
-     * Folder
+     * Can Unsubscribe
      */
-    folder: string;
+    can_unsubscribe: boolean;
+    /**
+     * Cc
+     */
+    cc: Array<string>;
+    /**
+     * Color Index
+     */
+    color_index: number;
+    /**
+     * Deadline
+     */
+    deadline: string | null;
     /**
      * Has Attachments
      */
@@ -345,25 +379,25 @@ export type MessageOut = {
      */
     internal_date: string | null;
     /**
+     * Is Flagged
+     */
+    is_flagged: boolean;
+    /**
      * Is Read
      */
     is_read: boolean;
     /**
-     * Labels
+     * Needs Reply
      */
-    labels: Array<string>;
+    needs_reply: boolean;
     /**
-     * Provider Uid
+     * Sender Address
      */
-    provider_uid: string;
+    sender_address: string;
     /**
-     * Recipients
+     * Sender Name
      */
-    recipients: Array<string>;
-    /**
-     * Sender
-     */
-    sender: string;
+    sender_name: string;
     /**
      * Snippet
      */
@@ -376,6 +410,82 @@ export type MessageOut = {
      * Thread Id
      */
     thread_id: string;
+    /**
+     * To
+     */
+    to: Array<string>;
+};
+
+/**
+ * MessageListItemOut
+ */
+export type MessageListItemOut = {
+    /**
+     * Account Id
+     */
+    account_id: string;
+    /**
+     * Color Index
+     */
+    color_index: number;
+    /**
+     * Deadline
+     */
+    deadline: string | null;
+    /**
+     * Has Attachments
+     */
+    has_attachments: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Internal Date
+     */
+    internal_date: string | null;
+    /**
+     * Is Flagged
+     */
+    is_flagged: boolean;
+    /**
+     * Is Read
+     */
+    is_read: boolean;
+    /**
+     * Needs Reply
+     */
+    needs_reply: boolean;
+    /**
+     * Sender Address
+     */
+    sender_address: string;
+    /**
+     * Sender Name
+     */
+    sender_name: string;
+    /**
+     * Snippet
+     */
+    snippet: string;
+    /**
+     * Subject
+     */
+    subject: string;
+};
+
+/**
+ * MessagePageOut
+ */
+export type MessagePageOut = {
+    /**
+     * Items
+     */
+    items: Array<MessageListItemOut>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
 };
 
 /**
@@ -843,47 +953,63 @@ export type MailConnectorToolsListResponses = {
 
 export type MailConnectorToolsListResponse = MailConnectorToolsListResponses[keyof MailConnectorToolsListResponses];
 
-export type MailMessagesSearchData = {
+export type MailMessagesListData = {
     body?: never;
     path?: never;
     query?: {
         /**
-         * Q
-         *
-         * Volltext über Betreff, Absender und Inhalt
+         * Cursor
          */
-        q?: string;
-        /**
-         * Account Id
-         */
-        account_id?: string;
+        cursor?: string;
         /**
          * Limit
          */
         limit?: number;
+        /**
+         * Account Id
+         */
+        account_id?: Array<string>;
+        /**
+         * Unread
+         */
+        unread?: boolean;
+        /**
+         * Important
+         */
+        important?: boolean;
+        /**
+         * Attachments
+         */
+        attachments?: boolean;
+        /**
+         * Q
+         */
+        q?: string;
+        /**
+         * Folder
+         */
+        folder?: 'INBOX' | 'ARCHIVE' | 'TRASH';
     };
     url: '/api/v1/mail/messages';
 };
 
-export type MailMessagesSearchErrors = {
+export type MailMessagesListErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type MailMessagesSearchError = MailMessagesSearchErrors[keyof MailMessagesSearchErrors];
+export type MailMessagesListError = MailMessagesListErrors[keyof MailMessagesListErrors];
 
-export type MailMessagesSearchResponses = {
+export type MailMessagesListResponses = {
     /**
-     * Response Mail Messages Search
-     *
      * Successful Response
      */
-    200: Array<MessageOut>;
+    200: MessagePageOut;
 };
 
-export type MailMessagesSearchResponse = MailMessagesSearchResponses[keyof MailMessagesSearchResponses];
+export type MailMessagesListResponse = MailMessagesListResponses[keyof MailMessagesListResponses];
 
 export type MailMessageGetData = {
     body?: never;
@@ -910,7 +1036,7 @@ export type MailMessageGetResponses = {
     /**
      * Successful Response
      */
-    200: MessageOut;
+    200: MessageDetailOut;
 };
 
 export type MailMessageGetResponse = MailMessageGetResponses[keyof MailMessageGetResponses];

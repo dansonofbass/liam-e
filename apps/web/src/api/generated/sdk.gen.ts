@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChatConversationsListData, ChatConversationsListResponses, ChatDraftCancelData, ChatDraftCancelErrors, ChatDraftCancelResponses, ChatDraftConfirmData, ChatDraftConfirmErrors, ChatDraftConfirmResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessagesSearchData, MailMessagesSearchErrors, MailMessagesSearchResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
+import type { ChatConversationsListData, ChatConversationsListResponses, ChatDraftCancelData, ChatDraftCancelErrors, ChatDraftCancelResponses, ChatDraftConfirmData, ChatDraftConfirmErrors, ChatDraftConfirmResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -182,23 +182,16 @@ export const mailAccountConnectConnector = <ThrowOnError extends boolean = false
 export const mailConnectorToolsList = <ThrowOnError extends boolean = false>(options: Options<MailConnectorToolsListData, ThrowOnError>): RequestResult<MailConnectorToolsListResponses, MailConnectorToolsListErrors, ThrowOnError> => (options.client ?? client).get<MailConnectorToolsListResponses, MailConnectorToolsListErrors, ThrowOnError>({ url: '/api/v1/mail/connectors/{name}/tools', ...options });
 
 /**
- * Search the synced mail index across all accounts
+ * List the synced inbox
  *
- * Search the synced mail index across all connected accounts.
- *
- * ``q`` matches case-insensitively as a substring of subject, sender and body, ``account_id``
- * restricts the search to one account and ``limit`` caps the result count (1-200). Messages are
- * returned with the newest ``internal_date`` first.
+ * List messages with filters and an opaque cursor for the next page.
  */
-export const mailMessagesSearch = <ThrowOnError extends boolean = false>(options?: Options<MailMessagesSearchData, ThrowOnError>): RequestResult<MailMessagesSearchResponses, MailMessagesSearchErrors, ThrowOnError> => (options?.client ?? client).get<MailMessagesSearchResponses, MailMessagesSearchErrors, ThrowOnError>({ url: '/api/v1/mail/messages', ...options });
+export const mailMessagesList = <ThrowOnError extends boolean = false>(options?: Options<MailMessagesListData, ThrowOnError>): RequestResult<MailMessagesListResponses, MailMessagesListErrors, ThrowOnError> => (options?.client ?? client).get<MailMessagesListResponses, MailMessagesListErrors, ThrowOnError>({ url: '/api/v1/mail/messages', ...options });
 
 /**
  * Read one synced message in full
  *
- * Return one synced message with all indexed fields, including its stored body text.
- *
- * The response also carries recipients, labels and read/attachment flags. ``message_id`` is the
- * id from a search result; an unknown id answers 404.
+ * Return one indexed message or 404 if it does not exist.
  */
 export const mailMessageGet = <ThrowOnError extends boolean = false>(options: Options<MailMessageGetData, ThrowOnError>): RequestResult<MailMessageGetResponses, MailMessageGetErrors, ThrowOnError> => (options.client ?? client).get<MailMessageGetResponses, MailMessageGetErrors, ThrowOnError>({ url: '/api/v1/mail/messages/{message_id}', ...options });
 

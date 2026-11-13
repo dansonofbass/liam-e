@@ -129,6 +129,29 @@
         "title": "AccountSummaryOut",
         "type": "object"
       },
+      "AttachmentOut": {
+        "properties": {
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "size",
+          "content_type"
+        ],
+        "title": "AttachmentOut",
+        "type": "object"
+      },
       "ChatMessageOut": {
         "properties": {
           "content": {
@@ -451,19 +474,49 @@
         "title": "MailSummaryOut",
         "type": "object"
       },
-      "MessageOut": {
+      "MessageDetailOut": {
         "properties": {
           "account_id": {
             "title": "Account Id",
             "type": "string"
           },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentOut"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
           "body_text": {
             "title": "Body Text",
             "type": "string"
           },
-          "folder": {
-            "title": "Folder",
-            "type": "string"
+          "can_unsubscribe": {
+            "title": "Can Unsubscribe",
+            "type": "boolean"
+          },
+          "cc": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cc",
+            "type": "array"
+          },
+          "color_index": {
+            "title": "Color Index",
+            "type": "integer"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
           },
           "has_attachments": {
             "title": "Has Attachments",
@@ -485,30 +538,24 @@
             ],
             "title": "Internal Date"
           },
+          "is_flagged": {
+            "title": "Is Flagged",
+            "type": "boolean"
+          },
           "is_read": {
             "title": "Is Read",
             "type": "boolean"
           },
-          "labels": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Labels",
-            "type": "array"
+          "needs_reply": {
+            "title": "Needs Reply",
+            "type": "boolean"
           },
-          "provider_uid": {
-            "title": "Provider Uid",
+          "sender_address": {
+            "title": "Sender Address",
             "type": "string"
           },
-          "recipients": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Recipients",
-            "type": "array"
-          },
-          "sender": {
-            "title": "Sender",
+          "sender_name": {
+            "title": "Sender Name",
             "type": "string"
           },
           "snippet": {
@@ -522,25 +569,154 @@
           "thread_id": {
             "title": "Thread Id",
             "type": "string"
+          },
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "To",
+            "type": "array"
           }
         },
         "required": [
           "id",
           "account_id",
-          "folder",
-          "provider_uid",
-          "thread_id",
+          "color_index",
           "subject",
-          "sender",
-          "recipients",
+          "sender_name",
+          "sender_address",
           "snippet",
-          "body_text",
           "internal_date",
-          "has_attachments",
           "is_read",
-          "labels"
+          "is_flagged",
+          "has_attachments",
+          "deadline",
+          "needs_reply",
+          "to",
+          "cc",
+          "body_text",
+          "attachments",
+          "thread_id",
+          "can_unsubscribe"
         ],
-        "title": "MessageOut",
+        "title": "MessageDetailOut",
+        "type": "object"
+      },
+      "MessageListItemOut": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "color_index": {
+            "title": "Color Index",
+            "type": "integer"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "has_attachments": {
+            "title": "Has Attachments",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "internal_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Date"
+          },
+          "is_flagged": {
+            "title": "Is Flagged",
+            "type": "boolean"
+          },
+          "is_read": {
+            "title": "Is Read",
+            "type": "boolean"
+          },
+          "needs_reply": {
+            "title": "Needs Reply",
+            "type": "boolean"
+          },
+          "sender_address": {
+            "title": "Sender Address",
+            "type": "string"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "color_index",
+          "subject",
+          "sender_name",
+          "sender_address",
+          "snippet",
+          "internal_date",
+          "is_read",
+          "is_flagged",
+          "has_attachments",
+          "deadline",
+          "needs_reply"
+        ],
+        "title": "MessageListItemOut",
+        "type": "object"
+      },
+      "MessagePageOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageListItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "MessagePageOut",
         "type": "object"
       },
       "OAuthAuthorizeOut": {
@@ -1198,28 +1374,16 @@
     },
     "/api/v1/mail/messages": {
       "get": {
-        "description": "Search the synced mail index across all connected accounts.\n\n``q`` matches case-insensitively as a substring of subject, sender and body, ``account_id``\nrestricts the search to one account and ``limit`` caps the result count (1-200). Messages are\nreturned with the newest ``internal_date`` first.",
-        "operationId": "mail_messages_search",
+        "description": "List messages with filters and an opaque cursor for the next page.",
+        "operationId": "mail_messages_list",
         "parameters": [
           {
-            "description": "Volltext \u00fcber Betreff, Absender und Inhalt",
             "in": "query",
-            "name": "q",
+            "name": "cursor",
             "required": false,
             "schema": {
               "default": "",
-              "description": "Volltext \u00fcber Betreff, Absender und Inhalt",
-              "title": "Q",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "account_id",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Account Id",
+              "title": "Cursor",
               "type": "string"
             }
           },
@@ -1229,10 +1393,78 @@
             "required": false,
             "schema": {
               "default": 50,
-              "maximum": 200,
+              "maximum": 100,
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Account Id",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unread",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Unread",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "important",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Important",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attachments",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Attachments",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder",
+            "required": false,
+            "schema": {
+              "default": "INBOX",
+              "enum": [
+                "INBOX",
+                "ARCHIVE",
+                "TRASH"
+              ],
+              "title": "Folder",
+              "type": "string"
             }
           }
         ],
@@ -1241,11 +1473,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/MessageOut"
-                  },
-                  "title": "Response Mail Messages Search",
-                  "type": "array"
+                  "$ref": "#/components/schemas/MessagePageOut"
                 }
               }
             },
@@ -1262,12 +1490,12 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Search the synced mail index across all accounts"
+        "summary": "List the synced inbox"
       }
     },
     "/api/v1/mail/messages/{message_id}": {
       "get": {
-        "description": "Return one synced message with all indexed fields, including its stored body text.\n\nThe response also carries recipients, labels and read/attachment flags. ``message_id`` is the\nid from a search result; an unknown id answers 404.",
+        "description": "Return one indexed message or 404 if it does not exist.",
         "operationId": "mail_message_get",
         "parameters": [
           {
@@ -1285,7 +1513,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MessageOut"
+                  "$ref": "#/components/schemas/MessageDetailOut"
                 }
               }
             },
