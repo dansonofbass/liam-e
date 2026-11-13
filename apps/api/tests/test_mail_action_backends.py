@@ -135,6 +135,19 @@ async def test_imap_undo_finds_message_by_message_id(imap):
 
 
 @pytest.mark.anyio
+async def test_imap_undo_read_state_in_inbox_uses_stored_uid(imap):
+    backend = backends.backend_for(account())
+    # The index row is still in INBOX, so its stored UID is the real INBOX UID.
+    row = message(folder="INBOX")
+    row.rfc_message_id = ""
+    await backend.apply(row, "mark_read")
+    imap.uid.reset_mock()
+    await backend.revert(row, {"folder": "INBOX", "is_read": False})
+    assert not any(call.args[0] == "SEARCH" for call in imap.uid.call_args_list)
+    imap.uid.assert_called_once_with("STORE", "12", "-FLAGS", "(\\Seen)")
+
+
+@pytest.mark.anyio
 async def test_imap_restore_searches_inbox_when_copyuid_missing(imap):
     imap.response.return_value = (None, [None])
     result = await backends.backend_for(account()).apply(message(folder="ARCHIVE"), "restore")

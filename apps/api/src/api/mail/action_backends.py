@@ -218,7 +218,8 @@ class ImapBackend:
                 # Undo must be able to locate the message after its folder UID changes.
                 raise ActionUnsupportedError()
             _ok(connection.select(_quoted(source)))
-            uid = _search(connection, message) if undo or message.folder != "INBOX" else message.provider_uid
+            # The stored UID is only valid while the row is in INBOX; elsewhere it may be stale.
+            uid = message.provider_uid if message.folder == "INBOX" else _search(connection, message)
             if not uid.isdigit():
                 raise ActionUnsupportedError()
             if is_read is not None:
