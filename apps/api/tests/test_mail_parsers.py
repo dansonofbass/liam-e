@@ -98,10 +98,10 @@ def test_graph_fetch_attachments_follows_next_link():
         if request.url.path == "/next":
             return httpx.Response(200, json={"value": [{"name": "second"}]})
         assert request.url.params["$select"] == "name,size,contentType"
-        return httpx.Response(200, json={"value": [{"name": "first"}], "@odata.nextLink": "https://graph.example/next"})
+        return httpx.Response(200, json={"value": [{"name": "first"}], "@odata.nextLink": "https://graph.microsoft.com/next"})
 
     async def run():
-        async with httpx.AsyncClient(base_url="https://graph.example", transport=httpx.MockTransport(handler)) as client:
+        async with httpx.AsyncClient(base_url="https://graph.microsoft.com", transport=httpx.MockTransport(handler)) as client:
             return await sync_graph.fetch_attachments(client, "id", {})
 
     assert asyncio.run(run()) == [{"name": "first"}, {"name": "second"}]
@@ -112,7 +112,7 @@ def test_graph_fetch_attachments_error_returns_none():
     import httpx
 
     async def run():
-        async with httpx.AsyncClient(base_url="https://graph.example", transport=httpx.MockTransport(lambda request: httpx.Response(429))) as client:
+        async with httpx.AsyncClient(base_url="https://graph.microsoft.com", transport=httpx.MockTransport(lambda request: httpx.Response(429))) as client:
             return await sync_graph.fetch_attachments(client, "id", {})
 
     assert asyncio.run(run()) is None
@@ -141,11 +141,69 @@ def test_graph_fetch_attachments_limits_pages():
 
     def handler(request):
         calls.append(request)
-        return httpx.Response(200, json={"value": [{"name": str(len(calls))}], "@odata.nextLink": "https://graph.example/next"})
+        return httpx.Response(200, json={"value": [{"name": str(len(calls))}], "@odata.nextLink": "https://graph.microsoft.com/next"})
 
     async def run():
-        async with httpx.AsyncClient(base_url="https://graph.example", transport=httpx.MockTransport(handler)) as client:
+        async with httpx.AsyncClient(base_url="https://graph.microsoft.com", transport=httpx.MockTransport(handler)) as client:
             return await sync_graph.fetch_attachments(client, "id", {})
 
     assert len(asyncio.run(run())) == 5
     assert len(calls) == 5
+
+
+def test_sender_address_ignores_angle_address_inside_encoded_word():
+    assert headers.sender_address("Doe, John <real@sender.example> =?utf-8?q?_<victim@corp.example>?=") == ""
+    assert headers.sender_address("real@sender.example =?utf-8?q?_<victim@corp.example>?=") == ""
+
+
+def test_sender_address_ignores_angle_address_inside_quotes():
+    assert headers.sender_address('a, b "q <victim@corp.example>"') == ""
+    assert headers.sender_address('"x <victim@corp.example>"') == ""
+
+
+def test_sender_address_several_mailboxes_is_empty_on_both_paths():
+    value = "a@evil.example, Bank <service@bank.example>"
+    assert headers.sender_address(value) == ""
+    assert sync_imap.parse_rfc822(f"From: {value}\r\n\r\n".encode(), max_body_chars=100)["sender_address"] == ""
+
+
+def test_graph_fetch_attachments_refuses_foreign_next_link():
+    assert _graph_next_link("https://evil.example/collect") == (None, 1)
+
+
+def test_graph_fetch_attachments_refuses_plain_http_next_link():
+    assert _graph_next_link("http://graph.microsoft.com/next") == (None, 1)
+
+
+def test_graph_fetch_attachments_refuses_userinfo_and_invalid_url():
+    assert _graph_next_link("https://user@graph.microsoft.com/next") == (None, 1)
+    assert _graph_next_link("https://[invalid") == (None, 1)
+
+
+def _graph_next_link(link):
+    import asyncio
+    import httpx
+
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"value": [], "@odata.nextLink": link})
+
+    async def run():
+        async with httpx.AsyncClient(base_url="https://graph.microsoft.com", transport=httpx.MockTransport(handler)) as client:
+            return await sync_graph.fetch_attachments(client, "id", {"Authorization": "Bearer test"})
+
+    result = asyncio.run(run())
+    return result, len(calls)
+
+
+def test_graph_fetch_attachments_malformed_json_returns_none():
+    import asyncio
+    import httpx
+
+    async def run():
+        async with httpx.AsyncClient(base_url="https://graph.microsoft.com", transport=httpx.MockTransport(lambda request: httpx.Response(200, text="not json"))) as client:
+            return await sync_graph.fetch_attachments(client, "id", {})
+
+    assert asyncio.run(run()) is None

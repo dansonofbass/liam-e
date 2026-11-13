@@ -3,9 +3,11 @@
 import json
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
+from api.mail.providers import GRAPH_API
 from api.mail.sync_types import attachments, common, strip_html
 
 
@@ -17,15 +19,18 @@ async def fetch_attachments(
     items: list[dict[str, Any]] = []
     try:
         for _ in range(5):
-            response = await client.get(url, params=params, headers=headers)
+            response = await client.get(url, params=params, headers=headers, follow_redirects=False)
             response.raise_for_status()
             page = response.json()
             items.extend(page.get("value", []))
             url = page.get("@odata.nextLink")
             if not url:
                 break
+            next_url = httpx.URL(url)
+            if next_url.scheme != "https" or next_url.host != httpx.URL(GRAPH_API).host or "@" in urlsplit(url).netloc:
+                return None
             params = None
-    except httpx.HTTPError:
+    except Exception:
         return None
     return items
 

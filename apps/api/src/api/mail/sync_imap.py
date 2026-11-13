@@ -7,6 +7,7 @@ from email import policy
 from email.utils import parsedate_to_datetime
 from typing import Any
 
+from api.mail.headers import plain_address
 from api.mail.sync_types import addresses, common
 
 
@@ -32,12 +33,12 @@ def parse_rfc822(raw: bytes, *, max_body_chars: int) -> dict[str, Any]:
         except Exception:
             return ""
 
-    def mailbox_addresses(key: str) -> list[str] | None:
+    def mailbox_addresses(key: str, *, include_invalid: bool = False) -> list[str] | None:
         try:
             values = msg.get_all(key, [])
             if not all(hasattr(value, "addresses") for value in values):
                 return None
-            return [address.addr_spec for value in values for address in value.addresses if address.username and address.domain]
+            return [address.addr_spec for value in values for address in value.addresses if include_invalid or (address.username and address.domain)]
         except Exception:
             return None
 
@@ -51,10 +52,9 @@ def parse_rfc822(raw: bytes, *, max_body_chars: int) -> dict[str, Any]:
     raw_from = next((value for key, value in msg.raw_items() if key.lower() == "from"), "")
     sender = header("from")
     sender_fields = common(raw_from, hdr)
-    from_addresses = mailbox_addresses("from")
-    if from_addresses:
-        candidate = from_addresses[0].lower()
-        sender_fields["sender_address"] = "" if "=?" in candidate else candidate
+    from_addresses = mailbox_addresses("from", include_invalid=True)
+    if from_addresses is not None:
+        sender_fields["sender_address"] = plain_address(from_addresses[0]) if len(from_addresses) == 1 else ""
     to_addresses = mailbox_addresses("to")
     cc_addresses = mailbox_addresses("cc")
     return {**sender_fields, "thread_id": hdr.get("message-id", ""),
