@@ -314,10 +314,15 @@ Folgen für dieses Design:
 - Inkrementell: IMAP über `UIDVALIDITY` und die letzte UID (bei geänderter `UIDVALIDITY`
   neu aufbauen), Gmail über `historyId`, Graph über `deltaLink`, Connector so weit sein
   Werkzeug es erlaubt. Gelesen-Flags und verschobene Mails werden nachgezogen.
-- Anstoßen: beim Öffnen der App, wenn der letzte Abruf älter als 10 Minuten ist, und
-  über „Jetzt abrufen“ je Konto oder für alle. Die Oberfläche fragt den Zustand ab
-  („Wird abgerufen …“). Ob Studio regelmäßige Aufgaben ausführen kann, klärt der Plan;
-  ohne das bleibt es beim Anstoßen.
+- Anstoßen: regelmäßig im Hintergrund, ohne dass die App offen ist (Owner-Entscheidung
+  2026-11-13). Der Worker im API-Prozess stellt alle `MAIL_SYNC_INTERVAL_MINUTES`
+  (Standard 5) für jedes aktive Konto einen Abruf ein, dessen letzter Abruf älter ist oder
+  fehlt. Konten mit abgelaufener Anmeldung lässt der Takt aus, damit der Anbieter das Konto
+  nicht nach wiederholten Fehlversuchen sperrt; „Jetzt abrufen“ und neues Verbinden gehen
+  weiter. Studio bietet Apps keine Zeitpläne (Probe), deshalb läuft der Takt im Prozess.
+  Zusätzlich beim Öffnen der App, wenn der letzte Abruf älter als 10 Minuten ist (etwa nach
+  einem Neustart), und über „Jetzt abrufen“ je Konto oder für alle. Die Oberfläche fragt den
+  Zustand ab („Wird abgerufen …“).
 - Hintergrundarbeit (Abruf, „Kurz gefasst“) läuft als Zeilen in einer Tabelle `mail_job`.
   Ein Worker im API-Prozess holt sie mit `FOR UPDATE SKIP LOCKED`. Das hält auch bei
   mehreren Instanzen oder einem Neustart, ohne dass doppelt abgerufen wird. „Nie zwei
@@ -420,7 +425,8 @@ Diese Punkte hat der Owner nicht ausdrücklich entschieden:
 4. „Rückgängig“ 10 Sekunden sichtbar, 24 Stunden möglich.
 5. Abbestellen ohne One-Click und ohne `mailto` geschieht nicht automatisch.
 6. Anhänge nur anzeigen, nicht herunterladen; Mails nur als Text.
-7. Abruf beim Öffnen, wenn älter als 10 Minuten, sonst nur von Hand.
+7. Abruf regelmäßig im Hintergrund alle 5 Minuten (Owner-Entscheidung 2026-11-13), dazu
+   beim Öffnen, wenn älter als 10 Minuten, und von Hand.
 8. IMAP-Server nur aus Voreinstellungen oder aus `MAIL_IMAP_ALLOWED_HOSTS` (S3). Für einen
    unbekannten Anbieter trägst du den Server dort ein, bevor du das Konto verbindest.
 9. Echte Antworten in der Unterhaltung mit Cc und „Allen antworten“ (§7.3).

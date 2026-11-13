@@ -66,7 +66,8 @@ Die Sicherheitslücken S1 bis S6 werden geschlossen.
   - Jede neue Einstellung bekommt ein Feld in `packages/py/env/src/env/mail.py` und einen
     leeren Eintrag in `.env.example`.
   - Neu in diesem Plan: `MAIL_IMAP_ALLOWED_HOSTS`, `MAIL_WORKER_ENABLED`,
-    `MAIL_WORKER_POLL_SECONDS`, `MAIL_SYNC_STALE_MINUTES`, `MAIL_INSIGHT_MODEL`,
+    `MAIL_WORKER_POLL_SECONDS`, `MAIL_SYNC_STALE_MINUTES`, `MAIL_SYNC_INTERVAL_MINUTES`,
+    `MAIL_INSIGHT_MODEL`,
     `MAIL_INSIGHT_BATCH_LIMIT`, `MAIL_INSIGHT_DAYS`.
 - **Geheimnisse:**
   - Keine Secrets, Tokens, Passwörter oder Mailinhalte in Logs, Tests, Fixtures oder Commits.
@@ -74,7 +75,9 @@ Die Sicherheitslücken S1 bis S6 werden geschlossen.
 - **Werte aus der Spec:**
   - Text läuft mit 3 Zeichen je 24 ms ein; bei `prefers-reduced-motion` sofort.
   - „Rückgängig“ ist höchstens 10 s sichtbar und 24 h möglich.
-  - Abruf beim Öffnen, wenn der letzte älter als 10 min ist.
+  - Abruf im Hintergrund alle `MAIL_SYNC_INTERVAL_MINUTES` (Standard 5) je aktivem Konto,
+    ohne Konten mit abgelaufener Anmeldung; zusätzlich beim Öffnen, wenn der letzte älter
+    als 10 min ist.
   - „Kurz gefasst“ im Hintergrund für ungelesene Mails der letzten 14 Tage, höchstens 50 je
     Abruf, Modell `MAIL_INSIGHT_MODEL` (Standard `mistral-small-latest`).
   - Höchstens 3 Folgevorschläge im Chat und 2 unter „Kurz gefasst“.
@@ -304,7 +307,7 @@ eine eigene Test-App freigegeben (2026-11-13).
   | Ausnahme je Operation möglich | Task 19 Variante B mit dem gefundenen Mechanismus |
   | MCP automatisch, keine Ausnahme möglich | **STOP:** Der Owner entscheidet vor Task 12, wie es weitergeht |
   | Zeitpläne vorhanden | Task 10 Step 8: Zeitplan für `mail_sync_all` |
-  | Mehrere Instanzen oder Leerlauf-Stopp | keine Codeänderung (SKIP LOCKED, Abruf beim Öffnen); Hinweis in AGENTS.md (Task 28) |
+  | Mehrere Instanzen oder Leerlauf-Stopp | keine Codeänderung (SKIP LOCKED, Takt im Worker, Abruf beim Öffnen); Hinweis in AGENTS.md (Task 28) |
   | `get_thread` liefert Kopfzeilen | Task 8 liest `List-Unsubscribe` aus dem Connector |
   | keine Kopfzeilen | Task 8 setzt `list_unsubscribe = ""`; Task 14 erkennt Newsletter über Gmail-Kategorien |
   | `TRASH` per Label erlaubt | Task 12: Papierkorb für Connector-Konten über `label_message` |
@@ -808,7 +811,8 @@ def test_is_public_ip(ip, public): assert netguard.is_public_ip(ip) is public
 - Modify: `apps/api/src/api/routers/api/v1/mail/accounts.py` (`mail_account_sync` stellt nur
   noch ein und antwortet mit 202)
 - Modify: `packages/py/env/src/env/mail.py` (`mail_worker_enabled: bool = True`,
-  `mail_worker_poll_seconds: float = 2.0`, `mail_sync_stale_minutes: int = 10`), `.env.example`
+  `mail_worker_poll_seconds: float = 2.0`, `mail_sync_stale_minutes: int = 10`,
+  `mail_sync_interval_minutes: int = 5`), `.env.example`
 - Modify: `apps/api/tests/support/fake_store.py` (Aufträge)
 - Test: `apps/api/tests/test_mail_jobs.py`, `apps/api/tests/test_mail_summary.py`
 
@@ -823,7 +827,16 @@ def test_is_public_ip(ip, public): assert netguard.is_public_ip(ip) is public
     - holt und führt genau einen Auftrag aus;
     - bei Fehler `fail(retry_at=now + 30 s × attempts)`, solange `attempts < 3`, sonst endgültig;
     - `LookupError` (Konto gelöscht) ist sofort endgültig.
-  - `jobs.worker_loop(stop: asyncio.Event) -> None`
+  - `jobs.enqueue_due_syncs(now: datetime, *, older_than_minutes: int | None, skip_auth_expired: bool) -> list[str]`:
+    stellt für jedes aktive Konto einen Abruf ein, dessen letzter Abruf älter ist oder fehlt
+    (`None` = alle), und gibt die eingestellten Konto-IDs zurück. `mail_sync_all` ruft es mit
+    `skip_auth_expired=False`, der Takt mit `True`.
+  - `jobs.worker_loop(stop: asyncio.Event) -> None`:
+    - arbeitet Aufträge ab;
+    - Takt: gleich nach dem Start und danach höchstens einmal je `mail_sync_interval_minutes`
+      `enqueue_due_syncs(now, older_than_minutes=mail_sync_interval_minutes, skip_auth_expired=True)`;
+    - `mail_sync_interval_minutes = 0` schaltet den Takt ab; ein Fehler im Takt beendet die
+      Schleife nicht.
   - Handler `sync`: ruft `sync.sync_account`. Task 13 hängt das Einstellen der Insights an.
   - Startup-Hook `async def startup(app: FastAPI) -> None`: startet den Worker, wenn
     `mail_env.mail_worker_enabled`, und legt ihn in `app.state.mail_worker` ab.
@@ -857,12 +870,15 @@ def test_is_public_ip(ip, public): assert netguard.is_public_ip(ip) is public
   - `test_summary_never_contains_provider_text`
   - `test_color_index_cycles_after_four_accounts`: 5 Konten → `[0, 1, 2, 3, 0]`.
   - `test_worker_not_started_when_disabled`
+  - `test_poll_enqueues_due_accounts`: Takt 5 min. Konto A vor 2 min abgerufen, B vor 7 min,
+    C nie, D vor 30 min mit `last_error == "auth_expired"` → eingestellt B und C.
+  - `test_worker_loop_polls_once_per_interval`: zwei Durchläufe innerhalb eines Takts → ein
+    Aufruf; nach Ablauf des Takts → zweiter Aufruf; Takt 0 → kein Aufruf.
 - [ ] **Step 2: Laufen lassen** → FAIL.
 - [ ] **Step 3: Implementieren.**
 - [ ] **Step 4: Laufen lassen** → PASS. Danach den API-Vertrag neu erzeugen.
-- [ ] **Step 5: Zeitplan, nur falls das Proben-Dokument Zeitpläne nennt.** Einen Zeitplan
-  eintragen, der alle 15 min `mail_sync_all` mit `only_if_older_than_minutes=10` aufruft, in der
-  Form, die das Proben-Dokument belegt.
+- [ ] **Step 5: entfällt.** Studio bietet Apps keine Zeitpläne (Proben-Dokument); der
+  regelmäßige Abruf läuft als Takt im Worker (Step 3).
 - [ ] **Step 6: Commit** `feat(mail): background jobs, sync triggers and inbox summary`.
 
 ### Task 11: Posteingang-API
