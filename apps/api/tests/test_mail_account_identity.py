@@ -28,7 +28,7 @@ def fake_search(monkeypatch, messages):
 
 @pytest.mark.parametrize("sender", ["max@example.org", "Max <MAX@example.org>"])
 def test_connect_connector_takes_address_from_sent_mail(setup, monkeypatch, sender):
-    fake_search(monkeypatch, [{"sender": sender}])
+    fake_search(monkeypatch, [{"sender": sender, "labelIds": ["SENT"]}])
     response = setup.post("/connectors/gmail/connect")
     assert response.status_code == 201
     assert response.json()["email_address"] == "max@example.org"
@@ -36,14 +36,14 @@ def test_connect_connector_takes_address_from_sent_mail(setup, monkeypatch, send
 
 @pytest.mark.parametrize("sender", ["", "not-an-address", "broken@"])
 def test_connect_connector_ignores_inbox_recipients(setup, monkeypatch, sender):
-    fake_search(monkeypatch, [{"sender": sender, "toRecipients": ["liste@example.net"]}])
+    fake_search(monkeypatch, [{"sender": sender, "labelIds": ["SENT"], "toRecipients": ["liste@example.net"]}])
     assert setup.post("/connectors/gmail/connect").json()["email_address"] == "gmail@connector.mistral"
 
 
 def test_connect_connector_uses_latest_sent_message(setup, monkeypatch):
     fake_search(monkeypatch, [
-        {"sender": "older@example.org", "date": "2026-11-13T12:00:00+02:00"},
-        {"sender": "max@example.org", "date": "2026-11-13T11:30:00+00:00"},
+        {"sender": "older@example.org", "labelIds": ["SENT"], "date": "2026-11-13T12:00:00+02:00"},
+        {"sender": "max@example.org", "labelIds": ["SENT"], "date": "2026-11-13T11:30:00+00:00"},
     ])
     assert setup.post("/connectors/gmail/connect").json()["email_address"] == "max@example.org"
 
@@ -52,7 +52,7 @@ def test_connect_connector_uses_latest_sent_message(setup, monkeypatch):
 async def test_upsert_refuses_to_switch_connection_of_existing_account(setup, monkeypatch, fake_store):
     account = await fake_store.create_account(provider="imap", auth_type="imap_password", email_address="max@example.org")
     await fake_store.store_credential(account_id=account.id, kind="imap_password", encrypted_payload="unchanged")
-    fake_search(monkeypatch, [{"sender": "max@example.org"}])
+    fake_search(monkeypatch, [{"sender": "max@example.org", "labelIds": ["SENT"]}])
     response = setup.post("/connectors/gmail/connect")
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "account_exists"
@@ -61,6 +61,54 @@ async def test_upsert_refuses_to_switch_connection_of_existing_account(setup, mo
     with pytest.raises(service.AccountConflictError):
         await service.upsert_account(provider="imap", auth_type="oauth2", email_address=account.email_address)
     assert await service.upsert_account(provider="imap", auth_type="imap_password", email_address=account.email_address) is account
+
+
+@pytest.mark.anyio
+async def test_conflict_detection_ignores_address_case(setup, monkeypatch, fake_store):
+    account = await fake_store.create_account(provider="imap", auth_type="imap_password", email_address="Max@example.org")
+    await fake_store.store_credential(account_id=account.id, kind="imap_password", encrypted_payload="unchanged")
+    before = account.model_dump()
+    fake_search(monkeypatch, [{"sender": "max@example.org", "labelIds": ["SENT"]}])
+    response = setup.post("/connectors/gmail/connect")
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "account_exists"
+    assert account.model_dump() == before
+    assert fake_store.credentials == {(account.id, "imap_password"): "unchanged"}
+    assert list(fake_store.accounts) == [account.id]
+
+
+@pytest.mark.anyio
+async def test_reconnect_same_connection_ignores_address_case(account_client, fake_store, monkeypatch):
+    monkeypatch.setattr(accounts.crypto, "encrypt_payload", lambda payload: "encrypted-test-credential")
+    account = await fake_store.create_account(provider="imap", auth_type="imap_password", email_address="Max@example.org")
+    monkeypatch.setattr(accounts.transport, "check_mail_host", AsyncMock())
+    monkeypatch.setattr(accounts, "check_imap_login", AsyncMock())
+    response = account_client.post("/accounts/imap", json={
+        "email_address": "max@example.org",
+        "password": "test-only",
+        "imap_host": "imap.example.org",
+        "smtp_host": "smtp.example.org",
+    })
+    assert response.status_code == 201
+    assert response.json()["id"] == account.id
+    assert list(fake_store.accounts) == [account.id]
+    assert account.email_address == "Max@example.org"
+    assert response.json()["email_address"] == "Max@example.org"
+
+
+def test_connect_connector_ignores_inbound_reply_in_sent_thread(setup, monkeypatch):
+    fake_search(monkeypatch, [
+        {"sender": "max@example.org", "labelIds": ["SENT"], "date": "2026-11-13T10:00:00+00:00"},
+        {"sender": "Erika <erika@example.net>", "labelIds": ["INBOX", "UNREAD"], "date": "2026-11-13T11:00:00+00:00"},
+    ])
+    assert setup.post("/connectors/gmail/connect").json()["email_address"] == "max@example.org"
+
+
+def test_connect_connector_without_sent_label_uses_placeholder(setup, monkeypatch):
+    fake_search(monkeypatch, [
+        {"sender": "Erika <erika@example.net>", "labelIds": ["INBOX", "UNREAD"]},
+    ])
+    assert setup.post("/connectors/gmail/connect").json()["email_address"] == "gmail@connector.mistral"
 
 
 @pytest.fixture

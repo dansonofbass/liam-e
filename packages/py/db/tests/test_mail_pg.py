@@ -9,6 +9,22 @@ import pytest
 pytestmark = pytest.mark.skipif(not os.getenv("RUN_PG_CONTRACT"), reason="RUN_PG_CONTRACT is not set")
 
 
+def test_account_lookup_ignores_case_and_selects_first_deterministically(pg_db):
+    async def run():
+        from db.accessors import mail_account as a
+
+        first = await a.create_account(provider="imap", auth_type="imap_password", email_address="Max@example.org")
+        assert (await a.get_account_by_email("max@example.org")).id == first.id
+        assert (await a.get_account(first.id)).email_address == "Max@example.org"
+        second = await a.create_account(provider="imap", auth_type="imap_password", email_address="max@example.org")
+        second.created_at = first.created_at
+        await a.touch_account(second)
+        assert (await a.get_account_by_email("MAX@EXAMPLE.ORG")).id == min(first.id, second.id)
+        assert await a.get_account_by_email("missing@example.org") is None
+
+    asyncio.run(run())
+
+
 def test_list_page_pages_with_cursor_without_gaps(pg_db):
     async def run():
         from db.accessors import mail_message as m

@@ -109,7 +109,12 @@ async def connect_connector(name: str) -> AccountOut:
             data = await connector_service.call_read_tool_json(
                 name, "search_threads", {"query": "in:sent", "pageSize": 1}
             )
-            messages = [message for thread in data.get("threads", []) for message in thread.get("messages", [])]
+            messages = [
+                message
+                for thread in data.get("threads", [])
+                for message in thread.get("messages", [])
+                if "SENT" in (message.get("labelIds") or [])
+            ]
             if messages:
                 def sent_at(message: dict[str, Any]) -> datetime:
                     try:

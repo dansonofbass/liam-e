@@ -1,6 +1,6 @@
 """Accessor for ``mail_account`` rows: the only place that reads or writes them."""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.engine import get_session_maker
@@ -27,7 +27,10 @@ async def get_account(account_id: str) -> MailAccount | None:
 async def get_account_by_email(email_address: str) -> MailAccount | None:
     async with get_session_maker()() as session:
         result = await session.execute(
-            select(MailAccount).where(MailAccount.email_address == email_address)
+            select(MailAccount)
+            .where(func.lower(MailAccount.email_address) == email_address.lower())
+            .order_by(MailAccount.created_at, MailAccount.id)
+            .limit(1)
         )
         return result.scalar_one_or_none()
 

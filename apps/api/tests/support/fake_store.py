@@ -33,7 +33,7 @@ class FakeStore:
         return self.accounts.get(account_id)
 
     async def get_account_by_email(self, email_address):
-        return next((a for a in self.accounts.values() if a.email_address == email_address), None)
+        return next((a for a in sorted(self.accounts.values(), key=lambda a: (a.created_at, a.id)) if a.email_address.lower() == email_address.lower()), None)
 
     async def create_account(self, **kwargs):
         return await self.touch_account(MailAccount(**kwargs))
