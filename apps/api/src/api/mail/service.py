@@ -18,7 +18,7 @@ from db.accessors import mail_account as account_access
 from db.accessors import mail_credential as credential_access
 from db.models.mail_account import MailAccount
 
-from api.mail import crypto, providers, secrets
+from api.mail import crypto, providers, secrets, transport
 
 
 class CredentialError(RuntimeError):
@@ -107,15 +107,16 @@ def verify_imap_login(
 
     Runs in a worker thread via ``asyncio.to_thread`` — never call it on the event loop.
     """
-    connection = imaplib.IMAP4_SSL(host, port) if use_ssl else imaplib.IMAP4(host, port)
+    connection = transport.open_imap(host, port)
     try:
         connection.login(email_address, password)
     finally:
         try:
             connection.logout()
         except (imaplib.IMAP4.error, OSError):
-            logger.debug("IMAP logout after the login check failed", exc_info=True)
+            logger.debug("IMAP logout after the login check failed")
 
 
 async def check_imap_login(**kwargs: Any) -> None:
+    await transport.check_mail_host(kwargs["host"])
     await asyncio.to_thread(verify_imap_login, **kwargs)

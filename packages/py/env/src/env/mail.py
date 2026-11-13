@@ -27,6 +27,9 @@ class Env(BaseEnv):
     #   bash tools/uv.sh run --no-sync python -c "from api.mail.crypto import new_key; print(new_key())"
     mail_token_encryption_key: Annotated[str | None, WorkspaceSecret()] = None
 
+    # Additional allowed IMAP/SMTP hosts, comma-separated.
+    mail_imap_allowed_hosts: str = ""
+
     # Sync behavior: which folders to index, how many messages per run, and the body cap so one
     # huge mail cannot blow up the index.
     mail_sync_enabled: bool = True

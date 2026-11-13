@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import smtplib
 from email.message import EmailMessage
 from email.utils import formatdate
 from typing import Any
@@ -16,7 +15,7 @@ from typing import Any
 import httpx
 from db.models.mail_account import MailAccount
 
-from api.mail import connectors, providers, service
+from api.mail import connectors, providers, service, transport
 
 
 def _send_smtp(
@@ -36,11 +35,9 @@ def _send_smtp(
     message.set_content(body)
     host = credentials["smtp_host"]
     port = int(credentials.get("smtp_port", 465))
-    if credentials.get("smtp_starttls"):
-        server = smtplib.SMTP(host, port, timeout=30)
-        server.starttls()
-    else:
-        server = smtplib.SMTP_SSL(host, port, timeout=30)
+    server = transport.open_smtp(
+        host, port, starttls=bool(credentials.get("smtp_starttls"))
+    )
     try:
         server.login(account.email_address, credentials["password"])
         server.send_message(message)
@@ -112,6 +109,7 @@ async def send_message(
         else await service.load_credentials(account)
     )
     if account.provider == providers.IMAP:
+        await transport.check_mail_host(credentials["smtp_host"])
         password = await service.imap_password(credentials)
         return await asyncio.to_thread(
             _send_smtp,

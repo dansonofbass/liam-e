@@ -27,7 +27,7 @@ from db.accessors import mail_sync_state as sync_state_access
 from db.models.mail_account import MailAccount
 from env.mail import env as mail_env
 
-from api.mail import connectors, providers, service
+from api.mail import connectors, providers, service, transport
 
 logger = logging.getLogger(__name__)
 
@@ -96,13 +96,12 @@ def _fetch_imap(
     password: str,
     host: str,
     port: int,
-    use_ssl: bool,
     folders: list[str],
     limit: int,
     max_body_chars: int,
 ) -> tuple[list[dict[str, Any]], str]:
     """Blocking IMAP fetch of the newest ``limit`` messages per folder; runs in a worker thread."""
-    connection = imaplib.IMAP4_SSL(host, port) if use_ssl else imaplib.IMAP4(host, port)
+    connection = transport.open_imap(host, port)
     messages: list[dict[str, Any]] = []
     cursor = ""
     try:
@@ -140,7 +139,7 @@ def _fetch_imap(
         try:
             connection.logout()
         except (imaplib.IMAP4.error, OSError):
-            logger.debug("IMAP logout after sync failed", exc_info=True)
+            logger.debug("IMAP logout after sync failed")
     return messages, cursor
 
 
@@ -383,6 +382,7 @@ async def sync_account(account_id: str) -> dict[str, Any]:
             )
         elif account.provider == providers.IMAP:
             credentials = await service.load_credentials(account)
+            await transport.check_mail_host(credentials["imap_host"])
             password = await service.imap_password(credentials)
             messages, cursor = await asyncio.to_thread(
                 _fetch_imap,
@@ -390,7 +390,6 @@ async def sync_account(account_id: str) -> dict[str, Any]:
                 password=password,
                 host=credentials["imap_host"],
                 port=int(credentials.get("imap_port", 993)),
-                use_ssl=bool(credentials.get("imap_use_ssl", True)),
                 folders=folders,
                 limit=limit,
                 max_body_chars=max_body_chars,
@@ -420,13 +419,14 @@ async def sync_account(account_id: str) -> dict[str, Any]:
             "cursor": state.cursor,
             "last_error": "",
         }
-    except Exception as error:  # noqa: BLE001 — any provider error is recorded in the sync state, not raised
+    except Exception:  # noqa: BLE001 — never expose provider errors or credentials
+        message = "Die Mails konnten nicht abgerufen werden. Prüfe die Kontoeinstellungen und versuch es noch einmal."
         state = await sync_state_access.save_state(
-            account_id=account_id, cursor=cursor, status="error", last_error=str(error)
+            account_id=account_id, cursor=cursor, status="error", last_error=message
         )
         return {
             "status": "error",
             "synced": 0,
             "cursor": state.cursor,
-            "last_error": str(error),
+            "last_error": message,
         }

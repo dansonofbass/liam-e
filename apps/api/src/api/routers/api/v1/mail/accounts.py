@@ -17,7 +17,9 @@ from env.mail import env as mail_env
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 
-from api.mail import crypto, providers, secrets
+from api.errors import refuse
+from api.mail import crypto, providers, secrets, transport
+from api.mail.netguard import BlockedAddressError
 from api.mail import sync as sync_service
 from api.mail.service import check_imap_login, upsert_account
 
@@ -115,21 +117,35 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
     smtp_host = body.smtp_host or (preset[2] if preset else "")
     smtp_port = body.smtp_port if body.smtp_host else (preset[3] if preset else 465)
     smtp_starttls = body.smtp_starttls or (preset[4] if preset else False)
-    if not imap_host or not smtp_host:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Kein IMAP/SMTP-Preset für die Domain von {body.email_address!r}; imap_host und smtp_host angeben.",
-        )
+    for host in (imap_host, smtp_host):
+        try:
+            await transport.check_mail_host(host)
+        except transport.MailHostNotAllowedError as error:
+            raise refuse(
+                422, "host_not_allowed",
+                f"Den Server {host} kennt liam-e nicht. Trag ihn in Mistral Studio unter MAIL_IMAP_ALLOWED_HOSTS ein und verbinde das Konto dann noch einmal.",
+            ) from error
+        except BlockedAddressError as error:
+            raise refuse(
+                422, "host_not_allowed",
+                "Der Mailserver ist nicht öffentlich erreichbar. Prüfe die Serveradresse und verbinde das Konto dann noch einmal.",
+            ) from error
     # Resolve a secret reference once now to fail fast; only the reference is stored.
     password = body.password
+    secret_name = ""
     if body.password_secret:
         try:
-            password = await secrets.resolve_workspace_secret(body.password_secret)
-        except secrets.WorkspaceSecretNotFoundError as error:
-            raise HTTPException(status_code=404, detail=str(error)) from error
-        except httpx.HTTPStatusError as error:
-            raise HTTPException(
-                status_code=502, detail=f"Secret konnte nicht gelesen werden: {error}"
+            secret_name = secrets.validate_secret_name(body.password_secret)
+            password = await secrets.resolve_workspace_secret(secret_name)
+        except secrets.SecretNameNotAllowedError as error:
+            raise refuse(
+                422, "secret_not_allowed",
+                "Diesen Secret-Namen kannst du nicht für ein Mailkonto verwenden. Leg in Mistral Studio ein eigenes Secret mit einem Namen wie yahoo-app-password an und verbinde das Konto noch einmal.",
+            ) from error
+        except (secrets.WorkspaceSecretNotFoundError, httpx.HTTPError) as error:
+            raise refuse(
+                404, "secret_not_found",
+                "Das Secret wurde nicht gefunden oder ist nicht lesbar. Prüfe den Namen und die Freigabe in Mistral Studio und verbinde dein Konto noch einmal.",
             ) from error
     try:
         await check_imap_login(
@@ -137,11 +153,11 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
             password=password,
             host=imap_host,
             port=imap_port,
-            use_ssl=True,
         )
-    except (imaplib.IMAP4.error, OSError) as error:
-        raise HTTPException(
-            status_code=502, detail=f"IMAP-Login fehlgeschlagen: {error}"
+    except (imaplib.IMAP4.error, OSError, BlockedAddressError, transport.MailHostNotAllowedError) as error:
+        raise refuse(
+            502, "login_failed",
+            "Die Anmeldung beim Mailserver hat nicht geklappt. Prüfe deine Serveradresse und das App-Passwort und verbinde das Konto noch einmal.",
         ) from error
     account = await upsert_account(
         provider=providers.IMAP,
@@ -151,13 +167,12 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
     payload: dict[str, Any] = {
         "imap_host": imap_host,
         "imap_port": imap_port,
-        "imap_use_ssl": True,
         "smtp_host": smtp_host,
         "smtp_port": smtp_port,
         "smtp_starttls": smtp_starttls,
     }
     if body.password_secret:
-        payload["password_secret"] = body.password_secret
+        payload["password_secret"] = secret_name
     else:
         payload["password"] = body.password
     await credential_access.store_credential(
