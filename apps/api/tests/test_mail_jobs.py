@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -60,12 +61,77 @@ async def test_poll_enqueues_due_accounts(fake_store):
     assert await jobs.enqueue_due_syncs(now, older_than_minutes=5, skip_auth_expired=True) == [b.id, c.id]
 
 
-def test_worker_loop_polls_once_per_interval():
-    now = datetime.now(timezone.utc)
-    assert jobs.poll_due(now, None, 5)
-    assert not jobs.poll_due(now + timedelta(minutes=4), now, 5)
-    assert jobs.poll_due(now + timedelta(minutes=5), now, 5)
-    assert not jobs.poll_due(now, None, 0)
+@pytest.mark.anyio
+async def test_poll_keeps_the_configured_interval(fake_store, monkeypatch):
+    t0 = datetime.now(timezone.utc)
+    a = account(fake_store, "a")
+    now = t0
+    stop = asyncio.Event()
+    monkeypatch.setattr(jobs.mail_env, "mail_sync_interval_minutes", 5)
+
+    async def run_once():
+        return False
+
+    async def wait(stop, timeout):
+        nonlocal now
+        if now == t0:
+            assert len(fake_store.jobs) == 1
+            job = next(iter(fake_store.jobs.values()))
+            assert job.dedupe_key == f"sync:{a.id}"
+            await fake_store.job_finish(job.id)
+            await fake_store.save_state(account_id=a.id, last_sync_at=t0 + timedelta(seconds=20))
+            b = account(fake_store, "b")
+            await fake_store.save_state(account_id=b.id, last_sync_at=t0 + timedelta(minutes=4))
+            now = t0 + timedelta(minutes=5)
+        else:
+            stop.set()
+
+    monkeypatch.setattr(jobs, "run_once", run_once)
+    await jobs.worker_loop(stop, clock=lambda: now, wait=wait)
+    assert [job.dedupe_key for job in fake_store.jobs.values()] == [f"sync:{a.id}", f"sync:{a.id}"]
+
+
+@pytest.mark.anyio
+async def test_worker_loop_polls_once_per_interval(monkeypatch):
+    t0 = datetime.now(timezone.utc)
+    monkeypatch.setattr(jobs.mail_env, "mail_sync_interval_minutes", 5)
+    calls = []
+    now = t0
+    stop = asyncio.Event()
+
+    async def enqueue(now, *, older_than_minutes, skip_auth_expired):
+        calls.append((now, older_than_minutes, skip_auth_expired))
+        if len(calls) == 1:
+            raise RuntimeError("temporary failure")
+
+    async def run_once():
+        return False
+
+    passes = 0
+    async def wait(stop, timeout):
+        nonlocal now, passes
+        passes += 1
+        if passes == 1:
+            assert len(calls) == 1  # Poll at startup, despite its failure.
+            now = t0 + timedelta(minutes=4)
+        elif passes == 2:
+            assert len(calls) == 1
+            now = t0 + timedelta(minutes=5)
+        else:
+            stop.set()
+
+    monkeypatch.setattr(jobs, "enqueue_due_syncs", enqueue)
+    monkeypatch.setattr(jobs, "run_once", run_once)
+    await jobs.worker_loop(stop, clock=lambda: now, wait=wait)
+    assert calls == [(t0, 2.5, True), (t0 + timedelta(minutes=5), 2.5, True)]
+
+    monkeypatch.setattr(jobs.mail_env, "mail_sync_interval_minutes", 0)
+    calls.clear()
+    stop = asyncio.Event()
+    async def stop_wait(stop, timeout):
+        stop.set()
+    await jobs.worker_loop(stop, clock=lambda: t0, wait=stop_wait)
+    assert calls == []
 
 
 @pytest.mark.anyio

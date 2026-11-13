@@ -47,7 +47,7 @@ async def run_once(now: datetime | None = None) -> bool:
     return True
 
 
-async def enqueue_due_syncs(now: datetime, *, older_than_minutes: int | None, skip_auth_expired: bool) -> list[str]:
+async def enqueue_due_syncs(now: datetime, *, older_than_minutes: float | None, skip_auth_expired: bool) -> list[str]:
     queued = []
     for account in await mail_account.list_accounts():
         if not account.is_active:
@@ -66,15 +66,20 @@ def poll_due(now: datetime, last_poll: datetime | None, interval_minutes: int) -
     return interval_minutes > 0 and (last_poll is None or now - last_poll >= timedelta(minutes=interval_minutes))
 
 
-async def worker_loop(stop: asyncio.Event) -> None:
+async def worker_loop(
+    stop: asyncio.Event, *, clock: Callable[[], datetime] | None = None,
+    wait: Callable[[asyncio.Event, float], Awaitable[None]] | None = None,
+) -> None:
+    clock = clock or (lambda: datetime.now(timezone.utc))
+    wait = wait or _wait_for_stop
     last_poll = None
     while not stop.is_set():
-        now = datetime.now(timezone.utc)
+        now = clock()
         interval = mail_env.mail_sync_interval_minutes
         if poll_due(now, last_poll, interval):
             last_poll = now
             try:
-                await enqueue_due_syncs(now, older_than_minutes=interval, skip_auth_expired=True)
+                await enqueue_due_syncs(now, older_than_minutes=interval / 2, skip_auth_expired=True)
             except Exception:
                 pass  # Retry on the next tick without exposing provider data.
         try:
@@ -82,7 +87,11 @@ async def worker_loop(stop: asyncio.Event) -> None:
                 continue
         except Exception:
             pass  # Database failures must not terminate the worker.
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=max(0.01, mail_env.mail_worker_poll_seconds))
-        except TimeoutError:
-            pass
+        await wait(stop, max(0.01, mail_env.mail_worker_poll_seconds))
+
+
+async def _wait_for_stop(stop: asyncio.Event, timeout: float) -> None:
+    try:
+        await asyncio.wait_for(stop.wait(), timeout=timeout)
+    except TimeoutError:
+        pass
