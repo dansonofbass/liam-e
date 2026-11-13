@@ -24,15 +24,19 @@ export function formatRelativeDay(d: Date, now: Date, timeZone?: string): string
   if (day === today) return 'Heute'
   if (day === today - 1) return 'Gestern'
   const monday = today - ((new Date(today * 86400000).getUTCDay() + 6) % 7)
-  if (day >= monday && day < today) return new Intl.DateTimeFormat(locale, { timeZone, weekday: 'short' }).format(d)
-  return new Intl.DateTimeFormat(locale, { timeZone, day: 'numeric', month: 'numeric' }).format(d)
+  if (day >= monday && day < today) {
+    const weekday = new Intl.DateTimeFormat(locale, { timeZone, weekday: 'short' }).format(d)
+    return weekday.endsWith('.') ? weekday : `${weekday}.`
+  }
+  const year = new Date(day * 86400000).getUTCFullYear() !== new Date(today * 86400000).getUTCFullYear() ? 'numeric' : undefined
+  return new Intl.DateTimeFormat(locale, { timeZone, day: 'numeric', month: 'numeric', year }).format(d)
 }
 
 export function formatBytes(n: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'] // i18n-exempt
   let value = n, unit = 0
   while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++ }
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)} ${units[unit]}`
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}\u00a0${units[unit]}`
 }
 
 export function formatStand(accounts: number, at: Date, timeZone?: string): string {
