@@ -165,6 +165,22 @@ async def test_missing_sdk_call_ids_are_generated_uniquely(store, monkeypatch):
     _, fake = await run(store, monkeypatch, [[sdk_delta(*calls)], ['Fertig']])
     ids = [m['tool_call_id'] for m in fake.requests[1]['messages'] if m['role'] == 'tool']
     assert len(ids) == len(set(ids)) == 2 and all(id not in ('', 'null') for id in ids)
+    assert ids[1] == 'real' and ids[0] != 'real'
+
+
+async def test_idless_calls_stay_unique_across_turns(store, monkeypatch):
+    c = await store.create()
+    async def turn(text):
+        fake = FakeMistral(streams=[[sdk_delta(ToolCall(function=FunctionCall(name='list_accounts', arguments='{}')))], ['Fertig']])
+        monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+        _ = [e async for e in agent.run_turn_events(conversation_id=c.id, text=text)]
+        return fake.requests[1]['messages']
+    await turn('Hallo')
+    messages = await turn('Nochmal')
+    calls = [call['id'] for m in messages for call in m.get('tool_calls', [])]
+    tool_ids = [m['tool_call_id'] for m in messages if m['role'] == 'tool']
+    assert len(calls) == len(set(calls)) == 2 and all(call not in ('', 'null') for call in calls)
+    assert sorted(tool_ids) == sorted(calls) and all(tool_ids.count(call) == 1 for call in calls)
 
 
 @pytest.mark.parametrize('text', ['', 'Anfang'])

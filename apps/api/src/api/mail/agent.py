@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from datetime import date
 
@@ -153,10 +154,10 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                 return
             payload = calls
             used_ids = {call['id'] for call in payload if call['id']}
-            for n, call in enumerate(payload):
+            for call in payload:
                 if not call['id']:
-                    id = f'call_{round_index}_{n}'
-                    while id in used_ids: id += '_'
+                    id = f'call_{uuid.uuid4().hex}'
+                    while id in used_ids: id = f'call_{uuid.uuid4().hex}'
                     call['id'] = id
                     used_ids.add(id)
             await message_access.add_message(conversation_id=conversation.id, role='assistant', content='', tool_payload_json=json.dumps(payload))
