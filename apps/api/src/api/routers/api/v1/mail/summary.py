@@ -7,7 +7,7 @@ from db.accessors import mail_account, mail_job, mail_message, mail_sync_state
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from api.mail import state
+from api.mail import newsletters, state
 
 router = APIRouter()
 
@@ -47,4 +47,4 @@ async def mail_summary() -> MailSummaryOut:
     unread = await mail_message.count_unread(folder="INBOX")
     summaries = [await account_summary(a, colors, unread) for a in accounts]
     dates = [a.last_sync_at for a in summaries if a.last_sync_at is not None]
-    return MailSummaryOut(unread_total=sum(a.unread for a in summaries), accounts=summaries, last_sync_at=max(dates, default=None), newsletter_senders=0)
+    return MailSummaryOut(unread_total=sum(a.unread for a in summaries), accounts=summaries, last_sync_at=max(dates, default=None), newsletter_senders=len(await newsletters.find_newsletters()))

@@ -26,6 +26,9 @@ class FakeStore:
         for name in ("enqueue", "claim_next", "finish", "fail", "latest_for_account", "delete_for_account"):
             monkeypatch.setattr(mail_job, name, getattr(self, "job_" + name))
         monkeypatch.setattr(mail_message, "count_unread", self.count_unread)
+        async def newsletter_senders(*, account_ids=None):
+            return []
+        monkeypatch.setattr(mail_message, "newsletter_senders", newsletter_senders)
         for module, names in (
             (mail_account, ("list_accounts", "get_account", "get_account_by_email", "create_account", "touch_account", "delete_account")),
             (mail_credential, ("load_credential", "store_credential")),
