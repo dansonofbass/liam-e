@@ -6,9 +6,57 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+from db.models.mail_account import MailAccount
 
+from api.mail import service
 from api.mail.providers import GRAPH_API
-from api.mail.sync_types import attachments, common, strip_html
+from api.mail.sync_types import SyncChanges, attachments, common, strip_html
+
+
+def _safe_delta_url(url: str) -> bool:
+    parsed = httpx.URL(url)
+    base = httpx.URL(GRAPH_API)
+    return (parsed.scheme == "https" and parsed.host == base.host
+            and (parsed.port or 443) == (base.port or 443)
+            and "@" not in urlsplit(url).netloc)
+
+
+async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int) -> SyncChanges:
+    credentials = await service.load_credentials(account)
+    token = await service.valid_access_token(account, credentials)
+    headers = {"Authorization": f"Bearer {token}", "Prefer": f"odata.maxpagesize={max(1, limit)}"}
+    changes = SyncChanges(cursor=cursor, full_rebuild=not cursor)
+    url = cursor or "/me/mailFolders/inbox/messages/delta"
+    params = None if cursor else {"$top": str(limit), "$select": "id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments,isRead,internetMessageId,internetMessageHeaders,flag"}
+    latest: dict[str, dict[str, Any] | None] = {}
+    async with httpx.AsyncClient(timeout=30, base_url=GRAPH_API) as client:
+        while url:
+            if url != "/me/mailFolders/inbox/messages/delta" and not _safe_delta_url(url):
+                raise ValueError("Invalid Graph delta URL")
+            response = await client.get(url, params=params, headers=headers, follow_redirects=False)
+            response.raise_for_status()
+            page = response.json()
+            for item in page.get("value", []):
+                if "@removed" in item:
+                    latest[item["id"]] = None
+                else:
+                    if item.get("hasAttachments"):
+                        item["attachments"] = await fetch_attachments(client, item["id"], headers)
+                    latest[item["id"]] = parse_message(item, folder="INBOX", max_body_chars=max_body_chars)
+            url = page.get("@odata.nextLink", "")
+            params = None
+            if url and len(latest) >= limit:
+                if not _safe_delta_url(url):
+                    raise ValueError("Invalid Graph next link")
+                changes.cursor = url
+                break
+            if not url:
+                changes.cursor = page.get("@odata.deltaLink", "")
+                if not changes.cursor or not _safe_delta_url(changes.cursor):
+                    raise ValueError("Missing or invalid Graph delta link")
+    changes.upserts = [item for item in latest.values() if item is not None]
+    changes.moved_out = [uid for uid, item in latest.items() if item is None]
+    return changes
 
 
 async def fetch_attachments(

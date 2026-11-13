@@ -333,9 +333,9 @@ export type SyncOut = {
      */
     cursor: string;
     /**
-     * Last Error
+     * Error Code
      */
-    last_error?: string;
+    error_code?: string;
     /**
      * Status
      */

@@ -87,7 +87,7 @@ class SyncOut(BaseModel):
     status: str
     synced: int
     cursor: str
-    last_error: str = ""
+    error_code: str = ""
 
 
 def _redirect_base(request: Request) -> str:
@@ -320,10 +320,10 @@ async def sync_account(account_id: str) -> SyncOut:
 
     ``account_id`` selects the account; the response reports the ``status``, the number of
     messages ``synced`` and the new ``cursor``. Provider failures do not raise — they return
-    status ``error`` with ``last_error``.
+    status ``error`` with ``error_code``.
     """
     try:
         result = await sync_service.sync_account(account_id)
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return SyncOut(**result)
+    return SyncOut(status=result.status, synced=result.synced, cursor=result.cursor, error_code=result.error_code)

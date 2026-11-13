@@ -152,7 +152,7 @@ export const mailAccountDelete = <ThrowOnError extends boolean = false>(options:
  *
  * ``account_id`` selects the account; the response reports the ``status``, the number of
  * messages ``synced`` and the new ``cursor``. Provider failures do not raise — they return
- * status ``error`` with ``last_error``.
+ * status ``error`` with ``error_code``.
  */
 export const mailAccountSync = <ThrowOnError extends boolean = false>(options: Options<MailAccountSyncData, ThrowOnError>): RequestResult<MailAccountSyncResponses, MailAccountSyncErrors, ThrowOnError> => (options.client ?? client).post<MailAccountSyncResponses, MailAccountSyncErrors, ThrowOnError>({ url: '/api/v1/mail/accounts/{account_id}/sync', ...options });
 

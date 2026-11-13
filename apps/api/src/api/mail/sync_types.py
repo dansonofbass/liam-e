@@ -2,10 +2,31 @@
 
 import json
 import re
+from dataclasses import dataclass, field
+from typing import Literal
 from email.utils import getaddresses
 from typing import Any
 
 from api.mail.headers import sender_address
+
+
+@dataclass
+class SyncChanges:
+    upserts: list[dict[str, Any]] = field(default_factory=list)
+    read_updates: dict[str, bool] = field(default_factory=dict)
+    flag_updates: dict[str, bool] = field(default_factory=dict)
+    moved_out: list[str] = field(default_factory=list)
+    cursor: str = ""
+    full_rebuild: bool = False
+
+
+@dataclass
+class SyncResult:
+    status: Literal["ok", "error"]
+    synced: int
+    cursor: str
+    error_code: str
+    new_message_ids: list[str] = field(default_factory=list)
 
 
 def addresses(value: str) -> str:

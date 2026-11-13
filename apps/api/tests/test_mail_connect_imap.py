@@ -56,10 +56,12 @@ def test_connect_imap_stores_reference_only(setup, fake_store):
 async def test_sync_refuses_stored_host_no_longer_allowed(setup, fake_store, monkeypatch):
     account = await fake_store.create_account(provider="imap", auth_type="imap_password", email_address="me@example.org")
     await fake_store.store_credential(account_id=account.id, kind="imap_password", encrypted_payload=crypto.encrypt_payload({"imap_host": "removed.example.org", "password": "test-only"}))
-    fetch = Mock()
-    monkeypatch.setattr(sync, "_fetch_imap", fetch)
-    assert (await sync.sync_account(account.id))["status"] == "error"
-    fetch.assert_not_called()
+    opener = Mock()
+    monkeypatch.setattr(transport, "open_imap", opener)
+    result = await sync.sync_account(account.id)
+    assert result.status == "error"
+    assert result.error_code == "host_not_allowed"
+    opener.assert_not_called()
 
 
 @pytest.mark.parametrize("failure,status,code", [(secrets.WorkspaceSecretNotFoundError("private data"), 404, "secret_not_found"), (OSError("private data"), 502, "login_failed")])

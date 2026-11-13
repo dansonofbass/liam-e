@@ -28,11 +28,20 @@ async def test_sync_ignores_stored_false(monkeypatch, fake_store):
     monkeypatch.setattr(service, "load_credentials", AsyncMock(return_value={"imap_host": "imap.gmail.com", "imap_use_ssl": False, "password": "test-only"}))
     monkeypatch.setattr(transport, "resolve_public", AsyncMock(return_value=["8.8.8.8"]))
     connection = Mock()
-    connection.select.return_value = ("NO", [])
+    connection.select.return_value = ("OK", [b"0"])
+    connection.response.return_value = ("UIDVALIDITY", [b"7"])
+    connection.uid.return_value = ("OK", [b""])
+    monkeypatch.setattr(sync.message_access, "known_uids", AsyncMock(return_value={}))
+    monkeypatch.setattr(sync.message_access, "delete_folder", AsyncMock(return_value=0))
     opener = Mock(return_value=connection)
     monkeypatch.setattr(transport, "open_imap", opener)
-    assert (await sync.sync_account(account.id))["status"] == "ok"
+    assert (await sync.sync_account(account.id)).status == "ok"
     opener.assert_called_once_with("imap.gmail.com", 993)
+
+    connection.select.return_value = ("NO", [])
+    result = await sync.sync_account(account.id)
+    assert result.status == "error"
+    assert result.error_code == "provider_error"
 
 
 def test_starttls_failure_closes_connection(monkeypatch):

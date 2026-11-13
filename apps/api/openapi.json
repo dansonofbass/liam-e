@@ -450,9 +450,9 @@
             "title": "Cursor",
             "type": "string"
           },
-          "last_error": {
+          "error_code": {
             "default": "",
-            "title": "Last Error",
+            "title": "Error Code",
             "type": "string"
           },
           "status": {
@@ -928,7 +928,7 @@
     },
     "/api/v1/mail/accounts/{account_id}/sync": {
       "post": {
-        "description": "Sync one connected account's mail into the local index and return the result.\n\n``account_id`` selects the account; the response reports the ``status``, the number of\nmessages ``synced`` and the new ``cursor``. Provider failures do not raise \u2014 they return\nstatus ``error`` with ``last_error``.",
+        "description": "Sync one connected account's mail into the local index and return the result.\n\n``account_id`` selects the account; the response reports the ``status``, the number of\nmessages ``synced`` and the new ``cursor``. Provider failures do not raise \u2014 they return\nstatus ``error`` with ``error_code``.",
         "operationId": "mail_account_sync",
         "parameters": [
           {

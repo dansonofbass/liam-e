@@ -160,12 +160,12 @@ async def count_unread(*, folder: str = "INBOX") -> dict[str, int]:
         return dict(rows.all())
 
 
-async def set_state(message_id: str, *, folder: str | None = None, is_read: bool | None = None, provider_uid: str | None = None, labels_json: str | None = None) -> MailMessage | None:
+async def set_state(message_id: str, *, folder: str | None = None, is_read: bool | None = None, is_flagged: bool | None = None, provider_uid: str | None = None, labels_json: str | None = None) -> MailMessage | None:
     async with get_session_maker()() as session:
         row = await session.get(MailMessage, message_id)
         if row is None:
             return None
-        for name, value in (("folder", folder), ("is_read", is_read), ("provider_uid", provider_uid), ("labels_json", labels_json)):
+        for name, value in (("folder", folder), ("is_read", is_read), ("is_flagged", is_flagged), ("provider_uid", provider_uid), ("labels_json", labels_json)):
             if value is not None:
                 setattr(row, name, value)
         await session.commit()

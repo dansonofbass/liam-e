@@ -1,10 +1,102 @@
-"""Parse Studio connector messages; full-content responses do not expose headers."""
+"""Sync Studio inboxes and parse full-content messages without headers.
+
+Cursors are Unix seconds: newest, optionally followed by :gap_after:gap_before
+for an unfinished window. Window boundaries overlap by one second.
+"""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from api.mail.sync_types import attachments, common, strip_html
+from db.accessors import mail_message as message_access
+from db.models.mail_account import MailAccount
+
+from api.mail import connectors
+from api.mail.sync_types import SyncChanges, attachments, common, strip_html
+
+
+async def _search(provider: str, query: str) -> list[dict[str, Any]]:
+    threads = []
+    token = ""
+    while True:
+        args: dict[str, Any] = {"query": query, "pageSize": 50}
+        if token:
+            args["pageToken"] = token
+        page = await connectors.call_read_tool_json(provider, "search_threads", args)
+        threads.extend(page.get("threads", []))
+        token = page.get("nextPageToken") or ""
+        if not token:
+            return threads
+
+
+async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int) -> SyncChanges:
+    parts = cursor.split(":")
+    valid = len(parts) in (1, 3) and all(part.isdigit() for part in parts)
+    newest = int(parts[0]) if valid else 0
+    gap = (int(parts[1]), int(parts[2])) if valid and len(parts) == 3 else None
+    changes = SyncChanges(full_rebuild=not valid)
+    known = await message_access.known_uids(account.id, "INBOX")
+    seen = set(known) if valid else set()
+
+    async def scan(query: str) -> tuple[bool, int | None, int | None]:
+        token = ""
+        oldest = latest = None
+        for _ in range(10):
+            args: dict[str, Any] = {"query": query, "pageSize": 50}
+            if token:
+                args["pageToken"] = token
+            page = await connectors.call_read_tool_json(account.provider, "search_threads", args)
+            threads = page.get("threads", [])
+            for thread in threads:
+                full = await connectors.call_read_tool_json(account.provider, "get_thread", {"threadId": thread.get("id", ""), "messageFormat": "FULL_CONTENT"})
+                thread_id = full.get("id") or thread.get("id", "")
+                for message in full.get("messages", []):
+                    parsed = parse_message(message, thread_id=thread_id, folder="INBOX", max_body_chars=max_body_chars)
+                    date = parsed["internal_date"]
+                    if date is None:
+                        raise ValueError("Connector message has no valid date")
+                    stamp = int(date.timestamp())
+                    if parsed["provider_uid"] not in seen and len(changes.upserts) >= limit:
+                        return False, oldest, latest
+                    oldest = stamp if oldest is None else min(oldest, stamp)
+                    latest = stamp if latest is None else max(latest, stamp)
+                    if parsed["provider_uid"] not in seen:
+                        changes.upserts.append(parsed)
+                        seen.add(parsed["provider_uid"])
+            token = page.get("nextPageToken") or ""
+            if not token:
+                return True, oldest, latest
+        return False, oldest, latest
+
+    old_newest = newest
+    done, oldest, latest = await scan(f"in:inbox after:{newest - 1}" if valid else "in:inbox")
+    if latest is not None:
+        newest = max(newest, latest)
+    if valid and not done and oldest is not None:
+        gap = (gap[0] if gap else old_newest, oldest)
+    if valid and gap and len(changes.upserts) < limit:
+        done, oldest, _ = await scan(f"in:inbox after:{gap[0] - 1} before:{gap[1] + 1}")
+        if done:
+            gap = None
+        elif oldest is not None:
+            gap = (gap[0], oldest)
+    changes.cursor = str(newest) + (f":{gap[0]}:{gap[1]}" if gap else "")
+    if valid:
+        present = {thread["id"] for thread in await _search(account.provider, "in:inbox newer_than:14d")}
+        unread = {thread["id"] for thread in await _search(account.provider, "is:unread in:inbox newer_than:14d")}
+        cutoff = datetime.now(UTC) - timedelta(days=14)
+        for uid, local_id in known.items():
+            message = await message_access.get_message(local_id)
+            if message is None:
+                continue
+            date = message.internal_date
+            if date is not None and (date.replace(tzinfo=UTC) if date.tzinfo is None else date) < cutoff:
+                continue
+            if message.thread_id not in present:
+                changes.moved_out.append(uid)
+            else:
+                changes.read_updates[uid] = message.thread_id not in unread
+    return changes
 
 
 def parse_message(message: dict[str, Any], *, thread_id: str, folder: str, max_body_chars: int) -> dict[str, Any]:
