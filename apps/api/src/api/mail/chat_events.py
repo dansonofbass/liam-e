@@ -2,28 +2,32 @@
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from api.mail.chat_schemas import ChatMessageOut
 
 
-class StartEvent(BaseModel):
+class EventModel(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+
+class StartEvent(EventModel):
     event: Literal['start'] = 'start'
     conversation_id: str
     user_message_id: str
 
 
-class StatusEvent(BaseModel):
+class StatusEvent(EventModel):
     event: Literal['status'] = 'status'
     code: Literal['thinking', 'searching', 'reading', 'checking_deadlines', 'finding_newsletters', 'preparing_proposal']
     count: int | None = None
 
 
-class DeltaEvent(BaseModel):
+class DeltaEvent(EventModel):
     event: Literal['delta'] = 'delta'
     text: str
 
 
-class MailRefOut(BaseModel):
+class MailRefOut(EventModel):
     id: str
     account_id: str
     color_index: int
@@ -33,29 +37,29 @@ class MailRefOut(BaseModel):
     deadline: date | None
 
 
-class MailsEvent(BaseModel):
+class MailsEvent(EventModel):
     event: Literal['mails'] = 'mails'
     mails: list[MailRefOut]
 
 
-class ProposalEvent(BaseModel):
+class ProposalEvent(EventModel):
     event: Literal['proposal'] = 'proposal'
     message: ChatMessageOut
 
 
-class SuggestionsEvent(BaseModel):
+class SuggestionsEvent(EventModel):
     event: Literal['suggestions'] = 'suggestions'
     items: list[str] = Field(max_length=3)
 
 
-class DoneEvent(BaseModel):
+class DoneEvent(EventModel):
     event: Literal['done'] = 'done'
     conversation_id: str
     message_id: str
     stopped: bool
 
 
-class ErrorEvent(BaseModel):
+class ErrorEvent(EventModel):
     event: Literal['error'] = 'error'
     code: Literal['model_unavailable', 'aborted', 'internal']
 

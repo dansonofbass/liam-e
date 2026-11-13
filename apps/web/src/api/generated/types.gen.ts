@@ -121,6 +121,29 @@ export type ChatConversationUpdateIn = {
 };
 
 /**
+ * ChatEvent
+ *
+ * A discriminated event in the streamed response.
+ */
+export type ChatEvent = ({
+    event: 'start';
+} & StartEvent) | ({
+    event: 'status';
+} & StatusEvent) | ({
+    event: 'delta';
+} & DeltaEvent) | ({
+    event: 'mails';
+} & MailsEvent) | ({
+    event: 'proposal';
+} & ProposalEvent) | ({
+    event: 'suggestions';
+} & SuggestionsEvent) | ({
+    event: 'done';
+} & DoneEvent) | ({
+    event: 'error';
+} & ErrorEvent);
+
+/**
  * ChatExtrasOut
  */
 export type ChatExtrasOut = {
@@ -198,6 +221,28 @@ export type ChatModelOut = {
      * Label
      */
     label: string;
+};
+
+/**
+ * ChatStreamRequest
+ */
+export type ChatStreamRequest = {
+    /**
+     * Account Id
+     */
+    account_id?: string | null;
+    /**
+     * Context Message Id
+     */
+    context_message_id?: string | null;
+    /**
+     * Conversation Id
+     */
+    conversation_id?: string | null;
+    /**
+     * Text
+     */
+    text: string;
 };
 
 /**
@@ -291,6 +336,20 @@ export type ConversationOut = {
 };
 
 /**
+ * DeltaEvent
+ */
+export type DeltaEvent = {
+    /**
+     * Event
+     */
+    event: 'delta';
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
  * DependencyStatus
  */
 export type DependencyStatus = {
@@ -302,6 +361,42 @@ export type DependencyStatus = {
      * Reachable
      */
     reachable?: boolean | null;
+};
+
+/**
+ * DoneEvent
+ */
+export type DoneEvent = {
+    /**
+     * Conversation Id
+     */
+    conversation_id: string;
+    /**
+     * Event
+     */
+    event: 'done';
+    /**
+     * Message Id
+     */
+    message_id: string;
+    /**
+     * Stopped
+     */
+    stopped: boolean;
+};
+
+/**
+ * ErrorEvent
+ */
+export type ErrorEvent = {
+    /**
+     * Code
+     */
+    code: 'model_unavailable' | 'aborted' | 'internal';
+    /**
+     * Event
+     */
+    event: 'error';
 };
 
 /**
@@ -421,6 +516,40 @@ export type ItemProblem = {
 };
 
 /**
+ * MailRefOut
+ */
+export type MailRefOut = {
+    /**
+     * Account Id
+     */
+    account_id: string;
+    /**
+     * Color Index
+     */
+    color_index: number;
+    /**
+     * Deadline
+     */
+    deadline: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Internal Date
+     */
+    internal_date: string | null;
+    /**
+     * Sender Name
+     */
+    sender_name: string;
+    /**
+     * Subject
+     */
+    subject: string;
+};
+
+/**
  * MailSummaryOut
  */
 export type MailSummaryOut = {
@@ -440,6 +569,20 @@ export type MailSummaryOut = {
      * Unread Total
      */
     unread_total: number;
+};
+
+/**
+ * MailsEvent
+ */
+export type MailsEvent = {
+    /**
+     * Event
+     */
+    event: 'mails';
+    /**
+     * Mails
+     */
+    mails: Array<MailRefOut>;
 };
 
 /**
@@ -684,6 +827,17 @@ export type ProposalConfirmIn = {
 };
 
 /**
+ * ProposalEvent
+ */
+export type ProposalEvent = {
+    /**
+     * Event
+     */
+    event: 'proposal';
+    message: ChatMessageOut;
+};
+
+/**
  * ProposalItem
  */
 export type ProposalItem = {
@@ -783,6 +937,56 @@ export type SendDraft = {
      * To
      */
     to: Array<string>;
+};
+
+/**
+ * StartEvent
+ */
+export type StartEvent = {
+    /**
+     * Conversation Id
+     */
+    conversation_id: string;
+    /**
+     * Event
+     */
+    event: 'start';
+    /**
+     * User Message Id
+     */
+    user_message_id: string;
+};
+
+/**
+ * StatusEvent
+ */
+export type StatusEvent = {
+    /**
+     * Code
+     */
+    code: 'thinking' | 'searching' | 'reading' | 'checking_deadlines' | 'finding_newsletters' | 'preparing_proposal';
+    /**
+     * Count
+     */
+    count: number | null;
+    /**
+     * Event
+     */
+    event: 'status';
+};
+
+/**
+ * SuggestionsEvent
+ */
+export type SuggestionsEvent = {
+    /**
+     * Event
+     */
+    event: 'suggestions';
+    /**
+     * Items
+     */
+    items: Array<string>;
 };
 
 /**
@@ -1063,6 +1267,31 @@ export type ChatProposalConfirmResponses = {
 };
 
 export type ChatProposalConfirmResponse = ChatProposalConfirmResponses[keyof ChatProposalConfirmResponses];
+
+export type ChatStreamData = {
+    body: ChatStreamRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/chat/stream';
+};
+
+export type ChatStreamErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatStreamError = ChatStreamErrors[keyof ChatStreamErrors];
+
+export type ChatStreamResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatEvent;
+};
+
+export type ChatStreamResponse = ChatStreamResponses[keyof ChatStreamResponses];
 
 export type MailAccountsListData = {
     body?: never;
