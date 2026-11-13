@@ -84,7 +84,8 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
             messages.insert(1, {'role':'system', 'content':f'Die Bitte bezieht sich auf die Mail mit der ID {context_message_id}. Lies sie mit get_message, bevor du antwortest.'})
         client = None
         for round_index in range(max(1, mail_env.mail_chat_max_tool_rounds)):
-            calls = {}
+            calls = []
+            calls_by_index = {}
             round_text = ''
             try:
                 kwargs = {'model':model, 'messages':messages, 'tools':TOOLS}
@@ -107,19 +108,27 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                             for pos, call in enumerate(tool_calls):
                                 index = getattr(call, 'index', None)
                                 if not isinstance(index, int): index = pos
-                                item = calls.setdefault(index, {'id':'', 'type':'function', 'function':{'name':'', 'arguments':''}})
                                 id = getattr(call, 'id', None)
+                                id = id if isinstance(id, str) and id not in ('', 'null') else ''
+                                item = calls_by_index.get(index)
+                                if not id and item is None and calls:
+                                    item = calls[-1]
+                                if item is None or (id and item['id'] and item['id'] != id):
+                                    item = {'id':'', 'type':'function', 'function':{'name':'', 'arguments':''}}
+                                    calls.append(item)
+                                calls_by_index[index] = item
                                 function = getattr(call, 'function', None)
                                 name = getattr(function, 'name', None)
                                 args = getattr(function, 'arguments', None)
-                                if isinstance(id, str) and id: item['id'] = id
-                                if isinstance(name, str) and name: item['function']['name'] = name
+                                if id: item['id'] = id
+                                if isinstance(name, str) and name and not item['function']['name']: item['function']['name'] = name
                                 if isinstance(args, dict): args = json.dumps(args)
                                 if isinstance(args, str): item['function']['arguments'] += args
             except (asyncio.CancelledError, GeneratorExit): raise
             except Exception as error:
                 logger.warning('%s', type(error).__name__)
                 if all_text: await save(True)
+                saved = True
                 yield ErrorEvent(code='model_unavailable')
                 return
             if not calls:
@@ -142,7 +151,14 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                 if suggestions: yield SuggestionsEvent(items=suggestions)
                 yield DoneEvent(conversation_id=conversation.id, message_id=answer.id, stopped=False)
                 return
-            payload = [calls[i] for i in sorted(calls)]
+            payload = calls
+            used_ids = {call['id'] for call in payload if call['id']}
+            for n, call in enumerate(payload):
+                if not call['id']:
+                    id = f'call_{round_index}_{n}'
+                    while id in used_ids: id += '_'
+                    call['id'] = id
+                    used_ids.add(id)
             await message_access.add_message(conversation_id=conversation.id, role='assistant', content='', tool_payload_json=json.dumps(payload))
             messages.append({'role':'assistant', 'content':round_text, 'tool_calls':payload})
             for call in payload:
@@ -180,4 +196,6 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         raise
     except Exception as error:
         logger.warning('%s', type(error).__name__)
+        if all_text: await save(True)
+        saved = True
         yield ErrorEvent(code='internal')

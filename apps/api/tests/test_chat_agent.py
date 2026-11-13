@@ -4,7 +4,10 @@ from datetime import date
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
+from fastapi import FastAPI
+from mistralai.client.models import DeltaMessage, FunctionCall, ToolCall
 from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
 from db.models.mail_message import MailMessage
@@ -135,12 +138,69 @@ async def test_model_failure_persists_partial_answer(store, monkeypatch):
     assert store.rows[-1].content == 'Anfang' and store.rows[-1].stopped
 
 
+def sdk_delta(*calls):
+    return NS(data=NS(choices=[NS(delta=DeltaMessage(tool_calls=list(calls)))]))
+
+
 async def test_stream_assembles_fragmented_calls(store, monkeypatch):
-    def part(id, name, arguments):
-        call = NS(id=id, index=0, function=NS(name=name, arguments=arguments))
-        return NS(data=NS(choices=[NS(delta=NS(content=None, tool_calls=[call]))]))
-    events, fake = await run(store, monkeypatch, [[part('call', 'suggest_followups', '{"texts":'), part(None, None, '["Mehr"]}')], ['Fertig']])
+    first = ToolCall(id='call', function=FunctionCall(name='suggest_followups', arguments='{"texts":'))
+    second = ToolCall(function=FunctionCall(name='suggest_followups', arguments='["Mehr"]}'))
+    events, fake = await run(store, monkeypatch, [[sdk_delta(first), sdk_delta(second)], ['Fertig']])
     assert next(e for e in events if e.event == 'suggestions').items == ['Mehr']
+    assert [m['tool_call_id'] for m in fake.requests[1]['messages'] if m['role'] == 'tool'] == ['call']
+    assert json.loads(next(r.tool_payload_json for r in store.rows if r.role == 'assistant' and r.tool_payload_json))[0]['function']['arguments'] == '{"texts":["Mehr"]}'
+
+
+async def test_parallel_sdk_calls_with_default_indexes(store, monkeypatch):
+    calls = [ToolCall(id=id, function=FunctionCall(name=name, arguments='{}')) for id, name in [('one', 'list_accounts'), ('two', 'find_newsletters')]]
+    _, fake = await run(store, monkeypatch, [[sdk_delta(*calls)], ['Fertig']])
+    messages = fake.requests[1]['messages']
+    assert [c['id'] for m in messages for c in m.get('tool_calls', [])] == ['one', 'two']
+    assert [m['tool_call_id'] for m in messages if m['role'] == 'tool'] == ['one', 'two']
+    assert [r.tool_name for r in store.rows if r.role == 'tool'] == ['list_accounts', 'find_newsletters']
+
+
+async def test_missing_sdk_call_ids_are_generated_uniquely(store, monkeypatch):
+    calls = [ToolCall(function=FunctionCall(name='list_accounts', arguments='{}')), ToolCall(index=1, id='real', function=FunctionCall(name='list_accounts', arguments='{}'))]
+    _, fake = await run(store, monkeypatch, [[sdk_delta(*calls)], ['Fertig']])
+    ids = [m['tool_call_id'] for m in fake.requests[1]['messages'] if m['role'] == 'tool']
+    assert len(ids) == len(set(ids)) == 2 and all(id not in ('', 'null') for id in ids)
+
+
+@pytest.mark.parametrize('text', ['', 'Anfang'])
+async def test_closing_after_model_error_preserves_only_partial_text(store, monkeypatch, text):
+    fake = FakeMistral(streams=[[text, RuntimeError('failure')]])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    stream = agent.run_turn_events(conversation_id=None, text='Hallo')
+    async for event in stream:
+        if event.event == 'error': break
+    await stream.aclose()
+    answers = [r for r in store.rows if r.role == 'assistant']
+    assert len(answers) == bool(text)
+    if text: assert answers[0].content == text and answers[0].stopped
+
+
+async def test_post_model_failure_has_no_empty_answer(store, monkeypatch):
+    from api.routers.api.v1.chat.route import router
+    fake = FakeMistral(streams=[RuntimeError('failure')])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    app = FastAPI()
+    app.include_router(router, prefix='/api/v1/chat')
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        response = await client.post('/api/v1/chat', json={'message':'Hallo'})
+    assert response.status_code == 503 and response.json()['detail']['code'] == 'model_unavailable'
+    assert [r.role for r in store.rows] == ['user']
+
+
+async def test_reply_draft_ignores_model_to_header(store, monkeypatch):
+    from api.mail.agent_tools import execute_tool, TurnContext
+    m = MailMessage(account_id=store.account.id, provider_uid='1', sender='Mira Example <mira@example.org>')
+    store.mail.messages[m.id] = m
+    monkeypatch.setattr(send, 'reply_recipients', lambda *args, **kwargs: (['mira@example.org'], ['cc@example.org']))
+    outcome = await execute_tool('create_draft', {'mode':'reply', 'reply_to_message_id':m.id, 'to':['Mira Example <mira@example.org>'], 'subject':'Hi', 'body':'Text'}, TurnContext('chat', None, date.today()))
+    assert outcome.proposal_message is not None
+    draft = json.loads(outcome.proposal_message.proposal_json)['draft']
+    assert draft['to'] == ['mira@example.org'] and draft['cc'] == ['cc@example.org']
 
 
 async def test_last_round_ignores_tool_calls(store, monkeypatch):

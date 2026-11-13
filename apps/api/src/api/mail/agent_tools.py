@@ -125,10 +125,11 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         if not items: return result({'error':'no_valid_items'})
         return await _proposal(ctx, proposals.Proposal(kind=kind, reason=arguments.get('reason',''), items=items))
     if name == 'create_draft':
-        to, cc = arguments.get('to', []), arguments.get('cc', [])
-        if not _valid_addresses(to + cc): return result({'error':'invalid_address'})
         mode = arguments.get('mode', 'new')
         if mode not in ('new','reply','reply_all','forward'): return result({'error':'invalid_arguments'})
+        to = [] if mode in ('reply', 'reply_all') else arguments.get('to', [])
+        cc = arguments.get('cc', [])
+        if not _valid_addresses(to + cc): return result({'error':'invalid_address'})
         original = await mail_message.get_message(arguments.get('reply_to_message_id', '')) if mode != 'new' else None
         if mode != 'new' and not original: return result({'error':'message_not_found'})
         if original:
