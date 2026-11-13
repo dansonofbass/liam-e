@@ -1,7 +1,8 @@
 """In-memory accessor replacement for mail tests, scoped to each fixture invocation."""
 
 import json
-from db.accessors import mail_account, mail_credential, mail_sync_state, mail_job, mail_message
+from db.accessors import mail_account, mail_action, mail_credential, mail_sync_state, mail_job, mail_message
+from db.models.mail_action import MailAction
 from db.models.mail_job import MailJob
 from db.models.mail_account import MailAccount
 from db.models.mail_sync_state import MailSyncState
@@ -14,6 +15,12 @@ class FakeStore:
         self.states = {}
         self.jobs = {}
         self.unread = {}
+        self.messages = {}
+        self.actions = {}
+        for name in ("record", "get_many", "mark_undone", "release", "latest_open", "delete_for_account"):
+            monkeypatch.setattr(mail_action, name, getattr(self, "action_" + name))
+        monkeypatch.setattr(mail_message, "get_message", self.get_message)
+        monkeypatch.setattr(mail_message, "set_state", self.set_message_state)
         for name in ("enqueue", "claim_next", "finish", "fail", "latest_for_account", "delete_for_account"):
             monkeypatch.setattr(mail_job, name, getattr(self, "job_" + name))
         monkeypatch.setattr(mail_message, "count_unread", self.count_unread)
@@ -32,6 +39,44 @@ class FakeStore:
             self.states.pop(account_id, None)
         monkeypatch.setattr(mail_credential, "delete_for_account", delete_credentials)
         monkeypatch.setattr(mail_sync_state, "delete_for_account", delete_state)
+
+    async def get_message(self, message_id):
+        row = self.messages.get(message_id)
+        return row.model_copy() if row else None
+
+    async def set_message_state(self, message_id, **kwargs):
+        row = self.messages.get(message_id)
+        if row:
+            for key, value in kwargs.items():
+                if value is not None:
+                    setattr(row, key, value)
+            return row.model_copy()
+        return None
+
+    async def action_record(self, **kwargs):
+        row = MailAction(**kwargs)
+        self.actions[row.id] = row
+        return row
+
+    async def action_get_many(self, ids):
+        return [row for key, row in self.actions.items() if key in ids]
+
+    async def action_mark_undone(self, action_id, at):
+        row = self.actions.get(action_id)
+        if row is None or row.undone_at is not None:
+            return False
+        row.undone_at = at
+        return True
+
+    async def action_release(self, action_id):
+        if action_id in self.actions:
+            self.actions[action_id].undone_at = None
+
+    async def action_latest_open(self, message_id):
+        return max((row for row in self.actions.values() if row.message_id == message_id and row.undone_at is None), key=lambda row: (row.created_at, row.id), default=None)
+
+    async def action_delete_for_account(self, account_id):
+        self.actions = {key: row for key, row in self.actions.items() if row.account_id != account_id}
 
     async def count_unread(self, *, folder="INBOX"):
         return self.unread

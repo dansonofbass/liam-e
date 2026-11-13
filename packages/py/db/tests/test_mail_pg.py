@@ -116,6 +116,35 @@ def test_mark_undone_is_single_use(pg_db):
     asyncio.run(run())
 
 
+def test_action_release_and_latest_open(pg_db):
+    async def run():
+        from db.accessors import mail_action as a
+        from db.engine import get_session_maker
+        from db.models.mail_action import MailAction
+        from sqlalchemy import update
+
+        first = await a.record(message_id="m", account_id="a", kind="archive", previous_json="{}")
+        second = await a.record(message_id="m", account_id="a", kind="restore", previous_json="{}")
+        await a.record(message_id="other", account_id="a", kind="archive", previous_json="{}")
+        assert (await a.latest_open("m")).id == second.id
+        assert await a.latest_open("missing") is None
+        assert await a.mark_undone(second.id, datetime.now(UTC))
+        assert (await a.latest_open("m")).id == first.id
+        await a.release(second.id)
+        assert (await a.latest_open("m")).id == second.id
+        assert (await a.get_many([second.id]))[0].undone_at is None
+        # Equal timestamps use descending IDs, independently of insertion order.
+        async with get_session_maker()() as session:
+            await session.execute(update(MailAction).where(MailAction.message_id == "m").values(created_at=first.created_at))
+            await session.commit()
+        assert (await a.latest_open("m")).id == max(first.id, second.id)
+        assert await a.mark_undone(second.id, datetime.now(UTC))
+        assert await a.mark_undone(first.id, datetime.now(UTC))
+        assert await a.latest_open("m") is None
+        await a.release("missing")
+    asyncio.run(run())
+
+
 def test_newsletter_senders_takes_headers_from_newest_mail(pg_db):
     async def run():
         from db.accessors import mail_message as m

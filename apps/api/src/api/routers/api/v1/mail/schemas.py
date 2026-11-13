@@ -2,7 +2,9 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from api.mail.actions import ActionKind
 
 
 class AttachmentOut(BaseModel):
@@ -39,3 +41,23 @@ class MessageDetailOut(MessageListItemOut):
 class MessagePageOut(BaseModel):
     items: list[MessageListItemOut]
     next_cursor: str | None
+
+
+class MessageActionIn(BaseModel):
+    kind: ActionKind
+
+
+class MessageActionOut(BaseModel):
+    action_id: str
+    message: MessageListItemOut
+
+
+class UndoIn(BaseModel):
+    action_ids: list[str] = Field(min_length=1, max_length=200)
+
+
+class UndoOut(BaseModel):
+    restored: list[str]
+    expired: list[str]
+    skipped: list[str]
+    failed: list[str]

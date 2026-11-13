@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChatConversationsListData, ChatConversationsListResponses, ChatDraftCancelData, ChatDraftCancelErrors, ChatDraftCancelResponses, ChatDraftConfirmData, ChatDraftConfirmErrors, ChatDraftConfirmResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
+import type { ChatConversationsListData, ChatConversationsListResponses, ChatDraftCancelData, ChatDraftCancelErrors, ChatDraftCancelResponses, ChatDraftConfirmData, ChatDraftConfirmErrors, ChatDraftConfirmResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOauthCallbackResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -153,6 +153,20 @@ export const mailAccountDelete = <ThrowOnError extends boolean = false>(options:
 export const mailAccountSync = <ThrowOnError extends boolean = false>(options: Options<MailAccountSyncData, ThrowOnError>): RequestResult<MailAccountSyncResponses, MailAccountSyncErrors, ThrowOnError> => (options.client ?? client).post<MailAccountSyncResponses, MailAccountSyncErrors, ThrowOnError>({ url: '/api/v1/mail/accounts/{account_id}/sync', ...options });
 
 /**
+ * Undo recent mail actions
+ *
+ * Undo up to 200 actions, newest first, within 24 hours; report individual failures.
+ */
+export const mailActionsUndo = <ThrowOnError extends boolean = false>(options: Options<MailActionsUndoData, ThrowOnError>): RequestResult<MailActionsUndoResponses, MailActionsUndoErrors, ThrowOnError> => (options.client ?? client).post<MailActionsUndoResponses, MailActionsUndoErrors, ThrowOnError>({
+    url: '/api/v1/mail/actions/undo',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * List the workspace's Mistral Studio connectors
  *
  * List the Mistral Studio connectors of this workspace as ``name``/``id`` pairs.
@@ -194,6 +208,20 @@ export const mailMessagesList = <ThrowOnError extends boolean = false>(options?:
  * Return one indexed message or 404 if it does not exist.
  */
 export const mailMessageGet = <ThrowOnError extends boolean = false>(options: Options<MailMessageGetData, ThrowOnError>): RequestResult<MailMessageGetResponses, MailMessageGetErrors, ThrowOnError> => (options.client ?? client).get<MailMessageGetResponses, MailMessageGetErrors, ThrowOnError>({ url: '/api/v1/mail/messages/{message_id}', ...options });
+
+/**
+ * Apply an undoable message action
+ *
+ * Update one message at its provider and retain its previous state for 24-hour undo.
+ */
+export const mailMessageAction = <ThrowOnError extends boolean = false>(options: Options<MailMessageActionData, ThrowOnError>): RequestResult<MailMessageActionResponses, MailMessageActionErrors, ThrowOnError> => (options.client ?? client).post<MailMessageActionResponses, MailMessageActionErrors, ThrowOnError>({
+    url: '/api/v1/mail/messages/{message_id}/actions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Mail Summary

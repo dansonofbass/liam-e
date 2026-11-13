@@ -335,6 +335,27 @@ export type MailSummaryOut = {
 };
 
 /**
+ * MessageActionIn
+ */
+export type MessageActionIn = {
+    /**
+     * Kind
+     */
+    kind: 'archive' | 'trash' | 'mark_read' | 'mark_unread' | 'restore';
+};
+
+/**
+ * MessageActionOut
+ */
+export type MessageActionOut = {
+    /**
+     * Action Id
+     */
+    action_id: string;
+    message: MessageListItemOut;
+};
+
+/**
  * MessageDetailOut
  */
 export type MessageDetailOut = {
@@ -520,6 +541,38 @@ export type SyncAllRequest = {
      * Only If Older Than Minutes
      */
     only_if_older_than_minutes?: number | null;
+};
+
+/**
+ * UndoIn
+ */
+export type UndoIn = {
+    /**
+     * Action Ids
+     */
+    action_ids: Array<string>;
+};
+
+/**
+ * UndoOut
+ */
+export type UndoOut = {
+    /**
+     * Expired
+     */
+    expired: Array<string>;
+    /**
+     * Failed
+     */
+    failed: Array<string>;
+    /**
+     * Restored
+     */
+    restored: Array<string>;
+    /**
+     * Skipped
+     */
+    skipped: Array<string>;
 };
 
 /**
@@ -873,6 +926,31 @@ export type MailAccountSyncResponses = {
 
 export type MailAccountSyncResponse = MailAccountSyncResponses[keyof MailAccountSyncResponses];
 
+export type MailActionsUndoData = {
+    body: UndoIn;
+    path?: never;
+    query?: never;
+    url: '/api/v1/mail/actions/undo';
+};
+
+export type MailActionsUndoErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailActionsUndoError = MailActionsUndoErrors[keyof MailActionsUndoErrors];
+
+export type MailActionsUndoResponses = {
+    /**
+     * Successful Response
+     */
+    200: UndoOut;
+};
+
+export type MailActionsUndoResponse = MailActionsUndoResponses[keyof MailActionsUndoResponses];
+
 export type MailConnectorsListData = {
     body?: never;
     path?: never;
@@ -1040,6 +1118,36 @@ export type MailMessageGetResponses = {
 };
 
 export type MailMessageGetResponse = MailMessageGetResponses[keyof MailMessageGetResponses];
+
+export type MailMessageActionData = {
+    body: MessageActionIn;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/mail/messages/{message_id}/actions';
+};
+
+export type MailMessageActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailMessageActionError = MailMessageActionErrors[keyof MailMessageActionErrors];
+
+export type MailMessageActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: MessageActionOut;
+};
+
+export type MailMessageActionResponse = MailMessageActionResponses[keyof MailMessageActionResponses];
 
 export type MailSummaryData = {
     body?: never;

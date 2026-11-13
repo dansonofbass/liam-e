@@ -29,6 +29,19 @@ async def mark_undone(action_id: str, at: datetime) -> bool:
         return changed
 
 
+async def release(action_id: str) -> None:
+    """Release an undo claim after a provider failure so it can be retried."""
+    async with get_session_maker()() as session:
+        await session.execute(update(MailAction).where(MailAction.id == action_id).values(undone_at=None))
+        await session.commit()
+
+
+async def latest_open(message_id: str) -> MailAction | None:
+    async with get_session_maker()() as session:
+        statement = select(MailAction).where(MailAction.message_id == message_id, MailAction.undone_at.is_(None)).order_by(MailAction.created_at.desc(), MailAction.id.desc()).limit(1)
+        return (await session.execute(statement)).scalar_one_or_none()
+
+
 async def delete_for_account(account_id: str) -> None:
     async with get_session_maker()() as session:
         await session.execute(delete(MailAction).where(MailAction.account_id == account_id))

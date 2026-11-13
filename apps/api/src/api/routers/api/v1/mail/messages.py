@@ -14,9 +14,10 @@ from db.models.mail_message import MailMessage
 from fastapi import APIRouter, HTTPException, Query
 
 from api.errors import refuse
+from api.mail import actions
 from api.mail.headers import sender_name
 from api.mail.state import color_indexes
-from api.routers.api.v1.mail.schemas import MessageDetailOut, MessageListItemOut, MessagePageOut
+from api.routers.api.v1.mail.schemas import MessageActionIn, MessageActionOut, MessageDetailOut, MessageListItemOut, MessagePageOut
 
 router = APIRouter()
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -76,6 +77,23 @@ async def list_messages(
         items=[list_item(message, colors, insights.get(message.id)) for message in messages],
         next_cursor=encode_cursor(messages[-1]) if len(messages) == limit else None,
     )
+
+
+@router.post("/{message_id}/actions", operation_id="mail_message_action", summary="Apply an undoable message action")
+async def message_action(message_id: str, body: MessageActionIn) -> MessageActionOut:
+    """Update one message at its provider and retain its previous state for 24-hour undo."""
+    try:
+        action = await actions.apply_action(message_id, body.kind)
+    except actions.ActionUnsupportedError:
+        raise refuse(409, "action_unsupported", "Diese Aktion ist für diese Mail nicht möglich.") from None
+    except actions.ActionFailedError:
+        raise refuse(502, "provider_failed", "Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.") from None
+    message = await message_access.get_message(message_id)
+    if message is None:
+        raise refuse(404, "message_not_found", "Diese Mail wurde nicht gefunden.")
+    insights = await insight_access.get_for_messages([message.id])
+    colors = color_indexes(await account_access.list_accounts())
+    return MessageActionOut(action_id=action.id, message=list_item(message, colors, insights.get(message.id)))
 
 
 @router.get("/{message_id}", operation_id="mail_message_get", summary="Read one synced message in full")

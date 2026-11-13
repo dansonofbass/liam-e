@@ -474,6 +474,43 @@
         "title": "MailSummaryOut",
         "type": "object"
       },
+      "MessageActionIn": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "archive",
+              "trash",
+              "mark_read",
+              "mark_unread",
+              "restore"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "MessageActionIn",
+        "type": "object"
+      },
+      "MessageActionOut": {
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/MessageListItemOut"
+          }
+        },
+        "required": [
+          "action_id",
+          "message"
+        ],
+        "title": "MessageActionOut",
+        "type": "object"
+      },
       "MessageDetailOut": {
         "properties": {
           "account_id": {
@@ -769,6 +806,64 @@
           }
         },
         "title": "SyncAllRequest",
+        "type": "object"
+      },
+      "UndoIn": {
+        "properties": {
+          "action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Action Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action_ids"
+        ],
+        "title": "UndoIn",
+        "type": "object"
+      },
+      "UndoOut": {
+        "properties": {
+          "expired": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expired",
+            "type": "array"
+          },
+          "failed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "restored": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Restored",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "restored",
+          "expired",
+          "skipped",
+          "failed"
+        ],
+        "title": "UndoOut",
         "type": "object"
       },
       "ValidationError": {
@@ -1265,6 +1360,45 @@
         "summary": "Schedule an account sync"
       }
     },
+    "/api/v1/mail/actions/undo": {
+      "post": {
+        "description": "Undo up to 200 actions, newest first, within 24 hours; report individual failures.",
+        "operationId": "mail_actions_undo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UndoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UndoOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo recent mail actions"
+      }
+    },
     "/api/v1/mail/connectors": {
       "get": {
         "description": "List the Mistral Studio connectors of this workspace as ``name``/``id`` pairs.\n\nThese are the connectors that can be registered as a mail account.",
@@ -1531,6 +1665,56 @@
           }
         },
         "summary": "Read one synced message in full"
+      }
+    },
+    "/api/v1/mail/messages/{message_id}/actions": {
+      "post": {
+        "description": "Update one message at its provider and retain its previous state for 24-hour undo.",
+        "operationId": "mail_message_action",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageActionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageActionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply an undoable message action"
       }
     },
     "/api/v1/mail/summary": {
