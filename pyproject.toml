@@ -59,3 +59,15 @@ exclude = ["apps/web", "apps/chat-app"]
 "mistralai-capabilities-feature-observability" = false
 "mistralai-capabilities-deployment-apps" = false
 "mistralai-capabilities-backend-fastapi" = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+    "respx>=0.23.1",
+]
+
+[tool.pytest.ini_options]
+# The scaffold's async tests are unmarked (db) or marked `asyncio` (api); auto mode runs both.
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
