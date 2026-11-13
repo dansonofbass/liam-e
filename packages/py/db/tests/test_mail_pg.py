@@ -24,6 +24,21 @@ def test_list_page_pages_with_cursor_without_gaps(pg_db):
     asyncio.run(run())
 
 
+def test_list_page_pages_through_null_dates(pg_db):
+    async def run():
+        from db.accessors import mail_message as m
+        now = datetime.now(UTC)
+        rows = [await m.upsert_message(account_id="a", folder="INBOX", provider_uid=str(i), internal_date=now - timedelta(days=i) if i < 2 else None) for i in range(5)]
+        pages = []
+        before = None
+        while page := await m.list_page(before=before, limit=2):
+            pages.extend(page)
+            before = (page[-1].internal_date, page[-1].id)
+        expected = sorted(rows[:2], key=lambda x: (x.internal_date, x.id), reverse=True) + sorted(rows[2:], key=lambda x: x.id, reverse=True)
+        assert [x.id for x in pages] == [x.id for x in expected]
+    asyncio.run(run())
+
+
 def test_list_page_filters(pg_db):
     async def run():
         from db.accessors import mail_message as m, mail_insight as ins
@@ -82,6 +97,31 @@ def test_mark_undone_is_single_use(pg_db):
         action = await a.record(message_id="m", account_id="a", kind="read", previous_json="{}")
         assert await a.mark_undone(action.id, datetime.now(UTC)) is True
         assert await a.mark_undone(action.id, datetime.now(UTC)) is False
+    asyncio.run(run())
+
+
+def test_newsletter_senders_takes_headers_from_newest_mail(pg_db):
+    async def run():
+        from db.accessors import mail_message as m
+        from db.engine import get_session_maker
+        from sqlalchemy import event
+
+        await m.upsert_message(account_id="a", folder="INBOX", provider_uid="old", sender_address="news@example.com", sender="Old", list_unsubscribe="old")
+        await m.upsert_message(account_id="a", folder="INBOX", provider_uid="new", sender_address="news@example.com", sender="New", internal_date=datetime.now(UTC), list_unsubscribe="new", list_unsubscribe_post="post", labels_json='["new"]')
+        statements = []
+        engine = get_session_maker().kw["bind"].sync_engine
+        def capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            rows = await m.newsletter_senders()
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        assert len(rows) == 1
+        assert (rows[0].sender_display, rows[0].list_unsubscribe, rows[0].list_unsubscribe_post, rows[0].labels_json) == ("New", "new", "post", '["new"]')
+        assert len(statements) == 1
+        assert "body_text" not in statements[0].lower()
+        assert "count(" in statements[0].lower()
     asyncio.run(run())
 
 

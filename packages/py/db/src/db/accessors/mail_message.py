@@ -134,7 +134,7 @@ class NewsletterRow:
     labels_json: str
 
 
-async def list_page(*, folder: str = "INBOX", account_ids: list[str] | None = None, unread_only: bool = False, important_only: bool = False, with_attachments: bool = False, query: str = "", before: tuple[datetime, str] | None = None, limit: int = 50) -> list[MailMessage]:
+async def list_page(*, folder: str = "INBOX", account_ids: list[str] | None = None, unread_only: bool = False, important_only: bool = False, with_attachments: bool = False, query: str = "", before: tuple[datetime | None, str] | None = None, limit: int = 50) -> list[MailMessage]:
     date_key = func.coalesce(MailMessage.internal_date, datetime(1970, 1, 1, tzinfo=UTC))
     stmt = select(MailMessage).where(MailMessage.folder == folder)
     if account_ids is not None:
@@ -148,7 +148,7 @@ async def list_page(*, folder: str = "INBOX", account_ids: list[str] | None = No
     if query:
         stmt = stmt.where(MailMessage.search_tsv.op("@@")(func.websearch_to_tsquery("german", query)))
     if before is not None:
-        stmt = stmt.where(tuple_(date_key, MailMessage.id) < tuple_(*before))
+        stmt = stmt.where(tuple_(date_key, MailMessage.id) < tuple_(before[0] or datetime(1970, 1, 1, tzinfo=UTC), before[1]))
     stmt = stmt.order_by(date_key.desc(), MailMessage.id.desc()).limit(limit)
     async with get_session_maker()() as session:
         return list((await session.execute(stmt)).scalars().all())
@@ -173,24 +173,22 @@ async def set_state(message_id: str, *, folder: str | None = None, is_read: bool
 
 
 async def newsletter_senders(*, account_ids: list[str] | None = None) -> list[NewsletterRow]:
-    # Rank messages before aggregation so headers are taken from the newest message.
-    stmt = select(MailMessage).where(MailMessage.folder == "INBOX", MailMessage.sender_address != "")
+    partition = (MailMessage.account_id, MailMessage.sender_address)
+    date_key = func.coalesce(MailMessage.internal_date, datetime(1970, 1, 1, tzinfo=UTC))
+    ranked = select(
+        MailMessage.account_id, MailMessage.sender_address, MailMessage.sender,
+        func.count().over(partition_by=partition).label("total"),
+        func.count().filter(MailMessage.is_read.is_(False)).over(partition_by=partition).label("unread"),
+        func.max(MailMessage.internal_date).filter(MailMessage.is_read.is_(True)).over(partition_by=partition).label("last_read_at"),
+        MailMessage.list_unsubscribe, MailMessage.list_unsubscribe_post, MailMessage.labels_json,
+        func.row_number().over(partition_by=partition, order_by=(date_key.desc(), MailMessage.id.desc())).label("rank"),
+    ).where(MailMessage.folder == "INBOX", MailMessage.sender_address != "")
     if account_ids is not None:
-        stmt = stmt.where(MailMessage.account_id.in_(account_ids))
-    stmt = stmt.order_by(MailMessage.internal_date.desc().nullslast(), MailMessage.id.desc())
+        ranked = ranked.where(MailMessage.account_id.in_(account_ids))
+    ranked = ranked.subquery()
+    stmt = select(ranked.c.account_id, ranked.c.sender_address, ranked.c.sender, ranked.c.total, ranked.c.unread, ranked.c.last_read_at, ranked.c.list_unsubscribe, ranked.c.list_unsubscribe_post, ranked.c.labels_json).where(ranked.c.rank == 1).order_by(ranked.c.total.desc(), ranked.c.sender_address, ranked.c.account_id)
     async with get_session_maker()() as session:
-        messages = (await session.execute(stmt)).scalars().all()
-    grouped: dict[tuple[str, str], NewsletterRow] = {}
-    for message in messages:
-        key = (message.account_id, message.sender_address)
-        if key not in grouped:
-            grouped[key] = NewsletterRow(*key, message.sender, 0, 0, None, message.list_unsubscribe, message.list_unsubscribe_post, message.labels_json)
-        row = grouped[key]
-        row.total += 1
-        row.unread += int(not message.is_read)
-        if message.is_read and message.internal_date is not None and (row.last_read_at is None or message.internal_date > row.last_read_at):
-            row.last_read_at = message.internal_date
-    return list(grouped.values())
+        return [NewsletterRow(*row) for row in (await session.execute(stmt)).all()]
 
 
 async def message_ids_from_sender(account_id: str, sender_address: str, *, folder: str = "INBOX") -> list[str]:
