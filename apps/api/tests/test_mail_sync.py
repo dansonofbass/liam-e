@@ -436,6 +436,22 @@ async def test_connector_skips_messages_without_inbox_label(monkeypatch):
     assert result.cursor == "200"
 
 
+@pytest.mark.anyio
+async def test_connector_scan_keeps_messages_with_unknown_labels(monkeypatch):
+    async def known(*_): return {}
+    async def call(provider, tool, args):
+        if tool == "get_thread":
+            return {"id": "t", "messages": [
+                {"id": "missing", "date": "1970-01-01T00:01:40+00:00"},
+                {"id": "none", "date": "1970-01-01T00:03:20+00:00", "labelIds": None},
+            ]}
+        return {"threads": [{"id": "t"}]}
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", known)
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
+    result = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="", folders=["INBOX"], limit=10, max_body_chars=100)
+    assert [m["provider_uid"] for m in result.upserts] == ["missing", "none"]
+
+
 async def connector_reconciliation(monkeypatch, threads, unread_threads):
     queries = []
     async def known(*_): return {"a": "a", "b": "b"}
@@ -470,6 +486,16 @@ async def test_connector_archived_sibling_is_moved_out(monkeypatch):
     assert result.moved_out == ["b"]
     assert result.read_updates == {"a": True}
     assert not any("is:unread" in query for query in queries)
+
+
+@pytest.mark.anyio
+async def test_connector_reconcile_unknown_labels_uses_thread_state(monkeypatch):
+    result, queries = await connector_reconciliation(monkeypatch, [{"id": "t", "messages": [
+        {"id": "a"}, {"id": "b", "labelIds": None},
+    ]}], [{"id": "t"}])
+    assert result.moved_out == []
+    assert result.read_updates == {"a": False, "b": False}
+    assert "is:unread in:inbox newer_than:14d" in queries
 
 
 @pytest.mark.anyio

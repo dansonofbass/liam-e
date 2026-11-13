@@ -63,7 +63,8 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
                     if (lower is not None and stamp <= lower) or (upper is not None and stamp >= upper):
                         continue
                     latest = stamp if latest is None else max(latest, stamp)
-                    if "INBOX" in (message.get("labelIds") or []) and parsed["provider_uid"] not in seen:
+                    labels = message.get("labelIds")
+                    if (labels is None or "INBOX" in labels) and parsed["provider_uid"] not in seen:
                         changes.upserts.append(parsed)
                         seen.add(parsed["provider_uid"])
                 if thread_latest is not None:
@@ -93,8 +94,9 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
     if valid:
         threads = await _search(account.provider, "in:inbox newer_than:14d")
         present = {thread["id"] for thread in threads}
-        labels_by_uid = {message["id"]: set(message.get("labelIds") or [])
-                         for thread in threads for message in (thread.get("messages") or [])}
+        labels_by_uid = {message["id"]: set(message["labelIds"])
+                         for thread in threads for message in (thread.get("messages") or [])
+                         if isinstance(message.get("labelIds"), list)}
         fallback = {}
         cutoff = datetime.now(UTC) - timedelta(days=14)
         for uid, local_id in known.items():
