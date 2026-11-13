@@ -20,6 +20,12 @@ class ChatTurnRequest(BaseModel):
 
 @router.post("", operation_id="chat_turn", summary="Send a message to the mail agent")
 async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
+    """Send one chat message to the mail agent and return the messages it produced.
+
+    Pass an empty ``conversation_id`` to start a new conversation; the response returns the
+    conversation id to continue with. The agent may create a pending draft, but this operation
+    never sends a mail by itself.
+    """
     if body.conversation_id:
         conversation = await conversation_access.get_conversation(body.conversation_id)
         if conversation is None:

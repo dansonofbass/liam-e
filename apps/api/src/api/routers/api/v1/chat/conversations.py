@@ -14,5 +14,6 @@ router = APIRouter()
     summary="List all chat conversations, newest first",
 )
 async def list_conversations() -> list[schemas.ConversationOut]:
+    """List all chat conversations, most recently updated first."""
     conversations = await conversation_access.list_conversations()
     return [schemas.ConversationOut.from_model(c) for c in conversations]

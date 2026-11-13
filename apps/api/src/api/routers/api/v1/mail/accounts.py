@@ -100,6 +100,10 @@ def _redirect_base(request: Request) -> str:
     "", operation_id="mail_accounts_list", summary="List all connected mail accounts"
 )
 async def list_accounts() -> list[AccountOut]:
+    """List all connected mail accounts with provider, auth type and e-mail address.
+
+    Credentials are never part of the response.
+    """
     accounts = await account_access.list_accounts()
     return [AccountOut.from_model(a) for a in accounts]
 
@@ -111,6 +115,13 @@ async def list_accounts() -> list[AccountOut]:
     summary="Connect an IMAP/SMTP account",
 )
 async def connect_imap(body: ImapConnectRequest) -> AccountOut:
+    """Connect an IMAP/SMTP account with an app password and store its credentials encrypted.
+
+    Exactly one of ``password`` or ``password_secret`` is required; ``password_secret`` names a
+    workspace secret (for example ``yahoo-app-password``) whose value is resolved now and re-read
+    at runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP
+    login is checked before the account is created; answers 201 with the new account.
+    """
     preset = providers.guess_imap_settings(body.email_address)
     imap_host = body.imap_host or (preset[0] if preset else "")
     imap_port = body.imap_port if body.imap_host else (preset[1] if preset else 993)
@@ -191,6 +202,12 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
 async def oauth_authorize(
     provider: Literal["google", "microsoft"], request: Request
 ) -> OAuthAuthorizeOut:
+    """Start the OAuth2 flow for ``google`` or ``microsoft`` and return the URL to open in a browser.
+
+    The response carries the ``authorization_url`` plus the signed ``state`` that the provider
+    echoes back to the callback; nothing is redirected here. Answers 503 when that provider's
+    OAuth client is not configured.
+    """
     if not providers.oauth_configured(provider):
         raise HTTPException(
             status_code=503,
@@ -218,6 +235,11 @@ async def oauth_callback(
     code: Annotated[str, Query()],
     state: Annotated[str, Query()],
 ) -> AccountOut:
+    """OAuth2 redirect target: exchange the authorization code and store the encrypted tokens.
+
+    The signed ``state`` must match ``provider``; the provider's e-mail address decides which
+    mail account is created or updated (auth type ``oauth2``) and returned.
+    """
     try:
         payload = providers.verify_state(state)
     except ValueError as error:
@@ -261,6 +283,11 @@ async def oauth_callback(
     summary="Delete an account and all its data",
 )
 async def delete_account(account_id: str) -> None:
+    """Delete a mail account together with its credentials, synced messages and sync state.
+
+    ``account_id`` selects the account; the data cannot be restored. Answers 204 on success and
+    404 for an unknown account.
+    """
     deleted = await account_access.delete_account(account_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Konto nicht gefunden.")
@@ -275,6 +302,12 @@ async def delete_account(account_id: str) -> None:
     summary="Sync the account into the local mail index",
 )
 async def sync_account(account_id: str) -> SyncOut:
+    """Sync one connected account's mail into the local index and return the result.
+
+    ``account_id`` selects the account; the response reports the ``status``, the number of
+    messages ``synced`` and the new ``cursor``. Provider failures do not raise — they return
+    status ``error`` with ``last_error``.
+    """
     try:
         result = await sync_service.sync_account(account_id)
     except LookupError as error:

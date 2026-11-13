@@ -17,6 +17,13 @@ router = APIRouter()
     "", operation_id="chat_draft_confirm", summary="Send the confirmed draft for real"
 )
 async def confirm_draft(draft_id: str) -> chat_schemas.ChatMessageOut:
+    """Send the pending draft for real; this is the only path that actually sends a mail.
+
+    ``draft_id`` identifies the pending draft chat message, which is sent to its recipients via
+    the account that created it. On success the draft is stored with status ``sent`` and the
+    provider's send result; a send failure stores status ``failed`` with the error and answers
+    502. Unknown or already handled drafts answer 404 and 409.
+    """
     message = await message_access.get_message(draft_id)
     if message is None or message.role != "draft":
         raise HTTPException(status_code=404, detail="Entwurf nicht gefunden.")

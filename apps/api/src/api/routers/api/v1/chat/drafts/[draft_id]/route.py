@@ -12,6 +12,12 @@ router = APIRouter()
 
 @router.delete("", operation_id="chat_draft_cancel", summary="Cancel a pending draft")
 async def cancel_draft(draft_id: str) -> schemas.ChatMessageOut:
+    """Discard a pending draft without sending it — no mail is delivered.
+
+    ``draft_id`` identifies the draft chat message; it answers 404 when the id is not a draft
+    and 409 when the draft was already handled (sent, failed or cancelled). The returned message
+    carries the draft with status ``cancelled``.
+    """
     message = await message_access.get_message(draft_id)
     if message is None or message.role != "draft":
         raise HTTPException(status_code=404, detail="Entwurf nicht gefunden.")

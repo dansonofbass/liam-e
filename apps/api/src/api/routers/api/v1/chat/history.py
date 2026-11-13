@@ -19,6 +19,10 @@ router = APIRouter()
 async def history(
     conversation_id: Annotated[str, Query()],
 ) -> list[schemas.ChatMessageOut]:
+    """Return every message of one conversation in conversation order.
+
+    ``conversation_id`` selects the conversation; an unknown id answers 404.
+    """
     conversation = await conversation_access.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Konversation nicht gefunden.")

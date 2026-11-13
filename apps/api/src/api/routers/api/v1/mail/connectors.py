@@ -68,6 +68,10 @@ def _http_error(error: Exception) -> HTTPException:
     summary="List the workspace's Mistral Studio connectors",
 )
 async def list_connectors() -> list[ConnectorOut]:
+    """List the Mistral Studio connectors of this workspace as ``name``/``id`` pairs.
+
+    These are the connectors that can be registered as a mail account.
+    """
     try:
         connectors = await connector_service.list_connectors()
     except httpx.HTTPStatusError as error:
@@ -81,6 +85,10 @@ async def list_connectors() -> list[ConnectorOut]:
     summary="List a connector's tools",
 )
 async def list_tools(name: str) -> list[ConnectorToolOut]:
+    """List the tools of one Studio connector with name, description and input schema.
+
+    ``name`` is the connector name; an unknown connector answers 404.
+    """
     try:
         tools = await connector_service.list_tools(name)
     except httpx.HTTPStatusError as error:
@@ -95,6 +103,12 @@ async def list_tools(name: str) -> list[ConnectorToolOut]:
     summary="Connect a Studio connector (e.g. gmail) as a mail account",
 )
 async def connect_connector(name: str) -> AccountOut:
+    """Register a Studio connector such as ``gmail`` as a mail account and return it.
+
+    The connector keeps the OAuth credentials inside Mistral, so the app stores no secret; the
+    account's e-mail address is derived from a one-message ``search_threads`` call when the
+    connector offers that tool and otherwise stays a placeholder. Answers 201.
+    """
     try:
         tools = await connector_service.list_tools(name)
     except httpx.HTTPStatusError as error:
@@ -128,6 +142,11 @@ async def connect_connector(name: str) -> AccountOut:
     summary="Call any tool of a Studio connector (e.g. gmail search_threads)",
 )
 async def call_tool(name: str, tool: str, body: ToolCallRequest) -> ToolCallResult:
+    """Call one tool of a Studio connector and return its text output.
+
+    ``name`` is the connector and ``tool`` the tool name, while ``body.arguments`` is passed to
+    the tool as its input. Unknown connectors answer 404 and other connector failures 502.
+    """
     try:
         content = await connector_service.call_tool(name, tool, body.arguments)
     except httpx.HTTPStatusError as error:

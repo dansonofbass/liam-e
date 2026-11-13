@@ -60,6 +60,12 @@ async def search_messages(
     account_id: Annotated[str, Query()] = "",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[MessageOut]:
+    """Search the synced mail index across all connected accounts.
+
+    ``q`` matches case-insensitively as a substring of subject, sender and body, ``account_id``
+    restricts the search to one account and ``limit`` caps the result count (1-200). Messages are
+    returned with the newest ``internal_date`` first.
+    """
     messages = await message_access.search_messages(
         query=q, account_id=account_id, limit=limit
     )
@@ -72,6 +78,11 @@ async def search_messages(
     summary="Read one synced message in full",
 )
 async def get_message(message_id: str) -> MessageOut:
+    """Return one synced message with all indexed fields, including its stored body text.
+
+    The response also carries recipients, labels and read/attachment flags. ``message_id`` is the
+    id from a search result; an unknown id answers 404.
+    """
     message = await message_access.get_message(message_id)
     if message is None:
         raise HTTPException(status_code=404, detail="Mail nicht gefunden.")
