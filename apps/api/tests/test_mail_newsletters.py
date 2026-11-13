@@ -38,6 +38,50 @@ def test_one_click_to_private_target_fails_and_does_not_archive(monkeypatch):
     archive.assert_not_called()
 
 
+def test_parse_mailto_sanitizes_subject_and_body():
+    target = newsletters.parse_mailto('mailto:leave@list.example.test?Subject=Stop%0D%0ABcc:%20x@y.test&body=line1%0Aline2%09end')
+    assert target == newsletters.MailtoTarget('leave@list.example.test', 'Stop Bcc: x@y.test', 'line1 line2 end')
+
+
+def test_parse_mailto_caps_subject_and_body_at_200():
+    long = 'a' * 500
+    target = newsletters.parse_mailto(f'mailto:leave@list.example.test?subject={long}&body={long}')
+    assert (len(target.subject), len(target.body)) == (200, 200)
+
+
+def test_parse_mailto_defaults_to_unsubscribe():
+    plain = newsletters.parse_mailto('mailto:leave@list.example.test')
+    assert (plain.subject, plain.body) == ('unsubscribe', 'unsubscribe')
+    blank = newsletters.parse_mailto('mailto:leave@list.example.test?subject=%0D%0A&body=%09')
+    assert (blank.subject, blank.body) == ('unsubscribe', 'unsubscribe')
+
+
+def test_parse_mailto_rejects_bad_recipient_and_scheme():
+    assert newsletters.parse_mailto('mailto:a@b.test,c@d.test') is None
+    assert newsletters.parse_mailto('mailto:no-at-sign') is None
+    assert newsletters.parse_mailto('mailto:%20a@b.test') is None
+    assert newsletters.parse_mailto('https://x.test/u') is None
+
+
+def test_mailto_sends_sanitized_values(monkeypatch):
+    send = AsyncMock()
+    monkeypatch.setattr(newsletters.send, 'send_message', send)
+    monkeypatch.setattr(mail_message, 'message_ids_from_sender', AsyncMock(return_value=[]))
+    account = SimpleNamespace()
+    link = 'mailto:leave@list.example.test?subject=Stop%0D%0ABcc:%20x@y.test&body=line1%0Aline2%09end'
+    outcome = run(newsletters.unsubscribe(sender('mailto', link), account))
+    assert outcome.status == 'done'
+    send.assert_awaited_once_with(account, to=['leave@list.example.test'], subject='Stop Bcc: x@y.test', body='line1 line2 end')
+
+
+def test_mailto_invalid_target_sends_nothing(monkeypatch):
+    send = AsyncMock()
+    monkeypatch.setattr(newsletters.send, 'send_message', send)
+    outcome = run(newsletters.unsubscribe(sender('mailto', 'mailto:a@b.test,c@d.test'), SimpleNamespace()))
+    assert (outcome.status, outcome.error_code) == ('failed', 'unsubscribe_invalid')
+    send.assert_not_called()
+
+
 def test_mailto_sends_through_the_account(monkeypatch):
     send = AsyncMock()
     monkeypatch.setattr(newsletters.send, 'send_message', send)

@@ -2,6 +2,7 @@
 
 import json
 import logging
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
@@ -15,6 +16,7 @@ from api.mail import actions, connectors, headers, netguard, send
 
 logger = logging.getLogger(__name__)
 UnsubscribeMethod = Literal['one_click', 'mailto', 'link', 'none']
+MAILTO_TEXT_LIMIT = 200
 
 
 @dataclass
@@ -28,6 +30,13 @@ class NewsletterSender:
     last_read_at: datetime | None
     method: UnsubscribeMethod
     link: str | None
+
+
+@dataclass
+class MailtoTarget:
+    recipient: str
+    subject: str
+    body: str
 
 
 @dataclass
@@ -51,6 +60,35 @@ def unsubscribe_method(list_unsubscribe: str, list_unsubscribe_post: str) -> tup
     if https or http:
         return 'link', https or http
     return 'none', None
+
+
+def _clean_mailto_text(value: str | None) -> str:
+    """Flatten an attacker-controlled header value to one short, printable line."""
+    if value is None:
+        return 'unsubscribe'
+    printable = ''.join(' ' if unicodedata.category(char).startswith('C') else char for char in value)
+    text = ' '.join(printable.split())[:MAILTO_TEXT_LIMIT]
+    return text or 'unsubscribe'
+
+
+def parse_mailto(link: str | None) -> MailtoTarget | None:
+    """Split a ``List-Unsubscribe`` mailto URI into a safe, bounded target.
+
+    The recipient is validated, ``subject``/``body`` are sanitized and capped so a
+    hostile header cannot make the user's account send arbitrary text.
+    """
+    if not link:
+        return None
+    uri = urlsplit(link)
+    if uri.scheme.lower() != 'mailto':
+        return None
+    recipient = unquote(uri.path)
+    if not recipient or '@' not in recipient or any(c.isspace() or c == ',' for c in recipient):
+        return None
+    query: dict[str, str] = {}
+    for key, value in parse_qsl(uri.query, keep_blank_values=True):
+        query.setdefault(key.lower(), value)
+    return MailtoTarget(recipient, _clean_mailto_text(query.get('subject')), _clean_mailto_text(query.get('body')))
 
 
 async def find_newsletters(*, account_ids: list[str] | None = None) -> list[NewsletterSender]:
@@ -92,16 +130,12 @@ async def unsubscribe(sender: NewsletterSender, account: MailAccount) -> Unsubsc
         except (httpx.HTTPError, OSError):
             outcome.error_code = 'unsubscribe_unreachable'
     elif sender.method == 'mailto':
+        target = parse_mailto(sender.link)
+        if target is None:
+            outcome.error_code = 'unsubscribe_invalid'
+            return outcome
         try:
-            uri = urlsplit(sender.link or '')
-            recipient = unquote(uri.path)
-            if not recipient or '@' not in recipient or any(c.isspace() or c == ',' for c in recipient):
-                outcome.error_code = 'unsubscribe_invalid'
-                return outcome
-            query = {}
-            for key, value in parse_qsl(uri.query, keep_blank_values=True):
-                query.setdefault(key.lower(), value)
-            await send.send_message(account, to=[recipient], subject=query.get('subject') or 'unsubscribe', body=query.get('body') or 'unsubscribe')
+            await send.send_message(account, to=[target.recipient], subject=target.subject, body=target.body)
             outcome.status = 'done'
         except Exception as error:
             logger.warning('%s', type(error).__name__)
