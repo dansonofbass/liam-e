@@ -1,0 +1,61 @@
+import { describe, expect, test, mock, afterEach, spyOn } from 'bun:test'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { IconButton } from './IconButton'
+import { Menu } from './Menu'
+import { Drawer } from './Drawer'
+import { Avatar } from './Avatar'
+
+afterEach(() => { cleanup(); mock.restore() })
+
+describe('IconButton', () => {
+  test('shows tooltip immediately on focus', () => {
+    render(<IconButton label="Archivieren" icon="archive" shortcut="E" />)
+    fireEvent.focus(screen.getByRole('button'))
+    expect(screen.getByRole('tooltip').textContent).toBe('Archivieren (E)')
+  })
+  test('shows tooltip after hovering for 350 ms', () => {
+    let callback: (() => void) | undefined
+    let delay = 0
+    spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms: number) => { callback = fn; delay = ms; return 1 }) as typeof setTimeout)
+    const advance = (ms: number) => { delay -= ms; if (delay <= 0) callback?.() }
+    render(<IconButton label="Archivieren" icon="archive" shortcut="E" />)
+    fireEvent.mouseEnter(screen.getByRole('button'))
+    act(() => { advance(349) })
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    act(() => { advance(1) })
+    expect(screen.getByRole('tooltip').textContent).toBe('Archivieren (E)')
+  })
+})
+
+test('menu navigates and returns focus on Escape', () => {
+  render(<Menu trigger={(props) => <button {...props}>Menü</button>} items={[{ label: 'Eins', onSelect: () => {} }, { label: 'Zwei', onSelect: () => {} }]} />)
+  const trigger = screen.getByRole('button')
+  fireEvent.click(trigger)
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' })
+  expect(document.activeElement?.textContent).toBe('Zwei')
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+  expect(screen.queryByRole('menu')).toBeNull()
+  expect(document.activeElement).toBe(trigger)
+})
+
+test('drawer traps focus and closes on Escape', () => {
+  const close = mock(() => {})
+  const { rerender } = render(<><button>Öffnen</button><Drawer open={false} onClose={close} label="Menü"><button>Erster</button><button>Letzter</button></Drawer></>)
+  const trigger = screen.getByText('Öffnen')
+  trigger.focus()
+  rerender(<><button>Öffnen</button><Drawer open onClose={close} label="Menü"><button>Erster</button><button>Letzter</button></Drawer></>)
+  screen.getByText('Letzter').focus()
+  fireEvent.keyDown(document, { key: 'Tab' })
+  expect(document.activeElement).toBe(screen.getByText('Erster'))
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(close).toHaveBeenCalledTimes(1)
+  rerender(<><button>Öffnen</button><Drawer open={false} onClose={close} label="Menü"><button>Erster</button><button>Letzter</button></Drawer></>)
+  expect(document.activeElement).toBe(trigger)
+})
+
+test('avatar uses name initials or address fallback', () => {
+  const { rerender } = render(<Avatar name="Hausverwaltung Kurz" colorIndex={0} />)
+  expect(screen.getByText('HK')).toBeTruthy()
+  rerender(<Avatar name="" address="max@example.org" colorIndex={0} />)
+  expect(screen.getByText('M')).toBeTruthy()
+})
