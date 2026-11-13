@@ -185,6 +185,19 @@ async def test_unsubscribe_results_and_manual_steps(store, monkeypatch):
     assert result.undo_action_ids == ["undo-1", "undo-2"]
 
 
+async def test_unsubscribe_without_link_is_manual_step(store, monkeypatch):
+    proposal = proposals.Proposal(kind="unsubscribe", reason="Newsletter", items=[proposals.ProposalItem(id="sender|news@example.org", kind="sender", title="News", subtitle="", count=2, unread=0, last_read_at=None, method="none")], draft=None, irreversible=True, result=None)
+    monkeypatch.setattr(proposals.newsletters, "sender_by_id", AsyncMock(return_value=SimpleNamespace(account_id=store.id, method="none")))
+    monkeypatch.setattr(proposals.newsletters, "unsubscribe", AsyncMock(return_value=SimpleNamespace(status="manual", link=None, archived_action_ids=["a1", "a2"])))
+    row = await proposals.create_proposal("chat", proposal)
+    await proposals.confirm(row.id, selected_ids=["sender|news@example.org"])
+    result = proposals.proposal_view(row).result
+    assert row.proposal_status == "done"
+    assert [step.model_dump() for step in result.manual] == [{"id": "sender|news@example.org", "link": None}]
+    assert result.failed == []
+    assert result.undo_action_ids == ["a1", "a2"]
+
+
 async def test_unexpected_failure_never_leaves_running(store, monkeypatch):
     async def explode(*args):
         raise RuntimeError("private")

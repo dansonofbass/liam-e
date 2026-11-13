@@ -597,8 +597,15 @@
             "type": "string"
           },
           "link": {
-            "title": "Link",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
           }
         },
         "required": [

@@ -413,7 +413,7 @@ export type ManualStep = {
     /**
      * Link
      */
-    link: string;
+    link: string | null;
 };
 
 /**

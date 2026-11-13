@@ -49,7 +49,7 @@ class ItemProblem(BaseModel):
 
 class ManualStep(BaseModel):
     id: str
-    link: str
+    link: str | None
 
 
 class ProposalResult(BaseModel):
