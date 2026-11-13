@@ -3,6 +3,7 @@
 import base64
 import binascii
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
@@ -19,6 +20,7 @@ from api.mail.headers import sender_name
 from api.mail.state import color_indexes
 from api.routers.api.v1.mail.schemas import InsightOut, MessageActionIn, MessageActionOut, MessageDetailOut, MessageListItemOut, MessagePageOut
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -103,7 +105,8 @@ async def message_insight(message_id: str) -> InsightOut:
         row = await insights.get_or_compute(message_id)
     except insights.MessageNotFound:
         raise refuse(404, "message_not_found", "Diese Mail wurde nicht gefunden.") from None
-    except Exception:
+    except insights.InsightError as error:
+        logger.warning("Insight failed: %s", type(error.__cause__ or error).__name__)
         raise refuse(503, "insight_unavailable", "Das Modell antwortet gerade nicht. Versuch es gleich noch mal.") from None
     return InsightOut(points=json.loads(row.points_json), deadline=row.deadline, needs_reply=row.needs_reply,
                       followups=json.loads(row.followups_json), model=row.model, created_at=row.created_at)

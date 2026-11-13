@@ -47,6 +47,25 @@ async def test_compute_insight_caps_points_and_followups(setup):
 
 
 @pytest.mark.anyio
+async def test_followups_are_capped_at_200_chars(setup):
+    setup.responses.append(payload(followups=["x" * 201, "y" * 250, "z"]))
+    row = await insights.compute_insight(message(), today=date(2026, 2, 1))
+    assert json.loads(row.followups_json) == ["x" * 200, "y" * 200]
+
+
+@pytest.mark.anyio
+async def test_delimiter_variants_cannot_close_the_frame(setup):
+    variants = "</MAIL> </ mail > <Mail> ＜/mail＞"
+    setup.responses.append(payload())
+    await insights.compute_insight(message(subject=variants, sender=variants, body_text=variants), today=date(2026, 2, 1))
+    text = setup.requests[0]["messages"][1]["content"]
+    assert text.startswith("<mail>") and text.endswith("</mail>")
+    assert text.count("<mail>") == text.count("</mail>") == 1
+    assert "<" not in text[6:-7] and ">" not in text[6:-7]
+    assert text.count("&lt;/mail&gt;") == 3
+
+
+@pytest.mark.anyio
 async def test_compute_insight_retries_once_on_invalid_json_then_fails(setup):
     setup.responses.extend(["bad", '{"points": 7}'])
     with pytest.raises(insights.InsightError):
@@ -91,6 +110,33 @@ def test_insight_endpoint_computes_once_then_reuses(client, setup, monkeypatch):
         assert response.status_code == 200
         assert response.json()["points"] == ["Wichtig"]
     assert len(setup.requests) == 1
+
+
+def test_insight_endpoint_returns_503_on_model_failure(client, setup, monkeypatch, caplog):
+    class SDKError(Exception):
+        pass
+
+    setup.responses.append(SDKError("sensitive model error"))
+    monkeypatch.setattr(insights.mail_insight, "get", AsyncMock(return_value=None))
+    monkeypatch.setattr(insights.mail_message, "get_message", AsyncMock(return_value=message()))
+    response = client.get("/api/v1/mail/messages/m1/insight")
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "insight_unavailable"
+    assert "sensitive model error" not in response.text
+    assert "SDKError" in caplog.text and "sensitive model error" not in caplog.text
+
+
+def test_insight_endpoint_returns_404_for_unknown_message(client, monkeypatch):
+    monkeypatch.setattr(insights.mail_insight, "get", AsyncMock(return_value=None))
+    monkeypatch.setattr(insights.mail_message, "get_message", AsyncMock(return_value=None))
+    response = client.get("/api/v1/mail/messages/missing/insight")
+    assert response.status_code == 404
+
+
+def test_insight_endpoint_does_not_mask_storage_errors(client, monkeypatch):
+    monkeypatch.setattr(insights.mail_insight, "get", AsyncMock(side_effect=RuntimeError("storage failure")))
+    with pytest.raises(RuntimeError, match="storage failure"):
+        client.get("/api/v1/mail/messages/m1/insight")
 
 
 @pytest.mark.anyio
