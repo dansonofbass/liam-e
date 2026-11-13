@@ -74,6 +74,9 @@ wirklich versendet wird.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
 - Der Agent sendet **nie ohne Bestätigung**: `create_draft` erzeugt einen `draft`-Eintrag, erst `POST .../drafts/{id}/confirm` verschickt (SMTP/Gmail-API/Graph).
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
+- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_messages_list`, `mail_summary`
+  Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.
+  Neue verändernde Operationen gehören bewusst in `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, sonst scheitert der Inventur-Test.
 
 ## Arbeitsweise für Agents
 - Vor jeder Arbeit an der Oberfläche (`apps/web`, Texte, auch Antworttexte des Assistenten) `DESIGN.md` lesen; sie regelt Tokens, Bausteine, Responsive-Verhalten und wie Texte klingen.
