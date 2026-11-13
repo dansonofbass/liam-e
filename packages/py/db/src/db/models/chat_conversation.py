@@ -12,6 +12,7 @@ class ChatConversation(SQLModel, table=True):
 
     id: str = Field(default_factory=new_id, primary_key=True)
     title: str = ""
+    model: str = ""
     created_at: datetime = Field(
         default_factory=utcnow, sa_column=utc_datetime_column()
     )

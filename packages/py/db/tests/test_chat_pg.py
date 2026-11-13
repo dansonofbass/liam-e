@@ -1,0 +1,56 @@
+"""Live Postgres contracts for chat proposals."""
+
+import asyncio
+import os
+
+import pytest
+from sqlalchemy.exc import IntegrityError
+
+pytestmark = pytest.mark.skipif(not os.getenv("RUN_PG_CONTRACT"), reason="RUN_PG_CONTRACT is not set")
+
+
+def test_only_one_pending_proposal_per_conversation(pg_db):
+    async def run():
+        from db.accessors import chat_message as m
+        await m.add_message(conversation_id="a", role="proposal", proposal_status="pending")
+        with pytest.raises(IntegrityError):
+            await m.add_message(conversation_id="a", role="proposal", proposal_status="pending")
+        await m.add_message(conversation_id="b", role="proposal", proposal_status="pending")
+    asyncio.run(run())
+
+
+def test_claim_proposal_is_atomic(pg_db):
+    async def run():
+        from db.accessors import chat_message as m
+        row = await m.add_message(conversation_id="a", role="proposal", proposal_status="pending")
+        results = await asyncio.gather(*(m.claim_proposal(row.id) for _ in range(2)))
+        assert sum(x is not None for x in results) == 1
+        assert next(x for x in results if x is not None).proposal_status == "running"
+    asyncio.run(run())
+
+
+def test_cancel_open_proposals(pg_db):
+    async def run():
+        from db.accessors import chat_message as m
+        row = await m.add_message(conversation_id="a", role="proposal", proposal_status="pending")
+        assert (await m.open_proposal("a")).id == row.id
+        assert await m.cancel_open_proposals("a") == 1
+        assert await m.open_proposal("a") is None
+        assert (await m.get_message(row.id)).proposal_status == "cancelled"
+        assert await m.cancel_open_proposals("a") == 0
+    asyncio.run(run())
+
+
+def test_conversation_and_message_fields(pg_db):
+    async def run():
+        from db.accessors import chat_conversation as c, chat_message as m
+        conversation = await c.create_conversation(title="old", model="one")
+        updated = await c.update_conversation(conversation.id, title="", model="two")
+        assert (updated.title, updated.model) == ("", "two")
+        assert await c.update_conversation("missing", model="x") is None
+        row = await m.add_message(conversation_id=conversation.id, role="proposal", proposal_json="{}", proposal_status="pending", stopped=True, extras_json="{}")
+        assert (row.proposal_json, row.stopped, row.extras_json) == ("{}", True, "{}")
+        updated = await m.set_proposal(row.id, proposal_json='{"x":1}', proposal_status="done")
+        assert (updated.proposal_json, updated.proposal_status) == ('{"x":1}', "done")
+        assert await m.set_proposal("missing", proposal_json="", proposal_status="failed") is None
+    asyncio.run(run())

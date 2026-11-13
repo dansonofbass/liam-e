@@ -7,10 +7,26 @@ from db.models._common import utcnow
 from db.models.chat_conversation import ChatConversation
 
 
-async def create_conversation(*, title: str = "") -> ChatConversation:
+async def create_conversation(*, title: str = "", model: str = "") -> ChatConversation:
     async with get_session_maker()() as session:
-        conversation = ChatConversation(title=title)
+        conversation = ChatConversation(title=title, model=model)
         session.add(conversation)
+        await session.commit()
+        return conversation
+
+
+async def update_conversation(
+    conversation_id: str, *, model: str | None = None, title: str | None = None
+) -> ChatConversation | None:
+    async with get_session_maker()() as session:
+        conversation = await session.get(ChatConversation, conversation_id)
+        if conversation is None:
+            return None
+        if model is not None:
+            conversation.model = model
+        if title is not None:
+            conversation.title = title
+        conversation.updated_at = utcnow()
         await session.commit()
         return conversation
 
