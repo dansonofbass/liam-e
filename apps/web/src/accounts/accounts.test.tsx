@@ -11,6 +11,8 @@ import { redirect } from './redirect'
 const account: AccountOut = { id: 'a1', email_address: 'x@yahoo.com', display_name: 'Privat', provider: 'imap', auth_type: 'imap_password', connection: 'imap', state: 'never', error_code: '', last_sync_at: null, message_count: 0, unread: 0, color_index: 0, is_active: true, created_at: '', updated_at: '' }
 const originalMatchMedia = window.matchMedia
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia })
+// Lets queries the page starts on mount settle inside act() before the test ends.
+const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 const props = { onSync: () => {}, onReconnect: () => {}, onRename: () => {}, onRemove: () => {} }
 const options: AccountOptionsOut = { gmail_connector: false, outlook_connector: false, google_oauth: true, microsoft_oauth: false, imap_presets: [{ domain: 'yahoo.com', imap_host: 'imap.mail.yahoo.com', smtp_host: 'smtp.mail.yahoo.com' }] }
 function setup(mode: 'row' | 'empty' | 'error' | 'loading' = 'row', path = '/accounts', item = account, extra: AccountOut[] = [], available = options, connectorNames: string[] = [], optionsMode: 'ready' | 'error' | 'loading' = 'ready') {
@@ -43,6 +45,19 @@ test('accounts scroll area is bounded by the viewport', async () => {
   for (const property of ['height: 100dvh', 'overflow: hidden']) expect(app).toContain(property)
   expect(sheet).toContain('min-height: 0')
   for (const property of ['flex: 1', 'min-height: 0', 'overflow-y: auto']) expect(scroll).toContain(property)
+})
+
+test('the footnote is a small block paragraph below the list and the connect panel is as tall as its content', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-accounts-layout \{[^}]*display: flex;[^}]*align-items: flex-start;/u)
+  expect(css).toMatch(/\.le-accounts-note \{[^}]*margin: var\(--space-4\) var\(--space-1\) 0;/u)
+  setup('row')
+  const note = await screen.findByText('Entfernst du ein Konto, löscht liam-e nur seine Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.')
+  expect(note.tagName).toBe('P')
+  expect(note.classList.contains('small')).toBe(true)
+  expect(note.classList.contains('le-muted')).toBe(true)
+  expect(note.previousElementSibling?.tagName).toBe('UL')
+  await settle()
 })
 
 test('account cards have spaced lists and mobile actions below the content', async () => {
@@ -145,7 +160,8 @@ test('remove traps focus and Escape returns it without deleting', async () => {
   const remove = spyOn(sdk, 'mailAccountDelete')
   setup(); const trigger = await openAction('Entfernen')
   const dialog = screen.getByRole('dialog', { name: 'Privat entfernen?' })
-  expect(screen.getAllByText('liam-e löscht nur die eigene Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.')).toHaveLength(2)
+  expect(screen.getAllByText('liam-e löscht nur die eigene Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.')).toHaveLength(1)
+  expect(screen.getByText('Entfernst du ein Konto, löscht liam-e nur seine Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.')).toBeTruthy()
   expect(within(dialog).getByText(/liam-e löscht nur die eigene Kopie der Mails/)).toBeTruthy()
   const cancel = within(dialog).getByRole('button', { name: 'Abbrechen' }), confirm = within(dialog).getByRole('button', { name: 'Konto entfernen' })
   expect(document.activeElement).toBe(cancel)

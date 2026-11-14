@@ -169,6 +169,7 @@ export const de = {
     renameLabel: 'Name des Kontos', renameSave: 'Speichern', renameInvalid: 'Gib einen Namen mit bis zu 80 Zeichen ein.',
     removeTitle: (title: string) => `${title} entfernen?`, removeConfirm: 'Konto entfernen',
     removeDescription: 'liam-e löscht nur die eigene Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.',
+    removeNote: 'Entfernst du ein Konto, löscht liam-e nur seine Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.',
     removed: (title: string) => `${title} entfernt.`,
     providersLabel: 'Anbieter', providersLoading: 'Anbieter werden geladen …', providersError: 'Die Anbieter konnten nicht geladen werden. Versuch es gleich noch mal.',
     gmail: 'Gmail', outlook: 'Outlook', other: 'Anderer Anbieter',

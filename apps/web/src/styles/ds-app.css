@@ -37,10 +37,11 @@
 .le-app:has(.le-accounts-scroll), .le-app:has(.le-chat-view), .le-app:has(.le-inbox) { height: 100dvh; overflow: hidden; }
 .le-sheet:has(.le-accounts-scroll) { min-height: 0; }
 .le-accounts-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
-.le-accounts-layout { display: flex; flex-wrap: wrap; gap: var(--space-6); max-width: 1180px; }
+.le-accounts-layout { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: flex-start; max-width: 1180px; }
 .le-accounts-list { flex: 1 1 460px; min-width: 0; }
 .le-accounts-list > h2 { margin: 0 0 var(--space-5); }
 .le-accounts-list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.le-accounts-note { margin: var(--space-4) var(--space-1) 0; }
 .le-accounts-connect { flex: 1 1 400px; min-width: 0; max-width: 520px; background: var(--surface-soft); border-radius: var(--radius-lg); padding: var(--space-5); }
 .le-account-content { min-width: 0; flex: 1; }
 .le-account-name, .le-account-address { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
