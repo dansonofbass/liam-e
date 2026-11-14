@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import { act, render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
-import type { AccountOut } from '../api/generated/types.gen'
+import type { AccountOptionsOut, AccountOut } from '../api/generated/types.gen'
 import { AccountCard } from '../ds/AccountCard'
 import { AccountsPage } from './AccountsPage'
 import { redirect } from './redirect'
@@ -12,15 +12,18 @@ const account: AccountOut = { id: 'a1', email_address: 'x@yahoo.com', display_na
 const originalMatchMedia = window.matchMedia
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia })
 const props = { onSync: () => {}, onReconnect: () => {}, onRename: () => {}, onRemove: () => {} }
-function setup(mode: 'row' | 'empty' | 'error' | 'loading' = 'row', path = '/accounts', item = account, extra: AccountOut[] = []) {
+const options: AccountOptionsOut = { gmail_connector: false, outlook_connector: false, google_oauth: true, microsoft_oauth: false, imap_presets: [{ domain: 'yahoo.com', imap_host: 'imap.mail.yahoo.com', smtp_host: 'smtp.mail.yahoo.com' }] }
+function setup(mode: 'row' | 'empty' | 'error' | 'loading' = 'row', path = '/accounts', item = account, extra: AccountOut[] = [], available = options, connectorNames: string[] = [], optionsMode: 'ready' | 'error' | 'loading' = 'ready') {
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   const list = spyOn(sdk, 'mailAccountsList').mockImplementation((async () => { if (mode === 'loading') return await new Promise(() => {}); if (mode === 'error') throw new Error('offline'); return { data: mode === 'empty' ? [] : [item, ...extra] } }) as never)
+  const optionList = spyOn(sdk, 'mailAccountOptions').mockImplementation((async () => { if (optionsMode === 'loading') return await new Promise(() => {}); if (optionsMode === 'error') throw new Error('offline'); return { data: available } }) as never)
+  spyOn(sdk, 'mailConnectorsList').mockImplementation((async () => ({ data: connectorNames.map(name => ({ id: name, name })) })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><Outlet /></QueryClientProvider> })
   const page = createRoute({ getParentRoute: () => root, path: '/accounts', validateSearch: (search: Record<string, unknown>) => search, component: AccountsPage })
   const router = createRouter({ routeTree: root.addChildren([page]), history: createMemoryHistory({ initialEntries: [path] }) })
   const view = render(<RouterProvider router={router} />)
-  return { router, list, view, client }
+  return { router, list, view, client, optionList }
 }
 
 test('card shows each state and connection', () => {
@@ -152,6 +155,102 @@ test('remove failure keeps the dialog open with a notice', async () => {
   spyOn(sdk, 'mailAccountDelete').mockImplementation((async () => ({ error: { detail: { code: 'account_not_found' } } })) as never)
   setup(); await openAction('Entfernen'); fireEvent.click(screen.getByRole('button', { name: 'Konto entfernen' }))
   const dialog = screen.getByRole('dialog'); expect(await within(dialog).findByText('Das Konto gibt es nicht mehr.')).toBeTruthy()
+})
+
+async function openImap() {
+  fireEvent.click(await screen.findByRole('button', { name: /Anderer Anbieter/ }))
+  await screen.findByLabelText('E-Mail-Adresse')
+}
+function fillImap() {
+  fireEvent.change(screen.getByLabelText('E-Mail-Adresse'), { target: { value: 'x@yahoo.com' } })
+  fireEvent.change(screen.getByLabelText('Secret mit dem App-Passwort'), { target: { value: 'yahoo-app-password' } })
+}
+test('gmail connector suppresses own Google login', async () => {
+  setup('empty', '/accounts', account, [], { ...options, gmail_connector: true, google_oauth: true })
+  fireEvent.click(await screen.findByRole('button', { name: /Gmail/ }))
+  expect(screen.queryByRole('button', { name: 'Bei Google anmelden' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Gmail verbinden' })).toBeTruthy()
+})
+test('Google login authorizes without account id and redirects', async () => {
+  const authorize = spyOn(sdk, 'mailAccountOauthAuthorize').mockImplementation((async () => ({ data: { authorization_url: 'https://example.com' } })) as never)
+  const go = spyOn(redirect, 'to').mockImplementation(() => {})
+  setup('empty'); fireEvent.click(await screen.findByRole('button', { name: /Gmail/ })); fireEvent.click(screen.getByRole('button', { name: 'Bei Google anmelden' }))
+  await waitFor(() => expect(go).toHaveBeenCalledWith('https://example.com'))
+  expect(authorize.mock.calls[0]?.[0]).toEqual({ path: { provider: 'google' } })
+})
+test('IMAP presets populate both servers without overwriting typed server fields', async () => {
+  setup('empty'); await openImap()
+  fireEvent.change(screen.getByLabelText('IMAP-Server'), { target: { value: 'custom.example' } }); fillImap()
+  expect((screen.getByLabelText('IMAP-Server') as HTMLInputElement).value).toBe('custom.example')
+  expect((screen.getByLabelText('SMTP-Server') as HTMLInputElement).value).toBe('smtp.mail.yahoo.com')
+  cleanup(); mock.restore(); setup('empty'); await openImap(); fillImap()
+  expect((screen.getByLabelText('IMAP-Server') as HTMLInputElement).value).toBe('imap.mail.yahoo.com')
+  expect((screen.getByLabelText('SMTP-Server') as HTMLInputElement).value).toBe('smtp.mail.yahoo.com')
+})
+test('IMAP submits secret reference, syncs new account and shows success', async () => {
+  const connect = spyOn(sdk, 'mailAccountConnectImap').mockImplementation((async () => ({ data: account })) as never)
+  const sync = spyOn(sdk, 'mailAccountSync').mockImplementation((async () => ({ response: { ok: true } })) as never)
+  setup('empty'); await openImap(); fillImap(); fireEvent.click(screen.getByRole('button', { name: 'Konto verbinden' }))
+  await waitFor(() => expect(sync).toHaveBeenCalledTimes(1))
+  expect(connect.mock.calls[0]?.[0]?.body).toEqual({ email_address: 'x@yahoo.com', imap_host: 'imap.mail.yahoo.com', smtp_host: 'smtp.mail.yahoo.com', password_secret: 'yahoo-app-password' })
+  expect(sync.mock.calls[0]?.[0]?.path).toEqual({ account_id: 'a1' }); expect(await screen.findByText('Konto verbunden.')).toBeTruthy()
+})
+for (const [code, text, field] of [
+  ['host_not_allowed', 'Der Server ist nicht erreichbar. Prüfe die Serveradresse.', 'IMAP-Server'],
+  ['secret_not_found', 'Das Secret wurde nicht gefunden oder ist nicht lesbar. Prüf den Namen und die Freigabe in Mistral Studio.', 'Secret mit dem App-Passwort'],
+  ['login_failed', 'Die Anmeldung beim Mailserver hat nicht geklappt. Prüf die Serveradresse und das App-Passwort.', ''],
+] as const) test(`IMAP displays ${code} refusal`, async () => {
+  spyOn(sdk, 'mailAccountConnectImap').mockImplementation((async () => ({ error: { detail: { code } } })) as never)
+  setup('empty'); await openImap(); fillImap(); fireEvent.click(screen.getByRole('button', { name: 'Konto verbinden' }))
+  expect(await screen.findByText(text)).toBeTruthy()
+  if (field) expect(screen.getByLabelText(field).getAttribute('aria-invalid')).toBe('true')
+  else expect(screen.getByRole('alert').textContent).toContain(text)
+})
+test('Gmail connector uses listed google_mail name', async () => {
+  const connect = spyOn(sdk, 'mailAccountConnectConnector').mockImplementation((async () => ({ data: account })) as never)
+  spyOn(sdk, 'mailAccountSync').mockImplementation((async () => ({ response: { ok: true } })) as never)
+  setup('empty', '/accounts', account, [], { ...options, gmail_connector: true }, ['google_mail'])
+  fireEvent.click(await screen.findByRole('button', { name: /Gmail/ })); fireEvent.click(screen.getByRole('button', { name: 'Gmail verbinden' }))
+  await waitFor(() => expect(connect).toHaveBeenCalledTimes(1)); expect(connect.mock.calls[0]?.[0]?.path).toEqual({ name: 'google_mail' }); expect(await screen.findByText('Konto verbunden.')).toBeTruthy()
+})
+test('provider loading and failure offer retry and IMAP fallback', async () => {
+  const loading = setup('empty', '/accounts', account, [], options, [], 'loading')
+  await screen.findByText('Anbieter werden geladen …'); expect(loading.view.container.querySelectorAll('.le-connect-placeholder')).toHaveLength(3)
+  cleanup(); mock.restore()
+  const failed = setup('empty', '/accounts', account, [], options, [], 'error')
+  expect(await screen.findByText('Die Anbieter konnten nicht geladen werden. Versuch es gleich noch mal.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: /Anderer Anbieter/ })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Noch mal versuchen' })); await waitFor(() => expect(failed.optionList).toHaveBeenCalledTimes(2))
+  await openImap(); expect((screen.getByLabelText('IMAP-Server') as HTMLInputElement).value).toBe('')
+})
+test('IMAP validates required fields before connecting', async () => {
+  const connect = spyOn(sdk, 'mailAccountConnectImap')
+  setup('empty'); await openImap(); fireEvent.click(screen.getByRole('button', { name: 'Konto verbinden' }))
+  expect(screen.getByText('Gib eine E-Mail-Adresse ein.')).toBeTruthy(); expect(screen.getAllByText('Gib den Server ein.')).toHaveLength(2); expect(screen.getByText('Gib den Namen des Secrets ein.')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('E-Mail-Adresse'), { target: { value: 'x@@y' } }); fireEvent.click(screen.getByRole('button', { name: 'Konto verbinden' }))
+  expect(screen.getByText('Gib eine E-Mail-Adresse ein.')).toBeTruthy(); expect(connect).not.toHaveBeenCalled()
+})
+test('cancel returns focus to provider option', async () => {
+  setup('empty'); await openImap()
+  const option = screen.getByRole('button', { name: /Anderer Anbieter/ })
+  expect(option.getAttribute('aria-pressed')).toBe('true'); fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+  expect(option.getAttribute('aria-pressed')).toBe('false'); expect(document.activeElement).toBe(option); expect(screen.queryByLabelText('E-Mail-Adresse')).toBeNull()
+})
+test('connector refusal remains in panel and pending requests cannot be repeated', async () => {
+  let finish!: (result: unknown) => void
+  const connect = spyOn(sdk, 'mailAccountConnectConnector').mockImplementation((() => new Promise(resolve => { finish = resolve })) as never)
+  setup('empty', '/accounts', account, [], { ...options, gmail_connector: true })
+  fireEvent.click(await screen.findByRole('button', { name: /Gmail/ }))
+  const button = screen.getByRole('button', { name: 'Gmail verbinden' }) as HTMLButtonElement
+  fireEvent.click(button); expect(button.disabled).toBe(true); expect(button.getAttribute('aria-busy')).toBe('true'); fireEvent.click(button); expect(connect).toHaveBeenCalledTimes(1)
+  finish({ error: { detail: { code: 'connector_auth_required' } } }); expect(await screen.findByText('Authentifiziere den Connector in Mistral Studio unter Connector → Auth.')).toBeTruthy()
+})
+test('IMAP reconnect selects provider and focuses the secret field', async () => {
+  setup('row', '/accounts', { ...account, state: 'auth_expired' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Erneut anmelden' }))
+  expect((await screen.findByLabelText('E-Mail-Adresse') as HTMLInputElement).value).toBe('x@yahoo.com')
+  await waitFor(() => expect((screen.getByLabelText('IMAP-Server') as HTMLInputElement).value).toBe('imap.mail.yahoo.com'))
+  expect(document.activeElement).toBe(screen.getByLabelText('Secret mit dem App-Passwort'))
 })
 
 test('loading, retry and empty states', async () => {

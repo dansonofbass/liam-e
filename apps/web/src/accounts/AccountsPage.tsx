@@ -10,6 +10,7 @@ import { de } from '../i18n/de'
 import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
 import { redirect } from './redirect'
 import { RemoveDialog } from './RemoveDialog'
+import { ConnectPanel } from './ConnectPanel'
 
 const messageFor = (error: unknown, fallback: string) => {
   const code = errorCode(error)
@@ -17,7 +18,7 @@ const messageFor = (error: unknown, fallback: string) => {
   return typeof text === 'string' ? text : fallback
 }
 type PageNotice = { tone: 'success' | 'info' | 'danger'; text: string }
-export function AccountsPage({ onReconnectImap = () => {} }: { onReconnectImap?: (address: string) => void }) {
+export function AccountsPage() {
   const client = useQueryClient(), navigate = useNavigate(), breakpoint = useBreakpoint(), coarse = useCoarsePointer()
   const search = useSearch({ strict: false }) as { connected?: string; error?: string }
   const accounts = useQuery({ ...accountsQuery(), refetchInterval: query => query.state.data?.some(a => a.state === 'syncing') ? 3000 : false })
@@ -25,6 +26,7 @@ export function AccountsPage({ onReconnectImap = () => {} }: { onReconnectImap?:
   const [pending, setPending] = useState<string[]>([]), [allPending, setAllPending] = useState(false)
   const handled = useRef(new Set<string>())
   const [removing, setRemoving] = useState<AccountOut>()
+  const [imapReconnect, setImapReconnect] = useState<{ address: string; sequence: number }>()
   const [focusAfterRemove, setFocusAfterRemove] = useState(false)
   const listHeading = useRef<HTMLHeadingElement>(null), connectHeading = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
@@ -56,7 +58,7 @@ export function AccountsPage({ onReconnectImap = () => {} }: { onReconnectImap?:
   }
   const reconnect = async (account: AccountOut) => {
     if (account.connection === 'connector') { setNotice({ tone: 'info', text: de.accounts.connectorNotice }); return }
-    if (account.connection === 'imap') { onReconnectImap(account.email_address); return }
+    if (account.connection === 'imap') { setImapReconnect(previous => ({ address: account.email_address, sequence: (previous?.sequence ?? 0) + 1 })); return }
     if (account.provider !== 'google' && account.provider !== 'microsoft') { setNotice({ tone: 'danger', text: de.accounts.actionError }); return }
     try {
       const result = await mailAccountOauthAuthorize({ path: { provider: account.provider }, query: { account_id: account.id } })
@@ -90,7 +92,7 @@ export function AccountsPage({ onReconnectImap = () => {} }: { onReconnectImap?:
           {accounts.isPending ? <><span className="le-sr" role="status">{de.accounts.loading}</span><div aria-hidden="true">{Array.from({ length: 3 }, (_, i) => <div className="le-account le-account--placeholder" key={i}><span /><span /></div>)}</div></> : <ul aria-labelledby="accounts-heading">{accounts.data?.map(account => <li key={account.id}><AccountCard account={account} coarse={coarse} syncPending={pending.includes(account.id)} onSync={() => { void sync(account.id) }} onReconnect={() => { void reconnect(account) }} onRename={() => {}} onSaveName={name => rename(account, name)} onRemove={() => setRemoving(account)} /></li>)}</ul>}
           {Boolean(accounts.data?.length) && <small className="le-muted">{de.accounts.removeFootnote}</small>}
         </section>}
-        <section className="le-accounts-connect"><h2 className="heading" ref={connectHeading} tabIndex={-1}>{de.accounts.connect}</h2></section>
+        <ConnectPanel headingRef={connectHeading} reconnect={imapReconnect} onConnected={account => { setNotice({ tone: 'success', text: de.accounts.connected }); invalidate(); void sync(account.id) }} />
       </div>
     </div>
     {removing && <RemoveDialog account={removing} onClose={() => setRemoving(undefined)} onRemoved={() => removed(removing)} />}
