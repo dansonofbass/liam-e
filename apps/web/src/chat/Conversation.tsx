@@ -38,8 +38,9 @@ function HistoryReference({ id, accounts, draft }: { id: string; accounts: Accou
   const { data } = useQuery({ ...messageQuery(id), retry: (count, error) => !(error instanceof MessageNotFoundError) && count < 2 })
   return data ? <Reference mail={data} accounts={accounts} draft={draft} /> : null
 }
+// DESIGN.md §9.1: at most three follow-up suggestions, whatever the model sent.
 function Suggestions({ items, onSend }: { items: string[]; onSend: (text: string) => void }) {
-  return <div className="le-chat-suggestions">{items.map(text => <Chip key={text} onClick={() => onSend(text)}>{text}</Chip>)}</div>
+  return <div className="le-chat-suggestions">{items.slice(0, 3).map(text => <Chip key={text} onClick={() => onSend(text)}>{text}</Chip>)}</div>
 }
 
 // The agent saves a proposal while it works and its answer at the end of the turn. Live, the card
@@ -102,6 +103,6 @@ export function Conversation({ conversationId }: { conversationId: string }) {
       {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'conversation_not_found' ? newConversation : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
       {state.phase === 'done' && <>{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}
     </div>}
-    <div className="sr-only" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
+    <div className="le-sr" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
   </div>{showEnd && <div className="le-chat-end"><Button variant="secondary" onClick={scrollToEnd}>{de.chat.toEnd}</Button></div>}<div className="le-chat-composer"><ChatComposer conversationId={conversationId} autoFocus={busy && state.conversationId === conversationId} /></div></div>
 }

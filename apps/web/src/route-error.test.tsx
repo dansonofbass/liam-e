@@ -57,8 +57,12 @@ describe("RouteError", () => {
     renderPageFailingWith(() => { throw new Error("failure"); }, german);
     expect(await screen.findByText("Diese Seite ließ sich nicht anzeigen")).toBeTruthy();
     expect(screen.getByText("Lade sie neu oder versuch es gleich noch mal.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Noch mal versuchen" })).toBeTruthy();
+    const retry = screen.getByRole("button", { name: "Noch mal versuchen" });
+    expect(retry.classList.contains("le-btn--primary")).toBe(true);
+    expect(retry.closest(".le-root-screen")).toBeTruthy();
     expect(screen.getByText("Details")).toBeTruthy();
+    expect(screen.getByText("failure").tagName).toBe("PRE");
+    expect(document.querySelector(".le-root-screen [class*='text-sm'], .le-root-screen .rounded-md")).toBeNull();
   });
 
   test("the German missing-chunk screen offers reload", async () => {
@@ -66,7 +70,7 @@ describe("RouteError", () => {
     renderPageFailingWith(() => { throw missingChunk(); }, german);
     expect(await screen.findByText("liam-e wurde aktualisiert")).toBeTruthy();
     expect(screen.getByText("Lade die Seite neu, um die neue Version zu öffnen.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Neu laden" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Neu laden" }).classList.contains("le-btn")).toBe(true);
   });
 
   test("reloads once for a missing chunk, then offers a Reload button", async () => {

@@ -87,7 +87,10 @@ describe("the root screens", () => {
     renderRoot(NotFound, german, { locale: german.resolveLocale() });
     expect(await screen.findByText("Diese Seite gibt es nicht")).toBeTruthy();
     expect(screen.getByText("Unter dieser Adresse liegt nichts.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Zum Chat" }).getAttribute("href")).toBe("/");
+    const home = screen.getByRole("link", { name: "Zum Chat" });
+    expect(home.getAttribute("href")).toBe("/");
+    expect(home.classList.contains("le-link")).toBe(true);
+    expect(home.closest(".le-root-screen")).toBeTruthy();
     expect(german.texts("de").lang).toBe("de");
   });
 

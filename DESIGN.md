@@ -5,11 +5,10 @@
 > wie sie eingesetzt werden, wie Texte klingen und wie sich die App auf kleinen
 > Bildschirmen verhält.
 
-**Status:** gültig, Stand 2026-11-13. Quelle der Werte ist das Design-System „liam-e“ in
-Claude Design (https://claude.ai/artifact/MJRNJYUPnK6ciYFc2U2KAz, Stilrichtung C „Weich“).
-Mit dem Redesign entstehen daraus `apps/web/src/styles/tokens.css` (Tokens) und
-`apps/web/src/ds/` (Bausteine). Ab dann sind diese Dateien die Quelle der Werte, und das
-Design-System wird ihnen nachgeführt.
+**Status:** gültig, Stand 2026-11-14. Quelle der Werte sind `apps/web/src/styles/tokens.css`
+(Tokens) und `apps/web/src/ds/` (Bausteine). Das Design-System „liam-e“ in Claude Design
+(https://claude.ai/artifact/MJRNJYUPnK6ciYFc2U2KAz, Stilrichtung C „Weich“), aus dem sie
+entstanden sind, wird ihnen nachgeführt (§10).
 
 ## Konflikt-Hierarchie
 
@@ -111,6 +110,7 @@ Antworten des Assistenten.
 | Bestätigen · Abbrechen | OK · Ja · Nein | Entscheidung über einen Vorschlag |
 | Rückgängig | Undo, Zurücknehmen | eine Aktion umkehren, solange es geht |
 | Modell | KI, LLM | das gewählte Mistral-Modell |
+| Darstellung | Theme, Modus, Design | hell, dunkel oder wie im System |
 | Secret | Geheimnis, Token | Workspace-Secret in Mistral Studio (Begriff der Plattform) |
 | liam-e | Bot, KI, Agent | Name des Assistenten, wo ein Name nötig ist |
 
@@ -123,9 +123,13 @@ Antworten des Assistenten.
   Einheit mit geschütztem Leerzeichen („184,20 €“, „3 Min.“). In Bedienelementen und
   Zählern Ziffern; in Antworten des Assistenten bis zwölf ausgeschrieben, außer bei
   Beträgen, Daten und Uhrzeiten.
-- **Datum und Zeit:** in Listen „08:57“, „Gestern“, Wochentag für die laufende Woche
-  („Di.“), danach „21.11.“; das Jahr nur, wenn es nicht das laufende ist. In Sätzen
-  „Freitag, 21. November“ und „um 8:57 Uhr“. Relative Angaben nur bis „vor 59 Min.“.
+- **Datum und Zeit:** in Listen „08:57“ für heute, „Gestern“, für die übrigen Tage der
+  laufenden Woche ab Montag der Wochentag („Di.“), davor „21.11.“; das Jahr nur, wenn es
+  nicht das laufende ist. Die geöffnete Mail zeigt Tag und Uhrzeit („Heute, 08:57“, „Di.,
+  08:57“), eine Frist steht als „Fr., 21.11.“. In Sätzen, also in Antworten des
+  Assistenten, „Freitag, 21. November“ und „um 8:57 Uhr“; die Oberfläche selbst braucht
+  diese Form bisher nicht. Relative Angaben („vor 5 Min.“) nutzt die Oberfläche nicht;
+  kommen sie dazu, dann nur bis „vor 59 Min.“.
 - **Plural:** je Form ein eigener Text über `Intl.PluralRules` („keine Mails“, „1 Mail“,
   „2 Mails“). Nie Klammerplural.
 - **Großschreibung** nach deutscher Rechtschreibung, erstes Wort von Buttons und
@@ -153,7 +157,7 @@ Antworten des Assistenten.
   Bedienungsanleitung.
 - **Antworten des Assistenten:** mit dem Ergebnis beginnen, ohne Einleitung und ohne
   Schlussformel. Die Regeln aus §2.2 bis §2.5 gelten auch hier; der Systemprompt in
-  `apps/api/src/api/mail/agent.py` enthält sie.
+  `apps/api/src/api/mail/agent_prompt.py` enthält sie.
 
 ### 2.7 Prüfliste für jeden Text
 
@@ -168,9 +172,9 @@ Antworten des Assistenten.
 ### 2.8 Wo Texte stehen
 
 Alle Texte der Oberfläche stehen in einem Katalog, `apps/web/src/i18n/de.ts`, nach
-Ansichten gruppiert (entsteht mit dem Redesign). So steht jeder Begriff einmal und bleibt
-einheitlich. Technische Literale in TSX (Pfade, Klassen, englische Werte) tragen
-`// i18n-exempt`.
+Ansichten gruppiert. So steht jeder Begriff einmal und bleibt einheitlich. Pluralformen,
+Uhrzeiten, Daten und Größen bildet `apps/web/src/i18n/format.ts`. Technische Literale in TSX
+(Pfade, Klassen, englische Werte) tragen `// i18n-exempt`.
 
 ## 3. Farbe
 
@@ -179,19 +183,37 @@ einheitlich. Technische Literale in TSX (Pfade, Klassen, englische Werte) tragen
   und Popover liegen auf `surface-overlay` mit `shadow-overlay`.
 - `accent` ist die **einzige Handlungsfarbe**: primäre Buttons, aktiver
   Navigationspunkt, Senden, Links, Assistent-Marke, Erfolg. Text darauf in `on-accent`.
-  Hover über Kacheln, Chips und Symbol-Buttons: `accent-soft` mit `accent`-Text.
-- `warm` heißt nur **Dringlichkeit** (Prioritätspunkt, Frist), nie Aktion oder Schmuck.
+  `accent-line` ist nur die Unterstreichung von Links (`le-link`); beim Hover wird sie
+  `accent`.
+- **Hover** in drei Stufen:
+  - Zeilen und Einträge (Mailzeile, Navigationspunkt, Unterhaltung, Menüeintrag, Eintrag
+    der Bestätigungskarte): `surface-soft`.
+  - Kacheln, Chips, Symbol-Buttons und Ghost-Buttons: `accent-soft` mit `accent`-Text;
+    Chips zeigen dazu den Rand in `accent`, Schnellaktionen heben sich mit `shadow-lift`.
+    Die Mail-Karte im Chat bekommt nur die Fläche.
+  - Bedienelemente mit eigener Farbe: primäre Buttons und Senden werden `accent-hover`
+    (primäre Buttons mit `shadow-lift`), Secondary-Buttons färben nur Rand und Text in
+    `accent`, Danger-Buttons bekommen einen Ring in `danger-soft`, Felder einen Rand in
+    `ink-muted`.
+- `warm` heißt nur **Dringlichkeit**, nie Aktion oder Schmuck: der Punkt einer markierten
+  Mail (in der Mailzeile neben der Uhrzeit, auf der Mailkarte im Chat vor dem Absender) mit
+  dem Namen und Tooltip „Dringend“, und das Frist-Schild.
 - `danger` nur für Löschen und Fehler, immer mit Wort oder Symbol.
 - `acc-1` bis `acc-4` färben **Konten** in der Reihenfolge ihrer Verbindung (Avatar,
   Konto-Punkt); ab dem fünften Konto beginnt die Reihe von vorn. Sie bedeuten nie einen
   Status.
 - Rahmen von Bedienelementen sind `control-border`; `line` und `line-strong` sind rein
   dekorativ.
-- **Dunkles Theme** folgt der Systemeinstellung (`prefers-color-scheme`), umschaltbar über
-  `data-theme`. Es ist kein invertiertes Hell: `accent` wird heller und trägt dunklen Text,
-  Schatten werden tiefer statt farbig.
-- Schublade und Dialoge dunkeln den Inhalt dahinter mit `scrim` ab. Der Token fehlt im
-  Design-System noch und kommt mit `apps/web/src/styles/tokens.css` dazu (hell
+- **Dunkles Theme** folgt der Systemeinstellung (`prefers-color-scheme`), solange keine
+  Darstellung gewählt ist. Es ist kein invertiertes Hell: `accent` wird heller und trägt dunklen Text, Schatten werden
+  tiefer statt farbig.
+- **Darstellung wählen:** Ein Symbol-Button `sun-moon` („Darstellung“) unten in der
+  Seitenleiste, rechts neben der Statuszeile, öffnet ein Menü mit „Hell“, „Dunkel“ und „Wie
+  im System“; die gewählte Zeile trägt `check`. In der Symbolleiste am Tablet steht er allein
+  am unteren Ende, auf dem Handy in der Schublade. Das Menü öffnet nach oben. Die Wahl gilt
+  nur in diesem Browser (`localStorage`, „Wie im System“ speichert nichts) und wird vor dem
+  ersten Zeichnen als `data-theme` auf `<html>` gesetzt, damit nichts aufblitzt.
+- Schublade und Dialoge dunkeln den Inhalt dahinter mit `scrim` ab (`.le-scrim`; hell
   `rgba(13, 19, 17, .45)`, dunkel `rgba(0, 0, 0, .6)`).
 - In Komponenten nie Hex-Werte, immer `var(--…)`.
 
@@ -215,12 +237,13 @@ Paar über beide Themes.
 | `control-border` | `surface`, `surface-soft` | 3:1 | 3,19:1 |
 | `focus-ring` | `surface`, `surface-soft`, `surface-ground`, `accent-soft` | 3:1 | 5,36:1 |
 
-Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein Test in
-`apps/web` sie automatisch.
+Wer einen Farbwert ändert, misst diese Tabelle neu. `apps/web/src/styles/contrast.test.ts`
+prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der letzten Spalte.
 
 ## 4. Schrift
 
-- **Plus Jakarta Sans** in 400, 500, 600 und 700 für alles. In der App selbst gehostet
+- **Plus Jakarta Sans** (`font-sans`, dahinter die Systemschriften) in 400, 500, 600 und 700
+  für alles. In der App selbst gehostet
   über Fontsource, exakt gepinnt; keine Übertragung an Google. Nur die Vorschauen in Claude
   Design laden sie von Google Fonts.
 - Stile aus den Tokens: `display` (36 px, nur die Begrüßung), `title` (24 px, Seitentitel
@@ -230,17 +253,33 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
   tabular-nums`, Klasse `le-num`).
 - Ungelesene Mails: Absender und Betreff in 700, sonst 500 und 400. Kein Kursiv, keine
   Versalien.
-- Keine freien px-Schriftgrößen außerhalb der Tokens.
+- Keine freien px-Schriftgrößen: Die Größen stehen als `--font-size-display` bis
+  `--font-size-caption` in `tokens.css`, und Bausteine nutzen nur diese sechs. Buttons und
+  Eingaben haben `body`, kleine Buttons, Chips, Hinweise, Fehler und Untertitel `small`,
+  Tags, Badges, Uhrzeiten in Listen und Tooltips `caption`, Titel der Bestätigungskarte
+  und Überschriften in Antworten `heading`.
 
 ## 5. Raum, Form, Schatten, Bewegung
 
-- **4-px-Raster**, Schritte `space-1` bis `space-8` (4 bis 64 px). App-Rahmen und Abstand
-  der schwebenden Flächen `space-3`, Innenabstand der Hauptfläche `space-5`, Kacheln und
-  Karten `space-4`.
-- **Radien:** `radius-pill` für alles, was man drückt (Buttons, Chips, Navigationspunkte,
-  Tags, Symbol-Buttons); `radius-sm` (12 px) für Zeilen und Felder; `radius-md` (18 px)
-  für Kacheln, Karten und Menüs; `radius-lg` (24 px) für schwebende Flächen, Composer und
-  Bestätigungskarte.
+- **4-px-Raster**, Schritte `space-1` bis `space-8` (4 bis 64 px). Jeder Innen- und
+  Außenabstand und jede Lücke (`padding`, `margin`, `gap`) liegt auf dem Raster und kommt aus
+  diesen Schritten oder ihrer Summe (20 px = `space-4` + `space-1`). Ausgenommen sind Größen
+  von Bausteinen (Höhen, Breiten, Symbole); Steuerhöhen kommen aus `control-height` (38 px)
+  und `control-height-lg` (44 px). Symbol und Text stehen 8 px auseinander, Punkt und Text
+  in Tags 4 px. App-Rahmen und Abstand
+  der schwebenden Flächen `space-3` (ab `tablet`; auf `mobile` gibt es keinen Rahmen, §7.3),
+  Innenabstand der Hauptfläche `space-5`, Kacheln und Karten `space-4`, das Panel „Konto
+  verbinden“ 20 px (`space-4` + `space-1`).
+- **Maße:** `sidebar-width` 236 px (Seitenleiste am Desktop), `list-width` 400 px (Mailliste
+  neben dem Lesebereich), `chat-width` 780 px (Höchstbreite von Verlauf und Composer),
+  `control-height` 38 px (Bedienelemente) und `control-height-lg` 44 px (große Symbol-Buttons,
+  Tippziel bei Touch, §7.2).
+- **Radien** nur aus den Tokens: `radius-pill` für Buttons, Chips, Navigationspunkte, Tags
+  und Symbol-Buttons; `radius-sm` (12 px) für Zeilen, Felder und Tooltips; `radius-md`
+  (18 px) für Kacheln, Karten und Menüs, auch für drückbare Kacheln (Schnellaktionen,
+  Optionen im Panel „Konto verbinden“); `radius-lg` (24 px) für schwebende Flächen,
+  Composer und Bestätigungskarte. Die eigene Blase im Chat hat `radius-md` mit einer
+  kleinen Ecke unten rechts (`radius-sm` / 2).
 - **Schatten** nur aus den Tokens: `shadow-sheet` für schwebende Flächen, `shadow-overlay`
   für Menüs, Popover und die Aktionsleiste in Listen, `shadow-lift` für den Hover von
   Kacheln und primären Buttons. Karten innerhalb einer Fläche haben keinen Schatten.
@@ -248,16 +287,21 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
   Listen, Konturen nur an Bedienelementen (`control-border`).
 - **Bewegung:** 160 ms für Hover und Tooltips, 220 ms für Zustandswechsel, 420 ms für
   erscheinende Inhalte (`le-rise`), Kurve `cubic-bezier(.2, .8, .2, 1)`. Tooltips nach
-  350 ms Verweilen, bei Tastaturfokus sofort. Seitenwechsel blenden den Inhalt der
-  Hauptfläche über; Seitenleiste und Composer bleiben stehen.
-- **`prefers-reduced-motion`** immer beachten: dann nur Überblenden, kein Aufsteigen,
-  Streaming zeigt den Text sofort.
+  350 ms Verweilen, bei Tastaturfokus sofort. Schleifen: Spinner 0,8 s je Umdrehung,
+  Tipp-Punkte 1,2 s, Caret 1 s. Wechselt der Bereich (Chat, Posteingang, Konten), blendet
+  der Inhalt der Hauptfläche über; innerhalb eines Bereichs, etwa von der Liste zur Mail
+  oder zwischen Unterhaltungen, nicht. Seitenleiste und Composer bleiben stehen.
+- **`prefers-reduced-motion`** immer beachten: dann nur Überblenden (`le-rise` wird zu
+  `le-fade`, Seitenwechsel und Schublade blenden weiter über), kein Aufsteigen, kein
+  Hereinschieben, Streaming zeigt den Text sofort. Schleifen (Tipp-Punkte, Caret, Spinner)
+  stehen still.
 
 ## 6. Symbole und Bausteine
 
 - **Symbole: Lucide** (`lucide-react`, exakt gepinnt), 24er-Raster, Strich 1,8, runde
-  Enden, `currentColor`. Größen 19 px (Standard) und 16 px (klein). Keine Emojis, keine
-  Logos der Anbieter.
+  Enden, `currentColor`. Größen 19 px (Standard) und 16 px (klein): Symbole neben Text in
+  Buttons, Chips, Tags und Hinweisen sind 16 px; Symbol-Buttons, Navigationspunkte und
+  Schnellaktionen tragen 19 px. Keine Emojis, keine Logos der Anbieter.
 - **Lexikon:** `message-circle` Chat · `messages-square` Unterhaltungen (Symbolleiste am Tablet) · `inbox` Posteingang · `at-sign` Konten · `archive`
   Archivieren · `trash-2` In den Papierkorb · `reply` Antworten · `pencil` Antwort
   entwerfen · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`
@@ -265,16 +309,46 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
   Anhalten · `sparkle` Assistent · `flag` Priorisieren · `newspaper` Newsletter · `clock`
   Frist · `paperclip` Anhang · `check`, `circle-alert`, `info` in Hinweisen · `menu` Menü
   öffnen · `x` Schließen · `arrow-left` Zurück · `plus` Neue Unterhaltung · `search` Suchen
-  · `chevron-down` Auswahl · `link` Connector · `key-round` Anmeldung beim Anbieter.
+  · `chevron-down` Auswahl · `link` Connector · `key-round` Anmeldung beim Anbieter ·
+  `sun-moon` Darstellung; `check` markiert außerdem die gewählte Zeile in einem Menü.
 - **Bausteine** (Klassen `le-*`, Beschreibung und Vorschau im Design-System): Button,
   IconButton, Chip (mit Tag, Badge, Punkt), Tooltip, Notice, AppShell, NavItem, Menu,
   QuickAction, Composer, ChatMessage, MailReference, ConfirmCard, MailRow, Avatar,
-  TextField, AccountCard. In der App liegen sie unter `apps/web/src/ds/` mit denselben
-  Namen. Screens unter `src/routes/` setzen keine eigenen Bedienelemente aus rohem
-  `<button>` oder `<input>` zusammen.
+  TextField, AccountCard, Drawer (Schublade) und NavButton (Navigationspunkt, der eine
+  Schublade öffnet, „Unterhaltungen“ am Tablet). In der App liegen sie unter
+  `apps/web/src/ds/` mit denselben Namen. Screens unter `src/routes/` und die app-weiten
+  Fehler- und Hinweisseiten (`src/root-screens/de.tsx`: neue Version, Fehler, Seite nicht
+  gefunden) setzen keine eigenen Bedienelemente aus rohem `<button>` oder `<input>` zusammen
+  und nutzen keine Tailwind-Größen; `routes/no-raw-controls.test.ts` prüft das.
+- **Zusammengesetzt** aus diesen, im Ordner ihrer Ansicht: ChatHeader und ModelMenu
+  (`chat/`, §9.6), InsightBox („Kurz gefasst“, §9.4) und ActionToast (Hinweis mit
+  „Rückgängig“, §9.2) in `mail/`, der Dialog „Konto entfernen“ (`accounts/RemoveDialog.tsx`,
+  Klasse `le-dialog`, mit `scrim`, Fokus bleibt im Dialog) und ThemeMenu (`shell/`, §3).
+- **Varianten:**
+  - Button `primary`, `secondary`, `ghost`, `danger`; klein mit `le-btn--sm` (obere Leiste
+    der Mail am Desktop, §7.4).
+  - IconButton `tone="danger"` (Papierkorb), `size="lg"` (44 px, Leisten auf `mobile`);
+    `shortcut` hängt das Tastenkürzel in Klammern an den Tooltip.
+  - Chip gedrückt (`aria-pressed`, aktiver Filter) und `quiet` (ohne Rand auf
+    `surface-soft`, für Auswahl-Chips wie Konto und Modell).
+  - Notice `info`, `success`, `danger`, wahlweise mit einer Aktion als Link.
+  - Tag `default`, `warm` (Frist, mit `clock`) und `on-surface` (Konto in Listen, mit
+    Konto-Punkt).
+  - Avatar `md` und `lg` (Kontenkarte).
+  - Badge zeigt ab 1.000 „999+“.
+  - Tooltip an fünf Stellen: `top` (Standard), `top-end`, `bottom`, `bottom-end` und
+    `right` (Symbolleiste am Tablet).
+  - Menu: Einträge mit Symbol, `tone: 'danger'`, `disabled` mit `hint` (bleibt fokussierbar
+    und sagt, warum der Eintrag nicht geht) und `checked` (Auswahl, Rolle `menuitemradio`,
+    `check` an der gewählten Zeile; der Fokus beginnt dort). Pfeiltasten bewegen den Fokus,
+    Escape schließt. `placement` `up-start` oder `up-end` öffnet nach oben.
 - **Zustände ohne Inhalt sind Pflicht:** jede Liste und Ansicht hat Leer, Laden
   (Platzhalterzeilen, kein Spinner über der ganzen Fläche) und Fehler mit Ursache und
-  nächstem Schritt.
+  nächstem Schritt. Platzhalter sind statische Balken auf `surface-soft` in `radius-sm`,
+  ohne Schimmer, und tragen `aria-hidden`; für Bildschirmleser steht daneben ein Status
+  („Mails werden geladen …“). Der Posteingang zeigt sechs Zeilen mit Kreis und Balken, die
+  Konten zeigen drei Karten, die geöffnete Mail einen Kopf mit Kreis und zwei Zeilen und
+  darunter vier Balken.
 
 ## 7. Responsive und mobil
 
@@ -290,10 +364,23 @@ Anfang an mit.
 | `desktop` | ab 1024 px | Desktop |
 | `wide` | ab 1440 px | breiter Monitor, Inhaltsbreite begrenzt |
 
+- `wide` hat keine eigene Regel: Nur die Hauptfläche wächst, die Inhalte behalten ihre
+  Höchstbreite. Chat und Composer haben `chat-width` (780 px), der Mailtext 720 px, beide
+  stehen mittig; die Konten sind höchstens 1180 px breit und bündig links; die Mailliste
+  bleibt `list-width`.
+- Quelle der Grenzen ist diese Tabelle. Im Code stehen sie an drei Stellen, die
+  übereinstimmen müssen: `shell/useBreakpoint.tsx` (640, 1024 und 1440 px), die
+  Media-Queries in `ds.css` und `ds-app.css` (`max-width: 639px` und `1023px`,
+  `min-width: 640px`) und die Tailwind-Namen `tablet`, `desktop` und `wide` in `index.css`
+  (40, 64 und 90 rem, bisher ungenutzt). `styles/tokens.test.ts` prüft das.
+
 ### 7.2 Touch
 
 - Bei `pointer: coarse` sind alle Tippziele mindestens **44 × 44 px**, ohne sich zu
-  überlappen.
+  überlappen. Für die Bausteine Button, IconButton, Senden, Chip, Navigationspunkt,
+  Unterhaltung und Menüeintrag gilt das allgemein (`ds.css`); `ds-app.css` ergänzt nur
+  Ziele, die keine Bausteine sind, etwa Links, Beschriftungen von Auswahlfeldern und die
+  Textarea im Composer.
 - **Nichts nur bei Hover.** Die Aktionsleiste einer Mailzeile erscheint am Desktop beim
   Hover; auf Touch öffnet ein sichtbarer Button „Weitere Aktionen“ dieselben Aktionen.
 - Der Fokusring bleibt auch mit Touch (Tastatur am Tablet).
@@ -301,9 +388,15 @@ Anfang an mit.
 ### 7.3 Hülle je Breakpoint
 
 - `desktop`: Seitenleiste (`sidebar-width`) und Hauptfläche schweben nebeneinander.
-- `tablet`: Seitenleiste als schmale Symbolleiste mit Tooltips; „Unterhaltungen“ öffnet
-  eine Schublade über dem Inhalt.
-- `mobile`: Kopfzeile mit Menü-Button links, Titel und „Neue Unterhaltung“ rechts. Das
+- `tablet`: Seitenleiste als schmale Symbolleiste mit Tooltips rechts daneben, so breit
+  wie ein Navigationspunkt mit Symbol und `space-3` je Seite. Sie zeigt die Marke ohne Namen,
+  Chat, Posteingang, Konten und „Unterhaltungen“, unten „Darstellung“; die Statuszeile mit
+  dem Stand entfällt. „Unterhaltungen“ öffnet eine Schublade über dem Inhalt. Der Zähler der ungelesenen Mails sitzt als Badge an der
+  oberen rechten Ecke des Posteingangs (ab 1.000 „999+“); der zugängliche Name nennt ihn
+  („Posteingang, 47 ungelesen“).
+- `mobile`: Die Hauptfläche füllt den Bildschirm, ohne Rahmen, Rundung und Schatten.
+  Kopfzeile mit Menü-Button links, Titel und „Neue Unterhaltung“ rechts; in einer geöffneten
+  Mail (`/mail/<id>`) ersetzt sie die Leiste der Mail mit „Zurück“. Das
   Menü öffnet eine Schublade mit Navigation und Unterhaltungen, mit abgedunkeltem
   Hintergrund. Keine untere Navigationsleiste: Der Composer gehört an den unteren Rand.
 - Die Schublade ist 308 px breit, höchstens `100vw - 48px`, mit 12 px Innenabstand,
@@ -312,13 +405,30 @@ Anfang an mit.
 
 ### 7.4 Posteingang je Breakpoint
 
-- `desktop`: Liste (`list-width`) und Lesebereich nebeneinander.
+- Aufbau der Liste: Auf `desktop` und `tablet` steht oben eine Leiste mit „Posteingang“,
+  Stand, Suchen (`search`) und Abrufen (`refresh-cw`). Darunter stehen die Filter-Chips:
+  Konto (Menü mit „Alle Konten“), „Ungelesen“, „Wichtig“ und „Mit Anhang“. Auf `mobile`
+  trägt die Kopfzeile den Titel, und unter den Filtern stehen „47 ungelesen · Stand 08:57“
+  und die beiden Buttons. Suchen öffnet ein Feld „In allen Konten suchen …“. Die Liste
+  gruppiert nach Tagen: „Heute“, „Gestern“, „Diese Woche“ (ab Montag) und „Älter“.
+- `desktop`: Liste (`list-width`) und Lesebereich nebeneinander. Alle Aktionen der Mail
+  stehen in der oberen Leiste des Lesebereichs: Archivieren, Gelesen/Ungelesen, Papierkorb
+  und „Weitere Aktionen“, rechts davon „Im Chat fragen“ und „Antwort entwerfen“ als kleine
+  Buttons (`le-btn--sm`).
 - `tablet` und `mobile`: nur die Liste; eine Mail öffnet als eigene Ansicht mit Zurück.
   Archivieren, Gelesen/Ungelesen, Papierkorb und „Weitere Aktionen“ stehen in der Leiste am
   oberen Rand; „Im Chat fragen“ und „Antwort entwerfen“ stehen in einer Leiste am unteren
   Rand.
-- Auf `mobile` trägt jede Mailzeile einen sichtbaren Button „Weitere Aktionen“; eine Frist
-  steht als Schild in `warm-soft` unter dem Vorschautext.
+- Auf `mobile` und bei `pointer: coarse` trägt jede Mailzeile einen sichtbaren Button
+  „Weitere Aktionen“; mit Maus erscheint auf `tablet` und `desktop` beim Hover die
+  Aktionsleiste (§7.2). Sie liegt über dem Ende der Textspalte, damit Uhrzeit,
+  Dringend-Punkt und Anhang-Symbol sichtbar bleiben und ihr Tooltip erreichbar ist.
+- Eine Frist steht auf allen Breakpoints als Schild in `warm-soft` unter dem Vorschautext,
+  auf `mobile` neben dem Konto-Tag.
+- Das Menü „Weitere Aktionen“ der geöffneten Mail enthält „Newsletter abbestellen“; es
+  schlägt das Abbestellen im Chat vor (§9.2) und ist gesperrt, mit Hinweis, wo die Mail
+  keinen Weg zum Abbestellen nennt. Geplant sind „Weiterleiten“, „Als Spam markieren“ und
+  „Original anzeigen“ (Entscheidung 4 vom 2026-11-14).
 - Filter-Chips stehen auf `mobile` in einer Zeile, die für sich seitlich scrollt; die Seite
   scrollt nie seitlich.
 
@@ -333,8 +443,14 @@ Anfang an mit.
 
 - Kontrast wie in §3, in beiden Themes.
 - **Tastatur zuerst:** sichtbarer Fokusring (2 px `focus-ring`, 2 px Abstand) auf
-  `:focus-visible`, logische Reihenfolge, Escape schließt Menüs und Schubladen, der Fokus
+  `:focus-visible`, ohne Ausnahme für Felder: Das Eingabefeld zeigt ihn selbst (dazu den
+  Rand in `accent`), der Composer als Ganzes, sobald sein Textfeld den Fokus hat; einen
+  eigenen Schein statt des Rings gibt es nicht. Logische Reihenfolge, Escape schließt Menüs und Schubladen, der Fokus
   bleibt in offenen Schubladen und Dialogen und kehrt danach an den Auslöser zurück.
+- **Tastenkürzel im Posteingang**, nur auf `desktop` und `wide` und nicht in Feldern,
+  Menüs und Dialogen: j und k nächste und vorige Mail, Enter öffnen, e archivieren, u
+  gelesen/ungelesen, Entf oder # in den Papierkorb. Tooltips nennen das Kürzel in Klammern,
+  für den Papierkorb „Entf“.
 - Symbol-Buttons tragen `aria-label`. Tooltips sind `role="tooltip"` und hängen über
   `aria-describedby` am Element.
 - Status nie nur über Farbe: Dringlichkeit hat Punkt **und** Text oder Tooltip, Fehler ein
@@ -353,12 +469,14 @@ Anfang an mit.
 3. Der Text läuft gleichmäßig ein (gepuffert, etwa drei Zeichen je 24 ms, nie ganze
    Absätze auf einmal), am Ende pulsiert ein Punkt in `accent`.
 4. Mail-Karten und Bestätigungskarten erscheinen erst, wenn ihr Inhalt vollständig ist.
+   Eine Mail-Karte zeigt Absender, Konto und Uhrzeit, darunter den Betreff und eine Zeile
+   Vorschautext in `small` und `ink-muted`, die mit Auslassung endet.
 5. Danach bis zu drei Folgevorschläge als Chips.
 
 Während der Antwort wird Senden zu Anhalten. Eine angehaltene Antwort bleibt stehen und
 bekommt den Hinweis „Angehalten – die Antwort ist unvollständig.“ Die Liste scrollt nur mit,
-solange du unten bist; scrollst du hoch, bleibt sie stehen, und ein Button „Zum Ende“
-erscheint.
+solange du unten bist, also höchstens 48 px vom Ende entfernt; scrollst du weiter hoch,
+bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 
 ### 9.2 Vorschlagen und bestätigen
 
@@ -371,7 +489,8 @@ erscheint.
 - Nach dem Klick ersetzt ein Hinweis die Karte, mit Ergebnis und „Rückgängig“, wo es geht.
   Nie automatisch bestätigen, nie zwei offene Karten gleichzeitig.
 - **Einzelaktionen im Posteingang** (eine Mail archivieren, gelesen/ungelesen, in den
-  Papierkorb) löst du selbst aus; sie wirken sofort und zeigen danach „Rückgängig“. Alles,
+  Papierkorb) löst du selbst aus; sie wirken sofort und zeigen danach 10 Sekunden lang
+  einen Hinweis mit „Rückgängig“. Alles,
   was mehrere Mails betrifft, läuft über den Chat und eine Bestätigungskarte.
 
 ### 9.3 Herkunft und Inhalte aus Mails
@@ -402,6 +521,22 @@ erscheint.
   erreichbar („Das Modell antwortet gerade nicht. Versuch es gleich noch mal.“), Abbruch
   mitten in der Antwort („Die Antwort ist abgebrochen.“ mit Button „Noch mal versuchen“),
   Konto nicht erreichbar (Hinweis nennt das Konto, die übrigen Konten arbeiten weiter).
+
+### 9.6 Kopf, Composer und Mailbezug
+
+- **Kopf:** Auf `desktop` und `tablet` steht über dem Verlauf eine Leiste mit „Chat“ und, in
+  einer Unterhaltung, „/ Titel“. Ein langer Titel endet mit Auslassung, der volle steht im
+  Tooltip. Rechts stehen das Modellmenü und „Neue Unterhaltung“ (`plus`). Auf `mobile`
+  tragen die Kopfzeile (§7.3) Titel und Plus; darunter steht nur das Modellmenü.
+- **Modellmenü:** ein Chip mit dem Namen des Modells und `chevron-down`, Tooltip „Modell
+  für diese Unterhaltung wählen“. Die Einträge zeigen „Name · Beschreibung“. In einer
+  Unterhaltung wird die Wahl gespeichert und gilt für ihre nächsten Antworten, auf der
+  Startseite für die erste Bitte.
+- **Composer:** Das Textfeld wächst bis 200 px Höhe. Enter sendet, Umschalt+Enter beginnt
+  eine neue Zeile. Der Konto-Chip links unten („Alle Konten“ oder der Name eines Kontos)
+  legt fest, in welchen Konten der Assistent sucht.
+- **Mailbezug:** „Im Chat fragen“ öffnet die Startseite mit der Mail als Bezug. Über dem
+  Composer steht dann ihre Mail-Karte mit dem Symbol-Button „Bezug entfernen“ (`x`).
 
 ## 10. Erweitern und pflegen
 
@@ -447,3 +582,30 @@ DESIGN.md folgt dem Aufbau und den Regeln von smartpaper-ng. Bewusst anders:
     Posteingang und Mail. Darin entschieden: „Kurz gefasst“ über jeder Mail, kein direktes
     Antworten (§9.4), Einzelaktionen sofort mit „Rückgängig“ (§9.2), Aktionsleisten am
     Handy (§7.4).
+
+## Entschieden (2026-11-14, Owner)
+
+1. **Handy randlos:** Unter 640 px füllt die Hauptfläche den Bildschirm, ohne Rahmen,
+   Rundung und Schatten. Ab 640 px schwebt sie wie bisher (§7.3).
+2. **Vier Details aus den Screens übernommen:** Dringlichkeitspunkt in `warm` in der
+   Mailzeile mit Tooltip; Symbole in Buttons mit Text 16 px, in Symbol-Buttons 19 px;
+   eine Zeile Vorschautext auf der Mailkarte im Chat; 20 px Innenabstand im Panel
+   „Konto verbinden“.
+3. **Ungelesen-Zähler** am Posteingang auch in der schmalen Symbolleiste am Tablet.
+4. **Weitere Einträge im Menü „Weitere Aktionen“** der geöffneten Mail sind geplant:
+   „Weiterleiten“ (als Vorschlag über den Chat), „Als Spam markieren“ (Einzelaktion mit
+   „Rückgängig“) und „Original anzeigen“ (Kopfzeilen und Quelltext, nur lesend). Jeder
+   Eintrag ist eine eigene Aufgabe mit eigenem Endpunkt.
+5. **Outlook:** Der Connector wird erneut geprobt, nur lesend, sobald die App in Studio
+   ihren `MISTRAL_API_KEY` hat. Eigenes Microsoft-Login wird erst geplant, wenn er weiter
+   scheitert.
+6. **Gmail-Probe** (Antworten über den Connector, To und Cc) macht der Owner selbst.
+7. **CI:** Ein GitHub-Workflow führt die bisher nur lokalen Prüfungen aus.
+8. **Design-System „liam-e“** in Claude Design wird nach DESIGN.md und Code nachgeführt
+   (§10).
+9. **Theme-Schalter** Hell, Dunkel, System, im Browser gespeichert, unten in der
+   Seitenleiste neben der Statuszeile (§3).
+10. **Fokus:** Eingabefeld und Composer zeigen den Fokusring aus §8 wie alle anderen
+    Bedienelemente.
+11. **Freie Werte aufgeräumt:** Schriftgrößen nur über Tokens, Abstände auf dem
+    4-px-Raster (§4, §5).

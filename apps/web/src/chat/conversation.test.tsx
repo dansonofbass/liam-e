@@ -47,7 +47,7 @@ test('shows status, streams text and stops the answer', async () => {
   expect(screen.getByRole('button', { name: 'Anhalten' })).toBeTruthy()
   await act(async () => { frame({ event: 'delta', text: 'Eine Antwort' }) })
   expect(await screen.findByText('Eine Antwort')).toBeTruthy()
-  expect(document.querySelector('.sr-only[aria-live="polite"]')?.textContent).toBe('')
+  expect(document.querySelector('.le-sr[aria-live="polite"]')?.textContent).toBe('')
   fireEvent.click(screen.getByRole('button', { name: 'Anhalten' }))
   expect(signal.aborted).toBe(true)
   expect(await screen.findByText('Angehalten – die Antwort ist unvollständig.')).toBeTruthy()
@@ -86,7 +86,7 @@ test('navigation after start preserves the stream through done', async () => {
   expect(await screen.findByText('Kommt noch', { selector: 'p' })).toBeTruthy()
   const announcements = [...document.querySelectorAll('.le-chat-messages [aria-live]')].filter(element => element.textContent?.includes('Kommt noch'))
   expect(announcements).toHaveLength(1)
-  expect(announcements[0]?.classList.contains('sr-only')).toBe(true)
+  expect(announcements[0]?.classList.contains('le-sr')).toBe(true)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Senden' })).toBeTruthy())
   expect(signal.aborted).toBe(false)
 })
@@ -124,11 +124,20 @@ test('a follow-up suggestion keeps the selected account', async () => {
 
 test('the pencil on a mail card asks for a reply draft to that mail in the same conversation', async () => {
   setup('/chat/c'); await send()
-  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
-  expect(await screen.findByText('Dringend')).toBeTruthy()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', snippet: 'Einwände bis Freitag möglich', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  expect(await screen.findByRole('img', { name: 'Dringend' })).toBeTruthy()
+  expect(screen.getByText('Einwände bis Freitag möglich').classList.contains('le-mailref-snippet')).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
   expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
   expect(requestBody.account_id).toBeUndefined()
+})
+
+test('an answer shows at most three follow-up suggestions', async () => {
+  setup('/chat/c'); await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Eins', 'Zwei', 'Drei', 'Vier'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  expect(await screen.findByRole('button', { name: 'Drei' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Vier' })).toBeNull()
+  expect(document.querySelectorAll('.le-chat-suggestions .le-chip')).toHaveLength(3)
 })
 
 test('a follow-up suggestion without a selected account searches all accounts', async () => {
@@ -279,7 +288,7 @@ test('history renders safe text, model, mail account and only the latest suggest
   })
   expect(await screen.findByText('<b>Betreff</b>')).toBeTruthy()
   expect(screen.getByText('Gmail')).toBeTruthy()
-  expect(screen.getByText('Dringend')).toBeTruthy()
+  expect(screen.getByRole('img', { name: 'Dringend' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Antwort entwerfen' })).toBeTruthy()
   expect(screen.getAllByText('Modellname')).toHaveLength(2)
   expect(screen.queryByText('Alte Frage')).toBeNull()

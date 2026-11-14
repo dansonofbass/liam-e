@@ -1,9 +1,11 @@
 import { describe, expect, test, mock, afterEach, spyOn } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IconButton } from './IconButton'
+import { Button } from './Button'
 import { Menu } from './Menu'
 import { Drawer } from './Drawer'
 import { Avatar, initialsOf } from './Avatar'
+import { Notice } from './Notice'
 
 afterEach(() => { cleanup(); mock.restore() })
 
@@ -87,6 +89,35 @@ test('drawer traps focus and closes on Escape', () => {
   expect(document.activeElement).toBe(trigger)
 })
 
+test('Escape in a menu inside the drawer closes only the menu and returns to its trigger', () => {
+  const close = mock(() => {})
+  render(<Drawer open onClose={close} label="Menü"><Menu trigger={props => <button {...props}>Darstellung</button>} items={[{ label: 'Hell', onSelect: () => {} }]} /></Drawer>)
+  const trigger = screen.getByRole('button', { name: 'Darstellung' })
+  fireEvent.click(trigger)
+  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Hell' }), { key: 'Escape' })
+  expect(screen.queryByRole('menu')).toBeNull()
+  expect(close).not.toHaveBeenCalled()
+  expect(document.activeElement).toBe(trigger)
+  // The app hydrates on `document`, where React and the drawer listen side by side, so the drawer
+  // must skip an Escape that something inside already handled, wherever React's listener sits.
+  const handled = new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+  handled.preventDefault()
+  document.dispatchEvent(handled)
+  expect(close).not.toHaveBeenCalled()
+  fireEvent.keyDown(trigger, { key: 'Escape' })
+  expect(close).toHaveBeenCalledTimes(1)
+})
+
+test('every notice draws its symbol at the small 16 px size', () => {
+  render(<><Notice tone="success">Erledigt</Notice><Notice tone="danger">Fehler</Notice><Notice tone="info">Angehalten</Notice></>)
+  const symbols = [...screen.getAllByRole('status'), screen.getByRole('alert')].map(notice => notice.querySelector('svg.le-ico'))
+  expect(symbols).toHaveLength(3)
+  for (const symbol of symbols) {
+    expect(symbol?.classList.contains('le-ico--sm')).toBe(true)
+    expect(symbol?.getAttribute('width')).toBe('16')
+  }
+})
+
 test('avatar uses name initials or address fallback', () => {
   const { rerender } = render(<Avatar name="Hausverwaltung Kurz" colorIndex={0} />)
   expect(screen.getByText('HK')).toBeTruthy()
@@ -105,4 +136,12 @@ test('avatar shows two letters like the boards, one only when there is nothing m
   expect(initialsOf('X')).toBe('X')
   expect(initialsOf('', 'z@example.org')).toBe('Z')
   expect(initialsOf('  ', undefined)).toBe('')
+})
+
+test('icons beside button text are 16 px, icon-only buttons keep 19 px', () => {
+  render(<><Button variant="primary" icon="pencil">Antwort entwerfen</Button><IconButton label="Archivieren" icon="archive" /></>)
+  const text = screen.getByRole('button', { name: 'Antwort entwerfen' }).querySelector('svg')!
+  expect(text.getAttribute('width')).toBe('16')
+  expect(text.classList.contains('le-ico--sm')).toBe(true)
+  expect(screen.getByRole('button', { name: 'Archivieren' }).querySelector('svg')!.getAttribute('width')).toBe('19')
 })

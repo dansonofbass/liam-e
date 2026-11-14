@@ -1,0 +1,130 @@
+name: CI
+
+# The checks that otherwise only run locally: `bun run check`, the web tests, pytest and the live
+# Postgres contract suite. The Bun and uv versions follow package.json `packageManager`
+# (bun@1.4.0), deploy/docker/Dockerfile.web (oven/bun:1.4.0, node:24) and
+# deploy/docker/Dockerfile.api (uv 0.11.17). Python comes from .python-version (3.14), which uv
+# downloads on demand.
+#
+# Dependencies are installed with the frozen lockfiles instead of `bun run install-all`:
+# tools/install.sh regenerates the API client, which would make the drift gate of
+# `bun run check` (tools/gen-types.sh --check) pass on a stale client.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  BUN_VERSION: "1.4.0"
+  UV_VERSION: "0.11.17"
+  NODE_VERSION: "24"
+
+jobs:
+  check:
+    name: bun run check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2.0.2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: astral-sh/setup-uv@v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: Install Python dependencies
+        run: bash tools/uv.sh sync --all-packages --frozen
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+      - name: Build and check (includes the generated API client drift gate)
+        run: bun run check
+
+  web-test:
+    name: Web tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2.0.2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+      - name: Run web tests
+        run: bunx nx run web:test
+
+  pytest:
+    name: pytest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: Install Python dependencies
+        run: bash tools/uv.sh sync --all-packages --frozen
+      # Covers every Python test directory, including packages/py/cli and packages/py/utils, which
+      # no Nx `test` target runs. The live-Postgres suites skip here (RUN_PG_CONTRACT is unset).
+      - name: Run pytest
+        run: bash tools/uv.sh run --no-sync pytest tests apps/api/tests packages/py -q
+
+  pg-contract:
+    name: Postgres contract suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # Without RUN_PG_CONTRACT every suite skips and the job would pass without testing anything.
+      RUN_PG_CONTRACT: "1"
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: Install Python dependencies
+        run: bash tools/uv.sh sync --all-packages --frozen
+      # Same command as `bunx nx run db:test-pg-contract` (packages/py/db/project.json), without
+      # needing Bun and Node for it. The suites create and drop throwaway databases, so the role
+      # needs CREATEDB; the image's superuser has it.
+      - name: Run Postgres contract suites
+        run: bash tools/db.sh test-pg-contract

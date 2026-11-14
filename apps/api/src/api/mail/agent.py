@@ -146,7 +146,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                         m = await mail_message.get_message(id)
                         if m:
                             insight = insight_map.get(id)
-                            refs.append(MailRefOut(id=m.id, account_id=m.account_id, color_index=colors.get(m.account_id, 0), subject=m.subject, sender_name=headers.sender_name(m.sender), internal_date=m.internal_date, deadline=insight.deadline if insight else None, is_flagged=m.is_flagged))
+                            refs.append(MailRefOut(id=m.id, account_id=m.account_id, color_index=colors.get(m.account_id, 0), subject=m.subject, sender_name=headers.sender_name(m.sender), snippet=m.snippet, internal_date=m.internal_date, deadline=insight.deadline if insight else None, is_flagged=m.is_flagged))
                     if refs: yield MailsEvent(mails=refs)
                 if proposal_id:
                     proposal = await message_access.get_message(proposal_id)

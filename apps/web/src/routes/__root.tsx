@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { DEFAULT_APP_NAME } from "../app-name";
 import { useRootTexts } from "../root-screens";
 import { contributedRootScreens } from "../root-screens-source";
+import { themeScript, useThemeSync } from "../shell/theme";
 
 import appCss from "../index.css?url";
 
@@ -30,10 +31,13 @@ export interface RouterContext {
  */
 const RootDocument = ({ children }: { children: ReactNode }) => {
   const { lang, dir } = useRootTexts();
+  useThemeSync();
 
   return (
     <html lang={lang} dir={dir} suppressHydrationWarning>
       <head>
+        {/* Sets a stored theme on <html> before the first paint (see shell/theme.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <HeadContent />
       </head>
       <body>

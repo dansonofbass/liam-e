@@ -120,7 +120,7 @@ test('drawer frame has inset padding, right radii and a coarse close target', as
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/\.le-drawer \{([^}]*)\}/u)?.[1]
   for (const property of ['width: min(308px, 100vw - 48px)', 'padding: var(--space-3)', 'border-radius: 0 var(--radius-lg) var(--radius-lg) 0', 'box-shadow: var(--shadow-overlay)']) expect(rule).toContain(property)
-  expect(css).toContain('@media (pointer: coarse) { .le-drawer-brand .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }')
+  expect(css).toContain('@media (pointer: coarse) { .le-drawer-brand .le-icon-btn, .le-shell-status .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }')
 })
 test('drawer stacks its content so the sidebar footer sits at the bottom', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
@@ -153,6 +153,49 @@ test('the tablet bar lists the conversations as a navigation entry with its own 
   expect(button.closest('.le-shell-sidebar')?.querySelectorAll('.le-nav-item')).toHaveLength(4)
   fireEvent.mouseEnter(button)
   expect((await screen.findByRole('tooltip', {}, { timeout: 2000 })).textContent).toBe('Öffnet die Liste deiner Unterhaltungen')
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+})
+test('the tablet bar shows the unread count on the inbox entry and names it', async () => {
+  width = 800
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  setup('/', client)
+  const inbox = await screen.findByRole('link', { name: 'Posteingang, 47 ungelesen' })
+  const badge = inbox.querySelector('.le-nav-badge')
+  expect(badge?.getAttribute('aria-hidden')).toBe('true')
+  expect(badge?.textContent).toBe('47')
+  act(() => { client.setQueryData(['summary'], { ...summary, unread_total: 1234 }) })
+  expect((await screen.findByRole('link', { name: 'Posteingang, 1.234 ungelesen' })).querySelector('.le-nav-badge')?.textContent).toBe('999+')
+  act(() => { client.setQueryData(['summary'], { ...summary, unread_total: 0 }) })
+  expect((await screen.findByRole('link', { name: 'Posteingang' })).querySelector('.le-nav-badge')).toBeNull()
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-nav-badge \{[^}]*position: absolute;/u)
+  expect(css).toMatch(/\.le-nav-item \{[^}]*position: relative;/u)
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+})
+test('the theme switch sits in the sidebar footer, the tablet bar and the phone drawer', async () => {
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
+  width = 1200
+  setup()
+  const stand = await screen.findByText('4 Konten · Stand 08:57')
+  const desktop = screen.getByRole('button', { name: 'Darstellung' })
+  expect(stand.closest('.le-shell-status')?.contains(desktop)).toBe(true)
+  fireEvent.click(desktop)
+  expect(screen.getByRole('menu').classList.contains('le-menu--up-end')).toBe(true)
+  cleanup()
+  width = 800
+  setup()
+  fireEvent.click(await screen.findByRole('button', { name: 'Darstellung' }))
+  expect(screen.getByRole('menu').classList.contains('le-menu--up-start')).toBe(true)
+  expect(screen.getByRole('button', { name: 'Darstellung' }).closest('.le-shell-status--collapsed')).toBeTruthy()
+  cleanup()
+  width = 375
+  setup()
+  expect(screen.queryByRole('button', { name: 'Darstellung' })).toBeNull()
+  fireEvent.click(await screen.findByRole('button', { name: 'Menü öffnen' }))
+  expect(screen.getByRole('dialog').contains(screen.getByRole('button', { name: 'Darstellung' }))).toBe(true)
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 })
 test('the mobile header centres its title between the menu and the new-conversation button', async () => {

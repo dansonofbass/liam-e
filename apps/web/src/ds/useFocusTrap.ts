@@ -10,7 +10,8 @@ export function useFocusTrap(open: boolean, onClose: () => void) {
     const focusable = () => Array.from(ref.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [])
     ;(focusable()[0] ?? ref.current)?.focus()
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return }
+      // An Escape that something inside already handled (an open menu) closes only that.
+      if (event.key === 'Escape') { if (!event.defaultPrevented) { event.preventDefault(); closeRef.current() } return }
       if (event.key !== 'Tab') return
       const nodes = focusable()
       if (!nodes.length) { event.preventDefault(); ref.current?.focus(); return }

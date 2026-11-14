@@ -1,42 +1,44 @@
 .le-tooltip-anchor, .le-menu-anchor { position: relative; display: inline-flex; }
-.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: 7px 10px; border-radius: 10px; background: var(--tip-bg); color: var(--tip-ink); font-size: 12px; pointer-events: none; animation: le-tooltip-fade 160ms ease; }
+.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-fade var(--le-dur-fast) ease; }
 .le-tooltip--top { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
 .le-tooltip--right { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
 .le-tooltip--bottom { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
 .le-tooltip--bottom-end { top: calc(100% + 8px); right: 0; }
 .le-tooltip--top-end { bottom: calc(100% + 8px); right: 0; }
-@keyframes le-tooltip-fade { from { opacity: 0; } to { opacity: 1; } }
 .le-menu-anchor .le-menu { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; }
+/* Menus for triggers at the bottom of the screen open upwards and size to their items. */
+.le-menu-anchor .le-menu--up-start, .le-menu-anchor .le-menu--up-end { top: auto; bottom: calc(100% + var(--space-2)); width: max-content; min-width: calc(3 * var(--space-8)); max-width: calc(100vw - 2 * var(--space-4)); }
+.le-menu-anchor .le-menu--up-end { left: auto; right: 0; }
 .le-menu-item--danger, .le-menu-item--danger .le-ico { color: var(--danger); }
 .le-menu-item[aria-disabled="true"], .le-menu-item[aria-disabled="true"] .le-ico { color: var(--ink-muted); cursor: not-allowed; }
 .le-menu-item[aria-disabled="true"]:hover { background: transparent; }
 .le-tag--warm { background: var(--warm-soft); color: var(--warm); }
-.le-scrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); animation: le-tooltip-fade 220ms ease; }
-.le-drawer { display: flex; flex-direction: column; height: 100%; width: min(308px, 100vw - 48px); padding: var(--space-3); box-sizing: border-box; background: var(--surface); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; box-shadow: var(--shadow-overlay); overflow: auto; animation: le-drawer-in 220ms ease; }
+.le-scrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); animation: le-fade var(--le-dur) ease; }
+.le-drawer { display: flex; flex-direction: column; height: 100%; width: min(308px, 100vw - 48px); padding: var(--space-3); box-sizing: border-box; background: var(--surface); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; box-shadow: var(--shadow-overlay); overflow: auto; animation: le-drawer-in var(--le-dur) ease; }
 .le-crumb--center { justify-content: center; text-align: center; }
-.le-drawer-brand { padding: 2px 0 18px 8px; }
+.le-drawer-brand { padding: 0 0 var(--space-4) var(--space-2); }
 .le-drawer .le-shell-sidebar { flex: 1 0 auto; }
 @keyframes le-drawer-in { from { opacity: 0; transform: translateX(-100%); } to { opacity: 1; transform: translateX(0); } }
 .le-composer-spacer { flex: 1; }
 .le-confirm-draft { padding: var(--space-3); }
 .le-confirm-draft .le-input { width: 100%; }
 .le-confirm-quote { margin: var(--space-3) 0 0; }
-.le-confirm-quote blockquote { margin: 4px 0 0; max-height: 12rem; overflow: auto; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.le-confirm-quote blockquote { margin: 4px 0 0; max-height: 12rem; overflow: auto; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: var(--font-size-small); white-space: pre-wrap; overflow-wrap: anywhere; }
 .le-mailrow-link { border: 0; padding: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .le-mailrow-side { grid-column: 3; }
+.le-mailrow-marks { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-muted); }
 .le-mailrow-more { display: none; position: relative; z-index: 3; align-self: flex-end; }
 .le-mailrow-more--coarse { display: block; }
-.le-mailrow:has(.le-mailrow-more--coarse) .le-mailrow-side { visibility: visible; }
 .le-mailrow-more .le-menu-anchor .le-menu { left: auto; right: 0; }
 /* The model chip sits at the right end of the chat header, so its menu opens to the left; the long model list scrolls instead of running off screen. */
 .le-chat-header .le-menu-anchor .le-menu, .le-chat-topbar .le-menu-anchor .le-menu { left: auto; right: 0; max-width: calc(100vw - 2 * var(--space-4)); max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain; }
-@media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } .le-mailrow:hover .le-mailrow-side, .le-mailrow:focus-within .le-mailrow-side, .le-mailrow.is-hover .le-mailrow-side { visibility: visible; } }
+@media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } }
 @media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor .le-chip, .le-chat-topbar .le-menu-anchor .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
-@media (pointer: coarse) { .le-drawer-brand .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
+@media (pointer: coarse) { .le-drawer-brand .le-icon-btn, .le-shell-status .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-topbar .le-icon-btn, .le-side .le-icon-btn, .le-side .le-nav-item, .le-side .le-conv, .le-drawer .le-nav-item, .le-drawer .le-conv { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } .le-composer textarea { min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-mailref-actions .le-icon-btn, .le-confirm-item label { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-proposal-manual a { display: inline-flex; align-items: center; min-height: var(--control-height-lg); } }
-@media (prefers-reduced-motion: reduce) { .le-drawer { animation-name: le-tooltip-fade; } }
+@media (prefers-reduced-motion: reduce) { .le-drawer { animation-name: le-fade; } }
 /* Views with their own scroll area keep the app at viewport height. */
 .le-app:has(.le-accounts-scroll), .le-app:has(.le-chat-view), .le-app:has(.le-inbox) { height: 100dvh; overflow: hidden; }
 .le-sheet:has(.le-accounts-scroll) { min-height: 0; }
@@ -44,9 +46,9 @@
 .le-accounts-layout { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: flex-start; max-width: 1180px; }
 .le-accounts-list { flex: 1 1 460px; min-width: 0; }
 .le-accounts-list > h2 { margin: 0 0 var(--space-5); }
-.le-accounts-list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.le-accounts-list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 .le-accounts-note { margin: var(--space-4) var(--space-1) 0; }
-.le-accounts-connect { flex: 1 1 400px; min-width: 0; max-width: 520px; background: var(--surface-soft); border-radius: var(--radius-lg); padding: var(--space-5); }
+.le-accounts-connect { flex: 1 1 400px; min-width: 0; max-width: 520px; background: var(--surface-soft); border-radius: var(--radius-lg); padding: calc(var(--space-4) + var(--space-1)); }
 .le-account-content { min-width: 0; flex: 1; }
 .le-account-name, .le-account-address { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .le-account--placeholder span { display: block; background: var(--surface-soft); border-radius: var(--radius-sm); height: var(--space-5); flex: 1; }
@@ -58,7 +60,8 @@
 .le-connect-option { width: 100%; height: auto; border-radius: var(--radius-md); justify-content: flex-start; text-align: left; padding: var(--space-3); }
 .le-connect-option[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .le-connect-icon { display: grid; place-items: center; flex: none; width: var(--control-height-lg); height: var(--control-height-lg); border-radius: var(--radius-sm); background: var(--surface); }
-.le-connect-option-text { display: flex; flex-direction: column; min-width: 0; }
+/* Button text does not wrap; the provider subtitles are longer than the panel at 13 px, so they may. */
+.le-connect-option-text { display: flex; flex-direction: column; min-width: 0; white-space: normal; }
 .le-connect-detail, .le-imap-form { margin-top: var(--space-4); }
 .le-connect-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .le-imap-servers { display: grid; gap: var(--space-3); }
@@ -71,11 +74,15 @@
 .le-dialog-actions { justify-content: flex-end; margin-top: var(--space-5); }
 
 .le-shell-sidebar { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.le-shell-status { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; margin-top: auto; padding: var(--space-3); }
+.le-shell-status { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; margin-top: auto; padding: var(--space-1) 0 0 var(--space-3); }
+.le-shell-stand { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; }
+.le-shell-status .le-menu-anchor { margin-left: auto; }
+.le-shell-status--collapsed { padding: var(--space-1) var(--space-1) 0; }
+.le-shell-status--collapsed .le-menu-anchor { margin-left: 0; }
 .le-side .le-shell-conversations { flex: 1; min-height: 0; overflow-y: auto; margin-inline: calc(-1 * var(--space-1)); padding-inline: var(--space-1); padding-bottom: var(--space-1); }
 .le-shell-conversations > .le-side-label { position: sticky; top: 0; z-index: 1; background: var(--surface); }
 .le-sheet:has(.le-chat-view) { min-height: 0; }
-.le-page-fade { animation: le-page-enter 220ms cubic-bezier(.2, .8, .2, 1) both; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.le-page-fade { animation: le-fade var(--le-dur) var(--le-ease) both; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .le-chat-view { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
 .le-chat-messages { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
 .le-chat-thread { width: 100%; max-width: var(--chat-width); align-self: center; box-sizing: border-box; }
@@ -92,17 +99,16 @@
 .le-mailref-dot { margin-top: 8px; }
 .le-mailref-dot--none { visibility: hidden; }
 .le-chat-end { align-self: center; padding: var(--space-2); }
-@media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+@media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .le-chat-entry { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
 .le-chat-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .le-chat-composer { width: 100%; max-width: var(--chat-width); box-sizing: border-box; align-self: center; padding: var(--space-3) var(--space-5) max(var(--space-3), env(safe-area-inset-bottom)); }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-@keyframes le-page-enter { from { opacity: 0; } to { opacity: 1; } }
 .le-greeting { padding: var(--space-5); }
 .le-greeting span { color: var(--accent); }
-@media (prefers-reduced-motion: reduce) { .le-page-fade { animation: none; } }
 @media (min-width: 640px) and (max-width: 1023px) { .le-side { flex: 0 0 auto; } }
 @media (max-width: 639px) { .le-app > .le-side { display: none; } }
+/* On a phone the main sheet fills the screen: no frame around it, no rounding, no shadow. */
+@media (max-width: 639px) { .le-app { padding: 0; gap: 0; } .le-sheet { border-radius: 0; box-shadow: none; } }
 
 .le-sheet:has(.le-inbox) { min-height: 0; }
 .le-inbox { display: flex; flex: 1; min-height: 0; min-width: 0; }
@@ -120,7 +126,7 @@
 .le-inbox-toast--inline { position: static; flex: 0 0 auto; margin: 0 var(--space-3) var(--space-2); }
 @media (pointer: coarse) { .le-inbox-filters .le-chip, .le-inbox-control, .le-inbox-toast .le-link { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } .le-inbox-toast .le-link { display: inline-flex; align-items: center; justify-content: center; } }
 .le-mailrow--placeholder { min-height: var(--space-7); align-items: center; }
-.le-mailrow--placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface-soft)); }
+.le-mailrow--placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-soft); }
 .le-mailrow--placeholder span:first-child { width: var(--space-7); height: var(--space-7); }
 .le-mailrow--placeholder span:last-child { width: 100%; }
 @media (max-width: 1023px) { .le-inbox-list { flex: 1 1 100%; border-right: 0; } }
@@ -141,7 +147,7 @@
 .le-insight-points li + li { margin-top: var(--space-1); }
 .le-insight .le-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .le-insight-placeholder { display: flex; flex-direction: column; gap: var(--space-2); }
-.le-insight-placeholder-line { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface)); }
+.le-insight-placeholder-line { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface); }
 .le-insight-placeholder-line:last-child { width: 60%; }
 .le-mail-text { display: flex; flex-direction: column; gap: var(--space-3); overflow-wrap: anywhere; max-width: 64ch; }
 .le-mail-text p { margin: 0; white-space: pre-wrap; }
@@ -154,7 +160,7 @@
 .le-mail-bottom .le-btn { width: 100%; min-height: var(--control-height-lg); }
 .le-mail-error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
 .le-mail-placeholder { max-width: 720px; margin: auto; display: flex; flex-direction: column; gap: var(--space-3); }
-.le-mail-placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface-soft)); }
+.le-mail-placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-soft); }
 .le-mail-placeholder > span:nth-last-child(1) { width: 60%; }
 .le-mail-placeholder-head { display: flex; gap: var(--space-3); margin-bottom: var(--space-4); }
 .le-mail-placeholder-head > span { width: var(--space-7); height: var(--space-7); border-radius: var(--radius-pill); }
@@ -162,3 +168,9 @@
 .le-mail-placeholder-head > div span:last-child { width: 60%; }
 @media (pointer: coarse) { .le-mail-topbar .le-icon-btn, .le-mail-topbar .le-btn, .le-mail-bottom .le-btn, .le-insight .le-chip, .le-mail-to-inbox, .le-mail-error .le-link { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (max-width: 639px) { .le-mail-scroll { padding: var(--space-4); } .le-mail-header { flex-wrap: wrap; } }
+
+/* Error, update and not-found screens outside the app shell (root-screens/de.tsx). */
+.le-root-screen { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); max-width: var(--chat-width); padding: var(--space-6); }
+.le-root-screen h1, .le-root-screen p { margin: 0; }
+.le-root-screen pre { margin: var(--space-2) 0 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (pointer: coarse) { .le-root-screen .le-link { display: inline-flex; align-items: center; min-height: var(--control-height-lg); } }

@@ -10,7 +10,7 @@ test('the user bubble sits on the right with its small corner at the bottom righ
   const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
   const rule = css.match(/\.le-msg-user \{([^}]*)\}/u)?.[1] ?? ''
   // top-left, top-right, bottom-right, bottom-left
-  expect(rule).toContain('border-radius: 20px 20px 6px 20px')
+  expect(rule).toContain('border-radius: var(--radius-md) var(--radius-md) calc(var(--radius-sm) / 2) var(--radius-md)')
   expect(rule).toContain('align-self: flex-end')
   expect(rule).toContain('background: var(--accent)')
   expect(css.match(/\.le-msg-user[^{]*\{[^}]*border-radius/gu)).toHaveLength(1)
