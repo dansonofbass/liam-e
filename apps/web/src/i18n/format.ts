@@ -14,7 +14,7 @@ export function formatDayShort(d: Date, timeZone?: string): string {
 }
 
 export function formatDeadline(value: string): string {
-  const [year, month, day] = value.split('-').map(Number)
+  const [year, month, day] = value.split('-').map(Number) as [number, number, number]
   return formatDayShort(new Date(Date.UTC(year, month - 1, day)), 'UTC')
 }
 
