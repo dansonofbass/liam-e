@@ -59,6 +59,22 @@ test('priority sends its fixed prompt and selected account', async () => {
   expect(request.account_id).toBe('a')
 })
 
+test('a failed start shows a retry that sends the same text', async () => {
+  setup()
+  const requests: Record<string, unknown>[] = []
+  globalThis.fetch = ((_url: unknown, init: RequestInit) => {
+    requests.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+    return Promise.resolve(new Response(null, { status: 503 }))
+  }) as typeof fetch
+  const composer = await screen.findByPlaceholderText(de.chat.placeholder)
+  fireEvent.change(composer, { target: { value: 'Was steht drin?' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+  expect((await screen.findByRole('alert')).textContent).toContain(de.errors.internal)
+  fireEvent.click(screen.getByRole('button', { name: 'Noch mal versuchen' }))
+  await waitFor(() => expect(requests).toHaveLength(2))
+  expect(requests.map(item => item.text)).toEqual(['Was steht drin?', 'Was steht drin?'])
+})
+
 test('about displays a mail and sends its context, which can be removed', async () => {
   const router = setup(true, '/?about=mail1')
   expect(await screen.findByText('Termin')).toBeTruthy()
