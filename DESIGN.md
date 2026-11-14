@@ -295,8 +295,10 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
   IconButton, Chip (mit Tag, Badge, Punkt), Tooltip, Notice, AppShell, NavItem, Menu,
   QuickAction, Composer, ChatMessage, MailReference, ConfirmCard, MailRow, Avatar,
   TextField, AccountCard. In der App liegen sie unter `apps/web/src/ds/` mit denselben
-  Namen. Screens unter `src/routes/` setzen keine eigenen Bedienelemente aus rohem
-  `<button>` oder `<input>` zusammen.
+  Namen. Screens unter `src/routes/` und die app-weiten Fehler- und Hinweisseiten
+  (`src/root-screens/de.tsx`: neue Version, Fehler, Seite nicht gefunden) setzen keine
+  eigenen Bedienelemente aus rohem `<button>` oder `<input>` zusammen und nutzen keine
+  Tailwind-Größen; `routes/no-raw-controls.test.ts` prüft das.
 - **Zustände ohne Inhalt sind Pflicht:** jede Liste und Ansicht hat Leer, Laden
   (Platzhalterzeilen, kein Spinner über der ganzen Fläche) und Fehler mit Ursache und
   nächstem Schritt.

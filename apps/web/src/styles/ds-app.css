@@ -168,3 +168,9 @@
 .le-mail-placeholder-head > div span:last-child { width: 60%; }
 @media (pointer: coarse) { .le-mail-topbar .le-icon-btn, .le-mail-topbar .le-btn, .le-mail-bottom .le-btn, .le-insight .le-chip, .le-mail-to-inbox, .le-mail-error .le-link { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (max-width: 639px) { .le-mail-scroll { padding: var(--space-4); } .le-mail-header { flex-wrap: wrap; } }
+
+/* Error, update and not-found screens outside the app shell (root-screens/de.tsx). */
+.le-root-screen { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); max-width: var(--chat-width); padding: var(--space-6); }
+.le-root-screen h1, .le-root-screen p { margin: 0; }
+.le-root-screen pre { margin: var(--space-2) 0 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (pointer: coarse) { .le-root-screen .le-link { display: inline-flex; align-items: center; min-height: var(--control-height-lg); } }
