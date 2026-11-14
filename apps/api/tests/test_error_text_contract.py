@@ -23,6 +23,7 @@ async def test_missing_history_and_mail_and_account(monkeypatch):
     cases = [
         (history.history("missing"), "conversation_not_found", "Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung."),
         (messages.get_message("missing"), "message_not_found", "Die Mail ist nicht mehr da."),
+        (messages.message_original("missing"), "message_not_found", "Die Mail ist nicht mehr da."),
         (accounts.sync_account("missing"), "account_not_found", "Das Konto gibt es nicht mehr."),
     ]
     for call, code, text in cases:
@@ -54,6 +55,20 @@ async def test_imap_refusals(monkeypatch, failure, code, text):
     with pytest.raises(HTTPException) as error:
         await accounts.connect_imap(accounts.ImapConnectRequest(email_address="a@yahoo.com", password_secret=name))
     assert_detail(error, code, text)
+
+
+async def test_original_refusals(monkeypatch):
+    from api.mail import original
+    monkeypatch.setattr(messages.message_access, "get_message", AsyncMock(return_value=SimpleNamespace(account_id="a")))
+    monkeypatch.setattr(messages.account_access, "get_account", AsyncMock(return_value=None))
+    with pytest.raises(HTTPException) as error:
+        await messages.message_original("m")
+    assert_detail(error, "original_unavailable", "Bei dieser Mail lässt sich das Original nicht abrufen.")
+    monkeypatch.setattr(original, "available", lambda account: True)
+    monkeypatch.setattr(original, "fetch", AsyncMock(side_effect=TimeoutError()))
+    with pytest.raises(HTTPException) as error:
+        await messages.message_original("m")
+    assert_detail(error, "provider_failed", "Das Original ließ sich beim Anbieter nicht abrufen. Versuch es gleich noch mal.")
 
 
 async def test_action_and_insight_refusals(monkeypatch):

@@ -702,7 +702,7 @@ export type MessageActionIn = {
     /**
      * Kind
      */
-    kind: 'archive' | 'trash' | 'mark_read' | 'mark_unread' | 'restore';
+    kind: 'archive' | 'trash' | 'spam' | 'mark_read' | 'mark_unread' | 'restore';
 };
 
 /**
@@ -732,6 +732,10 @@ export type MessageDetailOut = {
      * Body Text
      */
     body_text: string;
+    /**
+     * Can Show Original
+     */
+    can_show_original: boolean;
     /**
      * Can Unsubscribe
      */
@@ -799,6 +803,20 @@ export type MessageDetailOut = {
 };
 
 /**
+ * MessageHeaderOut
+ */
+export type MessageHeaderOut = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Value
+     */
+    value: string;
+};
+
+/**
  * MessageListItemOut
  */
 export type MessageListItemOut = {
@@ -854,6 +872,24 @@ export type MessageListItemOut = {
      * Subject
      */
     subject: string;
+};
+
+/**
+ * MessageOriginalOut
+ */
+export type MessageOriginalOut = {
+    /**
+     * Headers
+     */
+    headers: Array<MessageHeaderOut>;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
 };
 
 /**
@@ -1863,6 +1899,36 @@ export type MailMessageInsightResponses = {
 };
 
 export type MailMessageInsightResponse = MailMessageInsightResponses[keyof MailMessageInsightResponses];
+
+export type MailMessageOriginalData = {
+    body?: never;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/mail/messages/{message_id}/original';
+};
+
+export type MailMessageOriginalErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailMessageOriginalError = MailMessageOriginalErrors[keyof MailMessageOriginalErrors];
+
+export type MailMessageOriginalResponses = {
+    /**
+     * Successful Response
+     */
+    200: MessageOriginalOut;
+};
+
+export type MailMessageOriginalResponse = MailMessageOriginalResponses[keyof MailMessageOriginalResponses];
 
 export type MailSummaryData = {
     body?: never;

@@ -8,7 +8,9 @@ import { useBreakpoint } from '../shell/useBreakpoint'
 
 export type Clock = { now(): number; setTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout>; clearTimeout(id: ReturnType<typeof setTimeout>): void }
 const systemClock: Clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id) }
-type Kind = 'archive' | 'trash' | 'mark_read' | 'mark_unread'
+type Removal = 'archive' | 'trash' | 'spam'
+type Kind = Removal | 'mark_read' | 'mark_unread'
+const removes = (kind: Kind | 'remove'): kind is Removal => kind === 'archive' || kind === 'trash' || kind === 'spam'
 type Toast = { tone: 'success' | 'danger'; text: string; undoable: boolean }
 type Change = { key: QueryKey; page: number; index: number; row: MessageListItemOut }
 
@@ -61,7 +63,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
   }
   const update = (id: string, kind: Kind | 'remove') => {
     client.setQueriesData<InfiniteData<MessagePageOut>>({ queryKey: ['messages'] }, data => data && ({
-      ...data, pages: data.pages.map(page => ({ ...page, items: kind === 'archive' || kind === 'trash' || kind === 'remove'
+      ...data, pages: data.pages.map(page => ({ ...page, items: removes(kind) || kind === 'remove'
         ? page.items.filter(item => item.id !== id)
         : page.items.map(item => item.id === id ? { ...item, is_read: kind === 'mark_read' } : item) })),
     }))
@@ -78,7 +80,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
   const execute = async (id: string, kind: Kind, options: { silent?: boolean } | undefined, current: number) => {
     ++pending.current
     const changes: Change[] = []
-    const removal = kind === 'archive' || kind === 'trash'
+    const removal = removes(kind)
     let previousRead: boolean | undefined
     const rollback = () => {
       restore(changes, removal)
@@ -112,7 +114,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         return changes.length > 0
       } else {
         if (removal) reconcile.current = true
-        if (!options?.silent && (kind === 'archive' || kind === 'trash') && current === sequence.current) {
+        if (!options?.silent && removes(kind) && current === sequence.current) {
           const text = breakpoint === 'mobile' ? de.inbox.doneShort[kind] : de.inbox.done[kind](result.data.message.subject)
           show({ tone: 'success', text, undoable: true }, { actionId: result.data.action_id, changes })
         }

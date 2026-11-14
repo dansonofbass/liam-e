@@ -45,6 +45,7 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `proposals.py` — Vorschläge speichern, bestätigen, abbrechen und nach Bestätigung ausführen.
 - `newsletters.py` — Newsletter erkennen und unterstützte Abbestellwege ausführen.
 - `insights.py` — Kurzfassungen und Fristen erzeugen und zwischenspeichern.
+- `original.py` — Kopfzeilen und Quelltext einer Mail lesend beim Anbieter abrufen; nichts davon wird gespeichert.
 - `jobs.py` — dauerhafte Jobs und periodisches Einreihen von Abrufen.
 - `sync.py` — inkrementelle Änderungen im Index anwenden; `sync_connector.py`, `sync_gmail.py`,
   `sync_graph.py`, `sync_imap.py` — Abruf und Parsing je Provider; `sync_types.py` — gemeinsame Sync-Typen und Helfer.
@@ -100,6 +101,7 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}` | `mail_message_get` |
 | Mail / Nachrichten | POST | `/api/v1/mail/messages/{message_id}/actions` | `mail_message_action` |
 | Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}/insight` | `mail_message_insight` |
+| Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}/original` | `mail_message_original` |
 | Mail / Übersicht | GET | `/api/v1/mail/summary` | `mail_summary` |
 | Mail / Abruf | POST | `/api/v1/mail/sync` | `mail_sync_all` |
 
@@ -174,8 +176,9 @@ in der Probe HTTP 401.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
 - Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus. `.../cancel` verwirft sie.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
-- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_messages_list`, `mail_summary`
+- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`
   `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
+  `mail_message_original` ruft die Mail beim Anbieter ab (lesend, ohne sie als gelesen zu markieren) und speichert nichts.
   Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.
   Neue verändernde Operationen gehören bewusst in `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, sonst scheitert der Inventur-Test.
 

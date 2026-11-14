@@ -38,6 +38,17 @@ class InsightOut(BaseModel):
     created_at: datetime
 
 
+class MessageHeaderOut(BaseModel):
+    name: str
+    value: str
+
+
+class MessageOriginalOut(BaseModel):
+    headers: list[MessageHeaderOut]
+    source: str
+    truncated: bool
+
+
 class MessageDetailOut(MessageListItemOut):
     to: list[str]
     cc: list[str]
@@ -45,6 +56,7 @@ class MessageDetailOut(MessageListItemOut):
     attachments: list[AttachmentOut]
     thread_id: str
     can_unsubscribe: bool
+    can_show_original: bool
 
 
 class MessagePageOut(BaseModel):

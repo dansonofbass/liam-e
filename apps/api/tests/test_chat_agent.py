@@ -170,7 +170,7 @@ async def test_system_prompt_contains_tone_and_safety_rules():
     assert 'drei' in prompt
     from api.mail.agent_prompt import TERMS_AND_FORMATS
     assert TERMS_AND_FORMATS in prompt
-    for text in ('Diese Regeln gelten für Antworten an den Nutzer.', 'Schreibe du und dein klein.', 'Sprache und Anrede der ursprünglichen Mail', 'mit Anrede und Grußformel', 'Nach propose_action oder create_draft ist noch nichts geschehen', 'erst nach Bestätigung', 'Infinitiv mit Objekt und einem bis vier Wörtern', 'niemals als Fragen', 'Biete auch im Text nichts als Frage an.', '„Gerne“', '„Natürlich“', '„Ich hoffe, das hilft“', 'Begrüßungen nach Tageszeit'):
+    for text in ('Diese Regeln gelten für Antworten an den Nutzer.', 'Schreibe du und dein klein.', 'Sprache und Anrede der ursprünglichen Mail', 'mit Anrede und Grußformel', 'frag danach, bevor du create_draft aufrufst', 'erfinde nie eine Adresse', 'Nach propose_action oder create_draft ist noch nichts geschehen', 'erst nach Bestätigung', 'Infinitiv mit Objekt und einem bis vier Wörtern', 'niemals als Fragen', 'Biete auch im Text nichts als Frage an.', '„Gerne“', '„Natürlich“', '„Ich hoffe, das hilft“', 'Begrüßungen nach Tageszeit'):
         assert text in prompt
     for text in ('Entwurf statt Draft', 'abrufen statt synchronisieren', 'in den Papierkorb legen statt löschen', 'abbestellen statt abmelden', 'bestätigen statt zustimmen', 'Mail statt E-Mail', 'Konto statt Account oder Postfach', 'Freitag, 21. November', '8:57 Uhr', '184,20 €', '2.314', 'Zahlen bis zwölf', '„…“', '„–“'):
         assert text in TERMS_AND_FORMATS

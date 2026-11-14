@@ -29,6 +29,20 @@ test('ignores keys typed into fields and handles list keys', () => {
   expect(list.textContent).toBe('1')
 })
 
+test('does nothing behind an open dialog, wherever the focus is', () => {
+  const { archive, list } = setup(true)
+  const dialog = document.createElement('div')
+  dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true')
+  document.body.append(dialog)
+  try {
+    for (const target of [document.body, list]) { fireEvent.keyDown(target, { key: 'e' }); fireEvent.keyDown(target, { key: 'j' }) }
+    expect(archive).toHaveBeenCalledTimes(0)
+    expect(list.textContent).toBe('0')
+  } finally { dialog.remove() }
+  fireEvent.keyDown(document.body, { key: 'e' })
+  expect(archive).toHaveBeenCalledTimes(1)
+})
+
 test('does nothing on mobile', () => {
   const { archive, list } = setup(false)
   fireEvent.keyDown(list, { key: 'e' })

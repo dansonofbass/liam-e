@@ -11,6 +11,8 @@ export function useInboxKeys(handlers: Handlers) {
       if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return
       const target = event.target instanceof Element ? event.target : null
       if (target?.closest('input, textarea, select, [contenteditable], [role="menu"], [role="dialog"]')) return
+      // An open dialog blocks the list even when the focus is not inside it (its focused element was removed).
+      if (document.querySelector('[aria-modal="true"]')) return
       if (event.key === 'Enter' && target?.closest('button, a')) return
       const action = ({ j: handlers.onNext, k: handlers.onPrev, Enter: handlers.onOpen, e: handlers.onArchive, u: handlers.onToggleRead, '#': handlers.onTrash, Delete: handlers.onTrash } as Record<string, (() => void) | undefined>)[event.key]
       if (action) { event.preventDefault(); action() }

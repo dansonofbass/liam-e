@@ -227,6 +227,43 @@ def test_backend_unsupported_restores_index(client, setup):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("folder", ["INBOX", "ARCHIVE"])
+async def test_spam_and_undo_restore_snapshot(setup, folder):
+    store, backend = setup
+    row = store.messages["m"]
+    row.folder = folder
+    row.is_read = True
+    row.labels_json = '["custom"]'
+    backend.apply.return_value = {"provider_uid": "new", "labels_json": '["SPAM"]'}
+    action = await actions.apply_action("m", "spam")
+    assert store.messages["m"].folder == "SPAM"
+    assert (await actions.undo_actions([action.id], now=datetime.now(UTC))).restored == [action.id]
+    row = store.messages["m"]
+    assert (row.folder, row.is_read, row.provider_uid, row.labels_json) == (folder, True, "uid", '["custom"]')
+
+
+@pytest.mark.anyio
+async def test_spam_failure_rolls_back(setup):
+    store, backend = setup
+    backend.apply.side_effect = RuntimeError()
+    with pytest.raises(actions.ActionFailedError):
+        await actions.apply_action("m", "spam")
+    assert store.messages["m"].folder == "INBOX"
+    assert not store.actions
+
+
+def test_spam_api(client, setup):
+    store, _ = setup
+    assert client.post("/api/v1/mail/messages/m/actions", json={"kind": "unknown"}).status_code == 422
+    response = client.post("/api/v1/mail/messages/m/actions", json={"kind": "spam"})
+    assert response.status_code == 200 and response.json()["action_id"]
+    for folder in ("SPAM", "TRASH"):
+        store.messages["m"].folder = folder
+        response = client.post("/api/v1/mail/messages/m/actions", json={"kind": "spam"})
+        assert response.status_code == 409 and response.json()["detail"]["code"] == "action_unsupported"
+
+
+@pytest.mark.anyio
 async def test_undo_missing_message_and_duplicate_ids(setup):
     store, backend = setup
     action = await actions.apply_action("m", "archive")

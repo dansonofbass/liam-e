@@ -56,14 +56,14 @@ class LabelBackend:
     async def apply(self, message: MailMessage, kind: ActionKind) -> dict:
         # Folder state remains authoritative even if a connector omitted labels.
         current = set(json.loads(message.labels_json))
-        if message.folder == "INBOX":
-            current.add("INBOX")
-        if message.folder == "TRASH":
-            current.add("TRASH")
+        if message.folder in ("INBOX", "TRASH", "SPAM"):
+            current.add(message.folder)
         if kind == "archive":
             desired = sorted(current - {"INBOX"})
         elif kind == "trash":
             desired = sorted((current - {"INBOX"}) | {"TRASH"})
+        elif kind == "spam":
+            desired = sorted((current - {"INBOX"}) | {"SPAM"})
         elif kind == "restore":
             desired = sorted((current - {"TRASH"}) | {"INBOX"} | (set() if message.is_read else {"UNREAD"}))
         elif kind == "mark_read":
@@ -77,8 +77,10 @@ class LabelBackend:
     async def revert(self, message: MailMessage, previous: dict) -> dict:
         current = set(json.loads(message.labels_json))
         desired = set(json.loads(previous["labels_json"]))
-        desired.difference_update({"INBOX", "TRASH", "UNREAD"})
-        if previous["folder"] in ("INBOX", "TRASH"):
+        if message.folder in ("INBOX", "TRASH", "SPAM"):
+            current.add(message.folder)
+        desired.difference_update({"INBOX", "TRASH", "SPAM", "UNREAD"})
+        if previous["folder"] in ("INBOX", "TRASH", "SPAM"):
             desired.add(previous["folder"])
         if not previous["is_read"]:
             desired.add("UNREAD")
@@ -122,7 +124,7 @@ class GraphBackend:
                 response = await client.patch(f"/me/messages/{quote(uid, safe='')}", json={"isRead": is_read})
                 response.raise_for_status()
             if folder is not None and folder != message.folder:
-                destination = {"INBOX": "inbox", "ARCHIVE": "archive", "TRASH": "deleteditems"}.get(folder)
+                destination = {"INBOX": "inbox", "ARCHIVE": "archive", "TRASH": "deleteditems", "SPAM": "junkemail"}.get(folder)
                 if destination is None:
                     raise ActionUnsupportedError()
                 response = await client.post(f"/me/messages/{quote(uid, safe='')}/move", json={"destinationId": destination})
@@ -136,7 +138,7 @@ class GraphBackend:
     async def apply(self, message: MailMessage, kind: ActionKind) -> dict:
         if kind in ("mark_read", "mark_unread"):
             return await self._change(message, is_read=kind == "mark_read")
-        return await self._change(message, folder={"archive": "ARCHIVE", "trash": "TRASH", "restore": "INBOX"}[kind])
+        return await self._change(message, folder={"archive": "ARCHIVE", "trash": "TRASH", "spam": "SPAM", "restore": "INBOX"}[kind])
 
     async def revert(self, message: MailMessage, previous: dict) -> dict:
         updates = await self._change(message, folder=previous["folder"], is_read=previous["is_read"])
@@ -160,7 +162,7 @@ def _ok(result):
 def _folder(folder: str, listing: list) -> str:
     if folder == "INBOX":
         return "INBOX"
-    special = {"ARCHIVE": "\\archive", "TRASH": "\\trash"}.get(folder)
+    special = {"ARCHIVE": "\\archive", "TRASH": "\\trash", "SPAM": "\\junk"}.get(folder)
     if special is None:
         raise ActionUnsupportedError()
     parsed = []
@@ -178,7 +180,7 @@ def _folder(folder: str, listing: list) -> str:
     for flags, name in parsed:
         if special in flags:
             return name
-    for fallback in {"ARCHIVE": ("Archive", "Archiv"), "TRASH": ("Trash", "Papierkorb", "Deleted Items")}[folder]:
+    for fallback in {"ARCHIVE": ("Archive", "Archiv"), "TRASH": ("Trash", "Papierkorb", "Deleted Items"), "SPAM": ("Junk", "Spam", "Junk E-Mail", "Junk-E-Mail", "Bulk", "Bulk Mail")}[folder]:
         if any(name == fallback for _, name in parsed):
             return fallback
     raise ActionUnsupportedError()
@@ -199,7 +201,7 @@ class ImapBackend:
         self.account = account
 
     async def apply(self, message: MailMessage, kind: ActionKind) -> dict:
-        folder = {"archive": "ARCHIVE", "trash": "TRASH", "restore": "INBOX"}.get(kind, message.folder)
+        folder = {"archive": "ARCHIVE", "trash": "TRASH", "spam": "SPAM", "restore": "INBOX"}.get(kind, message.folder)
         is_read = kind == "mark_read" if kind in ("mark_read", "mark_unread") else None
         return await self._run(message, folder, is_read, undo=False)
 

@@ -15,10 +15,10 @@ from db.models.mail_message import MailMessage
 from fastapi import APIRouter, Query
 
 from api.errors import refuse
-from api.mail import actions, insights
+from api.mail import actions, insights, original
 from api.mail.headers import sender_name
 from api.mail.state import color_indexes
-from api.routers.api.v1.mail.schemas import InsightOut, MessageActionIn, MessageActionOut, MessageDetailOut, MessageListItemOut, MessagePageOut
+from api.routers.api.v1.mail.schemas import InsightOut, MessageActionIn, MessageActionOut, MessageDetailOut, MessageListItemOut, MessageOriginalOut, MessagePageOut
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -112,6 +112,25 @@ async def message_insight(message_id: str) -> InsightOut:
                       followups=json.loads(row.followups_json), model=row.model, created_at=row.created_at)
 
 
+@router.get("/{message_id}/original", operation_id="mail_message_original", summary="Read the original headers and source of one message")
+async def message_original(message_id: str) -> MessageOriginalOut:
+    """Fetch the original without storing it or changing its read status."""
+    message = await message_access.get_message(message_id)
+    if message is None:
+        raise refuse(404, "message_not_found", "Die Mail ist nicht mehr da.")
+    account = await account_access.get_account(message.account_id)
+    if not original.available(account):
+        raise refuse(409, "original_unavailable", "Bei dieser Mail lässt sich das Original nicht abrufen.")
+    try:
+        result = await original.fetch(account, message)
+    except actions.ActionUnsupportedError:
+        raise refuse(409, "original_unavailable", "Bei dieser Mail lässt sich das Original nicht abrufen.") from None
+    except Exception as error:
+        logger.warning("Original fetch failed: %s", type(error).__name__)
+        raise refuse(502, "provider_failed", "Das Original ließ sich beim Anbieter nicht abrufen. Versuch es gleich noch mal.") from None
+    return MessageOriginalOut(**result)
+
+
 @router.get("/{message_id}", operation_id="mail_message_get", summary="Read one synced message in full")
 async def get_message(message_id: str) -> MessageDetailOut:
     """Return one indexed message or 404 if it does not exist."""
@@ -119,10 +138,13 @@ async def get_message(message_id: str) -> MessageDetailOut:
     if message is None:
         raise refuse(404, "message_not_found", "Die Mail ist nicht mehr da.")
     insights = await insight_access.get_for_messages([message.id])
-    colors = color_indexes(await account_access.list_accounts())
+    accounts = await account_access.list_accounts()
+    colors = color_indexes(accounts)
+    account = next((account for account in accounts if account.id == message.account_id), None)
     return MessageDetailOut(
         **list_item(message, colors, insights.get(message.id)).model_dump(),
         to=json.loads(message.recipients_json), cc=json.loads(message.cc_json),
         body_text=message.body_text, attachments=json.loads(message.attachments_json),
         thread_id=message.thread_id, can_unsubscribe=bool(message.list_unsubscribe),
+        can_show_original=original.available(account),
     )
