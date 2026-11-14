@@ -23,7 +23,7 @@ function setup(mobile = false) {
     const { data } = useQuery<InfiniteData<MessagePageOut>>({ queryKey: key, queryFn: async () => client.getQueryData<InfiniteData<MessagePageOut>>(key)!, enabled: false })
     const { run, undo, notify, toast } = useMailActions({ clock: time.clock })
     return <><div>{data?.pages.flatMap(page => page.items).map(row => <div key={row.id}>{row.subject}:{String(row.is_read)}</div>)}</div>
-      <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'archive') }}>archive 2</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button>
+      <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'archive') }}>archive 2</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'spam') }}>spam 1</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button>
       <button onClick={() => { void run('2', 'mark_read', { silent: true }) }}>silent read 2</button><button onClick={() => { void run('1', 'mark_read', { silent: true }) }}>silent read 1</button><button onClick={() => notify('refresh failed')}>notify</button><button onClick={() => { void undo() }}>force undo</button>
       {toast && <div role="status" data-tone={toast.tone}>{toast.text}{toast.undoable && <button onClick={() => { void undo() }}>Rückgängig</button>}</div>}</>
   }
@@ -176,6 +176,30 @@ test('a single successful archive reconciles messages once after settling', asyn
   expect(messageInvalidations()).toHaveLength(0)
   await act(async () => { finish({ data: { action_id: 'action-1', message: rows[0] }, response: { status: 200 } }) })
   expect(messageInvalidations()).toHaveLength(1)
+})
+
+test('spam removes the row, names the mail and can be undone', async () => {
+  const action = success(); setup()
+  const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['action-1'], expired: [], skipped: [], failed: [] } })) as never)
+  fireEvent.click(screen.getByText('spam 1'))
+  await waitFor(() => expect(screen.queryByText('Erste:false')).toBeNull())
+  expect(action).toHaveBeenCalledWith({ path: { message_id: '1' }, body: { kind: 'spam' } })
+  expect(await screen.findByText('„Erste“ als Spam markiert.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Rückgängig' }))
+  expect(await screen.findByText('Erste:false')).toBeTruthy()
+  expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['action-1'] } })
+})
+
+test('spam on mobile uses the short success text', async () => {
+  success(); setup(true); fireEvent.click(screen.getByText('spam 1'))
+  expect(await screen.findByText('Mail als Spam markiert.')).toBeTruthy()
+})
+
+test('a refused spam action puts the row back and says so', async () => {
+  spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ response: { status: 409 }, error: { detail: { code: 'action_unsupported' } } })) as never)
+  setup(); fireEvent.click(screen.getByText('spam 1'))
+  expect(await screen.findByText('Das geht bei dieser Mail nicht.')).toBeTruthy()
+  expect(screen.getByText('Erste:false')).toBeTruthy()
 })
 
 test('mobile uses the short success text', async () => {

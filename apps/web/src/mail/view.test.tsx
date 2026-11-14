@@ -228,6 +228,15 @@ test('forward menu entry asks the assistant to forward this mail', async () => {
   expect(request()?.account_id).toBeUndefined()
 })
 
+test('spam menu entry marks the mail as spam and leaves the opened mail', async () => {
+  const { action, router } = setup({ mobile: true }); await screen.findByRole('heading', { name: 'Termin' })
+  fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Als Spam markieren' }))
+  await waitFor(() => expect(action).toHaveBeenCalledWith({ path: { message_id: 'm1' }, body: { kind: 'spam' } }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+  expect(await screen.findByText('Mail als Spam markiert.')).toBeTruthy()
+})
+
 test('newsletter menu starts the contextual confirmation turn', async () => {
   const { request } = setup({ mobile: true }); await screen.findByRole('heading', { name: 'Termin' })
   fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))

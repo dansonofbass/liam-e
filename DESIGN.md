@@ -304,7 +304,7 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   Schnellaktionen tragen 19 px. Keine Emojis, keine Logos der Anbieter.
 - **Lexikon:** `message-circle` Chat · `messages-square` Unterhaltungen (Symbolleiste am Tablet) · `inbox` Posteingang · `at-sign` Konten · `archive`
   Archivieren · `trash-2` In den Papierkorb · `reply` Antworten · `pencil` Antwort
-  entwerfen · `forward` Weiterleiten · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`
+  entwerfen · `forward` Weiterleiten · `ban` Als Spam markieren · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`
   Weitere Aktionen · `external-link` Mail öffnen · `arrow-up` Senden · `square` (gefüllt)
   Anhalten · `sparkle` Assistent · `flag` Priorisieren · `newspaper` Newsletter · `clock`
   Frist · `paperclip` Anhang · `check`, `circle-alert`, `info` in Hinweisen · `menu` Menü
@@ -425,11 +425,13 @@ Anfang an mit.
   Dringend-Punkt und Anhang-Symbol sichtbar bleiben und ihr Tooltip erreichbar ist.
 - Eine Frist steht auf allen Breakpoints als Schild in `warm-soft` unter dem Vorschautext,
   auf `mobile` neben dem Konto-Tag.
-- Das Menü „Weitere Aktionen“ der geöffneten Mail enthält „Weiterleiten“ und „Newsletter
-  abbestellen“. Beide schlagen ihre Aktion im Chat vor (§9.2): „Weiterleiten“ bittet um
-  einen Entwurf, und der Assistent fragt dort nach dem Empfänger; „Newsletter abbestellen“
-  ist gesperrt, mit Hinweis, wo die Mail keinen Weg zum Abbestellen nennt. Geplant sind
-  „Als Spam markieren“ und „Original anzeigen“ (Entscheidung 4 vom 2026-11-14).
+- Das Menü „Weitere Aktionen“ der geöffneten Mail enthält „Weiterleiten“, „Newsletter
+  abbestellen“ und „Als Spam markieren“. Die ersten beiden schlagen ihre Aktion im Chat vor
+  (§9.2): „Weiterleiten“ bittet um einen Entwurf, und der Assistent fragt dort nach dem
+  Empfänger; „Newsletter abbestellen“ ist gesperrt, mit Hinweis, wo die Mail keinen Weg zum
+  Abbestellen nennt. „Als Spam markieren“ ist eine Einzelaktion (§9.2): Die Mail
+  verschwindet sofort aus der Liste, und der Hinweis bietet „Rückgängig“. Geplant ist
+  „Original anzeigen“ (Entscheidung 4 vom 2026-11-14).
 - Filter-Chips stehen auf `mobile` in einer Zeile, die für sich seitlich scrollt; die Seite
   scrollt nie seitlich.
 
@@ -490,7 +492,7 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 - Nach dem Klick ersetzt ein Hinweis die Karte, mit Ergebnis und „Rückgängig“, wo es geht.
   Nie automatisch bestätigen, nie zwei offene Karten gleichzeitig.
 - **Einzelaktionen im Posteingang** (eine Mail archivieren, gelesen/ungelesen, in den
-  Papierkorb) löst du selbst aus; sie wirken sofort und zeigen danach 10 Sekunden lang
+  Papierkorb, als Spam markieren) löst du selbst aus; sie wirken sofort und zeigen danach 10 Sekunden lang
   einen Hinweis mit „Rückgängig“. Alles,
   was mehrere Mails betrifft, läuft über den Chat und eine Bestätigungskarte.
 
