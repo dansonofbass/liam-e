@@ -6,7 +6,11 @@ from datetime import UTC, datetime
 
 from api.mail import dev_seed
 from api.mail.dev_seed import SeedRefusedError, db_env, require_local_database
+from db.models.chat_conversation import ChatConversation
+from db.models.chat_message import ChatMessage
 from db.models.mail_account import MailAccount
+from api.mail.proposals import proposal_view
+from api.mail.chat_schemas import ChatExtrasOut
 from db.models.mail_message import MailMessage
 
 
@@ -38,6 +42,31 @@ async def test_seed_is_repeatable_and_preserves_other_rows(fake_store, monkeypat
     fake_store.accounts[outsider.id] = outsider
     fake_store.messages[other_mail.id] = other_mail
     insights = {}
+    outsider_conversation = ChatConversation(id="other-conversation", title="Other")
+    outsider_chat = ChatMessage(conversation_id=outsider_conversation.id, role="user", content="Other")
+    conversations = {outsider_conversation.id: outsider_conversation}
+    chats = {outsider_chat.id: outsider_chat}
+
+    async def replace_conversations(rows):
+        ids = {row.id for row in rows}
+        for id in list(chats):
+            if chats[id].conversation_id in ids:
+                del chats[id]
+        conversations.update({row.id: row for row in rows})
+
+    async def add_message(**kwargs):
+        row = ChatMessage(**kwargs)
+        chats[row.id] = row
+        return row
+
+    async def cancel_open_proposals(conversation_id):
+        for row in chats.values():
+            if row.conversation_id == conversation_id and row.proposal_status == "pending":
+                row.proposal_status = "cancelled"
+
+    monkeypatch.setattr(dev_seed.seed_access, "replace_conversations", replace_conversations)
+    monkeypatch.setattr(dev_seed.chat_access, "add_message", add_message)
+    monkeypatch.setattr(dev_seed.chat_access, "cancel_open_proposals", cancel_open_proposals)
 
     async def replace(accounts, states, messages, rows, jobs):
         for account in accounts:
@@ -57,7 +86,30 @@ async def test_seed_is_repeatable_and_preserves_other_rows(fake_store, monkeypat
     now = datetime(2026, 11, 13, 12, 30, tzinfo=UTC)
     for _ in range(2):
         result = await dev_seed.seed(now)
-        assert (result.accounts, result.mails, result.unread, result.insights) == (4, 67, 47, 1)
+        assert (result.accounts, result.mails, result.unread, result.insights, result.conversations, result.proposals) == (4, 67, 47, 1, 4, 1)
+        assert len(conversations) == 5
+        assert len(chats) == 8
+        assert conversations[outsider_conversation.id] == outsider_conversation
+        assert chats[outsider_chat.id] == outsider_chat
+        proposals = [row for row in chats.values() if row.proposal_status == "pending"]
+        assert len(proposals) == 1
+        proposal = proposal_view(proposals[0])
+        assert proposal is not None and proposal.kind == "unsubscribe"
+        assert [item.title for item in proposal.items] == ["Wohnwelt Deals", "Laufschuh-Club", "TechDigest Weekly", "Gartenfreunde Post", "ReiseRadar"]
+        assert [item.count for item in proposal.items] == [23, 11, 14, 6, 7]
+        for item in proposal.items:
+            account_id, address = item.id.split("|", 1)
+            matching = [m for m in fake_store.messages.values() if m.account_id == account_id and m.sender_address == address]
+            assert item.selected and len(matching) == item.count
+        first_id = dev_seed.seed_id("conversation", "was-ist-heute-wichtig")
+        first = [row for row in chats.values() if row.conversation_id == first_id]
+        assert [row.role for row in first] == ["user", "assistant"]
+        extras = ChatExtrasOut.model_validate_json(first[1].extras_json)
+        assert extras.mails == [dev_seed.seed_id("mail", key) for key in ("hausverwaltung-nebenkosten", "meyer-angebot-4471", "kita-elternabend")]
+        assert extras.suggestions == ["Antworten entwerfen", "Nur die Hausverwaltung", "Was steht in der Abrechnung?"]
+        assert extras.model == "mistral-medium-latest"
+        assert first[1].content.startswith("Auf drei Mails solltest du heute antworten.\n\n")
+        assert conversations[first_id].updated_at == datetime(2026, 11, 13, 7, 57, tzinfo=UTC)
         assert len(fake_store.accounts) == 5
         assert len(fake_store.messages) == 68
         assert len(insights) == 1

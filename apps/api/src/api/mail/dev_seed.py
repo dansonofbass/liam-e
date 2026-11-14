@@ -9,12 +9,16 @@ from urllib.parse import parse_qsl, urlsplit
 from uuid import UUID, uuid5
 from zoneinfo import ZoneInfo
 
-from db.accessors import dev_seed as seed_access, mail_insight
+from db.accessors import chat_message as chat_access, dev_seed as seed_access, mail_insight
+from db.models.chat_conversation import ChatConversation
 from db.models.mail_account import MailAccount
 from db.models.mail_message import MailMessage
 from db.models.mail_job import MailJob
 from db.models.mail_sync_state import MailSyncState
 from env.db import env as db_env
+
+from api.mail import newsletters, proposals
+from api.mail.chat_schemas import ChatExtrasOut
 
 SEED_NAMESPACE = UUID("e7a6334c-ec02-4ac7-b7b0-14e98b91e689")
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -30,6 +34,8 @@ class SeedResult:
     mails: int
     unread: int
     insights: int
+    conversations: int
+    proposals: int
 
 
 class SeedRefusedError(Exception):
@@ -140,7 +146,51 @@ async def seed(now: datetime | None = None) -> SeedResult:
                     dedupe_key=f"seed-sync-{by_key['familie'].id}", locked_at=started,
                     created_at=started, updated_at=started)]
     await seed_access.replace_mail_data(accounts, states, messages, [insight], jobs)
-    return SeedResult(len(accounts), len(messages), sum(not m.is_read for m in messages), 1)
+
+    conversation_specs = [
+        ("was-ist-heute-wichtig", "Was ist heute wichtig?", at(0, "08:57")),
+        ("newsletter-aufraeumen", "Newsletter aufräumen", at(1, "10:00")),
+        ("angebot-meyer-gmbh", "Angebot Meyer GmbH", at(3, "10:00")),
+        ("belege-fuer-die-steuer", "Belege für die Steuer", at(12, "10:00")),
+    ]
+    conversations = [ChatConversation(id=seed_id("conversation", key), title=title,
+                                     model="mistral-medium-latest", created_at=updated, updated_at=updated)
+                     for key, title, updated in conversation_specs]
+    await seed_access.replace_conversations(conversations)
+    first, second, third, fourth = conversations
+    await chat_access.add_message(conversation_id=first.id, role="user", content="Was ist heute wichtig?")
+    extras = ChatExtrasOut(
+        mails=[seed_id("mail", key) for key in ("hausverwaltung-nebenkosten", "meyer-angebot-4471", "kita-elternabend")],
+        suggestions=["Antworten entwerfen", "Nur die Hausverwaltung", "Was steht in der Abrechnung?"],
+        model="mistral-medium-latest",
+    )
+    await chat_access.add_message(conversation_id=first.id, role="assistant", extras_json=extras.model_dump_json(),
+        content="Auf drei Mails solltest du heute antworten.\n\nAm dringendsten ist die Nebenkostenabrechnung der Hausverwaltung Kurz, denn Einwände nimmt sie nur bis nächsten Freitag an. Die Meyer GmbH möchte bis Montag wissen, ob du ihr Angebot annimmst, und die Kita fragt, ob du zum Elternabend kommst.")
+    await chat_access.add_message(conversation_id=second.id, role="user", content="Räum meine Newsletter auf.")
+    await chat_access.add_message(conversation_id=second.id, role="assistant",
+        content="Ich habe 14 Absender gefunden, die dir regelmäßig Newsletter schicken. Fünf davon hast du seit über drei Monaten nicht geöffnet; die schlage ich zum Abbestellen vor. Die anderen neun liest du, sie bleiben, wie sie sind.",
+        extras_json=ChatExtrasOut(model="mistral-medium-latest").model_dump_json())
+    items = []
+    for sender, slug, account, _, _ in NEWSLETTERS:
+        address = f"newsletter@{slug}.example"
+        sender_mails = [m for m in messages if m.account_id == by_key[account].id and m.sender_address == address]
+        link = f"<mailto:abmelden@{slug}.example>"
+        method, uri = newsletters.unsubscribe_method(link, "")
+        target = newsletters.parse_mailto(uri)
+        subtitle = f"{address} · {len(sender_mails)} Mails"
+        if target:
+            subtitle += f" · {target.recipient} · {target.subject} · {target.body}"
+        items.append(proposals.ProposalItem(
+            id=f"{by_key[account].id}|{address}", kind="sender", title=sender, subtitle=subtitle,
+            count=len(sender_mails), unread=sum(not m.is_read for m in sender_mails),
+            last_read_at=max((m.internal_date for m in sender_mails if m.is_read and m.internal_date), default=None),
+            method=method,
+        ))
+    await proposals.create_proposal(second.id, proposals.Proposal(
+        kind="unsubscribe", reason="Du hast sie seit über drei Monaten nicht geöffnet.", items=items))
+    for conversation in (third, fourth):
+        await chat_access.add_message(conversation_id=conversation.id, role="user", content=conversation.title)
+    return SeedResult(len(accounts), len(messages), sum(not m.is_read for m in messages), 1, len(conversations), 1)
 
 
 def main() -> None:
@@ -149,7 +199,7 @@ def main() -> None:
     except SeedRefusedError as error:
         print(str(error), file=sys.stderr)
         raise SystemExit(2) from None
-    print(f"Seeded {result.accounts} accounts, {result.mails} mails, {result.unread} unread, {result.insights} insights.")
+    print(f"Seeded {result.accounts} accounts, {result.mails} mails, {result.unread} unread, {result.insights} insights, {result.conversations} conversations, {result.proposals} proposals.")
 
 
 if __name__ == "__main__":
