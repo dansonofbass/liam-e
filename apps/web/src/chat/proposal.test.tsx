@@ -414,6 +414,22 @@ test('a confirmation that finishes after the card is gone does not take the focu
   expect(document.activeElement).toBe(document.body)
 })
 
+test('a confirmation that finishes after the card shows another proposal does not take the focus later', async () => {
+  let resolve: (value: { data: ChatMessageOut }) => void = () => {}
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((() => new Promise(done => { resolve = done })) as never)
+  const client = new QueryClient()
+  const card = (row: ChatMessageOut) => <QueryClientProvider client={client}><ProposalCard message={row} /></QueryClientProvider>
+  const view = render(card(message()))
+  const button = screen.getByRole('button', { name: '2 abbestellen und archivieren' })
+  button.focus(); fireEvent.click(button)
+  view.rerender(card({ ...message(), id: 'q' }))
+  await act(async () => { resolve({ data: message('done', { done: 2 }) }); await new Promise(done => setTimeout(done, 0)) })
+  view.unmount()
+  render(card(message('done', { done: 2 })))
+  await screen.findByText(/2 Newsletter abbestellt/)
+  expect(document.activeElement).toBe(document.body)
+})
+
 test('a settled card loaded from the history does not take the focus', async () => {
   setup(message('done', { done: 1 }))
   await screen.findByText('1 Newsletter abbestellt.')

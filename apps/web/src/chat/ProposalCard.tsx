@@ -106,9 +106,9 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   const [, refresh] = useState(0)
   const pending = useRef(false)
   const outcome = useRef<HTMLDivElement>(null)
-  // A response that arrives after the card is gone must not leave a focus request for a later mount.
-  const mounted = useRef(false)
-  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  // A response that arrives after the card is gone or shows another proposal must not leave a focus request for a later mount.
+  const shown = useRef<string | null>(null)
+  useLayoutEffect(() => { shown.current = message.id; return () => { shown.current = null } }, [message.id])
   const current = updated?.id === message.id && !(updated.proposal_status === 'running' && message.proposal_status !== 'pending' && message.proposal_status !== 'running') ? updated : message
   const proposal = current.proposal
   useEffect(() => {
@@ -129,7 +129,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
     try {
       const result = await operation()
       if (confirm) cardState(client, result.id).deadline = clock.now() + 10_000
-      if (mounted.current) cardState(client, result.id).focus = true
+      if (shown.current === result.id) cardState(client, result.id).focus = true
       setUpdated(result)
       client.setQueryData<ChatMessageOut[]>(['history', current.conversation_id], rows => rows?.map(row => row.id === result.id ? result : row))
       void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
