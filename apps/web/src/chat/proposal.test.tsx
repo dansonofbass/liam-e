@@ -327,6 +327,14 @@ test('unsubscribe without archived mail and unsafe manual link', async () => {
   expect(links[0]?.getAttribute('href')).toBe('https://example.org/unsubscribe')
   expect(links[0]?.getAttribute('rel')).toBe('noopener noreferrer')
   expect(links[0]?.parentElement?.classList.contains('le-proposal-manual')).toBe(true)
+  expect(screen.getByText('Alpha: Kein Abmeldelink bekannt. Öffne eine Mail dieses Newsletters und bestell ihn dort ab.').classList.contains('le-proposal-manual')).toBe(true)
+})
+
+test('a manual unsubscribe without a link names the next step', async () => {
+  setup(message('done', { done: 0, failed: [], manual: [{ id: 'b', link: null }], undo_action_ids: ['u1', 'u2'] }))
+  expect(await screen.findByText('Kein Newsletter abbestellt, 2 Mails archiviert.')).toBeTruthy()
+  expect(screen.getByText('Beta: Kein Abmeldelink bekannt. Öffne eine Mail dieses Newsletters und bestell ihn dort ab.')).toBeTruthy()
+  expect(screen.queryByRole('link')).toBeNull()
 })
 
 test('after confirming, the focus moves from the gone button to the result', async () => {

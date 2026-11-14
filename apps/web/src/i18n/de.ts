@@ -99,6 +99,7 @@ export const de = {
     irreversibleUnsubscribe: 'Abbestellen lässt sich nicht rückgängig machen.',
     irreversibleSend: 'Gesendete Mails lassen sich nicht zurückholen.',
     manualSubtitle: 'nur über den Link im Newsletter', manualLink: 'Abmeldeseite öffnen',
+    manualNoLink: 'Kein Abmeldelink bekannt. Öffne eine Mail dieses Newsletters und bestell ihn dort ab.',
     results: {
       unsubscribe: (n: number, mails: number) => `${plural(n, { zero: 'Kein Newsletter', one: '# Newsletter', other: '# Newsletter' })} abbestellt${mails ? `, ${plural(mails, { one: '# Mail', other: '# Mails' })} archiviert` : ''}.`,
       archive: (n: number) => `${plural(n, { one: '# Mail', other: '# Mails' })} archiviert.`,

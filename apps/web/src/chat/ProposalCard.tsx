@@ -93,7 +93,7 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
   </Notice>{result?.manual?.map(entry => {
     const href = safeLink(entry.link)
     const item = proposal.items.find(candidate => candidate.id === entry.id)
-    return href ? <p key={entry.id} className="le-proposal-manual">{item?.title}{item && ': '}<a href={href} target="_blank" rel="noopener noreferrer">{de.proposal.manualLink}</a></p> : null
+    return <p key={entry.id} className="le-proposal-manual">{item?.title}{item && ': '}{href ? <a href={href} target="_blank" rel="noopener noreferrer">{de.proposal.manualLink}</a> : de.proposal.manualNoLink}</p>
   })}{error && <Notice tone="danger">{de.proposal.requestError}</Notice>}</>
 }
 
