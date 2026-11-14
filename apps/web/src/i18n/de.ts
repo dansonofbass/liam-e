@@ -53,9 +53,9 @@ export const de = {
   mail: { summary: 'Kurz gefasst', draftReply: 'Antwort entwerfen', askInChat: 'Im Chat fragen' },
   accounts: { title: 'Konten', connect: 'Konto verbinden' },
   quickActions: {
-    unread: { title: 'Ungelesenes zusammenfassen', subtitle: 'Ungelesene Mails ansehen', prompt: 'Fasse meine ungelesenen Mails zusammen.' },
-    priority: { title: 'Priorisieren', subtitle: 'Wichtiges zuerst', prompt: 'Welche Mails sind wichtig?' },
-    newsletters: { title: 'Newsletter aufräumen', subtitle: 'Newsletter durchsehen', prompt: 'Zeig mir meine Newsletter.' },
-    dueToday: { title: 'Heute fällig', subtitle: 'Fristen im Blick', prompt: 'Was ist heute fällig?' },
+    unread: { title: 'Ungelesenes zusammenfassen', subtitle: (n: number) => plural(n, { one: '# Mail', other: '# Mails' }), prompt: 'Fasse meine ungelesenen Mails zusammen.' },
+    priority: { title: 'Priorisieren', subtitle: 'Was wartet auf dich?', prompt: 'Welche Mails sind wichtig?' },
+    newsletters: { title: 'Newsletter aufräumen', subtitle: (n: number) => plural(n, { one: '# Absender', other: '# Absender' }), prompt: 'Zeig mir meine Newsletter.' },
+    dueToday: { title: 'Heute fällig', subtitle: 'Fristen und Termine', prompt: 'Was ist heute fällig?' },
   },
 } as const
