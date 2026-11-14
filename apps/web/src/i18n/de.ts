@@ -4,9 +4,11 @@ export const de = {
   shell: {
     chat: 'Chat', inbox: 'Posteingang', accounts: 'Konten', conversations: 'Unterhaltungen',
     newConversation: 'Neue Unterhaltung', openMenu: 'Menü öffnen', close: 'Schließen',
+    chatTip: 'Mit deinen Mails chatten und Aufgaben erledigen', inboxTip: 'Mails aus allen Konten in einer Liste', accountsTip: 'Konten verbinden und verwalten',
+    accountCount: (n: number) => plural(n, { one: '# Konto', other: '# Konten' }),
   },
   chat: {
-    greeting: 'Hallo, was kann ich für dich tun?', placeholder: 'Frag etwas zu deinen Mails …',
+    greeting: 'Hallo, was kann ich für dich tun?', greetingFirst: 'Hallo,', greetingSecond: 'was kann ich für dich tun?', placeholder: 'Frag etwas zu deinen Mails …',
     stopped: 'Angehalten – die Antwort ist unvollständig.', retry: 'Noch mal versuchen',
   },
   status: {

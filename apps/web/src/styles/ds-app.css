@@ -22,3 +22,13 @@
 @media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } }
 @media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (prefers-reduced-motion: reduce) { .le-drawer { animation-name: le-tooltip-fade; } }
+
+.le-shell-sidebar { display: flex; flex-direction: column; flex: 1; min-height: 100%; }
+.le-shell-status { margin-top: auto; padding: var(--space-3); }
+.le-page-fade { animation: le-page-enter 220ms cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes le-page-enter { from { opacity: 0; } to { opacity: 1; } }
+.le-greeting { padding: var(--space-5); }
+.le-greeting span { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .le-page-fade { animation: none; } }
+@media (min-width: 640px) and (max-width: 1023px) { .le-side { flex: 0 0 auto; } }
+@media (max-width: 639px) { .le-app > .le-side { display: none; } }

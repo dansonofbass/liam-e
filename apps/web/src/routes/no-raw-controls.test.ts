@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const root = import.meta.dir
-const LEGACY_ROUTES = ['chat.tsx', 'mail.tsx']
+const LEGACY_ROUTES: string[] = []
 function files(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)])
 }
