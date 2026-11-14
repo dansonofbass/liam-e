@@ -54,6 +54,20 @@ test('shows status, streams text and stops the answer', async () => {
   expect(screen.getByRole('button', { name: 'Noch mal fragen' }).closest('.le-chat-retry')).toBeTruthy()
 })
 
+for (const phase of ['stopped', 'error'] as const) test(`saved partial answer is shown once after ${phase}`, async () => {
+  const { client } = setup('/chat/c'); await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'delta', text: 'Teilantwort' }) })
+  expect(await screen.findByText('Teilantwort')).toBeTruthy()
+  const row = (id: string, role: 'user' | 'assistant', content: string): ChatMessageOut => ({ id, conversation_id: 'c', role, content, created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: role === 'assistant', tool_name: '' })
+  history = [row('u', 'user', 'Meine Frage'), row('a', 'assistant', 'Teilantwort')]
+  if (phase === 'stopped') fireEvent.click(screen.getByRole('button', { name: 'Anhalten' }))
+  else await act(async () => { frame({ event: 'error', code: 'aborted' }) })
+  await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual(history))
+  await waitFor(() => expect(screen.getAllByText('Teilantwort')).toHaveLength(1))
+  expect(screen.getAllByText('Meine Frage')).toHaveLength(1)
+  expect(screen.getByRole('button', { name: phase === 'stopped' ? 'Noch mal fragen' : 'Noch mal versuchen' })).toBeTruthy()
+})
+
 test('coarse pointer chat controls use the large touch target token', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/@media \(pointer: coarse\) \{ ([^{}]+)\{ ([^{}]+) \} \}/u)
