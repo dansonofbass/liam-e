@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ChatHeader } from './ChatHeader'
 
 const originalMatchMedia = window.matchMedia
@@ -22,7 +22,8 @@ test('desktop header shows the conversation crumb and starts a new conversation'
   expect(await screen.findByText('Chat')).toBeTruthy()
   expect(screen.getByTitle('Eine lange Unterhaltung')).toBeTruthy()
   const button = screen.getByRole('button', { name: 'Neue Unterhaltung' })
-  fireEvent.focus(button)
+  fireEvent.keyDown(document.body, { key: 'Tab' })
+  act(() => button.focus())
   expect((await screen.findByRole('tooltip')).textContent).toBe('Startet eine neue Unterhaltung.')
   fireEvent.click(button)
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))

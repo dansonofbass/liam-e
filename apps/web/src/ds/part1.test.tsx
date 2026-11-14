@@ -10,8 +10,14 @@ afterEach(() => { cleanup(); mock.restore() })
 describe('IconButton', () => {
   test('shows tooltip immediately on focus', () => {
     render(<IconButton label="Archivieren" icon="archive" shortcut="E" />)
-    fireEvent.focus(screen.getByRole('button'))
+    fireEvent.keyDown(document.body, { key: 'Tab' })
+    act(() => screen.getByRole('button').focus())
     expect(screen.getByRole('tooltip').textContent).toBe('Archivieren (E)')
+  })
+  test('shows no tooltip when focus is not keyboard focus', () => {
+    render(<IconButton label="Archivieren" icon="archive" />)
+    fireEvent.focus(screen.getByRole('button'))
+    expect(screen.queryByRole('tooltip')).toBeNull()
   })
   test('shows tooltip after hovering for 350 ms', () => {
     let callback: (() => void) | undefined

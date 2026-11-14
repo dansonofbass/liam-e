@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { MessageListItemOut } from '../api/generated/types.gen'
 import { MailRow } from './MailRow'
 import { MailReference } from './MailReference'
@@ -46,6 +46,7 @@ test('mail row shows time for today', () => {
 
 test('quick action shows its tip on focus', () => {
   render(<QuickAction icon="inbox" title="Posteingang" sub="Mails" tip="Zeigt Mails" onClick={() => {}} />)
-  fireEvent.focus(screen.getByRole('button'))
+  fireEvent.keyDown(document.body, { key: 'Tab' })
+  act(() => screen.getByRole('button').focus())
   expect(screen.getByRole('tooltip').textContent).toBe('Zeigt Mails')
 })
