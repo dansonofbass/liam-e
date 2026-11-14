@@ -63,3 +63,17 @@ test('every base control reaches 44 px with a coarse pointer, wherever it sits',
   expect(block![2]).toContain('min-width: var(--control-height-lg)')
   expect(block![2]).toContain('min-height: var(--control-height-lg)')
 })
+
+test('the breakpoints agree in the hook, the media queries and the Tailwind names', async () => {
+  // DESIGN.md §7.1: mobile below 640 px, tablet to 1023 px, desktop from 1024 px, wide from 1440 px.
+  const hook = await Bun.file(new URL('../shell/useBreakpoint.tsx', import.meta.url)).text()
+  for (const width of [640, 1024, 1440]) expect(hook).toContain(`'(min-width: ${width}px)'`)
+  const index = await Bun.file(new URL('../index.css', import.meta.url)).text()
+  expect(index).toContain('--breakpoint-tablet: 40rem;')
+  expect(index).toContain('--breakpoint-desktop: 64rem;')
+  expect(index).toContain('--breakpoint-wide: 90rem;')
+  const css = (await read('ds.css')) + (await read('ds-app.css'))
+  const widths = [...css.matchAll(/\((min|max)-width: (\d+)px\)/gu)].map(([, kind, px]) => `${kind} ${px}`)
+  expect(widths.length).toBeGreaterThan(0)
+  for (const width of widths) expect(['max 639', 'max 1023', 'min 640', 'min 1024', 'min 1440']).toContain(width)
+})

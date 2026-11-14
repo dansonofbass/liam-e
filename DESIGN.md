@@ -123,9 +123,13 @@ Antworten des Assistenten.
   Einheit mit geschütztem Leerzeichen („184,20 €“, „3 Min.“). In Bedienelementen und
   Zählern Ziffern; in Antworten des Assistenten bis zwölf ausgeschrieben, außer bei
   Beträgen, Daten und Uhrzeiten.
-- **Datum und Zeit:** in Listen „08:57“, „Gestern“, Wochentag für die laufende Woche
-  („Di.“), danach „21.11.“; das Jahr nur, wenn es nicht das laufende ist. In Sätzen
-  „Freitag, 21. November“ und „um 8:57 Uhr“. Relative Angaben nur bis „vor 59 Min.“.
+- **Datum und Zeit:** in Listen „08:57“ für heute, „Gestern“, für die übrigen Tage der
+  laufenden Woche ab Montag der Wochentag („Di.“), davor „21.11.“; das Jahr nur, wenn es
+  nicht das laufende ist. Die geöffnete Mail zeigt Tag und Uhrzeit („Heute, 08:57“, „Di.,
+  08:57“), eine Frist steht als „Fr., 21.11.“. In Sätzen, also in Antworten des
+  Assistenten, „Freitag, 21. November“ und „um 8:57 Uhr“; die Oberfläche selbst braucht
+  diese Form bisher nicht. Relative Angaben („vor 5 Min.“) nutzt die Oberfläche nicht;
+  kommen sie dazu, dann nur bis „vor 59 Min.“.
 - **Plural:** je Form ein eigener Text über `Intl.PluralRules` („keine Mails“, „1 Mail“,
   „2 Mails“). Nie Klammerplural.
 - **Großschreibung** nach deutscher Rechtschreibung, erstes Wort von Buttons und
@@ -179,9 +183,18 @@ Uhrzeiten, Daten und Größen bildet `apps/web/src/i18n/format.ts`. Technische L
   und Popover liegen auf `surface-overlay` mit `shadow-overlay`.
 - `accent` ist die **einzige Handlungsfarbe**: primäre Buttons, aktiver
   Navigationspunkt, Senden, Links, Assistent-Marke, Erfolg. Text darauf in `on-accent`.
-  Hover über Kacheln, Chips und Symbol-Buttons: `accent-soft` mit `accent`-Text.
   `accent-line` ist nur die Unterstreichung von Links (`le-link`); beim Hover wird sie
   `accent`.
+- **Hover** in drei Stufen:
+  - Zeilen und Einträge (Mailzeile, Navigationspunkt, Unterhaltung, Menüeintrag, Eintrag
+    der Bestätigungskarte): `surface-soft`.
+  - Kacheln, Chips, Symbol-Buttons und Ghost-Buttons: `accent-soft` mit `accent`-Text;
+    Chips zeigen dazu den Rand in `accent`, Schnellaktionen heben sich mit `shadow-lift`.
+    Die Mail-Karte im Chat bekommt nur die Fläche.
+  - Bedienelemente mit eigener Farbe: primäre Buttons und Senden werden `accent-hover`
+    (primäre Buttons mit `shadow-lift`), Secondary-Buttons färben nur Rand und Text in
+    `accent`, Danger-Buttons bekommen einen Ring in `danger-soft`, Felder einen Rand in
+    `ink-muted`.
 - `warm` heißt nur **Dringlichkeit**, nie Aktion oder Schmuck: der Punkt einer markierten
   Mail (in der Mailzeile neben der Uhrzeit, auf der Mailkarte im Chat vor dem Absender) mit
   dem Namen und Tooltip „Dringend“, und das Frist-Schild.
@@ -275,8 +288,9 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
 - **Bewegung:** 160 ms für Hover und Tooltips, 220 ms für Zustandswechsel, 420 ms für
   erscheinende Inhalte (`le-rise`), Kurve `cubic-bezier(.2, .8, .2, 1)`. Tooltips nach
   350 ms Verweilen, bei Tastaturfokus sofort. Schleifen: Spinner 0,8 s je Umdrehung,
-  Tipp-Punkte 1,2 s, Caret 1 s. Seitenwechsel blenden den Inhalt der
-  Hauptfläche über; Seitenleiste und Composer bleiben stehen.
+  Tipp-Punkte 1,2 s, Caret 1 s. Wechselt der Bereich (Chat, Posteingang, Konten), blendet
+  der Inhalt der Hauptfläche über; innerhalb eines Bereichs, etwa von der Liste zur Mail
+  oder zwischen Unterhaltungen, nicht. Seitenleiste und Composer bleiben stehen.
 - **`prefers-reduced-motion`** immer beachten: dann nur Überblenden (`le-rise` wird zu
   `le-fade`, Seitenwechsel und Schublade blenden weiter über), kein Aufsteigen, kein
   Hereinschieben, Streaming zeigt den Text sofort. Schleifen (Tipp-Punkte, Caret, Spinner)
@@ -330,7 +344,11 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
     Escape schließt. `placement` `up-start` oder `up-end` öffnet nach oben.
 - **Zustände ohne Inhalt sind Pflicht:** jede Liste und Ansicht hat Leer, Laden
   (Platzhalterzeilen, kein Spinner über der ganzen Fläche) und Fehler mit Ursache und
-  nächstem Schritt.
+  nächstem Schritt. Platzhalter sind statische Balken auf `surface-soft` in `radius-sm`,
+  ohne Schimmer, und tragen `aria-hidden`; für Bildschirmleser steht daneben ein Status
+  („Mails werden geladen …“). Der Posteingang zeigt sechs Zeilen mit Kreis und Balken, die
+  Konten zeigen drei Karten, die geöffnete Mail einen Kopf mit Kreis und zwei Zeilen und
+  darunter vier Balken.
 
 ## 7. Responsive und mobil
 
@@ -346,6 +364,16 @@ Anfang an mit.
 | `desktop` | ab 1024 px | Desktop |
 | `wide` | ab 1440 px | breiter Monitor, Inhaltsbreite begrenzt |
 
+- `wide` hat keine eigene Regel: Nur die Hauptfläche wächst, die Inhalte behalten ihre
+  Höchstbreite. Chat und Composer haben `chat-width` (780 px), der Mailtext 720 px, beide
+  stehen mittig; die Konten sind höchstens 1180 px breit und bündig links; die Mailliste
+  bleibt `list-width`.
+- Quelle der Grenzen ist diese Tabelle. Im Code stehen sie an drei Stellen, die
+  übereinstimmen müssen: `shell/useBreakpoint.tsx` (640, 1024 und 1440 px), die
+  Media-Queries in `ds.css` und `ds-app.css` (`max-width: 639px` und `1023px`,
+  `min-width: 640px`) und die Tailwind-Namen `tablet`, `desktop` und `wide` in `index.css`
+  (40, 64 und 90 rem, bisher ungenutzt). `styles/tokens.test.ts` prüft das.
+
 ### 7.2 Touch
 
 - Bei `pointer: coarse` sind alle Tippziele mindestens **44 × 44 px**, ohne sich zu
@@ -360,8 +388,10 @@ Anfang an mit.
 ### 7.3 Hülle je Breakpoint
 
 - `desktop`: Seitenleiste (`sidebar-width`) und Hauptfläche schweben nebeneinander.
-- `tablet`: Seitenleiste als schmale Symbolleiste mit Tooltips; „Unterhaltungen“ öffnet
-  eine Schublade über dem Inhalt. Der Zähler der ungelesenen Mails sitzt als Badge an der
+- `tablet`: Seitenleiste als schmale Symbolleiste mit Tooltips rechts daneben, so breit
+  wie ein Navigationspunkt mit Symbol und `space-3` je Seite. Sie zeigt die Marke ohne Namen,
+  Chat, Posteingang, Konten und „Unterhaltungen“, unten „Darstellung“; die Statuszeile mit
+  dem Stand entfällt. „Unterhaltungen“ öffnet eine Schublade über dem Inhalt. Der Zähler der ungelesenen Mails sitzt als Badge an der
   oberen rechten Ecke des Posteingangs (ab 1.000 „999+“); der zugängliche Name nennt ihn
   („Posteingang, 47 ungelesen“).
 - `mobile`: Die Hauptfläche füllt den Bildschirm, ohne Rahmen, Rundung und Schatten.
@@ -381,13 +411,23 @@ Anfang an mit.
   trägt die Kopfzeile den Titel, und unter den Filtern stehen „47 ungelesen · Stand 08:57“
   und die beiden Buttons. Suchen öffnet ein Feld „In allen Konten suchen …“. Die Liste
   gruppiert nach Tagen: „Heute“, „Gestern“, „Diese Woche“ (ab Montag) und „Älter“.
-- `desktop`: Liste (`list-width`) und Lesebereich nebeneinander.
+- `desktop`: Liste (`list-width`) und Lesebereich nebeneinander. Alle Aktionen der Mail
+  stehen in der oberen Leiste des Lesebereichs: Archivieren, Gelesen/Ungelesen, Papierkorb
+  und „Weitere Aktionen“, rechts davon „Im Chat fragen“ und „Antwort entwerfen“ als kleine
+  Buttons (`le-btn--sm`).
 - `tablet` und `mobile`: nur die Liste; eine Mail öffnet als eigene Ansicht mit Zurück.
   Archivieren, Gelesen/Ungelesen, Papierkorb und „Weitere Aktionen“ stehen in der Leiste am
   oberen Rand; „Im Chat fragen“ und „Antwort entwerfen“ stehen in einer Leiste am unteren
   Rand.
-- Auf `mobile` trägt jede Mailzeile einen sichtbaren Button „Weitere Aktionen“; eine Frist
-  steht als Schild in `warm-soft` unter dem Vorschautext.
+- Auf `mobile` und bei `pointer: coarse` trägt jede Mailzeile einen sichtbaren Button
+  „Weitere Aktionen“; mit Maus erscheint auf `tablet` und `desktop` beim Hover die
+  Aktionsleiste (§7.2).
+- Eine Frist steht auf allen Breakpoints als Schild in `warm-soft` unter dem Vorschautext,
+  auf `mobile` neben dem Konto-Tag.
+- Das Menü „Weitere Aktionen“ der geöffneten Mail enthält „Newsletter abbestellen“; es
+  schlägt das Abbestellen im Chat vor (§9.2) und ist gesperrt, mit Hinweis, wo die Mail
+  keinen Weg zum Abbestellen nennt. Geplant sind „Weiterleiten“, „Als Spam markieren“ und
+  „Original anzeigen“ (Entscheidung 4 vom 2026-11-14).
 - Filter-Chips stehen auf `mobile` in einer Zeile, die für sich seitlich scrollt; die Seite
   scrollt nie seitlich.
 
@@ -434,8 +474,8 @@ Anfang an mit.
 
 Während der Antwort wird Senden zu Anhalten. Eine angehaltene Antwort bleibt stehen und
 bekommt den Hinweis „Angehalten – die Antwort ist unvollständig.“ Die Liste scrollt nur mit,
-solange du unten bist; scrollst du hoch, bleibt sie stehen, und ein Button „Zum Ende“
-erscheint.
+solange du unten bist, also höchstens 48 px vom Ende entfernt; scrollst du weiter hoch,
+bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 
 ### 9.2 Vorschlagen und bestätigen
 
