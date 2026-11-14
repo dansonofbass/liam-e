@@ -36,6 +36,8 @@ function setup({ mobile = false, unread = false, missing = false, loading = fals
   return { client, router, view, action, get, getInsight, request: () => request }
 }
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia; globalThis.fetch = originalFetch })
+// Lets queries a view starts on mount settle inside act() before the test moves on or ends.
+const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 
 test('open mail shows the provider when the account has no display name', async () => {
   setup()
@@ -107,8 +109,9 @@ test('manual unread waits for pending automatic read and remains unread in both 
 test('mobile bars contain the requested actions; desktop has no back button', async () => {
   setup({ mobile: true }); await screen.findByRole('heading', { name: 'Termin' })
   for (const name of ['Zurück zum Posteingang', 'Archivieren', 'Als ungelesen markieren', 'In den Papierkorb', 'Weitere Aktionen', 'Im Chat fragen', 'Antwort entwerfen']) expect(screen.getByRole('button', { name })).toBeTruthy()
-  cleanup(); mock.restore(); setup(); await screen.findByRole('heading', { name: 'Termin' })
+  await settle(); cleanup(); mock.restore(); setup(); await screen.findByRole('heading', { name: 'Termin' })
   expect(screen.queryByRole('button', { name: 'Zurück zum Posteingang' })).toBeNull()
+  await settle()
 })
 
 test('mail body is literal text and attachment is non-interactive', async () => {
@@ -120,6 +123,7 @@ test('mail body is literal text and attachment is non-interactive', async () => 
   expect(within(chip).getByText('212 KB')).toBeTruthy()
   expect(chip.querySelector('.lucide-paperclip')).toBeTruthy()
   expect(chip.querySelector('button, a')).toBeNull()
+  await settle()
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/\.le-mail-attachment \{([^}]+)\}/u)?.[1]
   for (const property of ['min-height: 36px', 'border: 1px solid var(--control-border)', 'border-radius: var(--radius-pill)']) expect(rule).toContain(property)
@@ -189,6 +193,7 @@ test('loading displays placeholders and mobile back button', async () => {
   expect(screen.getByText('Mail wird geladen …')).toBeTruthy()
   expect(view.container.querySelector('.le-mail-placeholder[aria-hidden="true"]')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Zurück zum Posteingang' })).toBeTruthy()
+  await settle()
 })
 
 test('newsletter menu starts the contextual confirmation turn', async () => {
