@@ -348,7 +348,9 @@ Anfang an mit.
 
 - Kontrast wie in §3, in beiden Themes.
 - **Tastatur zuerst:** sichtbarer Fokusring (2 px `focus-ring`, 2 px Abstand) auf
-  `:focus-visible`, logische Reihenfolge, Escape schließt Menüs und Schubladen, der Fokus
+  `:focus-visible`, ohne Ausnahme für Felder: Das Eingabefeld zeigt ihn selbst (dazu den
+  Rand in `accent`), der Composer als Ganzes, sobald sein Textfeld den Fokus hat; einen
+  eigenen Schein statt des Rings gibt es nicht. Logische Reihenfolge, Escape schließt Menüs und Schubladen, der Fokus
   bleibt in offenen Schubladen und Dialogen und kehrt danach an den Auslöser zurück.
 - Symbol-Buttons tragen `aria-label`. Tooltips sind `role="tooltip"` und hängen über
   `aria-describedby` am Element.

@@ -141,3 +141,13 @@ test('account status reflects syncing and login errors', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Erneut anmelden' }))
   expect(reconnect).toHaveBeenCalledTimes(1)
 })
+
+test('input and composer show the standard 2 px focus ring instead of their own glow', async () => {
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  const rule = (selector: string) => css.split(`${selector} {`)[1]?.split('}')[0] ?? ''
+  expect(rule(':focus-visible')).toContain('outline: 2px solid var(--focus-ring); outline-offset: 2px')
+  expect(rule('.le-composer:has(textarea:focus-visible)')).toContain('outline: 2px solid var(--focus-ring); outline-offset: 2px')
+  expect(rule('.le-input:focus')).not.toContain('outline')
+  expect(css).not.toContain('0 0 0 4px var(--accent-soft)')
+  expect(rule('.le-composer:focus-within, .le-composer.is-focus')).toContain('border-color: var(--control-border)')
+})

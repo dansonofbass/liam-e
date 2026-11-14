@@ -134,8 +134,10 @@ body { margin: 0; font-family: var(--font-sans); font-size: 14.5px; line-height:
 .le-qa-sub { font-size: 12.5px; color: var(--ink-muted); line-height: 1.4; }
 
 /* Composer */
-.le-composer { border-radius: var(--radius-lg); background: var(--surface-soft); border: 1px solid transparent; transition: border-color var(--le-dur) ease, box-shadow var(--le-dur) ease, background-color var(--le-dur) ease; }
-.le-composer:focus-within, .le-composer.is-focus { background: var(--surface); border-color: var(--accent-line); box-shadow: 0 0 0 4px var(--accent-soft); }
+.le-composer { border-radius: var(--radius-lg); background: var(--surface-soft); border: 1px solid transparent; transition: border-color var(--le-dur) ease, background-color var(--le-dur) ease; }
+.le-composer:focus-within, .le-composer.is-focus { background: var(--surface); border-color: var(--control-border); }
+/* The ring belongs to the whole composer, not the bare textarea; the chip and the send button inside draw their own. */
+.le-composer:has(textarea:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .le-composer textarea { display: block; width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; padding: 15px 20px 4px; font: inherit; font-size: 15.5px; color: var(--ink); }
 .le-composer textarea::placeholder { color: var(--ink-muted); }
 .le-composer-bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px 12px; }
@@ -227,10 +229,10 @@ body { margin: 0; font-family: var(--font-sans); font-size: 14.5px; line-height:
 /* Text field */
 .le-field { display: flex; flex-direction: column; gap: 6px; }
 .le-label { font-size: 13px; font-weight: 600; }
-.le-input { min-height: var(--control-height-lg); box-sizing: border-box; padding: 10px 14px; border: 1px solid var(--control-border); border-radius: var(--radius-sm); background: var(--surface); font: inherit; color: var(--ink); transition: border-color var(--le-dur) ease, box-shadow var(--le-dur) ease; }
+.le-input { min-height: var(--control-height-lg); box-sizing: border-box; padding: 10px 14px; border: 1px solid var(--control-border); border-radius: var(--radius-sm); background: var(--surface); font: inherit; color: var(--ink); transition: border-color var(--le-dur) ease; }
 .le-input::placeholder { color: var(--ink-muted); }
 .le-input:hover { border-color: var(--ink-muted); }
-.le-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.le-input:focus { border-color: var(--accent); }
 .le-hint { font-size: 12.5px; color: var(--ink-muted); }
 .le-field.is-invalid .le-input { border-color: var(--danger); }
 .le-error { display: flex; gap: 6px; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--danger); }
