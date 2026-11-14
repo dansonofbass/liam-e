@@ -7,6 +7,14 @@ const noticeSubject = (subject: string) => {
 }
 
 export const de = {
+  rootScreens: {
+    lang: 'de', missingChunkTitle: 'liam-e wurde aktualisiert',
+    missingChunk: 'Lade die Seite neu, um die neue Version zu öffnen.', reload: 'Neu laden',
+    errorTitle: 'Diese Seite ließ sich nicht anzeigen', errorDescription: 'Lade sie neu oder versuch es gleich noch mal.',
+    retry: 'Noch mal versuchen', errorDetails: 'Details', notFound: 'Diese Seite gibt es nicht',
+    notFoundDescription: 'Unter dieser Adresse liegt nichts.', home: 'Zum Chat',
+    starterEyebrow: 'Erste Schritte', starterHintBefore: 'Bearbeite ', starterHintBetween: ' oder füge eine Route unter ', starterHintAfter: ' hinzu.',
+  },
   shell: {
     chat: 'Chat', inbox: 'Posteingang', accounts: 'Konten', conversations: 'Unterhaltungen',
     newConversation: 'Neue Unterhaltung', openMenu: 'Menü öffnen', close: 'Schließen',
@@ -32,6 +40,7 @@ export const de = {
     preparing_proposal: 'Bereite einen Vorschlag vor …',
   },
   errors: {
+    request_failed: 'Die Anfrage hat nicht geklappt.',
     model_unavailable: 'Das Modell antwortet gerade nicht. Versuch es gleich noch mal.',
     aborted: 'Die Antwort ist abgebrochen.',
     internal: 'Die Antwort konnte nicht erstellt werden. Versuch es gleich noch mal.',

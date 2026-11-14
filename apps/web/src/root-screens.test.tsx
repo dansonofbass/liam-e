@@ -11,6 +11,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { NotFound } from "./not-found";
+import german from "./root-screens/de";
 import { RootScreensContext } from "./root-screens";
 import type { RootScreens, RootTexts } from "./root-screens";
 
@@ -82,6 +83,21 @@ afterEach(() => {
 });
 
 describe("the root screens", () => {
+  test("the German not-found screen links to chat", async () => {
+    renderRoot(NotFound, german, { locale: german.resolveLocale() });
+    expect(await screen.findByText("Diese Seite gibt es nicht")).toBeTruthy();
+    expect(screen.getByText("Unter dieser Adresse liegt nichts.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Zum Chat" }).getAttribute("href")).toBe("/");
+    expect(german.texts("de").lang).toBe("de");
+  });
+
+  test("the starter text is German", () => {
+    const texts = german.texts("de");
+    render(<>{texts.starterEyebrow}{texts.starterHint({ file: <code>file</code>, directory: <code>directory</code> })}</>);
+    expect(screen.getByText(/Erste Schritte/)).toBeTruthy();
+    expect(screen.getByText(/Bearbeite/)).toBeTruthy();
+  });
+
   test("the not-found page speaks the provided source in the root route's locale", async () => {
     const source = french();
 

@@ -85,21 +85,21 @@ describe("refusals in words", () => {
   });
 
   test("only a readable detail is a message: a gateway's page or any other body is not", async () => {
-    expect(await message(GATEWAY_PAGE)).toBe("The request failed.");
-    expect(await message("Bad Gateway")).toBe("The request failed.");
+    expect(await message(GATEWAY_PAGE)).toBe("Die Anfrage hat nicht geklappt.");
+    expect(await message("Bad Gateway")).toBe("Die Anfrage hat nicht geklappt.");
     expect(await message({ error: "upstream timeout" })).toBe(
-      "The request failed."
+      "Die Anfrage hat nicht geklappt."
     );
     expect(await message({ detail: { code: "E42" } })).toBe(
-      "The request failed."
+      "Die Anfrage hat nicht geklappt."
     );
-    expect(await message({ detail: null })).toBe("The request failed.");
+    expect(await message({ detail: null })).toBe("Die Anfrage hat nicht geklappt.");
   });
 
   test("a failed read through dataOr404 reads a gateway's page as a plain sentence", () => {
     expect(() =>
       dataOr404({ error: GATEWAY_PAGE }, () => new RangeError("gone"))
-    ).toThrow("The request failed.");
+    ).toThrow("Die Anfrage hat nicht geklappt.");
   });
 
   test("a read answers a 404 as the caller's own error", () => {
