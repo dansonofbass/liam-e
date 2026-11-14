@@ -61,6 +61,17 @@ test('composer submits on Enter and stops while busy', () => {
   expect((screen.getByRole('button', { name: 'Senden' }) as HTMLButtonElement).disabled).toBe(true)
 })
 
+test('IMAP account reports rejected password and missing secret', () => {
+  const account: AccountOut = { id: '1', auth_type: 'imap_password', color_index: 0, connection: 'imap', created_at: '', display_name: 'Privat', email_address: 'a@example.org', error_code: 'auth_expired', is_active: true, last_sync_at: null, message_count: 1, provider: 'imap', state: 'auth_expired', unread: 0, updated_at: '' }
+  const props = { onSync: () => {}, onReconnect: () => {}, onRename: () => {}, onRemove: () => {} }
+  const { rerender } = render(<AccountCard account={account} {...props} />)
+  expect(screen.getByText('Anmeldung abgelehnt')).toBeTruthy()
+  expect(screen.getByText('Der Mailserver lehnt das App-Passwort ab. Prüfe das Secret in Mistral Studio.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Erneut anmelden' })).toBeTruthy()
+  rerender(<AccountCard account={{ ...account, state: 'error', error_code: 'secret_not_found' }} {...props} />)
+  expect(screen.getByText('Das Secret wurde nicht gefunden oder ist nicht lesbar. Prüfe den Namen und die Freigabe in Mistral Studio.')).toBeTruthy()
+})
+
 test('account status reflects syncing and login errors', () => {
   const account: AccountOut = { id: '1', auth_type: 'oauth2', color_index: 0, connection: 'oauth', created_at: '', display_name: 'Privat', email_address: 'a@example.org', error_code: '', is_active: true, last_sync_at: null, message_count: 1, provider: 'Gmail', state: 'syncing', unread: 0, updated_at: '' }
   const reconnect = mock(() => {})

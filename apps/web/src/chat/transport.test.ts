@@ -56,7 +56,7 @@ describe('streamChatTurn refusals', () => {
 
     expect(error instanceof ChatStreamError).toBe(true)
     const refusal = error as ChatStreamError
-    expect(refusal.code).toBe('internal')
+    expect(refusal.code).toBe('conversation_not_found')
     expect(refusal.detailCode).toBe('conversation_not_found')
     expect(refusal.message).not.toContain('x')
   })

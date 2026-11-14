@@ -4,7 +4,7 @@ import type { ChatMessageOut, ChatStreamRequest, MailRefOut, StatusEvent } from 
 import { ChatStreamError, streamChatTurn } from './transport'
 import { createTypewriter } from './typewriter'
 
-type ErrorCode = 'model_unavailable' | 'aborted' | 'internal'
+type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'conversation_not_found'
 type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
 type Session = { state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })

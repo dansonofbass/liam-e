@@ -3,7 +3,7 @@ import type { ChatEvent, ChatStreamRequest } from '../api/generated/types.gen'
 import { parseSse } from './sse'
 
 export class ChatStreamError extends Error {
-  constructor(public code: 'internal' | 'aborted', public detailCode?: string) {
+  constructor(public code: 'internal' | 'aborted' | 'conversation_not_found', public detailCode?: string) {
     super('Chat stream failed')
     this.name = 'ChatStreamError'
   }
@@ -26,7 +26,7 @@ export async function* streamChatTurn(body: ChatStreamRequest, signal: AbortSign
         if (isAbort(error)) throw error
         /* No JSON detail. */
       }
-      throw new ChatStreamError('internal', detailCode)
+      throw new ChatStreamError(detailCode === 'conversation_not_found' ? 'conversation_not_found' : 'internal', detailCode)
     }
     if (!response.body) throw new ChatStreamError('aborted')
     for await (const frame of parseSse(response.body)) {

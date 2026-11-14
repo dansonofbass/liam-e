@@ -44,6 +44,16 @@ test('archive removes immediately and toast expires after ten seconds', async ()
   act(() => time.advance(1)); expect(screen.queryByRole('status')).toBeNull()
 })
 
+test.each(['other status', 'other code', 'network'])('uncertain action failure: %s', async failure => {
+  spyOn(sdk, 'mailMessageAction').mockImplementation((async () => {
+    if (failure === 'network') throw new TypeError('network')
+    return { response: { status: failure === 'other status' ? 500 : 502 }, error: { detail: { code: failure === 'other status' ? 'provider_failed' : 'other' } } }
+  }) as never)
+  setup(); fireEvent.click(screen.getByText('archive 1'))
+  expect(await screen.findByText('Das hat nicht geklappt. Lade den Posteingang neu, um zu sehen, wo die Mail jetzt liegt.')).toBeTruthy()
+  expect(screen.getByText('Erste:false')).toBeTruthy()
+})
+
 test('second action replaces toast and its timer', async () => {
   success(); const time = setup()
   fireEvent.click(screen.getByText('archive 1')); await screen.findByText('„Erste“ archiviert.')
@@ -104,7 +114,7 @@ for (const replacement of ['new action', 'timeout']) {
   })
 }
 
-for (const [status, text, removed] of [[502, 'Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.', false], [409, 'Das geht bei diesem Konto nicht.', false], [404, 'Die Mail ist nicht mehr da.', true]] as const) {
+for (const [status, text, removed] of [[502, 'Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.', false], [409, 'Das geht bei dieser Mail nicht.', false], [404, 'Die Mail ist nicht mehr da.', true]] as const) {
   test(`${status} shows a danger notice and ${removed ? 'keeps removal' : 'restores the row'}`, async () => {
     spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ error: { detail: { code: status === 409 ? 'action_unsupported' : status === 404 ? 'message_not_found' : 'provider_failed' } }, response: { status } })) as never)
     setup(); fireEvent.click(screen.getByText('archive 1'))

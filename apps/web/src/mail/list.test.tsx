@@ -140,7 +140,7 @@ test('failed archive restores the highlight and the next archive targets the res
   await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
   await waitFor(() => expect(screen.getByText('Zweite').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true'))
   fail({ response: { status: 502 } })
-  await screen.findByText('Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.')
+  await screen.findByText('Das hat nicht geklappt. Lade den Posteingang neu, um zu sehen, wo die Mail jetzt liegt.')
   await waitFor(() => expect(screen.getByText('Termin').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true'))
   fireEvent.keyDown(document.body, { key: 'e' })
   await waitFor(() => expect(action).toHaveBeenCalledTimes(2))
@@ -157,7 +157,7 @@ test('failed removal does not replace a highlight moved by the user', async () =
   fireEvent.keyDown(document.body, { key: 'j' })
   expect(screen.getByText('Dritte').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true')
   fail({ response: { status: 502 } })
-  await screen.findByText('Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.')
+  await screen.findByText('Das hat nicht geklappt. Lade den Posteingang neu, um zu sehen, wo die Mail jetzt liegt.')
   expect(screen.getByText('Dritte').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true')
 })
 

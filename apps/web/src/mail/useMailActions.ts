@@ -3,6 +3,7 @@ import { createContext, createElement, useContext, useEffect, useRef, useState, 
 import { mailActionsUndo, mailMessageAction } from '../api/generated/sdk.gen'
 import type { MessageDetailOut, MessageListItemOut, MessagePageOut } from '../api/generated/types.gen'
 import { de } from '../i18n/de'
+import { errorCode } from '../api/unwrap'
 import { useBreakpoint } from '../shell/useBreakpoint'
 
 export type Clock = { now(): number; setTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout>; clearTimeout(id: ReturnType<typeof setTimeout>): void }
@@ -107,7 +108,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         return changes.length > 0
       } else if (!result.data || result.response?.status !== 200) {
         rollback()
-        if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
+        if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: result.response?.status === 502 && errorCode(result.error) === 'provider_failed' ? de.errors.provider_failed : de.errors.action_uncertain, undoable: false })
         return changes.length > 0
       } else {
         if (removal) reconcile.current = true
@@ -120,7 +121,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       }
     } catch {
       rollback()
-      if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
+      if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.errors.action_uncertain, undoable: false })
       return changes.length > 0
     } finally { settle() }
   }

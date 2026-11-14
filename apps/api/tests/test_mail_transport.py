@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from api.mail import netguard, send, service, sync, transport
+from api.mail import netguard, secrets, send, service, sync, transport
 from db.models.mail_account import MailAccount
 
 
@@ -42,6 +42,17 @@ async def test_sync_ignores_stored_false(monkeypatch, fake_store):
     result = await sync.sync_account(account.id)
     assert result.status == "error"
     assert result.error_code == "provider_error"
+
+
+@pytest.mark.anyio
+async def test_sync_stores_missing_workspace_secret(monkeypatch, fake_store):
+    account = await fake_store.create_account(provider="imap", auth_type="imap_password", email_address="me@gmail.com")
+    monkeypatch.setattr(service, "load_credentials", AsyncMock(return_value={"imap_host": "imap.gmail.com", "password_secret": "gmail-app-password"}))
+    monkeypatch.setattr(service, "imap_password", AsyncMock(side_effect=secrets.WorkspaceSecretNotFoundError("missing")))
+    result = await sync.sync_account(account.id)
+    assert result.error_code == "secret_not_found"
+    state = await sync.sync_state_access.get_state(account.id)
+    assert state.last_error == "secret_not_found"
 
 
 def test_starttls_failure_closes_connection(monkeypatch):

@@ -163,6 +163,23 @@ test('does not follow new text after scrolling up; button resumes following', as
   expect(screen.queryByRole('button', { name: 'Zum Ende' })).toBeNull()
 })
 
+test('missing conversation refusal renders its explanation', async () => {
+  setup('/chat/c')
+  globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'conversation_not_found' } }), { status: 404 }))) as unknown as typeof fetch
+  await send()
+  expect(await screen.findByText('Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.')).toBeTruthy()
+})
+
+test('unknown model refusal renders its explanation', async () => {
+  spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'model_unknown' } } }) as never)
+  const { client } = setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei', is_default: false }]) })
+  fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
+  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei/ }))
+  expect(await screen.findByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeTruthy()
+})
+
 test('model menu updates the conversation', async () => {
   const update = spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => ({ data: {} })) as never)
   const { client } = setup('/chat/c')

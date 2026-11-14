@@ -9,13 +9,15 @@ from db.accessors import mail_message as message_access
 from db.accessors import mail_sync_state as sync_state_access
 from env.mail import env as mail_env
 
-from api.mail import connectors, netguard, providers, service, sync_connector, sync_gmail, sync_graph, sync_imap, transport
+from api.mail import connectors, netguard, providers, secrets, service, sync_connector, sync_gmail, sync_graph, sync_imap, transport
 from api.mail.sync_types import SyncResult
 
 logger = logging.getLogger(__name__)
 
 
 def _error_code(error: Exception) -> str:
+    if isinstance(error, secrets.WorkspaceSecretNotFoundError):
+        return "secret_not_found"
     if isinstance(error, service.CredentialError):
         return "auth_expired"
     if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (401, 403):
