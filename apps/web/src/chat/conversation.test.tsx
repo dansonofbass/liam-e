@@ -132,6 +132,14 @@ test('the pencil on a mail card asks for a reply draft to that mail in the same 
   expect(requestBody.account_id).toBeUndefined()
 })
 
+test('an answer shows at most three follow-up suggestions', async () => {
+  setup('/chat/c'); await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Eins', 'Zwei', 'Drei', 'Vier'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  expect(await screen.findByRole('button', { name: 'Drei' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Vier' })).toBeNull()
+  expect(document.querySelectorAll('.le-chat-suggestions .le-chip')).toHaveLength(3)
+})
+
 test('a follow-up suggestion without a selected account searches all accounts', async () => {
   setup('/chat/c'); await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })

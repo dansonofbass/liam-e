@@ -38,8 +38,9 @@ function HistoryReference({ id, accounts, draft }: { id: string; accounts: Accou
   const { data } = useQuery({ ...messageQuery(id), retry: (count, error) => !(error instanceof MessageNotFoundError) && count < 2 })
   return data ? <Reference mail={data} accounts={accounts} draft={draft} /> : null
 }
+// DESIGN.md §9.1: at most three follow-up suggestions, whatever the model sent.
 function Suggestions({ items, onSend }: { items: string[]; onSend: (text: string) => void }) {
-  return <div className="le-chat-suggestions">{items.map(text => <Chip key={text} onClick={() => onSend(text)}>{text}</Chip>)}</div>
+  return <div className="le-chat-suggestions">{items.slice(0, 3).map(text => <Chip key={text} onClick={() => onSend(text)}>{text}</Chip>)}</div>
 }
 
 // The agent saves a proposal while it works and its answer at the end of the turn. Live, the card
