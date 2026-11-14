@@ -20,7 +20,8 @@ function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' = 'empty', p
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><Outlet /></QueryClientProvider> })
   const mail = createRoute({ getParentRoute: () => root, path: '/mail', validateSearch: inboxSearchSchema, component: Route.options.component })
   const index = createRoute({ getParentRoute: () => mail, path: '/', component: () => <div /> })
-  const router = createRouter({ routeTree: root.addChildren([mail.addChildren([index])]), history: createMemoryHistory({ initialEntries: [path] }) })
+  const message = createRoute({ getParentRoute: () => mail, path: '$messageId', component: () => <div /> })
+  const router = createRouter({ routeTree: root.addChildren([mail.addChildren([index, message])]), history: createMemoryHistory({ initialEntries: [path] }) })
   const view = render(<RouterProvider router={router} />)
   return { router, list, view }
 }
@@ -50,6 +51,59 @@ test('shows six placeholder rows while loading', async () => {
   await screen.findByText('Mails werden geladen …')
   expect(view.container.querySelectorAll('.le-mailrow--placeholder').length).toBe(6)
 })
+test('archiving an open mail selects and opens the next mail with filters', async () => {
+  const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'act', message: row }, response: { status: 200 } })) as never)
+  const { router } = setup('rows', '/mail/m1?unread=true')
+  await screen.findByText('Termin')
+  expect(screen.getByText('Termin').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true')
+  fireEvent.keyDown(document.body, { key: 'e' })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail/m2'))
+  expect(router.state.location.searchStr).toContain('unread=true')
+  await waitFor(() => expect(action.mock.calls[0]?.[0]?.path).toEqual({ message_id: 'm1' }))
+  expect(screen.getByText('Zweite').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true')
+})
+
+test('failed removal of an open mail returns to it if navigation has not changed', async () => {
+  let fail!: (value: unknown) => void
+  spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(resolve => { fail = resolve })) as never)
+  const { router } = setup('rows', '/mail/m1?unread=true')
+  await screen.findByText('Termin')
+  fireEvent.keyDown(document.body, { key: 'e' })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail/m2'))
+  await waitFor(() => expect(fail).toBeDefined())
+  fail({ response: { status: 502 } })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail/m1'))
+  expect(router.state.location.searchStr).toContain('unread=true')
+})
+
+test('archiving the only open mail returns to the filtered list', async () => {
+  spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'act', message: row }, response: { status: 200 } })) as never)
+  const { router } = setup('row', '/mail/m1?unread=true')
+  await screen.findByText('Termin')
+  fireEvent.keyDown(document.body, { key: 'e' })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+  expect(router.state.location.searchStr).toContain('unread=true')
+})
+
+test('j and k open adjacent mails while preserving filters', async () => {
+  const { router } = setup('rows', '/mail/m1?unread=true')
+  await screen.findByText('Termin')
+  fireEvent.keyDown(document.body, { key: 'j' })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail/m2'))
+  expect(router.state.location.searchStr).toContain('unread=true')
+  fireEvent.keyDown(document.body, { key: 'k' })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail/m1'))
+})
+
+test('trashing the last open mail by its row button opens the previous mail', async () => {
+  const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'act', message: row }, response: { status: 200 } })) as never)
+  const { router } = setup('rows', '/mail/m3')
+  const rowElement = (await screen.findByText('Dritte')).closest('.le-mailrow')!
+  fireEvent.click(rowElement.querySelector('button[aria-label="In den Papierkorb"]')!)
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail/m2'))
+  await waitFor(() => expect(action.mock.calls[0]?.[0]?.path).toEqual({ message_id: 'm3' }))
+})
+
 test('failed archive restores the highlight and the next archive targets the restored row', async () => {
   let fail!: (value: unknown) => void
   const action = spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(resolve => { fail = resolve })) as never)

@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useSearch } from '@tanstack/react-router'
+import { useLocation, useNavigate, useParams, useRouter, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { mailSyncAll } from '../api/generated/sdk.gen'
 import type { MessageListItemOut } from '../api/generated/types.gen'
@@ -13,27 +13,29 @@ import { groupByDay } from './groups'
 import { useInboxKeys } from './useInboxKeys'
 import { useMailActions } from './useMailActions'
 
-export function MailList({ onOpen, selectedId }: { onOpen(id: string): void; selectedId?: string }) {
+export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const search = useSearch({ strict: false }) as InboxSearch
+  const { messageId } = useParams({ strict: false }) as { messageId?: string }
+  const location = useLocation()
   const navigate = useNavigate()
+  const router = useRouter()
   const client = useQueryClient()
   const breakpoint = useBreakpoint(), coarse = useCoarsePointer()
   const summary = useQuery(summaryQuery())
   const messages = useInfiniteQuery(messagesInfiniteQuery(toMessageFilters(search)))
   const { run, undo, toast } = useMailActions()
-  const [localSelected, setLocalSelected] = useState<string | undefined>(selectedId)
+  const [localSelected, setLocalSelected] = useState<string | undefined>()
   const [searchOpen, setSearchOpen] = useState(Boolean(search.q))
   const [value, setValue] = useState(search.q ?? '')
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null), sentinel = useRef<HTMLDivElement>(null)
   const rowRefs = useRef(new Map<string, HTMLLIElement>())
-  const selected = localSelected
+  const selected = messageId ?? localSelected
   const items = messages.data?.pages.flatMap(page => page.items) ?? []
   const selectedIndex = items.findIndex(item => item.id === selected)
   const changeSearch = (change: Partial<InboxSearch>) => { void navigate({ to: '.', search: previous => ({ ...previous, ...change }), replace: true }) }
 
-  useEffect(() => { setLocalSelected(selectedId) }, [selectedId])
   useEffect(() => { setValue(search.q ?? ''); if (search.q) setSearchOpen(true) }, [search.q])
   useEffect(() => {
     const trimmed = value.trim() || undefined
@@ -56,16 +58,31 @@ export function MailList({ onOpen, selectedId }: { onOpen(id: string): void; sel
   const remove = (mail: MessageListItemOut, kind: 'archive' | 'trash') => {
     const moved = selected === mail.id
     const next = items[selectedIndex + 1]?.id ?? items[selectedIndex - 1]?.id
-    if (moved) setLocalSelected(next)
+    if (moved) {
+      setLocalSelected(next)
+      if (messageId) {
+        if (next) onOpen(next)
+        else void navigate({ href: `/mail${location.searchStr}` })
+      }
+    }
     void run(mail.id, kind).then(restored => {
-      if (restored && moved) setLocalSelected(current => current === next ? mail.id : current)
+      if (!restored || !moved) return
+      if (!messageId) setLocalSelected(current => current === next ? mail.id : current)
+      else {
+        const destination = next ? `/mail/${encodeURIComponent(next)}` : '/mail'
+        if (router.state.location.pathname === destination) void navigate({ href: `/mail/${encodeURIComponent(mail.id)}${router.state.location.searchStr}` })
+      }
     })
   }
   const toggleRead = (mail: MessageListItemOut) => { void run(mail.id, mail.is_read ? 'mark_unread' : 'mark_read') }
   const current = items[selectedIndex]
+  const select = (id: string | undefined) => {
+    if (messageId && id) onOpen(id)
+    else if (!messageId) setLocalSelected(id)
+  }
   useInboxKeys({
-    onNext: () => setLocalSelected(items[Math.min(selectedIndex + 1, items.length - 1)]?.id),
-    onPrev: () => setLocalSelected(items[Math.max(selectedIndex - 1, 0)]?.id),
+    onNext: () => select(items[Math.min(selectedIndex + 1, items.length - 1)]?.id),
+    onPrev: () => select(items[Math.max(selectedIndex - 1, 0)]?.id),
     onOpen: () => { if (current) onOpen(current.id) },
     onArchive: () => { if (current) remove(current, 'archive') },
     onToggleRead: () => { if (current) toggleRead(current) },
