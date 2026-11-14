@@ -116,7 +116,11 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
         void client.invalidateQueries({ queryKey: ['messages'] })
         void client.invalidateQueries({ queryKey: ['message'] })
       }
-    } catch (failure) { setError(errorCode(failure instanceof Error ? failure.cause : failure) ?? 'action_failed') } finally { pending.current = false; setBusy(false) }
+    } catch (failure) {
+      const code = errorCode(failure instanceof Error ? failure.cause : failure) ?? 'action_failed'
+      setError(code)
+      if (code === 'proposal_not_pending') void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
+    } finally { pending.current = false; setBusy(false) }
   }
   if (!proposal) return null
   if (current.proposal_status === 'cancelled') return <p className="le-hint">{de.proposal.cancelled}</p>

@@ -9,11 +9,11 @@ import { ProposalCard } from './ProposalCard'
 function message(status = 'pending', result?: ProposalResult): ChatMessageOut {
   return { id: 'p', conversation_id: 'c', role: 'proposal', content: '', tool_name: '', created_at: '', extras: {}, stopped: false, proposal_status: status, proposal: { kind: 'unsubscribe', reason: 'Nicht mehr gelesen.', items: [{ id: 'a', kind: 'sender', title: 'Alpha', subtitle: '12 Mails', method: 'post' }, { id: 'b', kind: 'sender', title: 'Beta', subtitle: '2 Mails', method: 'manual' }], result } }
 }
-function setup(initial: ChatMessageOut, clock?: { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }) {
+function setup(initial: ChatMessageOut, clock?: { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }, loadHistory?: () => Promise<ChatMessageOut[]>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(['history', 'c'], [initial])
   function Page() {
-    const { data } = useQuery({ queryKey: ['history', 'c'], queryFn: async () => client.getQueryData<ChatMessageOut[]>(['history', 'c']) ?? [], staleTime: Infinity })
+    const { data } = useQuery({ queryKey: ['history', 'c'], queryFn: loadHistory ?? (async () => client.getQueryData<ChatMessageOut[]>(['history', 'c']) ?? []), staleTime: Infinity })
     return <ProposalCard message={data![0]!} clock={clock} />
   }
   const root = createRootRoute({ component: Page })
@@ -150,7 +150,7 @@ test.each([
   ['send_failed', 'Die Mail wurde nicht gesendet. Der Anbieter hat sie nicht angenommen. Versuch es gleich noch mal.'],
   ['account_gone', 'Die Mail wurde nicht gesendet, weil das Konto nicht mehr verbunden ist.'],
   ...['unsubscribe_rejected', 'unsubscribe_blocked', 'unsubscribe_unreachable', 'unsubscribe_invalid', 'unsubscribe_send_failed'].map(code => [code, 'Der Newsletter ließ sich nicht abbestellen. Öffne die Abmeldeseite im Newsletter.']),
-  ['proposal_not_pending', 'Dieser Vorschlag ist schon erledigt oder abgebrochen. Lade die Unterhaltung neu, um den Stand zu sehen.'],
+  ['proposal_not_pending', 'Dieser Vorschlag ist schon erledigt oder abgebrochen.'],
   ['selection_empty', 'Wähle mindestens einen Eintrag aus.'],
   ['action_failed', 'Das hat nicht geklappt. Versuch es gleich noch mal.'],
   ['host_not_allowed', 'liam-e darf diesen Server nicht ansprechen. Prüfe die Serveradresse oder trag den Server in Mistral Studio unter MAIL_IMAP_ALLOWED_HOSTS ein.'],
@@ -164,7 +164,23 @@ test.each(['proposal_not_pending', 'selection_empty'])('confirmation refusal %s 
   spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => { throw { detail: { code } } }) as never)
   setup(message())
   fireEvent.click(await screen.findByRole('button', { name: '2 abbestellen und archivieren' }))
-  expect(await screen.findByText(code === 'selection_empty' ? 'Wähle mindestens einen Eintrag aus.' : 'Dieser Vorschlag ist schon erledigt oder abgebrochen. Lade die Unterhaltung neu, um den Stand zu sehen.')).toBeTruthy()
+  expect(await screen.findByText(code === 'selection_empty' ? 'Wähle mindestens einen Eintrag aus.' : 'Dieser Vorschlag ist schon erledigt oder abgebrochen.')).toBeTruthy()
+})
+
+test.each(['confirm', 'cancel'] as const)('%s conflict reloads the actual proposal state', async operation => {
+  const request = operation === 'confirm' ? 'chatProposalConfirm' : 'chatProposalCancel'
+  spyOn(sdk, request).mockImplementation((async () => { throw { detail: { code: 'proposal_not_pending' } } }) as never)
+  let resolveHistory!: (rows: ChatMessageOut[]) => void
+  const loadHistory = mock(() => new Promise<ChatMessageOut[]>(resolve => { resolveHistory = resolve }))
+  const client = setup(message(), undefined, loadHistory)
+  const invalidate = spyOn(client, 'invalidateQueries')
+  fireEvent.click(await screen.findByRole('button', { name: operation === 'confirm' ? '2 abbestellen und archivieren' : 'Abbrechen' }))
+  expect(await screen.findByText('Dieser Vorschlag ist schon erledigt oder abgebrochen.')).toBeTruthy()
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['history', 'c'] })
+  expect(loadHistory).toHaveBeenCalledTimes(1)
+  await act(async () => { resolveHistory([message('done', { done: 1 })]) })
+  expect(await screen.findByText('1 Newsletter abbestellt.')).toBeTruthy()
+  expect(screen.queryByRole('checkbox')).toBeNull()
 })
 
 test.each([
