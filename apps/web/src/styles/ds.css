@@ -167,7 +167,7 @@ body { margin: 0; font-family: var(--font-sans); font-size: 14.5px; line-height:
 .le-maillist { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .le-mailrow { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; padding: 12px 14px 12px 12px; border-radius: var(--radius-sm); transition: background-color var(--le-dur-fast) ease; }
 .le-mailrow:hover, .le-mailrow.is-hover { background: var(--surface-soft); }
-.le-mailrow[aria-selected="true"] { background: var(--accent-soft); }
+.le-mailrow[aria-current="true"] { background: var(--accent-soft); }
 .le-mailrow-link { color: inherit; text-decoration: none; }
 .le-mailrow-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .le-mailrow-link:focus-visible { outline: none; }

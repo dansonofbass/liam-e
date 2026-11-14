@@ -46,7 +46,19 @@ test('unread coarse mail exposes its actions and markers', () => {
   fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Weitere Aktionen zu Nebenkostenabrechnung 2025' }))
   expect(document.querySelector('.le-tag--warm')).toBeTruthy()
-  expect(document.querySelector('.lucide-paperclip')).toBeTruthy()
+  expect(screen.getByRole('img', { name: 'Anhang' }).querySelector('.lucide-paperclip')).toBeTruthy()
+})
+
+test('selected mail row is current and keeps its selected styling', async () => {
+  const props = { mail, coarse: true, onOpen: () => {}, onArchive: () => {}, onToggleRead: () => {}, onTrash: () => {} }
+  const { container, rerender } = render(<MailRow {...props} selected />)
+  const row = container.querySelector('.le-mailrow')!
+  expect(row.getAttribute('aria-current')).toBe('true')
+  expect(row.hasAttribute('aria-selected')).toBe(false)
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  expect(css).toContain('.le-mailrow[aria-current="true"] { background: var(--accent-soft); }')
+  rerender(<MailRow {...props} selected={false} />)
+  expect(row.hasAttribute('aria-current')).toBe(false)
 })
 
 test('mail row menu stays in the right-hand time column', async () => {
