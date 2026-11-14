@@ -19,6 +19,14 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
   const target = useRef<{ actionId: string; changes: Change[]; deadline: number } | null>(null)
   const sequence = useRef(0)
   const undoPending = useRef(false)
+  const pending = useRef(0)
+  const reconcile = useRef(false)
+  const settle = () => {
+    if (--pending.current === 0 && reconcile.current) {
+      reconcile.current = false
+      void client.invalidateQueries({ queryKey: ['messages'] })
+    }
+  }
 
   const clear = () => {
     if (timer.current !== undefined) clock.clearTimeout(timer.current)
@@ -59,17 +67,18 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
   const run = async (id: string, kind: Kind) => {
     const current = ++sequence.current
     clear()
-    await client.cancelQueries({ queryKey: ['messages'] })
+    ++pending.current
     const changes: Change[] = []
-    for (const [key, data] of client.getQueriesData<InfiniteData<MessagePageOut>>({ queryKey: ['messages'] })) {
-      data?.pages.forEach((page, pageIndex) => page.items.forEach((row, index) => {
-        if (row.id === id) changes.push({ key, page: pageIndex, index, row })
-      }))
-    }
     const removal = kind === 'archive' || kind === 'trash'
-    const rollback = () => { restore(changes, removal); void client.invalidateQueries({ queryKey: ['messages'] }) }
-    update(id, kind)
+    const rollback = () => { restore(changes, removal); reconcile.current = true }
     try {
+      await client.cancelQueries({ queryKey: ['messages'] })
+      for (const [key, data] of client.getQueriesData<InfiniteData<MessagePageOut>>({ queryKey: ['messages'] })) {
+        data?.pages.forEach((page, pageIndex) => page.items.forEach((row, index) => {
+          if (row.id === id) changes.push({ key, page: pageIndex, index, row })
+        }))
+      }
+      update(id, kind)
       const result = await mailMessageAction({ path: { message_id: id }, body: { kind } })
       if (result.response?.status === 404) {
         update(id, 'remove')
@@ -83,6 +92,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         if (current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
         return changes.length > 0
       } else {
+        if (removal) reconcile.current = true
         if ((kind === 'archive' || kind === 'trash') && current === sequence.current) {
           const text = breakpoint === 'mobile' ? de.inbox.doneShort[kind] : de.inbox.done[kind](result.data.message.subject)
           show({ tone: 'success', text, undoable: true }, { actionId: result.data.action_id, changes })
@@ -94,24 +104,25 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       rollback()
       if (current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
       return changes.length > 0
-    }
+    } finally { settle() }
   }
   const undo = async () => {
     const selected = target.current
     if (!selected || undoPending.current) return
     if (clock.now() >= selected.deadline) { clear(); return }
     undoPending.current = true
+    ++pending.current
     try {
       const result = await mailActionsUndo({ body: { action_ids: [selected.actionId] } })
       if (result.data?.restored.includes(selected.actionId)) {
         restore(selected.changes, true)
         if (target.current === selected) clear()
-        void client.invalidateQueries({ queryKey: ['messages'] })
+        reconcile.current = true
         void client.invalidateQueries({ queryKey: ['summary'] })
       } else if (target.current === selected) show({ tone: 'danger', text: de.proposal.requestError, undoable: false })
     } catch {
       if (target.current === selected) show({ tone: 'danger', text: de.proposal.requestError, undoable: false })
-    } finally { undoPending.current = false }
+    } finally { undoPending.current = false; settle() }
   }
   const notify = (text: string) => {
     ++sequence.current

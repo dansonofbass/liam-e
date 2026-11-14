@@ -133,6 +133,41 @@ for (const first of ['archive 1', 'read 1']) {
   })
 }
 
+test('overlapping archives reconcile only after both requests settle', async () => {
+  const finish: Record<string, (value: unknown) => void> = {}
+  spyOn(sdk, 'mailMessageAction').mockImplementation(((options: { path: { message_id: string } }) =>
+    new Promise(resolve => { finish[options.path.message_id] = resolve })) as never)
+  const { client } = setup()
+  const invalidate = spyOn(client, 'invalidateQueries')
+  const messageInvalidations = () => invalidate.mock.calls.filter(([filters]) => JSON.stringify(filters?.queryKey) === JSON.stringify(['messages']))
+  fireEvent.click(screen.getByText('archive 1'))
+  await waitFor(() => expect(finish['1']).toBeDefined())
+  fireEvent.click(screen.getByText('archive 2'))
+  await waitFor(() => expect(finish['2']).toBeDefined())
+  await act(async () => { finish['1']!({ response: { status: 502 } }) })
+  expect(messageInvalidations()).toHaveLength(0)
+  await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
+  expect(screen.queryByText('Zweite:false')).toBeNull()
+  await act(async () => { finish['2']!({ data: { action_id: 'action-2', message: rows[1] }, response: { status: 200 } }) })
+  expect(messageInvalidations()).toHaveLength(1)
+  await act(async () => { await client.fetchQuery({ queryKey: key, queryFn: async () => ({ pages: [{ items: [rows[0]], next_cursor: null }], pageParams: [undefined] }) }) })
+  await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
+  expect(screen.queryByText('Zweite:false')).toBeNull()
+})
+
+test('a single successful archive reconciles messages once after settling', async () => {
+  let finish!: (value: unknown) => void
+  spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(resolve => { finish = resolve })) as never)
+  const { client } = setup()
+  const invalidate = spyOn(client, 'invalidateQueries')
+  const messageInvalidations = () => invalidate.mock.calls.filter(([filters]) => JSON.stringify(filters?.queryKey) === JSON.stringify(['messages']))
+  fireEvent.click(screen.getByText('archive 1'))
+  await waitFor(() => expect(finish).toBeDefined())
+  expect(messageInvalidations()).toHaveLength(0)
+  await act(async () => { finish({ data: { action_id: 'action-1', message: rows[0] }, response: { status: 200 } }) })
+  expect(messageInvalidations()).toHaveLength(1)
+})
+
 test('mobile uses the short success text', async () => {
   success(); setup(true); fireEvent.click(screen.getByText('archive 1'))
   expect(await screen.findByText('Mail archiviert.')).toBeTruthy()
