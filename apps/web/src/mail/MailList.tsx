@@ -96,7 +96,7 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
       void client.invalidateQueries({ queryKey: ['summary'] }); void client.invalidateQueries({ queryKey: ['messages'] })
     } catch { notify(de.inbox.refreshError) } finally { setSyncing(false) }
   }
-  const buttons = <><IconButton icon="search" label={de.inbox.search} tip={de.inbox.searchTip} size={breakpoint === 'mobile' ? 'lg' : 'md'} onClick={() => { setSearchOpen(true); searchRef.current?.querySelector('input')?.focus() }} /><IconButton icon="refresh-cw" label={de.inbox.refresh} tip={de.inbox.refreshTip} size={breakpoint === 'mobile' ? 'lg' : 'md'} disabled={syncing} onClick={() => { void refresh() }} /></>
+  const buttons = <><IconButton className="le-inbox-control" icon="search" label={de.inbox.search} tip={de.inbox.searchTip} size={breakpoint === 'mobile' || coarse ? 'lg' : 'md'} onClick={() => { setSearchOpen(true); searchRef.current?.querySelector('input')?.focus() }} /><IconButton className="le-inbox-control" icon="refresh-cw" label={de.inbox.refresh} tip={de.inbox.refreshTip} size={breakpoint === 'mobile' || coarse ? 'lg' : 'md'} disabled={syncing} onClick={() => { void refresh() }} /></>
   const time = summary.data?.last_sync_at ? formatTime(new Date(summary.data.last_sync_at)) : undefined
   const accounts = summary.data?.accounts ?? []
   const accountLabel = accounts.find(account => account.id === search.account?.[0])?.display_name ?? de.controls.allAccounts

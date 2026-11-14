@@ -59,10 +59,11 @@
 .le-inbox-search { padding: var(--space-2) var(--space-4); }
 .le-inbox-search .le-input { width: 100%; }
 .le-inbox-mobile-status { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); }
-.le-inbox-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.le-inbox-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: calc(var(--control-height-lg) + 2 * var(--space-4)); }
 .le-inbox-scroll > .le-hint, .le-inbox-scroll > .le-notice { margin: var(--space-4); }
 .le-inbox-toast { position: absolute; z-index: 10; left: var(--space-4); right: var(--space-4); bottom: var(--space-4); border-radius: var(--radius-md); background: var(--surface-overlay); box-shadow: var(--shadow-overlay); }
 .le-inbox-toast .le-notice > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) { .le-inbox-filters .le-chip, .le-inbox-control, .le-inbox-toast .le-link { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } .le-inbox-toast .le-link { display: inline-flex; align-items: center; justify-content: center; } }
 .le-mailrow--placeholder { min-height: var(--space-7); align-items: center; }
 .le-mailrow--placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface-soft)); }
 .le-mailrow--placeholder span:first-child { width: var(--space-7); height: var(--space-7); }

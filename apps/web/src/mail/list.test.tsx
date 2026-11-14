@@ -8,8 +8,8 @@ import { inboxSearchSchema } from './filters'
 
 const originalMatchMedia = window.matchMedia
 const row = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', subject: 'Termin', snippet: '', internal_date: null, deadline: null, has_attachments: false, is_flagged: false, is_read: false, needs_reply: false }
-function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' = 'empty', path = '/mail') {
-  window.matchMedia = ((query: string) => ({ matches: query.includes('1024px'), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' = 'empty', path = '/mail', coarse = false) {
+  window.matchMedia = ((query: string) => ({ matches: query.includes('1024px') || (coarse && query.includes('pointer: coarse')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' }], unread_total: 1, last_sync_at: null } })) as never)
   const list = spyOn(sdk, 'mailMessagesList').mockImplementation((async () => {
     if (mode === 'loading') return await new Promise(() => {})
@@ -26,6 +26,20 @@ function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' = 'empty', p
   return { router, list, view }
 }
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia })
+
+test('coarse pointer inbox controls use the large touch target token', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.match(/@media \(pointer: coarse\) \{ (\.le-inbox-filters[^{}]+)\{ ([^{}]+) \} \.le-inbox-toast \.le-link \{ ([^{}]+) \} \}/u)
+  expect(rule).toBeTruthy()
+  for (const selector of ['.le-inbox-filters .le-chip', '.le-inbox-control', '.le-inbox-toast .le-link']) expect(rule?.[1]).toContain(selector)
+  expect(rule?.[2]).toContain('min-width: var(--control-height-lg)')
+  expect(rule?.[2]).toContain('min-height: var(--control-height-lg)')
+  for (const property of ['display: inline-flex', 'align-items: center', 'justify-content: center']) expect(rule?.[3]).toContain(property)
+  expect(css).toMatch(/\.le-inbox-scroll \{[^}]*padding-bottom: calc\(var\(--control-height-lg\) \+ 2 \* var\(--space-4\)\)/u)
+  setup('row', '/mail', true)
+  await screen.findByText('Termin')
+  for (const name of ['Suchen', 'Jetzt abrufen']) expect(screen.getByRole('button', { name }).classList.contains('le-icon-btn--lg')).toBe(true)
+})
 
 test('unread filter updates URL and query', async () => {
   const { router, list } = setup()
