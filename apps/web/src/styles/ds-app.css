@@ -136,7 +136,8 @@
 .le-insight-placeholder { display: flex; flex-direction: column; gap: var(--space-2); }
 .le-insight-placeholder-line { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface)); }
 .le-insight-placeholder-line:last-child { width: 60%; }
-.le-mail-text { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 64ch; }
+.le-mail-text { display: flex; flex-direction: column; gap: var(--space-3); overflow-wrap: anywhere; max-width: 64ch; }
+.le-mail-text p { margin: 0; white-space: pre-wrap; }
 .le-mail-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .le-mail-attachment { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 36px; max-width: 100%; padding: var(--space-1) var(--space-3); border: 1px solid var(--control-border); border-radius: var(--radius-pill); }
 .le-mail-attachment-name { font-weight: 600; overflow-wrap: anywhere; }

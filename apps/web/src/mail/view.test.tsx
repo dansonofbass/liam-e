@@ -51,6 +51,22 @@ test('insight points use disc markers, indentation and item spacing', async () =
   expect(css).toMatch(/\.le-insight-points li \+ li \{[^}]*margin-top: var\(--space-1\);/u)
 })
 
+test('mail text becomes one paragraph per block, spaced by the paragraph gap and not by blank lines', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-mail-text \{[^}]*display: flex; flex-direction: column; gap: var\(--space-3\);/u)
+  expect(css).toMatch(/\.le-mail-text p \{[^}]*margin: 0; white-space: pre-wrap;/u)
+  const original = mail.body_text
+  mail.body_text = 'Sehr geehrte Damen und Herren,\n\nanbei die Abrechnung.\n\n\nMit freundlichen Grüßen\nIhre Hausverwaltung'
+  try {
+    setup()
+    await screen.findByRole('heading', { name: 'Termin' })
+    const text = document.querySelector('.le-mail-text')
+    expect(Array.from(text?.querySelectorAll('p') ?? []).map(p => p.textContent)).toEqual(['Sehr geehrte Damen und Herren,', 'anbei die Abrechnung.', 'Mit freundlichen Grüßen\nIhre Hausverwaltung'])
+    expect(text?.textContent).not.toContain('\n\n')
+    await settle()
+  } finally { mail.body_text = original }
+})
+
 test('opening unread mail marks it read once across rerender and refetch, updating list', async () => {
   const { action, client, view, router } = setup({ unread: true })
   await waitFor(() => expect(action.mock.calls.length).toBe(1))
