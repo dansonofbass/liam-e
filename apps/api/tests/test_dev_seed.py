@@ -1,10 +1,13 @@
 """Tests for the local development seed's database safety guard."""
 
+import json
+
 import pytest
 
 from datetime import UTC, datetime
 
-from api.mail import dev_seed
+from api.mail import dev_seed, headers
+from api.routers.api.v1.mail.schemas import AttachmentOut
 from api.mail.dev_seed import SeedRefusedError, db_env, require_local_database
 from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
@@ -122,6 +125,12 @@ async def test_seed_is_repeatable_and_preserves_other_rows(fake_store, monkeypat
         assert fake_store.messages["other-mail"] == other_mail
         house = fake_store.messages[dev_seed.seed_id("mail", "hausverwaltung-nebenkosten")]
         assert house.internal_date == datetime(2026, 11, 13, 7, 57, tzinfo=UTC)
+        assert headers.sender_name(house.sender) == "Hausverwaltung Kurz"
+        attachments = [AttachmentOut.model_validate(item) for item in json.loads(house.attachments_json)]
+        assert len(attachments) == 1 and attachments[0].content_type == "application/pdf"
+        for name, slug, *_ in dev_seed.NEWSLETTERS:
+            row = fake_store.messages[dev_seed.seed_id("mail", f"{slug}-1")]
+            assert headers.sender_name(row.sender) == name
         assert insights[house.id].deadline.isoformat() == "2026-11-20"
 
 

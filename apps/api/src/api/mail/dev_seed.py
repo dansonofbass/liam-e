@@ -5,6 +5,7 @@ import json
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
+from email.utils import formataddr
 from urllib.parse import parse_qsl, urlsplit
 from uuid import UUID, uuid5
 from zoneinfo import ZoneInfo
@@ -114,11 +115,11 @@ async def seed(now: datetime | None = None) -> SeedResult:
         house = key == "hausverwaltung-nebenkosten"
         tech = key == "techdigest-woche"
         messages.append(MailMessage(id=seed_id("mail", key), account_id=by_key[account].id,
-            provider_uid=f"seed-{key}", thread_id=f"seed-{key}", sender=sender, sender_address=address,
+            provider_uid=f"seed-{key}", thread_id=f"seed-{key}", sender=formataddr((sender, address)), sender_address=address,
             subject=subject, snippet=snippet, body_text=HOUSE_BODY if house else snippet,
             recipients_json=json.dumps([by_key[account].email_address]), internal_date=at(day, clock),
             is_read=read, is_flagged=flagged, has_attachments=house,
-            attachments_json=json.dumps([{"name": "Abrechnung_2025.pdf", "size": 212 * 1024}]) if house else "[]",
+            attachments_json=json.dumps([{"name": "Abrechnung_2025.pdf", "size": 212 * 1024, "content_type": "application/pdf"}]) if house else "[]",
             list_unsubscribe="<mailto:abmelden@techdigest-weekly.example>" if tech else ""))
     index = 0
     for sender, slug, account, count, read in NEWSLETTERS:
@@ -126,7 +127,7 @@ async def seed(now: datetime | None = None) -> SeedResult:
             key = f"{slug}-{number}"
             snippet = "Die neuen Angebote und Tipps der Woche."
             messages.append(MailMessage(id=seed_id("mail", key), account_id=by_key[account].id,
-                provider_uid=f"seed-{key}", thread_id=f"seed-{key}", sender=sender,
+                provider_uid=f"seed-{key}", thread_id=f"seed-{key}", sender=formataddr((sender, f"newsletter@{slug}.example")),
                 sender_address=f"newsletter@{slug}.example", subject=f"{sender}: Ausgabe {number}",
                 snippet=snippet, body_text=snippet, recipients_json=json.dumps([by_key[account].email_address]),
                 list_unsubscribe=f"<mailto:abmelden@{slug}.example>", is_read=read,
