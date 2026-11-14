@@ -10,7 +10,7 @@ import { inboxSearchSchema } from './filters'
 import { MailView } from './MailView'
 
 const originalMatchMedia = window.matchMedia, originalFetch = globalThis.fetch
-const mail = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', to: ['ich@example.com'], cc: [], subject: 'Termin', snippet: '', body_text: '<b>fett</b>', internal_date: null, deadline: null, has_attachments: true, attachments: [{ name: 'Abrechnung_2025.pdf', size: 217088, content_type: 'application/pdf' }], is_flagged: false, is_read: true, needs_reply: false, can_unsubscribe: true, thread_id: null }
+const mail = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', to: ['ich@example.com'], cc: [], subject: 'Termin', snippet: '', body_text: '<b>fett</b>', internal_date: null, deadline: null, has_attachments: true, attachments: [{ name: 'Abrechnung_2025.pdf', size: 217088, content_type: 'application/pdf' }], is_flagged: false, is_read: true, needs_reply: false, can_unsubscribe: true, can_show_original: true, thread_id: null }
 function setup({ mobile = false, unread = false, missing = false, loading = false, failed = false, path = '/mail/m1', stream = false, insight }: { mobile?: boolean; unread?: boolean; missing?: boolean; loading?: boolean; failed?: boolean; path?: string; stream?: boolean; insight?: () => Promise<{ data: InsightOut }> } = {}) {
   window.matchMedia = ((q: string) => ({ matches: !mobile && (q.includes('1024px') || q.includes('640px')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   let request: Record<string, unknown> | undefined
@@ -246,7 +246,7 @@ test('newsletter menu starts the contextual confirmation turn', async () => {
   expect((screen.getByRole('button', { name: 'Antwort entwerfen' }) as HTMLButtonElement).disabled).toBe(true)
 })
 
-test.each([{ mobile: false }, { mobile: true }])('the more-actions button is always there; without an unsubscribe route its only entry is disabled and explains why (%o)', async ({ mobile }) => {
+test.each([{ mobile: false }, { mobile: true }])('the more-actions button is always there; without an unsubscribe route that entry is disabled and explains why (%o)', async ({ mobile }) => {
   const original = mail.can_unsubscribe
   mail.can_unsubscribe = false
   try {
@@ -273,6 +273,86 @@ test('with an unsubscribe route the entry is enabled and has no hint', async () 
   expect(item.hasAttribute('aria-disabled')).toBe(false)
   expect(item.querySelector('.le-menu-sub')).toBeNull()
   await settle()
+})
+
+const source = 'Received: from a\r\nSubject: Termin\r\n\r\n<b>fett</b>'
+const originalData = { headers: [{ name: 'Received', value: 'from a' }, { name: 'Subject', value: 'Termin' }], source, truncated: false }
+async function openOriginal() {
+  await screen.findByRole('heading', { name: 'Termin' })
+  const more = screen.getByRole('button', { name: 'Weitere Aktionen' })
+  fireEvent.click(more)
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Original anzeigen' }))
+  return { more, dialog: await screen.findByRole('dialog', { name: 'Original der Mail' }) }
+}
+
+test('original shows loading, then headers and literal source, fetched once; Escape closes and returns the focus', async () => {
+  let resolve!: (value: unknown) => void
+  const fetchOriginal = spyOn(sdk, 'mailMessageOriginal').mockImplementation((() => new Promise(done => { resolve = done })) as never)
+  setup()
+  const { more, dialog } = await openOriginal()
+  expect(within(dialog).getByRole('status').textContent).toBe('Original wird abgerufen …')
+  expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Schließen' }))
+  await act(async () => { resolve({ data: originalData, response: { status: 200 } }) })
+  expect(await within(dialog).findByText('Received')).toBeTruthy()
+  expect(within(dialog).getByText('from a')).toBeTruthy()
+  expect(within(dialog).getByRole('heading', { name: 'Kopfzeilen' })).toBeTruthy()
+  expect(within(dialog).getByRole('heading', { name: 'Quelltext' })).toBeTruthy()
+  expect(dialog.querySelector('pre')?.textContent).toBe(source)
+  expect(dialog.querySelector('pre b')).toBeNull()
+  expect(within(dialog).queryByRole('status')).toBeNull()
+  expect(fetchOriginal.mock.calls).toEqual([[{ path: { message_id: 'm1' } }]])
+  fireEvent.keyDown(dialog, { key: 'Escape' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(document.activeElement).toBe(more)
+})
+
+test('a truncated original says so, an empty one too, and the close button closes', async () => {
+  spyOn(sdk, 'mailMessageOriginal').mockImplementation((async () => ({ data: { headers: [], source: '', truncated: true }, response: { status: 200 } })) as never)
+  setup({ mobile: true })
+  const { dialog } = await openOriginal()
+  expect(await within(dialog).findByText('Die Mail ist groß, deshalb siehst du hier nur den Anfang des Quelltexts.')).toBeTruthy()
+  expect(within(dialog).getByText('Der Anbieter hat zu dieser Mail keinen Quelltext geliefert.')).toBeTruthy()
+  expect(within(dialog).queryByRole('heading', { name: 'Kopfzeilen' })).toBeNull()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Schließen' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+})
+
+test.each([[409, 'Bei dieser Mail lässt sich das Original nicht abrufen.'], [404, 'Die Mail ist nicht mehr da.']])('a refused original (%i) explains itself and offers no retry', async (status, text) => {
+  const fetchOriginal = spyOn(sdk, 'mailMessageOriginal').mockImplementation((async () => ({ error: { detail: { code: 'original_unavailable' } }, response: { status } })) as never)
+  setup()
+  const { dialog } = await openOriginal()
+  expect((await within(dialog).findByRole('alert')).textContent).toBe(text)
+  expect(within(dialog).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
+  expect(fetchOriginal).toHaveBeenCalledTimes(1)
+})
+
+test('a provider failure offers a retry that fetches the original again', async () => {
+  let fail = true
+  const fetchOriginal = spyOn(sdk, 'mailMessageOriginal').mockImplementation((async () => fail ? { error: { detail: { code: 'provider_failed' } }, response: { status: 502 } } : { data: originalData, response: { status: 200 } }) as never)
+  setup()
+  const { dialog } = await openOriginal()
+  expect(await within(dialog).findByText('Das Original ließ sich beim Anbieter nicht abrufen. Versuch es gleich noch mal.')).toBeTruthy()
+  fail = false
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Noch mal versuchen' }))
+  await waitFor(() => expect(dialog.querySelector('pre')?.textContent).toBe(source))
+  expect(within(dialog).queryByRole('alert')).toBeNull()
+  expect(fetchOriginal).toHaveBeenCalledTimes(2)
+})
+
+test('where the original cannot be fetched the entry is disabled, explains why and opens nothing', async () => {
+  const fetchOriginal = spyOn(sdk, 'mailMessageOriginal')
+  mail.can_show_original = false
+  try {
+    setup(); await screen.findByRole('heading', { name: 'Termin' })
+    fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
+    const item = screen.getByRole('menuitem', { name: /Original anzeigen/ })
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    expect(within(item).getByText('Bei diesem Konto lässt sich das Original nicht abrufen.')).toBeTruthy()
+    fireEvent.click(item)
+    await settle()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(fetchOriginal).not.toHaveBeenCalled()
+  } finally { mail.can_show_original = true }
 })
 
 test('other load errors can retry or return to the filtered inbox', async () => {

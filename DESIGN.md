@@ -304,7 +304,7 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   Schnellaktionen tragen 19 px. Keine Emojis, keine Logos der Anbieter.
 - **Lexikon:** `message-circle` Chat · `messages-square` Unterhaltungen (Symbolleiste am Tablet) · `inbox` Posteingang · `at-sign` Konten · `archive`
   Archivieren · `trash-2` In den Papierkorb · `reply` Antworten · `pencil` Antwort
-  entwerfen · `forward` Weiterleiten · `ban` Als Spam markieren · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`
+  entwerfen · `forward` Weiterleiten · `ban` Als Spam markieren · `file-code` Original anzeigen · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`
   Weitere Aktionen · `external-link` Mail öffnen · `arrow-up` Senden · `square` (gefüllt)
   Anhalten · `sparkle` Assistent · `flag` Priorisieren · `newspaper` Newsletter · `clock`
   Frist · `paperclip` Anhang · `check`, `circle-alert`, `info` in Hinweisen · `menu` Menü
@@ -323,7 +323,9 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
 - **Zusammengesetzt** aus diesen, im Ordner ihrer Ansicht: ChatHeader und ModelMenu
   (`chat/`, §9.6), InsightBox („Kurz gefasst“, §9.4) und ActionToast (Hinweis mit
   „Rückgängig“, §9.2) in `mail/`, der Dialog „Konto entfernen“ (`accounts/RemoveDialog.tsx`,
-  Klasse `le-dialog`, mit `scrim`, Fokus bleibt im Dialog) und ThemeMenu (`shell/`, §3).
+  Klasse `le-dialog`, mit `scrim`, Fokus bleibt im Dialog), der Dialog „Original der Mail“
+  (`mail/OriginalDialog.tsx`, breiter mit `le-dialog--wide`, Kopf mit „Schließen“, der
+  Inhalt scrollt für sich) und ThemeMenu (`shell/`, §3).
 - **Varianten:**
   - Button `primary`, `secondary`, `ghost`, `danger`; klein mit `le-btn--sm` (obere Leiste
     der Mail am Desktop, §7.4).
@@ -426,12 +428,15 @@ Anfang an mit.
 - Eine Frist steht auf allen Breakpoints als Schild in `warm-soft` unter dem Vorschautext,
   auf `mobile` neben dem Konto-Tag.
 - Das Menü „Weitere Aktionen“ der geöffneten Mail enthält „Weiterleiten“, „Newsletter
-  abbestellen“ und „Als Spam markieren“. Die ersten beiden schlagen ihre Aktion im Chat vor
-  (§9.2): „Weiterleiten“ bittet um einen Entwurf, und der Assistent fragt dort nach dem
-  Empfänger; „Newsletter abbestellen“ ist gesperrt, mit Hinweis, wo die Mail keinen Weg zum
-  Abbestellen nennt. „Als Spam markieren“ ist eine Einzelaktion (§9.2): Die Mail
-  verschwindet sofort aus der Liste, und der Hinweis bietet „Rückgängig“. Geplant ist
-  „Original anzeigen“ (Entscheidung 4 vom 2026-11-14).
+  abbestellen“, „Als Spam markieren“ und „Original anzeigen“. Die ersten beiden schlagen
+  ihre Aktion im Chat vor (§9.2): „Weiterleiten“ bittet um einen Entwurf, und der Assistent
+  fragt dort nach dem Empfänger; „Newsletter abbestellen“ ist gesperrt, mit Hinweis, wo die
+  Mail keinen Weg zum Abbestellen nennt. „Als Spam markieren“ ist eine Einzelaktion (§9.2):
+  Die Mail verschwindet sofort aus der Liste, und der Hinweis bietet „Rückgängig“.
+  „Original anzeigen“ öffnet einen Dialog mit Kopfzeilen und Quelltext, nur lesend und in
+  der normalen Schrift; er holt beides erst beim Öffnen vom Anbieter und speichert nichts.
+  Bei Konten, die das Original nicht liefern (Connector), ist der Eintrag gesperrt, mit
+  Hinweis.
 - Filter-Chips stehen auf `mobile` in einer Zeile, die für sich seitlich scrollt; die Seite
   scrollt nie seitlich.
 
@@ -595,10 +600,10 @@ DESIGN.md folgt dem Aufbau und den Regeln von smartpaper-ng. Bewusst anders:
    eine Zeile Vorschautext auf der Mailkarte im Chat; 20 px Innenabstand im Panel
    „Konto verbinden“.
 3. **Ungelesen-Zähler** am Posteingang auch in der schmalen Symbolleiste am Tablet.
-4. **Weitere Einträge im Menü „Weitere Aktionen“** der geöffneten Mail sind geplant:
-   „Weiterleiten“ (als Vorschlag über den Chat), „Als Spam markieren“ (Einzelaktion mit
-   „Rückgängig“) und „Original anzeigen“ (Kopfzeilen und Quelltext, nur lesend). Jeder
-   Eintrag ist eine eigene Aufgabe mit eigenem Endpunkt.
+4. **Weitere Einträge im Menü „Weitere Aktionen“** der geöffneten Mail: „Weiterleiten“
+   (als Vorschlag über den Chat), „Als Spam markieren“ (Einzelaktion mit „Rückgängig“, eine
+   weitere Art am Aktions-Endpunkt) und „Original anzeigen“ (Kopfzeilen und Quelltext, nur
+   lesend, eigener Endpunkt). Umgesetzt, siehe §7.4.
 5. **Outlook:** Der Connector wird erneut geprobt, nur lesend, sobald die App in Studio
    ihren `MISTRAL_API_KEY` hat. Eigenes Microsoft-Login wird erst geplant, wenn er weiter
    scheitert.
