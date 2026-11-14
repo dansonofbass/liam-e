@@ -87,7 +87,7 @@ export const de = {
     item_gone: 'Die Mail ist nicht mehr da.', action_unsupported: 'Das geht bei diesem Konto nicht.',
   },
   assistant: { name: 'liam-e' },
-  inbox: { title: 'Posteingang' },
+  inbox: { title: 'Posteingang', groups: { today: 'Heute', yesterday: 'Gestern', week: 'Diese Woche', older: 'Älter' } },
   mail: { summary: 'Kurz gefasst', draftReply: 'Antwort entwerfen', askInChat: 'Im Chat fragen' },
   accounts: { title: 'Konten', connect: 'Konto verbinden' },
   quickActions: {
