@@ -1,7 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
 import type { ChatMessageOut, MailSummaryOut } from '../api/generated/types.gen'
 import { Route as StartRoute } from '../routes/_app/index'
@@ -15,12 +15,12 @@ let signal: AbortSignal
 let history: ChatMessageOut[] = []
 let requestBody: Record<string, unknown>
 let summary: MailSummaryOut = { accounts: [], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
-function setup(path = '/') {
+function setup(path = '/', historyGone = false) {
   history = []
   summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; requestBody = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start(c) { stream = c } }))) }) as typeof fetch
-  spyOn(sdk, 'chatHistory').mockImplementation((async () => ({ data: history })) as never)
+  spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [] })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -186,11 +186,22 @@ test('does not follow new text after scrolling up; button resumes following', as
   expect(screen.queryByRole('button', { name: 'Zum Ende' })).toBeNull()
 })
 
-test('missing conversation refusal renders its explanation', async () => {
-  setup('/chat/c')
+test('missing conversation in history offers a new conversation', async () => {
+  const { router } = setup('/chat/c', true)
+  const notice = (await screen.findByText('Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.')).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
+  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+})
+
+test('missing conversation in a stream offers a new conversation', async () => {
+  const { router } = setup('/chat/c')
   globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'conversation_not_found' } }), { status: 404 }))) as unknown as typeof fetch
   await send()
-  expect(await screen.findByText('Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.')).toBeTruthy()
+  const notice = (await screen.findByText('Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.')).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
+  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
 })
 
 test('unknown model refusal renders its explanation', async () => {

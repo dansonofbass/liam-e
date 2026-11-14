@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 import { historyQuery, messageQuery, modelsQuery, summaryQuery } from '../api/queries'
+import { errorCode } from '../api/unwrap'
 import type { AccountSummaryOut, ChatMessageOut, MailRefOut } from '../api/generated/types.gen'
 import { Button, ChatMessage, Chip, Composer, MailReference, Notice } from '../ds'
 import { providerLabel } from '../ds/providerLabel'
@@ -41,6 +42,7 @@ function Suggestions({ items, onSend }: { items: string[]; onSend: (text: string
 }
 
 export function Conversation({ conversationId }: { conversationId: string }) {
+  const navigate = useNavigate()
   const history = useQuery(historyQuery(conversationId))
   const { data: summary } = useQuery(summaryQuery())
   const { data: models = [] } = useQuery(modelsQuery())
@@ -65,13 +67,15 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   }
   const status = state.status?.code === 'searching' ? de.status.searching(state.status.count ?? 0) : state.status ? de.status[state.status.code] : null
   const liveModel = modelLabel(selectedModel?.conversationId === conversationId ? selectedModel.id : lastAssistant?.extras.model) ?? models.find(model => model.is_default)?.label
+  const historyGone = errorCode(history.error instanceof Error ? history.error.cause : history.error) === 'conversation_not_found'
+  const newConversation = { label: de.shell.newConversation, onClick: () => { void navigate({ to: '/' }) } }
   return <div className="le-chat-view"><ChatHeader conversationId={conversationId}><ModelMenu key={conversationId} conversationId={conversationId} model={lastAssistant?.extras.model} onChange={id => setSelectedModel({ conversationId, id })} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
     {history.isPending && <p className="le-hint">{de.chat.loadingHistory}</p>}
-    {history.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void history.refetch() } }}>{de.chat.historyError}</Notice>}
+    {history.isError && <Notice tone="danger" action={historyGone ? newConversation : { label: de.chat.retry, onClick: () => { void history.refetch() } }}>{historyGone ? de.errors.conversation_not_found : de.chat.historyError}</Notice>}
     {messages.map(message => <div className="le-chat-entry" key={message.id}>{renderMessage(message)}</div>)}
     {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={liveModel} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{de.chat.askAgain}</Button></div>}
-      {state.phase === 'error' && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
+      {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'conversation_not_found' ? newConversation : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
       {state.phase === 'done' && <>{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}
     </div>}
     <div className="sr-only" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
