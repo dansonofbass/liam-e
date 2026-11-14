@@ -37,6 +37,13 @@ test('coarse pointer account actions and notice links use large touch targets', 
   for (const property of ['display: inline-flex', 'align-items: center', 'min-width: var(--control-height-lg)', 'min-height: var(--control-height-lg)']) expect(rule?.[3]).toContain(property)
 })
 
+test('the provider subtitles may wrap inside their option, although buttons do not wrap', async () => {
+  // At 13 px "iCloud, Yahoo und andere über IMAP mit App-Passwort" needs 343 px; beside an account list the option is 316 px wide.
+  const [ds, app] = await Promise.all(['ds.css', 'ds-app.css'].map(name => Bun.file(new URL(`../styles/${name}`, import.meta.url)).text()))
+  expect(ds).toMatch(/^\.le-btn \{[^}]*white-space: nowrap;/mu)
+  expect(app).toMatch(/^\.le-connect-option-text \{[^}]*white-space: normal;/mu)
+})
+
 test('accounts scroll area is bounded by the viewport', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const app = css.match(/\.le-app:has\(\.le-accounts-scroll\)[^{]*\{([^}]*)\}/u)?.[1]

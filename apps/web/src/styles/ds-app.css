@@ -60,7 +60,8 @@
 .le-connect-option { width: 100%; height: auto; border-radius: var(--radius-md); justify-content: flex-start; text-align: left; padding: var(--space-3); }
 .le-connect-option[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .le-connect-icon { display: grid; place-items: center; flex: none; width: var(--control-height-lg); height: var(--control-height-lg); border-radius: var(--radius-sm); background: var(--surface); }
-.le-connect-option-text { display: flex; flex-direction: column; min-width: 0; }
+/* Button text does not wrap; the provider subtitles are longer than the panel at 13 px, so they may. */
+.le-connect-option-text { display: flex; flex-direction: column; min-width: 0; white-space: normal; }
 .le-connect-detail, .le-imap-form { margin-top: var(--space-4); }
 .le-connect-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .le-imap-servers { display: grid; gap: var(--space-3); }
