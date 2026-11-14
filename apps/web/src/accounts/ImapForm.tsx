@@ -27,7 +27,9 @@ export function ImapForm({ presets, initialAddress = '', focusSecret = false, on
     if (Object.keys(problems).length) return
     pendingRef.current = true; setPending(true); onBusyChange(true)
     try {
-      const result = await mailAccountConnectImap({ body: { email_address: email.trim(), imap_host: imap.trim(), smtp_host: smtp.trim(), password_secret: secret.trim() } })
+      const preset = presets.find(item => item.domain.toLowerCase() === domain)
+      const imapHost = imap.trim(), smtpHost = smtp.trim()
+      const result = await mailAccountConnectImap({ body: { email_address: email.trim(), ...(imapHost.toLowerCase() !== preset?.imap_host.toLowerCase() && { imap_host: imapHost }), ...(smtpHost.toLowerCase() !== preset?.smtp_host.toLowerCase() && { smtp_host: smtpHost }), password_secret: secret.trim() } })
       if (result.error || !result.data) throw result.error
       onConnected(result.data)
     } catch (error) {
