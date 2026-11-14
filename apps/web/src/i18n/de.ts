@@ -17,7 +17,7 @@ export const de = {
   },
   shell: {
     chat: 'Chat', inbox: 'Posteingang', accounts: 'Konten', conversations: 'Unterhaltungen',
-    newConversation: 'Neue Unterhaltung', openMenu: 'Menü öffnen', close: 'Schließen',
+    newConversation: 'Neue Unterhaltung', newConversationTip: 'Startet eine neue Unterhaltung.', openMenu: 'Menü öffnen', close: 'Schließen',
     chatTip: 'Mit deinen Mails chatten und Aufgaben erledigen', inboxTip: 'Mails aus allen Konten in einer Liste', accountsTip: 'Konten verbinden und verwalten',
     accountCount: (n: number) => plural(n, { zero: 'kein Konto', one: '# Konto', other: '# Konten' }),
   },

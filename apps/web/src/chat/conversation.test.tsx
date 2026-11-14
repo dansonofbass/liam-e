@@ -18,7 +18,7 @@ let summary: MailSummaryOut = { accounts: [], unread_total: 0, newsletter_sender
 function setup(path = '/') {
   history = []
   summary = { accounts: [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
-  window.matchMedia = (() => ({ matches: true })) as unknown as typeof window.matchMedia
+  window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; requestBody = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start(c) { stream = c } }))) }) as typeof fetch
   spyOn(sdk, 'chatHistory').mockImplementation((async () => ({ data: history })) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)

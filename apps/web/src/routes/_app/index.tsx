@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { messageQuery, summaryQuery } from '../../api/queries'
 import { ChatComposer } from '../../chat/Conversation'
 import { ModelMenu } from '../../chat/ModelMenu'
+import { ChatHeader } from '../../chat/ChatHeader'
 import { useChatSession } from '../../chat/session'
 import { Button as ActionButton, IconButton, MailReference, Notice, QuickAction } from '../../ds'
 import { de } from '../../i18n/de'
@@ -41,7 +42,7 @@ function Greeting() {
     }
   }, [started, state.conversationId, navigate])
   const data = summary.data
-  return <div className="le-chat-view"><div className="le-chat-header"><ModelMenu /></div><div className="le-chat-messages"><div className="le-chat-start"><h1 className="display le-greeting">{de.chat.greetingFirst}<br /><span>{de.chat.greetingSecond}</span></h1>
+  return <div className="le-chat-view"><ChatHeader><ModelMenu /></ChatHeader><div className="le-chat-messages"><div className="le-chat-start"><h1 className="display le-greeting">{de.chat.greetingFirst}<br /><span>{de.chat.greetingSecond}</span></h1>
     {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
     {summary.isPending && <p className="le-hint">{de.chat.loadingSummary}</p>}
     {summary.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void summary.refetch() } }}>{de.chat.summaryError}</Notice>}

@@ -11,7 +11,7 @@ import { ChatSessionProvider } from './session'
 const originalFetch = globalThis.fetch, originalMatchMedia = window.matchMedia
 let request: Record<string, unknown>
 function setup(accounts = true, path = '/', unread = 3, lastSync: string | null = null) {
-  window.matchMedia = (() => ({ matches: true })) as unknown as typeof window.matchMedia
+  window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { request = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start() {} }))) }) as typeof fetch
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: accounts ? [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' }] : [], unread_total: unread, newsletter_senders: 2, last_sync_at: lastSync } })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [{ id: 'm', label: 'Standardmodell', description: '', is_default: true }] })) as never)
