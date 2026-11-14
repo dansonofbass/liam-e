@@ -229,6 +229,34 @@ test('newsletter menu starts the contextual confirmation turn', async () => {
   expect((screen.getByRole('button', { name: 'Antwort entwerfen' }) as HTMLButtonElement).disabled).toBe(true)
 })
 
+test.each([{ mobile: false }, { mobile: true }])('the more-actions button is always there; without an unsubscribe route its only entry is disabled and explains why (%o)', async ({ mobile }) => {
+  const original = mail.can_unsubscribe
+  mail.can_unsubscribe = false
+  try {
+    const { request } = setup({ mobile }); await screen.findByRole('heading', { name: 'Termin' })
+    const more = screen.getByRole('button', { name: 'Weitere Aktionen' })
+    expect(more.getAttribute('aria-haspopup')).toBe('menu')
+    fireEvent.click(more)
+    const item = screen.getByRole('menuitem', { name: /Newsletter abbestellen/ })
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    expect(within(item).getByText('In dieser Mail steht kein Weg zum Abbestellen.')).toBeTruthy()
+    fireEvent.click(item)
+    expect(screen.getByRole('menuitem', { name: /Newsletter abbestellen/ })).toBeTruthy()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+    expect(request()).toBeUndefined()
+    expect(screen.getByRole('button', { name: 'Antwort entwerfen' }).hasAttribute('disabled')).toBe(false)
+    expect(await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()).toMatch(/\.le-menu-item\[aria-disabled="true"\][^{]*\{[^}]*cursor: not-allowed/u)
+  } finally { mail.can_unsubscribe = original }
+})
+
+test('with an unsubscribe route the entry is enabled and has no hint', async () => {
+  setup(); await screen.findByRole('heading', { name: 'Termin' })
+  fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
+  const item = screen.getByRole('menuitem', { name: 'Newsletter abbestellen' })
+  expect(item.hasAttribute('aria-disabled')).toBe(false)
+  expect(item.querySelector('.le-menu-sub')).toBeNull()
+  await settle()
+})
 
 test('other load errors can retry or return to the filtered inbox', async () => {
   const { router, get } = setup({ mobile: true, failed: true, path: '/mail/m1?unread=true' })

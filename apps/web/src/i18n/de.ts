@@ -154,7 +154,7 @@ export const de = {
     back: 'Zurück zum Posteingang', toInbox: 'Zum Posteingang', more: 'Weitere Aktionen',
     loading: 'Mail wird geladen …', loadError: 'Die Mail konnte nicht geladen werden. Versuch es gleich noch mal.',
     askTip: 'Öffnet den Chat mit dieser Mail als Bezug', draftTip: 'Schreibt im Chat einen Entwurf, den liam-e erst sendet, wenn du ihn bestätigst',
-    draftPrompt: 'Entwirf eine Antwort auf diese Mail.', unsubscribe: 'Newsletter abbestellen', unsubscribePrompt: 'Bestelle diesen Newsletter ab.',
+    draftPrompt: 'Entwirf eine Antwort auf diese Mail.', unsubscribe: 'Newsletter abbestellen', unsubscribePrompt: 'Bestelle diesen Newsletter ab.', unsubscribeUnavailable: 'In dieser Mail steht kein Weg zum Abbestellen.',
     addressTo: (address: string, to: string) => `${address} an ${to}`,
     attachment: (name: string, size: string) => `${name} · ${size}`,
   },

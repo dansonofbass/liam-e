@@ -8,6 +8,8 @@
 @keyframes le-tooltip-fade { from { opacity: 0; } to { opacity: 1; } }
 .le-menu-anchor .le-menu { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; }
 .le-menu-item--danger, .le-menu-item--danger .le-ico { color: var(--danger); }
+.le-menu-item[aria-disabled="true"], .le-menu-item[aria-disabled="true"] .le-ico { color: var(--ink-muted); cursor: not-allowed; }
+.le-menu-item[aria-disabled="true"]:hover { background: transparent; }
 .le-tag--warm { background: var(--warm-soft); color: var(--warm); }
 .le-scrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); animation: le-tooltip-fade 220ms ease; }
 .le-drawer { display: flex; flex-direction: column; height: 100%; width: min(308px, 100vw - 48px); padding: var(--space-3); box-sizing: border-box; background: var(--surface); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; box-shadow: var(--shadow-overlay); overflow: auto; animation: le-drawer-in 220ms ease; }
