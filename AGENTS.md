@@ -140,7 +140,7 @@ Operationen zu Tools. App-Module haben keine Zeitpläne (Workflows schon). Bei j
 lief dieselbe Instanz, auch nach 31 Minuten Leerlauf; ein späterer Stopp wurde nicht geprüft.
 SSE kam durch das Gateway vor Ende des Streams an, mit einer einmaligen kurzen Stockung in der
 ersten Messung. Der Gmail-Connector liefert bei `get_thread` keine vollständigen Kopfzeilen;
-Newsletter-Erkennung nutzt daher bei Connector-Konten auch `CATEGORY_*`-Labels. `TRASH` ist als
+Newsletter-Erkennung nutzt daher bei Connector-Konten auch das Label `CATEGORY_PROMOTIONS` (`CATEGORY_UPDATES` zählt nicht, es enthält auch Bestellbestätigungen und Kontohinweise). `TRASH` ist als
 System-Label unterstützt, `send_email` nimmt `replyToMessageId`; der Outlook-Connector lieferte
 in der Probe HTTP 401.
 
