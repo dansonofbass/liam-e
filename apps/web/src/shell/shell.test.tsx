@@ -139,3 +139,17 @@ test('mobile menu opens and closes on Escape', async () => {
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('dialog')).toBeNull()
 })
+test('the mobile header centres its title between the menu and the new-conversation button', async () => {
+  width = 375
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
+  setup()
+  const menu = await screen.findByRole('button', { name: 'Menü öffnen' })
+  const title = menu.closest('header')?.querySelector('.le-crumb')
+  expect(title?.textContent).toBe('Chat')
+  expect(title?.classList.contains('le-crumb--center')).toBe(true)
+  expect(title?.previousElementSibling?.contains(menu)).toBe(true)
+  expect(title?.nextElementSibling?.querySelector('button')?.getAttribute('aria-label')).toBe('Neue Unterhaltung')
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-crumb--center \{[^}]*justify-content: center/u)
+})
