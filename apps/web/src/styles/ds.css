@@ -103,7 +103,7 @@ body { margin: 0; font-family: var(--font-sans); font-size: 14.5px; line-height:
 .le-side-label { font-size: 12px; font-weight: 600; color: var(--ink-muted); padding: 22px 14px 6px; }
 .le-conv { display: flex; align-items: baseline; gap: 8px; width: 100%; min-height: 36px; padding: 7px 14px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; text-decoration: none; transition: background-color var(--le-dur) ease; }
 .le-conv:hover { background: var(--surface-soft); }
-.le-conv[aria-current="true"] { background: var(--accent-soft); }
+.le-conv[aria-current="true"], .le-conv[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
 .le-conv-title { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .le-conv-when { font-size: 12px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .le-topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 24px; }
