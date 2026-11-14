@@ -110,6 +110,26 @@ test('account scope and composer focus survive navigation to the conversation', 
   expect(requestBody.conversation_id).toBe('c')
 })
 
+test('a follow-up suggestion keeps the selected account', async () => {
+  setup()
+  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
+  await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
+  expect(requestBody.text).toBe('Weiter fragen')
+  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.conversation_id).toBe('c')
+})
+
+test('a follow-up suggestion without a selected account searches all accounts', async () => {
+  setup('/chat/c'); await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
+  expect(requestBody.text).toBe('Weiter fragen')
+  expect(requestBody.account_id).toBeNull()
+})
+
 test('history user message is not duplicated while streaming after navigation', async () => {
   const { client, router } = setup(); await send()
   history = [{ id: 'u', conversation_id: 'c', role: 'user', content: 'Meine Frage', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, tool_name: '' }]

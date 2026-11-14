@@ -46,7 +46,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const history = useQuery(historyQuery(conversationId))
   const { data: summary } = useQuery(summaryQuery())
   const { data: models = [] } = useQuery(modelsQuery())
-  const { state, send, retry } = useChatSession()
+  const { state, send, retry, scope } = useChatSession()
   const [selectedModel, setSelectedModel] = useState<{ conversationId: string; id: string }>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const { showEnd, scrollToEnd } = useFollowScroll(scrollRef, [history.data, state, conversationId])
@@ -57,7 +57,8 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const userIndex = state.userMessageId ? messages.findIndex(message => message.id === state.userMessageId) : -1
   const savedPartial = (state.phase === 'stopped' || state.phase === 'error') && userIndex >= 0 && messages.slice(userIndex + 1).some(message => message.role === 'assistant')
   const busy = state.phase === 'working' || state.phase === 'streaming'
-  const submitSuggestion = (text: string) => { void send({ text, conversation_id: conversationId }) }
+  // Follow-ups keep the account the composer shows, like a typed question.
+  const submitSuggestion = (text: string) => { void send({ text, account_id: scope, conversation_id: conversationId }) }
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
   const renderMessage = (message: ChatMessageOut) => {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
