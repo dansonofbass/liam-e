@@ -26,6 +26,25 @@ function setup(mode: 'row' | 'empty' | 'error' | 'loading' = 'row', path = '/acc
   return { router, list, view, client, optionList }
 }
 
+test('coarse pointer account actions and notice links use large touch targets', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.match(/@media \(pointer: coarse\) \{ (\.le-accounts-refresh[^{}]+)\{ ([^{}]+) \} \.le-notice \.le-link \{ ([^{}]+) \} \}/u)
+  expect(rule).toBeTruthy()
+  expect(rule?.[1]).toContain('.le-account-actions .le-btn')
+  expect(rule?.[2]).toContain('min-height: var(--control-height-lg)')
+  for (const property of ['display: inline-flex', 'align-items: center', 'min-width: var(--control-height-lg)', 'min-height: var(--control-height-lg)']) expect(rule?.[3]).toContain(property)
+})
+
+test('accounts scroll area is bounded by the viewport', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const app = css.match(/\.le-app:has\(\.le-accounts-scroll\) \{([^}]*)\}/u)?.[1]
+  const sheet = css.match(/\.le-sheet:has\(\.le-accounts-scroll\) \{([^}]*)\}/u)?.[1]
+  const scroll = css.match(/\.le-accounts-scroll \{([^}]*)\}/u)?.[1]
+  for (const property of ['height: 100dvh', 'overflow: hidden']) expect(app).toContain(property)
+  expect(sheet).toContain('min-height: 0')
+  for (const property of ['flex: 1', 'min-height: 0', 'overflow-y: auto']) expect(scroll).toContain(property)
+})
+
 test('card shows each state and connection', () => {
   const { rerender } = render(<AccountCard account={account} {...props} />)
   expect(screen.getByText('Yahoo')).toBeTruthy(); expect(screen.getByText('IMAP')).toBeTruthy(); expect(screen.getByText('Noch nicht abgerufen')).toBeTruthy()

@@ -22,7 +22,9 @@
 @media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } }
 @media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor > .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (prefers-reduced-motion: reduce) { .le-drawer { animation-name: le-tooltip-fade; } }
-.le-accounts-scroll { overflow-y: auto; padding: var(--space-5); }
+.le-app:has(.le-accounts-scroll) { height: 100dvh; overflow: hidden; }
+.le-sheet:has(.le-accounts-scroll) { min-height: 0; }
+.le-accounts-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
 .le-accounts-layout { display: flex; flex-wrap: wrap; gap: var(--space-6); max-width: 1180px; }
 .le-accounts-list { flex: 1 1 460px; min-width: 0; }
 .le-accounts-list ul { list-style: none; padding: 0; margin: 0; }
@@ -31,7 +33,7 @@
 .le-account-name, .le-account-address { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .le-account--placeholder span { display: block; background: var(--surface-soft); border-radius: var(--radius-sm); height: var(--space-5); flex: 1; }
 @media (max-width: 1023px) { .le-accounts-layout { display: block; } .le-accounts-connect { max-width: none; margin-top: var(--space-6); } }
-@media (pointer: coarse) { .le-accounts-refresh, .le-account-rename .le-btn, .le-dialog-actions .le-btn, .le-connect-option, .le-connect-actions .le-btn { min-height: var(--control-height-lg); } }
+@media (pointer: coarse) { .le-accounts-refresh, .le-account-actions .le-btn, .le-account-rename .le-btn, .le-dialog-actions .le-btn, .le-connect-option, .le-connect-actions .le-btn { min-height: var(--control-height-lg); } .le-notice .le-link { display: inline-flex; align-items: center; min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 .le-connect-options, .le-imap-form, .le-connect-detail { display: flex; flex-direction: column; gap: var(--space-3); }
 .le-connect-options { margin-top: var(--space-4); }
 .le-connect-option { width: 100%; height: auto; border-radius: var(--radius-md); justify-content: flex-start; text-align: left; padding: var(--space-3); }
