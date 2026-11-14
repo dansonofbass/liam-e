@@ -264,8 +264,10 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
   erscheinende Inhalte (`le-rise`), Kurve `cubic-bezier(.2, .8, .2, 1)`. Tooltips nach
   350 ms Verweilen, bei Tastaturfokus sofort. Seitenwechsel blenden den Inhalt der
   Hauptfläche über; Seitenleiste und Composer bleiben stehen.
-- **`prefers-reduced-motion`** immer beachten: dann nur Überblenden, kein Aufsteigen,
-  Streaming zeigt den Text sofort.
+- **`prefers-reduced-motion`** immer beachten: dann nur Überblenden (`le-rise` wird zu
+  `le-fade`, Seitenwechsel und Schublade blenden weiter über), kein Aufsteigen, kein
+  Hereinschieben, Streaming zeigt den Text sofort. Schleifen (Tipp-Punkte, Caret, Spinner)
+  stehen still.
 
 ## 6. Symbole und Bausteine
 

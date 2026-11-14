@@ -25,3 +25,14 @@ test('stylesheets have no free font sizes, no dead tooltip rules and no motion l
   expect(app).not.toContain('cubic-bezier(')
   for (const unused of ['.le-avatar--sm', '.le-notice--warm']) expect(ds).not.toContain(unused)
 })
+
+test('with reduced motion content still fades in but no longer rises, and page changes keep their fade', async () => {
+  const [ds, app] = await Promise.all([read('ds.css'), read('ds-app.css')])
+  expect(ds).toContain('@keyframes le-fade { from { opacity: 0; } to { opacity: 1; } }')
+  const reduce = ds.split('@media (prefers-reduced-motion: reduce) {')[1]?.split('\n}')[0] ?? ''
+  expect(reduce).toContain('.le-rise { animation-name: le-fade; }')
+  expect(reduce).not.toMatch(/\.le-rise[^{]*\{ animation: none/u)
+  expect(app).toMatch(/\.le-page-fade \{[^}]*animation: le-fade /u)
+  expect(app).not.toMatch(/prefers-reduced-motion: reduce\) \{ \.le-page-fade/u)
+  expect(app).toContain('@media (prefers-reduced-motion: reduce) { .le-drawer { animation-name: le-fade; } }')
+})
