@@ -284,6 +284,16 @@ async def test_valid_proposals_are_capped_after_filtering_invalid_ids(store):
     assert outcome.proposal_message is not None
 
 
+@pytest.mark.parametrize('message', ['', 'x' * 8001])
+async def test_chat_turn_rejects_message_outside_length_bounds(message):
+    from api.routers.api.v1.chat.route import router
+    app = FastAPI()
+    app.include_router(router, prefix='/api/v1/chat')
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        response = await client.post('/api/v1/chat', json={'message': message})
+    assert response.status_code == 422
+
+
 async def test_chat_turn_still_returns_messages(store, monkeypatch):
     from api.routers.api.v1.chat.route import chat_turn, ChatTurnRequest
     fake = FakeMistral(streams=[['Antwort']]); monkeypatch.setattr(agent, 'mistral_client', lambda: fake)

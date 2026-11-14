@@ -11,7 +11,7 @@ router = APIRouter()
 
 class ChatTurnRequest(BaseModel):
     conversation_id: str = Field(default='', description='Leer lassen für eine neue Unterhaltung')
-    message: str
+    message: str = Field(min_length=1, max_length=8000)
 
 
 @router.post('', operation_id='chat_turn', summary='Send a message to the mail agent')
