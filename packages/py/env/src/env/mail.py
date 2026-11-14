@@ -41,6 +41,11 @@ class Env(BaseEnv):
     mail_sync_page_size: int = 100
     mail_sync_max_body_chars: int = 200_000
 
+    # Concise mail insights.
+    mail_insight_model: str = "mistral-small-latest"
+    mail_insight_batch_limit: int = 50
+    mail_insight_days: int = 14
+
     # Chat agent (tool loop over the synced mail index).
     mail_chat_model: str = "mistral-medium-latest"
     mail_chat_max_tool_rounds: int = 8

@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+import { de } from "../i18n/de";
+
+export const errorCode = (error: unknown): string | undefined => {
+  const parsed = z.object({ detail: z.object({ code: z.string() }) }).safeParse(error);
+  return parsed.success ? parsed.data.detail.code : undefined;
+};
+
 /** One field FastAPI refused (422), named by its path under the request: "phone: …". */
 const fieldProblem = z
   .object({ loc: z.array(z.union([z.string(), z.number()])), msg: z.string() })
@@ -28,7 +35,7 @@ const rejection = z.union([
   z
     .object({ detail: z.object({ message: z.string() }) })
     .transform(({ detail }) => detail.message),
-  z.unknown().transform(() => "The request failed."),
+  z.unknown().transform(() => de.errors.request_failed),
 ]);
 
 /** Unwraps a hey-api SDK result: the typed data, or a real `Error` carrying the server's message. */

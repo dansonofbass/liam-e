@@ -306,6 +306,8 @@ Anfang an mit.
 - `mobile`: Kopfzeile mit Menü-Button links, Titel und „Neue Unterhaltung“ rechts. Das
   Menü öffnet eine Schublade mit Navigation und Unterhaltungen, mit abgedunkeltem
   Hintergrund. Keine untere Navigationsleiste: Der Composer gehört an den unteren Rand.
+- Die Schublade ist 308 px breit, höchstens `100vw - 48px`, mit 12 px Innenabstand,
+  rechts 24 px Rundung und `shadow-overlay`; ein Schließen-Button steht in der Markenzeile.
 - Der Composer bleibt unten, mit Abstand `max(12px, env(safe-area-inset-bottom))`.
 
 ### 7.4 Posteingang je Breakpoint

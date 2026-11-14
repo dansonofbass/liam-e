@@ -149,12 +149,9 @@ async def test_oauth_callback_refuses_address_of_imap_account(account_client, fa
     monkeypatch.setattr(accounts.providers, "verify_state", lambda state: {"provider": provider, "redirect_uri": "https://example.org/callback"})
     monkeypatch.setattr(accounts.providers, "exchange_code", AsyncMock(return_value={"access_token": "test-only"}))
     monkeypatch.setattr(accounts.providers, "fetch_account_email", AsyncMock(return_value=account.email_address))
-    response = account_client.get(f"/accounts/oauth/{provider}/callback", params={"code": "code", "state": "state"})
-    assert response.status_code == 409
-    assert response.json()["detail"] == {
-        "code": "account_exists",
-        "message": "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.",
-    }
+    response = account_client.get(f"/accounts/oauth/{provider}/callback", params={"code": "code", "state": "state"}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/accounts?error=account_exists"
     assert account.model_dump() == before
     assert fake_store.credentials == {(account.id, "imap_password"): "unchanged"}
     assert list(fake_store.accounts) == [account.id]

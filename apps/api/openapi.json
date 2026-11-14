@@ -1,10 +1,59 @@
 {
   "components": {
     "schemas": {
+      "AccountOptionsOut": {
+        "properties": {
+          "gmail_connector": {
+            "title": "Gmail Connector",
+            "type": "boolean"
+          },
+          "google_oauth": {
+            "title": "Google Oauth",
+            "type": "boolean"
+          },
+          "imap_presets": {
+            "items": {
+              "$ref": "#/components/schemas/ImapPresetOut"
+            },
+            "title": "Imap Presets",
+            "type": "array"
+          },
+          "microsoft_oauth": {
+            "title": "Microsoft Oauth",
+            "type": "boolean"
+          },
+          "outlook_connector": {
+            "title": "Outlook Connector",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "gmail_connector",
+          "outlook_connector",
+          "google_oauth",
+          "microsoft_oauth",
+          "imap_presets"
+        ],
+        "title": "AccountOptionsOut",
+        "type": "object"
+      },
       "AccountOut": {
         "properties": {
           "auth_type": {
             "title": "Auth Type",
+            "type": "string"
+          },
+          "color_index": {
+            "title": "Color Index",
+            "type": "integer"
+          },
+          "connection": {
+            "enum": [
+              "connector",
+              "oauth",
+              "imap"
+            ],
+            "title": "Connection",
             "type": "string"
           },
           "created_at": {
@@ -20,6 +69,10 @@
             "title": "Email Address",
             "type": "string"
           },
+          "error_code": {
+            "title": "Error Code",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -28,9 +81,40 @@
             "title": "Is Active",
             "type": "boolean"
           },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "message_count": {
+            "title": "Message Count",
+            "type": "integer"
+          },
           "provider": {
             "title": "Provider",
             "type": "string"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "syncing",
+              "auth_expired",
+              "error",
+              "never"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
           },
           "updated_at": {
             "format": "date-time",
@@ -40,13 +124,20 @@
         },
         "required": [
           "id",
-          "provider",
-          "auth_type",
-          "email_address",
           "display_name",
+          "email_address",
+          "provider",
+          "connection",
+          "color_index",
+          "unread",
+          "state",
+          "error_code",
+          "last_sync_at",
+          "auth_type",
           "is_active",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "message_count"
         ],
         "title": "AccountOut",
         "type": "object"
@@ -129,6 +220,21 @@
         "title": "AccountSummaryOut",
         "type": "object"
       },
+      "AccountUpdateIn": {
+        "properties": {
+          "display_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "AccountUpdateIn",
+        "type": "object"
+      },
       "AttachmentOut": {
         "properties": {
           "content_type": {
@@ -152,6 +258,102 @@
         "title": "AttachmentOut",
         "type": "object"
       },
+      "ChatConversationUpdateIn": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ChatConversationUpdateIn",
+        "type": "object"
+      },
+      "ChatEvent": {
+        "description": "A discriminated event in the streamed response.",
+        "discriminator": {
+          "mapping": {
+            "delta": "#/components/schemas/DeltaEvent",
+            "done": "#/components/schemas/DoneEvent",
+            "error": "#/components/schemas/ErrorEvent",
+            "mails": "#/components/schemas/MailsEvent",
+            "proposal": "#/components/schemas/ProposalEvent",
+            "start": "#/components/schemas/StartEvent",
+            "status": "#/components/schemas/StatusEvent",
+            "suggestions": "#/components/schemas/SuggestionsEvent"
+          },
+          "propertyName": "event"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/StatusEvent"
+          },
+          {
+            "$ref": "#/components/schemas/DeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/MailsEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ProposalEvent"
+          },
+          {
+            "$ref": "#/components/schemas/SuggestionsEvent"
+          },
+          {
+            "$ref": "#/components/schemas/DoneEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorEvent"
+          }
+        ],
+        "title": "ChatEvent"
+      },
+      "ChatExtrasOut": {
+        "properties": {
+          "mails": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mails",
+            "type": "array"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "title": "ChatExtrasOut",
+        "type": "object"
+      },
       "ChatMessageOut": {
         "properties": {
           "content": {
@@ -167,17 +369,34 @@
             "title": "Created At",
             "type": "string"
           },
-          "draft_json": {
-            "title": "Draft Json",
-            "type": "string"
+          "extras": {
+            "$ref": "#/components/schemas/ChatExtrasOut"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Proposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposal_status": {
+            "title": "Proposal Status",
+            "type": "string"
+          },
           "role": {
             "title": "Role",
             "type": "string"
+          },
+          "stopped": {
+            "title": "Stopped",
+            "type": "boolean"
           },
           "tool_name": {
             "title": "Tool Name",
@@ -190,21 +409,102 @@
           "role",
           "content",
           "tool_name",
-          "draft_json",
-          "created_at"
+          "created_at",
+          "proposal",
+          "proposal_status",
+          "stopped",
+          "extras"
         ],
         "title": "ChatMessageOut",
+        "type": "object"
+      },
+      "ChatModelOut": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "is_default"
+        ],
+        "title": "ChatModelOut",
+        "type": "object"
+      },
+      "ChatStreamRequest": {
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "context_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Message Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "text": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ChatStreamRequest",
         "type": "object"
       },
       "ChatTurnRequest": {
         "properties": {
           "conversation_id": {
             "default": "",
-            "description": "Leer lassen f\u00fcr eine neue Konversation",
+            "description": "Leer lassen f\u00fcr eine neue Unterhaltung",
             "title": "Conversation Id",
             "type": "string"
           },
           "message": {
+            "maxLength": 8000,
+            "minLength": 1,
             "title": "Message",
             "type": "string"
           }
@@ -289,6 +589,10 @@
             "title": "Id",
             "type": "string"
           },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -302,10 +606,31 @@
         "required": [
           "id",
           "title",
+          "model",
           "created_at",
           "updated_at"
         ],
         "title": "ConversationOut",
+        "type": "object"
+      },
+      "DeltaEvent": {
+        "properties": {
+          "event": {
+            "const": "delta",
+            "default": "delta",
+            "title": "Event",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "text"
+        ],
+        "title": "DeltaEvent",
         "type": "object"
       },
       "DependencyStatus": {
@@ -334,6 +659,61 @@
           }
         },
         "title": "DependencyStatus",
+        "type": "object"
+      },
+      "DoneEvent": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "event": {
+            "const": "done",
+            "default": "done",
+            "title": "Event",
+            "type": "string"
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "stopped": {
+            "title": "Stopped",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "event",
+          "conversation_id",
+          "message_id",
+          "stopped"
+        ],
+        "title": "DoneEvent",
+        "type": "object"
+      },
+      "ErrorEvent": {
+        "properties": {
+          "code": {
+            "enum": [
+              "model_unavailable",
+              "aborted",
+              "internal"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "event": {
+            "const": "error",
+            "default": "error",
+            "title": "Event",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "code"
+        ],
+        "title": "ErrorEvent",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -435,6 +815,159 @@
         "title": "ImapConnectRequest",
         "type": "object"
       },
+      "ImapPresetOut": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "imap_host": {
+            "title": "Imap Host",
+            "type": "string"
+          },
+          "smtp_host": {
+            "title": "Smtp Host",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "imap_host",
+          "smtp_host"
+        ],
+        "title": "ImapPresetOut",
+        "type": "object"
+      },
+      "InsightOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "followups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Followups",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "needs_reply": {
+            "title": "Needs Reply",
+            "type": "boolean"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "points",
+          "deadline",
+          "needs_reply",
+          "followups",
+          "model",
+          "created_at"
+        ],
+        "title": "InsightOut",
+        "type": "object"
+      },
+      "ItemProblem": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code"
+        ],
+        "title": "ItemProblem",
+        "type": "object"
+      },
+      "MailRefOut": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "color_index": {
+            "title": "Color Index",
+            "type": "integer"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "internal_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Date"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "color_index",
+          "subject",
+          "sender_name",
+          "internal_date",
+          "deadline"
+        ],
+        "title": "MailRefOut",
+        "type": "object"
+      },
       "MailSummaryOut": {
         "properties": {
           "accounts": {
@@ -472,6 +1005,54 @@
           "newsletter_senders"
         ],
         "title": "MailSummaryOut",
+        "type": "object"
+      },
+      "MailsEvent": {
+        "properties": {
+          "event": {
+            "const": "mails",
+            "default": "mails",
+            "title": "Event",
+            "type": "string"
+          },
+          "mails": {
+            "items": {
+              "$ref": "#/components/schemas/MailRefOut"
+            },
+            "title": "Mails",
+            "type": "array"
+          }
+        },
+        "required": [
+          "event",
+          "mails"
+        ],
+        "title": "MailsEvent",
+        "type": "object"
+      },
+      "ManualStep": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          }
+        },
+        "required": [
+          "id",
+          "link"
+        ],
+        "title": "ManualStep",
         "type": "object"
       },
       "MessageActionIn": {
@@ -774,6 +1355,391 @@
         "title": "OAuthAuthorizeOut",
         "type": "object"
       },
+      "Proposal": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SendDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "irreversible": {
+            "default": false,
+            "title": "Irreversible",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "send",
+              "archive",
+              "trash",
+              "mark_read",
+              "unsubscribe"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "reason",
+          "items"
+        ],
+        "title": "Proposal",
+        "type": "object"
+      },
+      "ProposalConfirmIn": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "selected_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "selected_ids"
+        ],
+        "title": "ProposalConfirmIn",
+        "type": "object"
+      },
+      "ProposalEvent": {
+        "properties": {
+          "event": {
+            "const": "proposal",
+            "default": "proposal",
+            "title": "Event",
+            "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ChatMessageOut"
+          }
+        },
+        "required": [
+          "event",
+          "message"
+        ],
+        "title": "ProposalEvent",
+        "type": "object"
+      },
+      "ProposalItem": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "mail",
+              "sender"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_read_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Read At"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "selected": {
+            "default": true,
+            "title": "Selected",
+            "type": "boolean"
+          },
+          "subtitle": {
+            "title": "Subtitle",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unread": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unread"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "subtitle"
+        ],
+        "title": "ProposalItem",
+        "type": "object"
+      },
+      "ProposalResult": {
+        "properties": {
+          "done": {
+            "default": 0,
+            "title": "Done",
+            "type": "integer"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/ItemProblem"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "manual": {
+            "items": {
+              "$ref": "#/components/schemas/ManualStep"
+            },
+            "title": "Manual",
+            "type": "array"
+          },
+          "undo_action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Undo Action Ids",
+            "type": "array"
+          }
+        },
+        "title": "ProposalResult",
+        "type": "object"
+      },
+      "SendDraft": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "cc": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cc",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "new",
+              "reply",
+              "reply_all",
+              "forward"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "reply_to_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply To Message Id"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "To",
+            "type": "array"
+          }
+        },
+        "required": [
+          "account_id",
+          "mode",
+          "to",
+          "cc",
+          "subject",
+          "body",
+          "quote",
+          "reply_to_message_id"
+        ],
+        "title": "SendDraft",
+        "type": "object"
+      },
+      "StartEvent": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "event": {
+            "const": "start",
+            "default": "start",
+            "title": "Event",
+            "type": "string"
+          },
+          "user_message_id": {
+            "title": "User Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "conversation_id",
+          "user_message_id"
+        ],
+        "title": "StartEvent",
+        "type": "object"
+      },
+      "StatusEvent": {
+        "properties": {
+          "code": {
+            "enum": [
+              "thinking",
+              "searching",
+              "reading",
+              "checking_deadlines",
+              "finding_newsletters",
+              "preparing_proposal"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "event": {
+            "const": "status",
+            "default": "status",
+            "title": "Event",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "code",
+          "count"
+        ],
+        "title": "StatusEvent",
+        "type": "object"
+      },
+      "SuggestionsEvent": {
+        "properties": {
+          "event": {
+            "const": "suggestions",
+            "default": "suggestions",
+            "title": "Event",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "event",
+          "items"
+        ],
+        "title": "SuggestionsEvent",
+        "type": "object"
+      },
       "SyncAllOut": {
         "properties": {
           "queued": {
@@ -935,7 +1901,7 @@
     },
     "/api/v1/chat": {
       "post": {
-        "description": "Send one chat message to the mail agent and return the messages it produced.\n\nPass an empty ``conversation_id`` to start a new conversation; the response returns the\nconversation id to continue with. The agent may create a pending draft, but this operation\nnever sends a mail by itself.",
+        "description": "Run a complete chat turn and return its visible messages.",
         "operationId": "chat_turn",
         "requestBody": {
           "content": {
@@ -995,27 +1961,37 @@
         "summary": "List all chat conversations, newest first"
       }
     },
-    "/api/v1/chat/drafts/{draft_id}": {
-      "delete": {
-        "description": "Discard a pending draft without sending it \u2014 no mail is delivered.\n\n``draft_id`` identifies the draft chat message; it answers 404 when the id is not a draft\nand 409 when the draft was already handled (sent, failed or cancelled). The returned message\ncarries the draft with status ``cancelled``.",
-        "operationId": "chat_draft_cancel",
+    "/api/v1/chat/conversations/{conversation_id}": {
+      "patch": {
+        "description": "Change the title or the model used for future turns.",
+        "operationId": "chat_conversation_update",
         "parameters": [
           {
             "in": "path",
-            "name": "draft_id",
+            "name": "conversation_id",
             "required": true,
             "schema": {
-              "title": "Draft Id",
+              "title": "Conversation Id",
               "type": "string"
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatConversationUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ChatMessageOut"
+                  "$ref": "#/components/schemas/ConversationOut"
                 }
               }
             },
@@ -1032,47 +2008,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Cancel a pending draft"
-      }
-    },
-    "/api/v1/chat/drafts/{draft_id}/confirm": {
-      "post": {
-        "description": "Send the pending draft for real; this is the only path that actually sends a mail.\n\n``draft_id`` identifies the pending draft chat message, which is sent to its recipients via\nthe account that created it. On success the draft is stored with status ``sent`` and the\nprovider's send result; a send failure stores status ``failed`` with a safe error code.\nBlocked hosts answer 422 and other send failures 502. Unknown or already handled\ndrafts answer 404 and 409.",
-        "operationId": "chat_draft_confirm",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "draft_id",
-            "required": true,
-            "schema": {
-              "title": "Draft Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatMessageOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Send the confirmed draft for real"
+        "summary": "Update a chat conversation"
       }
     },
     "/api/v1/chat/history": {
@@ -1117,6 +2053,158 @@
           }
         },
         "summary": "All messages of one conversation, in order"
+      }
+    },
+    "/api/v1/chat/models": {
+      "get": {
+        "description": "Return available models that support chat and function calls.",
+        "operationId": "chat_models_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatModelOut"
+                  },
+                  "title": "Response Chat Models List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List available chat models"
+      }
+    },
+    "/api/v1/chat/proposals/{proposal_id}/cancel": {
+      "post": {
+        "description": "Verwirft einen offenen Vorschlag, ohne seine Aktionen auszuf\u00fchren.",
+        "operationId": "chat_proposal_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel"
+      }
+    },
+    "/api/v1/chat/proposals/{proposal_id}/confirm": {
+      "post": {
+        "description": "F\u00fchrt die ausgew\u00e4hlten Eintr\u00e4ge eines offenen Vorschlags nach Best\u00e4tigung aus.",
+        "operationId": "chat_proposal_confirm",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalConfirmIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm"
+      }
+    },
+    "/api/v1/chat/stream": {
+      "post": {
+        "description": "Streams one agent turn. It never sends mail itself; proposals require explicit confirmation.",
+        "operationId": "chat_stream",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatStreamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat Stream"
       }
     },
     "/api/v1/mail/accounts": {
@@ -1198,6 +2286,22 @@
               "title": "Provider",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Id"
+            }
           }
         ],
         "responses": {
@@ -1227,7 +2331,7 @@
     },
     "/api/v1/mail/accounts/oauth/{provider}/callback": {
       "get": {
-        "description": "OAuth2 redirect target: exchange the authorization code and store the encrypted tokens.\n\nThe signed ``state`` must match ``provider``; the provider's e-mail address decides which\nmail account is created or updated (auth type ``oauth2``) and returned.\nAn address already using another connection type answers 409 without changing credentials.",
+        "description": "Complete OAuth and redirect without exposing provider details.",
         "operationId": "mail_account_oauth_callback",
         "parameters": [
           {
@@ -1246,32 +2350,55 @@
           {
             "in": "query",
             "name": "code",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Code",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
             }
           },
           {
             "in": "query",
             "name": "state",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "State",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
             }
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccountOut"
-                }
-              }
-            },
-            "description": "Successful Response"
+          "303": {
+            "description": "Redirect to accounts"
           },
           "422": {
             "content": {
@@ -1284,7 +2411,26 @@
             "description": "Validation Error"
           }
         },
-        "summary": "OAuth2 redirect target: exchanges the code and stores the encrypted tokens"
+        "summary": "Complete OAuth and redirect to accounts"
+      }
+    },
+    "/api/v1/mail/accounts/options": {
+      "get": {
+        "description": "Return available account connection methods and IMAP presets.",
+        "operationId": "mail_account_options",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Account Options"
       }
     },
     "/api/v1/mail/accounts/{account_id}": {
@@ -1318,6 +2464,54 @@
           }
         },
         "summary": "Delete an account and all its data"
+      },
+      "patch": {
+        "description": "Rename an existing account.",
+        "operationId": "mail_account_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Account"
       }
     },
     "/api/v1/mail/accounts/{account_id}/sync": {
@@ -1715,6 +2909,46 @@
           }
         },
         "summary": "Apply an undoable message action"
+      }
+    },
+    "/api/v1/mail/messages/{message_id}/insight": {
+      "get": {
+        "description": "Return the cached insight or generate it for this message.",
+        "operationId": "mail_message_insight",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsightOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get a concise mail insight"
       }
     },
     "/api/v1/mail/summary": {

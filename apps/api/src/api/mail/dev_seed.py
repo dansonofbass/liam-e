@@ -1,0 +1,200 @@
+"""Safety checks for the local development seed."""
+
+import asyncio
+import json
+import sys
+from dataclasses import dataclass
+from datetime import UTC, datetime, time, timedelta
+from email.utils import formataddr
+from urllib.parse import parse_qsl, urlsplit
+from zoneinfo import ZoneInfo
+
+from db.accessors import chat_message as chat_access, dev_seed as seed_access, mail_insight
+from db.models.chat_conversation import ChatConversation
+from db.models.mail_account import MailAccount
+from db.models.mail_message import MailMessage
+from db.models.mail_job import MailJob
+from db.models.mail_sync_state import MailSyncState
+from env.db import env as db_env
+
+from api.mail import newsletters, proposals
+from api.mail.agent_tools import unsubscribe_subtitle
+from api.mail.chat_schemas import ChatExtrasOut
+from api.mail.seed_ids import SEED_NAMESPACE, seed_id
+
+BERLIN = ZoneInfo("Europe/Berlin")
+
+
+@dataclass(frozen=True)
+class SeedResult:
+    accounts: int
+    mails: int
+    unread: int
+    insights: int
+    conversations: int
+    proposals: int
+
+
+class SeedRefusedError(Exception):
+    """The configured database is not an explicitly local host."""
+
+
+def require_local_database() -> None:
+    """Reject remote hosts before any database access without exposing credentials."""
+    try:
+        url = urlsplit(db_env.database_url)
+        host = url.hostname or ""
+        # A connection parameter must not override the authority's host.
+        overrides = [value for key, value in parse_qsl(url.query) if key.lower() in {"host", "hostaddr"}]
+    except ValueError:
+        raise SeedRefusedError("Database host refused: <invalid>") from None
+    if host.lower() not in {"localhost", "127.0.0.1", "::1"} or overrides:
+        # Only print a validated hostname, never arbitrary URL components.
+        shown = host if host and all(c.isalnum() or c in ".:-" for c in host) else "<empty or invalid>"
+        raise SeedRefusedError(f"Database host refused: {shown}")
+
+
+# key, account, sender, address, subject, snippet, days ago, local time, read, flagged
+BOARD_MAILS = [
+    ("hausverwaltung-nebenkosten", "privat", "Hausverwaltung Kurz", "abrechnung@hv-kurz.example", "Nebenkostenabrechnung 2025", "Sehr geehrte Mieterinnen und Mieter, anbei erhalten Sie die Abrechnung …", 0, "08:57", False, True),
+    ("paketdienst-paket-heute", "privat", "Paketdienst Nord", "post@paketdienst-nord.example", "Dein Paket kommt heute", "Zustellung zwischen 13 und 15 Uhr. Du kannst den Termin noch ändern …", 0, "07:42", False, False),
+    ("meyer-angebot-4471", "arbeit", "Meyer GmbH", "angebot@meyer-gmbh.example", "Angebot Nr. 4471", "Guten Tag, wie besprochen sende ich Ihnen unser Angebot. Bitte bestätigen …", 1, "17:20", False, True),
+    ("sportverein-hallenzeiten", "verein", "Sportverein Lindenau", "post@sportverein-lindenau.example", "Hallenzeiten im Dezember", "Liebe Mitglieder, über die Feiertage ändern sich die Trainingszeiten …", 1, "14:05", False, False),
+    ("stadtwerke-abschlag", "privat", "Stadtwerke Lindenau", "post@stadtwerke-lindenau.example", "Dein Abschlag ab Januar", "Ab dem 1. Januar beträgt dein monatlicher Abschlag 86 € …", 1, "09:31", True, False),
+    ("kita-elternabend", "familie", "Kita Sonnenblume", "post@kita-sonnenblume.example", "Elternabend am Donnerstag", "Liebe Eltern, am Donnerstag um 19 Uhr findet unser Elternabend statt …", 2, "10:00", True, False),
+    ("techdigest-woche", "arbeit", "TechDigest Weekly", "newsletter@techdigest-weekly.example", "Die Woche in fünf Minuten", "Diese Woche: neue Modelle, ein Sicherheitsupdate und drei Lesetipps …", 3, "10:00", True, False),
+]
+
+HOUSE_BODY = "Sehr geehrte Mieterinnen und Mieter,\n\nanbei erhalten Sie die Nebenkostenabrechnung für das Jahr 2025. Für Ihre Wohnung ergibt sich eine Nachzahlung von 184,20 €, die wir am 15.12. von Ihrem Konto einziehen.\n\nDer Anstieg geht vor allem auf die Heizkosten zurück, die gegenüber dem Vorjahr um 18 % gestiegen sind. Die Einzelaufstellung finden Sie im Anhang.\n\nEinwände gegen die Abrechnung können Sie bis zum 20.11. schriftlich bei uns einreichen.\n\nMit freundlichen Grüßen\nIhre Hausverwaltung Kurz"
+
+NEWSLETTERS = [
+    ("Wohnwelt Deals", "wohnwelt-deals", "privat", 23, False),
+    ("Laufschuh-Club", "laufschuh-club", "privat", 11, True),
+    ("TechDigest Weekly", "techdigest-weekly", "arbeit", 13, False),
+    ("Gartenfreunde Post", "gartenfreunde-post", "familie", 6, True),
+    ("ReiseRadar", "reiseradar", "arbeit", 7, False),
+]
+
+
+async def seed(now: datetime | None = None) -> SeedResult:
+    """Replace local board sample mail data, never accessing a remote database."""
+    require_local_database()
+    local_now = (now or datetime.now(BERLIN)).astimezone(BERLIN)
+    today = local_now.date()
+
+    def at(day_offset: int, clock: str) -> datetime:
+        hour, minute = map(int, clock.split(":"))
+        return datetime.combine(today - timedelta(days=day_offset), time(hour, minute), BERLIN).astimezone(UTC)
+
+    specs = [
+        ("privat", "privat@example.com", "gmail", "mistral_connector"),
+        ("arbeit", "arbeit@example.org", "microsoft", "oauth2"),
+        ("verein", "verein@example.com", "imap", "imap_password"),
+        ("familie", "familie@example.net", "imap", "imap_password"),
+    ]
+    accounts = [MailAccount(id=seed_id("account", key), email_address=email, provider=provider, auth_type=auth,
+                            created_at=local_now.astimezone(UTC) + timedelta(seconds=i), updated_at=local_now.astimezone(UTC))
+                for i, (key, email, provider, auth) in enumerate(specs)]
+    by_key = dict(zip((spec[0] for spec in specs), accounts, strict=True))
+    states = [
+        MailSyncState(id=seed_id("sync", key), account_id=by_key[key].id, status=status, last_error=error,
+                      last_sync_at=last, updated_at=updated)
+        for key, status, error, last, updated in [
+            ("privat", "ok", "", at(0, "08:57"), at(0, "08:57")),
+            ("arbeit", "error", "auth_expired", None, local_now.astimezone(UTC)),
+            ("verein", "ok", "", at(0, "08:55"), at(0, "08:55")),
+            ("familie", "syncing", "", None, (local_now - timedelta(minutes=1)).astimezone(UTC)),
+        ]
+    ]
+    messages = []
+    for key, account, sender, address, subject, snippet, day, clock, read, flagged in BOARD_MAILS:
+        house = key == "hausverwaltung-nebenkosten"
+        tech = key == "techdigest-woche"
+        messages.append(MailMessage(id=seed_id("mail", key), account_id=by_key[account].id,
+            provider_uid=f"seed-{key}", thread_id=f"seed-{key}", sender=formataddr((sender, address)), sender_address=address,
+            subject=subject, snippet=snippet, body_text=HOUSE_BODY if house else snippet,
+            recipients_json=json.dumps([by_key[account].email_address]), internal_date=at(day, clock),
+            is_read=read, is_flagged=flagged, has_attachments=house,
+            attachments_json=json.dumps([{"name": "Abrechnung_2025.pdf", "size": 212 * 1024, "content_type": "application/pdf"}]) if house else "[]",
+            list_unsubscribe="<mailto:abmelden@techdigest-weekly.example>" if tech else ""))
+    index = 0
+    for sender, slug, account, count, read in NEWSLETTERS:
+        for number in range(count, 0, -1):
+            key = f"{slug}-{number}"
+            snippet = "Die neuen Angebote und Tipps der Woche."
+            messages.append(MailMessage(id=seed_id("mail", key), account_id=by_key[account].id,
+                provider_uid=f"seed-{key}", thread_id=f"seed-{key}", sender=formataddr((sender, f"newsletter@{slug}.example")),
+                sender_address=f"newsletter@{slug}.example", subject=f"{sender}: Ausgabe {number}",
+                snippet=snippet, body_text=snippet, recipients_json=json.dumps([by_key[account].email_address]),
+                list_unsubscribe=f"<mailto:abmelden@{slug}.example>", is_read=read,
+                internal_date=(local_now - timedelta(days=5 + 115 * index / 59)).astimezone(UTC)))
+            index += 1
+    tomorrow = today + timedelta(days=1)
+    deadline = tomorrow + timedelta(days=(4 - tomorrow.weekday()) % 7)
+    insight = mail_insight.seed_row(id=seed_id("insight", "hausverwaltung-nebenkosten"),
+        message_id=seed_id("mail", "hausverwaltung-nebenkosten"), deadline=deadline,
+        points=["Du sollst für 2025 184,20 € nachzahlen; der Betrag wird am 15.12. abgebucht.",
+                "Grund sind vor allem die Heizkosten, sie sind um 18 % gestiegen.",
+                "Einwände nimmt die Hausverwaltung bis Fr., 20.11. an."],
+        followups=["Einwand entwerfen", "Mit der Abrechnung 2024 vergleichen"])
+    started = (local_now - timedelta(minutes=1)).astimezone(UTC)
+    jobs = [MailJob(id=seed_id("job", "familie"), kind="sync", status="running",
+                    payload_json=json.dumps({"account_id": by_key["familie"].id}),
+                    dedupe_key=f"seed-sync-{by_key['familie'].id}", locked_at=started,
+                    created_at=started, updated_at=started)]
+    await seed_access.replace_mail_data(accounts, states, messages, [insight], jobs)
+
+    conversation_specs = [
+        ("was-ist-heute-wichtig", "Was ist heute wichtig?", at(0, "08:57")),
+        ("newsletter-aufraeumen", "Newsletter aufräumen", at(1, "10:00")),
+        ("angebot-meyer-gmbh", "Angebot Meyer GmbH", at(3, "10:00")),
+        ("belege-fuer-die-steuer", "Belege für die Steuer", at(12, "10:00")),
+    ]
+    conversations = [ChatConversation(id=seed_id("conversation", key), title=title,
+                                     model="mistral-medium-latest", created_at=updated, updated_at=updated)
+                     for key, title, updated in conversation_specs]
+    await seed_access.replace_conversations(conversations)
+    first, second, third, fourth = conversations
+    await chat_access.add_message(conversation_id=first.id, role="user", content="Was ist heute wichtig?")
+    extras = ChatExtrasOut(
+        mails=[seed_id("mail", key) for key in ("hausverwaltung-nebenkosten", "meyer-angebot-4471", "kita-elternabend")],
+        suggestions=["Antworten entwerfen", "Nur die Hausverwaltung", "Was steht in der Abrechnung?"],
+        model="mistral-medium-latest",
+    )
+    await chat_access.add_message(conversation_id=first.id, role="assistant", extras_json=extras.model_dump_json(),
+        content="Auf drei Mails solltest du heute antworten.\n\nAm dringendsten ist die Nebenkostenabrechnung der Hausverwaltung Kurz, denn Einwände nimmt sie nur bis nächsten Freitag an. Die Meyer GmbH möchte bis Montag wissen, ob du ihr Angebot annimmst, und die Kita fragt, ob du zum Elternabend kommst.")
+    await chat_access.add_message(conversation_id=second.id, role="user", content="Räum meine Newsletter auf.")
+    await chat_access.add_message(conversation_id=second.id, role="assistant",
+        content="Ich habe 14 Absender gefunden, die dir regelmäßig Newsletter schicken. Fünf davon hast du seit über drei Monaten nicht geöffnet; die schlage ich zum Abbestellen vor. Die anderen neun liest du, sie bleiben, wie sie sind.",
+        extras_json=ChatExtrasOut(model="mistral-medium-latest").model_dump_json())
+    items = []
+    for sender, slug, account, _, _ in NEWSLETTERS:
+        address = f"newsletter@{slug}.example"
+        sender_mails = [m for m in messages if m.account_id == by_key[account].id and m.sender_address == address]
+        link = f"<mailto:abmelden@{slug}.example>"
+        method, uri = newsletters.unsubscribe_method(link, "")
+        subtitle = unsubscribe_subtitle(len(sender_mails), address, method, uri)
+        items.append(proposals.ProposalItem(
+            id=f"{by_key[account].id}|{address}", kind="sender", title=sender, subtitle=subtitle,
+            count=len(sender_mails), unread=sum(not m.is_read for m in sender_mails),
+            last_read_at=max((m.internal_date for m in sender_mails if m.is_read and m.internal_date), default=None),
+            method=method, target=uri,
+        ))
+    await proposals.create_proposal(second.id, proposals.Proposal(
+        kind="unsubscribe", reason="Du hast sie seit über drei Monaten nicht geöffnet.", items=items))
+    for conversation in (third, fourth):
+        await chat_access.add_message(conversation_id=conversation.id, role="user", content=conversation.title)
+    return SeedResult(len(accounts), len(messages), sum(not m.is_read for m in messages), 1, len(conversations), 1)
+
+
+def main() -> None:
+    try:
+        result = asyncio.run(seed())
+    except SeedRefusedError as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(2) from None
+    print(f"Seeded {result.accounts} accounts, {result.mails} mails, {result.unread} unread, {result.insights} insights, {result.conversations} conversations, {result.proposals} proposals.")
+
+
+if __name__ == "__main__":
+    main()

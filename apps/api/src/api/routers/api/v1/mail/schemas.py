@@ -29,6 +29,15 @@ class MessageListItemOut(BaseModel):
     needs_reply: bool
 
 
+class InsightOut(BaseModel):
+    points: list[str]
+    deadline: date | None
+    needs_reply: bool
+    followups: list[str]
+    model: str
+    created_at: datetime
+
+
 class MessageDetailOut(MessageListItemOut):
     to: list[str]
     cc: list[str]

@@ -1,4 +1,7 @@
-"""Accessor for ``chat_message`` rows: append-only chat history plus draft bookkeeping."""
+"""Chat history and proposal bookkeeping.
+
+Proposals are confirmed via ``POST /api/v1/chat/proposals/{proposal_id}/confirm``.
+"""
 
 from sqlalchemy import select, update
 
@@ -48,6 +51,20 @@ async def claim_proposal(message_id: str) -> ChatMessage | None:
         return message
 
 
+async def cancel_proposal(message_id: str) -> ChatMessage | None:
+    """Cancel only a pending proposal; never interrupt an executing confirmation."""
+    async with get_session_maker()() as session:
+        result = await session.execute(
+            update(ChatMessage)
+            .where(ChatMessage.id == message_id, ChatMessage.proposal_status == "pending")
+            .values(proposal_status="cancelled")
+            .returning(ChatMessage)
+        )
+        message = result.scalar_one_or_none()
+        await session.commit()
+        return message
+
+
 async def set_proposal(message_id: str, *, proposal_json: str, proposal_status: str) -> ChatMessage | None:
     async with get_session_maker()() as session:
         result = await session.execute(
@@ -91,14 +108,3 @@ async def list_messages(conversation_id: str) -> list[ChatMessage]:
             .order_by(ChatMessage.created_at)
         )
         return list(result.scalars().all())
-
-
-async def update_draft_json(message_id: str, draft_json: str) -> ChatMessage | None:
-    async with get_session_maker()() as session:
-        message = await session.get(ChatMessage, message_id)
-        if message is None:
-            return None
-        message.draft_json = draft_json
-        session.add(message)
-        await session.commit()
-        return message

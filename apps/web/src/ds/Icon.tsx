@@ -1,0 +1,8 @@
+import { MessageCircle, Inbox, AtSign, Archive, Trash2, Reply, Pencil, MailOpen, RefreshCw, MoreHorizontal, ExternalLink, ArrowUp, Square, Sparkle, Flag, Newspaper, Clock, Paperclip, Check, CircleAlert, Info, Menu, X, ArrowLeft, Plus, Search, ChevronDown, Link, KeyRound } from 'lucide-react'
+
+const icons = { 'message-circle': MessageCircle, inbox: Inbox, 'at-sign': AtSign, archive: Archive, 'trash-2': Trash2, reply: Reply, pencil: Pencil, 'mail-open': MailOpen, 'refresh-cw': RefreshCw, 'more-horizontal': MoreHorizontal, 'external-link': ExternalLink, 'arrow-up': ArrowUp, square: Square, sparkle: Sparkle, flag: Flag, newspaper: Newspaper, clock: Clock, paperclip: Paperclip, check: Check, 'circle-alert': CircleAlert, info: Info, menu: Menu, x: X, 'arrow-left': ArrowLeft, plus: Plus, search: Search, 'chevron-down': ChevronDown, link: Link, 'key-round': KeyRound } as const
+export type IconName = keyof typeof icons
+export function Icon({ name, size = 'md' }: { name: IconName; size?: 'md' | 'sm' }) {
+  const Component = icons[name]
+  return <Component aria-hidden="true" size={size === 'sm' ? 16 : 19} strokeWidth={1.8} fill={name === 'sparkle' || name === 'square' ? 'currentColor' : 'none'} className={`le-ico${size === 'sm' ? ' le-ico--sm' : ''}`} />
+}

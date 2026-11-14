@@ -4,6 +4,7 @@
 @import "@fontsource/plus-jakarta-sans/700.css";
 @import "./styles/tokens.css";
 @import "./styles/ds.css";
+@import "./styles/ds-app.css";
 @import "tailwindcss";
 
 @theme inline {

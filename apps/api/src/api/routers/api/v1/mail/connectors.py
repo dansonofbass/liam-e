@@ -19,7 +19,7 @@ from api.mail import connectors as connector_service
 from api.mail.connectors import CONNECTOR
 from api.errors import refuse
 from api.mail.service import AccountConflictError, upsert_account
-from api.routers.api.v1.mail.accounts import AccountOut
+from api.routers.api.v1.mail.accounts import AccountOut, current_account_out
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +45,10 @@ def _http_error(error: Exception) -> HTTPException:
         or 502
     )
     if status == 404:
-        return refuse(404, "connector_not_found", "Connector nicht gefunden.")
+        return refuse(404, "connector_not_found", "Den Connector gibt es in Mistral Studio nicht mehr. Leg ihn dort wieder an oder verbinde das Konto auf anderem Weg.")
     if status == 401:
-        return refuse(502, "connector_auth_required", "Authentifiziere den Connector in Mistral Studio unter Connector → Auth.")
-    return refuse(502, "connector_failed", "Der Connector antwortet nicht. Versuch es später noch mal.")
+        return refuse(502, "connector_auth_required", "Der Connector ist in Mistral Studio nicht angemeldet. Melde ihn dort unter Connector → Auth an und versuch es dann noch mal.")
+    return refuse(502, "connector_failed", "Der Connector antwortet gerade nicht. Versuch es gleich noch mal.")
 
 
 @router.get(
@@ -137,4 +137,4 @@ async def connect_connector(name: str) -> AccountOut:
         )
     except AccountConflictError as error:
         raise refuse(409, "account_exists", "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.") from error
-    return AccountOut.from_model(account)
+    return await current_account_out(account)

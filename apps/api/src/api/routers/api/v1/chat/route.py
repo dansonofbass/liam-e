@@ -1,42 +1,34 @@
-"""One chat turn: persists the user message, runs the agent tool loop, returns the new messages."""
-
-from db.accessors import chat_conversation as conversation_access
-from fastapi import APIRouter, HTTPException
+"""Non-streaming compatibility endpoint for one chat turn."""
+from db.accessors import chat_message as message_access
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-
+from api.errors import refuse
 from api.mail import agent
-
 from . import schemas
 
 router = APIRouter()
 
 
 class ChatTurnRequest(BaseModel):
-    conversation_id: str = Field(
-        default="", description="Leer lassen für eine neue Konversation"
-    )
-    message: str
+    conversation_id: str = Field(default='', description='Leer lassen für eine neue Unterhaltung')
+    message: str = Field(min_length=1, max_length=8000)
 
 
-@router.post("", operation_id="chat_turn", summary="Send a message to the mail agent")
+@router.post('', operation_id='chat_turn', summary='Send a message to the mail agent')
 async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
-    """Send one chat message to the mail agent and return the messages it produced.
-
-    Pass an empty ``conversation_id`` to start a new conversation; the response returns the
-    conversation id to continue with. The agent may create a pending draft, but this operation
-    never sends a mail by itself.
-    """
-    if body.conversation_id:
-        conversation = await conversation_access.get_conversation(body.conversation_id)
-        if conversation is None:
-            raise HTTPException(status_code=404, detail="Konversation nicht gefunden.")
-    else:
-        conversation = await conversation_access.create_conversation()
+    """Run a complete chat turn and return its visible messages."""
+    conversation_id = ''
+    user_id = ''
     try:
-        _, new_messages = await agent.run_turn(conversation.id, body.message)
+        async for event in agent.run_turn_events(conversation_id=body.conversation_id or None, text=body.message):
+            if event.event == 'start':
+                conversation_id, user_id = event.conversation_id, event.user_message_id
+            elif event.event == 'error':
+                if event.code == 'model_unavailable':
+                    raise refuse(503, 'model_unavailable', 'Das Modell antwortet gerade nicht. Versuch es gleich noch mal.')
+                raise refuse(500, 'internal', 'Die Antwort konnte nicht erstellt werden. Versuch es gleich noch mal.')
     except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    return schemas.ChatTurnResponse(
-        conversation_id=conversation.id,
-        messages=[schemas.ChatMessageOut.from_model(m) for m in new_messages],
-    )
+        raise refuse(404, 'conversation_not_found', 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.') from error
+    rows = await message_access.list_messages(conversation_id)
+    index = next((i for i, row in enumerate(rows) if row.id == user_id), len(rows))
+    return schemas.ChatTurnResponse(conversation_id=conversation_id, messages=[schemas.to_message_out(m) for m in agent.visible_messages(rows[index + 1:])])

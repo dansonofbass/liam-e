@@ -26,8 +26,12 @@ class FakeStore:
         for name in ("enqueue", "claim_next", "finish", "fail", "latest_for_account", "delete_for_account"):
             monkeypatch.setattr(mail_job, name, getattr(self, "job_" + name))
         monkeypatch.setattr(mail_message, "count_unread", self.count_unread)
+        monkeypatch.setattr(mail_message, "count_for_account", self.count_for_account)
+        async def newsletter_senders(*, account_ids=None):
+            return []
+        monkeypatch.setattr(mail_message, "newsletter_senders", newsletter_senders)
         for module, names in (
-            (mail_account, ("list_accounts", "get_account", "get_account_by_email", "create_account", "touch_account", "delete_account")),
+            (mail_account, ("list_accounts", "get_account", "get_account_by_email", "create_account", "touch_account", "update_display_name", "delete_account")),
             (mail_credential, ("load_credential", "store_credential")),
             (mail_sync_state, ("get_state", "save_state")),
         ):
@@ -91,6 +95,9 @@ class FakeStore:
     async def action_delete_for_account(self, account_id):
         self.actions = {key: row for key, row in self.actions.items() if row.account_id != account_id}
 
+    async def count_for_account(self, account_id):
+        return sum(row.account_id == account_id for row in self.messages.values())
+
     async def count_unread(self, *, folder="INBOX"):
         return self.unread
 
@@ -148,6 +155,12 @@ class FakeStore:
 
     async def touch_account(self, account):
         self.accounts[account.id] = account
+        return account
+
+    async def update_display_name(self, account_id, display_name):
+        account = self.accounts.get(account_id)
+        if account:
+            account.display_name = display_name
         return account
 
     async def delete_account(self, account_id):

@@ -13,6 +13,7 @@ import type { ComponentType } from "react";
 import { RootScreensContext, plainRootScreens } from "./root-screens";
 import type { RootScreens } from "./root-screens";
 import { RouteError, page } from "./route-error";
+import german from "./root-screens/de";
 
 // A page whose `React.lazy` panel fails to load, as after a redeploy removed the panel's chunk.
 const renderPageFailingWith = (
@@ -50,6 +51,22 @@ const missingChunk = () =>
 describe("RouteError", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
+  });
+
+  test("the German error screen explains the error and retry", async () => {
+    renderPageFailingWith(() => { throw new Error("failure"); }, german);
+    expect(await screen.findByText("Diese Seite ließ sich nicht anzeigen")).toBeTruthy();
+    expect(screen.getByText("Lade sie neu oder versuch es gleich noch mal.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Noch mal versuchen" })).toBeTruthy();
+    expect(screen.getByText("Details")).toBeTruthy();
+  });
+
+  test("the German missing-chunk screen offers reload", async () => {
+    spyOn(page, "reload").mockImplementation(() => {});
+    renderPageFailingWith(() => { throw missingChunk(); }, german);
+    expect(await screen.findByText("liam-e wurde aktualisiert")).toBeTruthy();
+    expect(screen.getByText("Lade die Seite neu, um die neue Version zu öffnen.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Neu laden" })).toBeTruthy();
   });
 
   test("reloads once for a missing chunk, then offers a Reload button", async () => {

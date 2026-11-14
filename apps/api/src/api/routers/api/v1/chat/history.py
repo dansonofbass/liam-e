@@ -4,7 +4,11 @@ from typing import Annotated
 
 from db.accessors import chat_conversation as conversation_access
 from db.accessors import chat_message as message_access
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
+
+from api.errors import refuse
+
+from api.mail.agent import visible_messages
 
 from . import schemas
 
@@ -25,6 +29,6 @@ async def history(
     """
     conversation = await conversation_access.get_conversation(conversation_id)
     if conversation is None:
-        raise HTTPException(status_code=404, detail="Konversation nicht gefunden.")
+        raise refuse(404, "conversation_not_found", "Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.")
     messages = await message_access.list_messages(conversation_id)
-    return [schemas.ChatMessageOut.from_model(m) for m in messages]
+    return [schemas.to_message_out(m) for m in visible_messages(messages)]

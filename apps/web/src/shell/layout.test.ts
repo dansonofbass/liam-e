@@ -1,0 +1,64 @@
+import { expect, test } from 'bun:test'
+
+test('conversation and composer share the same centred column', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const tokens = await Bun.file(new URL('../styles/tokens.css', import.meta.url)).text()
+  const rule = (selector: string) => css.split(`${selector} {`)[1]?.split('}')[0] ?? ''
+  for (const selector of ['.le-chat-thread', '.le-chat-composer']) {
+    for (const property of ['width: 100%', 'max-width: var(--chat-width)', 'align-self: center', 'box-sizing: border-box']) expect(rule(selector)).toContain(property)
+  }
+  expect(rule('.le-chat-messages')).toContain('padding: var(--space-5)')
+  expect(rule('.le-chat-composer')).toContain('var(--space-5)')
+  expect(tokens).toContain('--chat-width: 780px')
+  expect(tokens).toContain('--space-5: 24px')
+})
+
+test('start content is centred and quick actions use four columns or two on mobile', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const route = await Bun.file(new URL('../routes/_app/index.tsx', import.meta.url)).text()
+  expect(route).toContain('le-chat-messages le-chat-thread le-chat-start-scroll')
+  expect(css).toContain('.le-chat-start-scroll { display: flex; flex-direction: column; }')
+  expect(css).toMatch(/\.le-chat-start \{[^}]*width: 100%; margin: auto 0;/u)
+  expect(css).toMatch(/\.le-chat-quick-actions \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/u)
+  expect(css).toContain('@media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }')
+})
+
+test('shell navigation and composer have coarse pointer targets', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.match(/@media \(pointer: coarse\) \{ (\.le-topbar \.le-icon-btn[^{}]+)\{ ([^{}]+) \} \.le-composer textarea \{ ([^{}]+) \} \}/u)
+  expect(rule).toBeTruthy()
+  for (const selector of ['.le-topbar .le-icon-btn', '.le-side .le-icon-btn', '.le-side .le-nav-item', '.le-side .le-conv', '.le-drawer .le-nav-item', '.le-drawer .le-conv']) expect(rule?.[1]).toContain(selector)
+  for (const property of ['min-width: var(--control-height-lg)', 'min-height: var(--control-height-lg)']) expect(rule?.[2]).toContain(property)
+  expect(rule?.[3]).toContain('min-height: var(--control-height-lg)')
+})
+
+test('the viewport bounds the shell and its independently scrolling content', async () => {
+  const base = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  const app = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = (css: string, selector: string) => css.split(`${selector} {`)[1]?.split('}')[0] ?? ''
+  for (const property of ['height: 100dvh', 'overflow: hidden']) expect(rule(base, '.le-app')).toContain(property)
+  expect(rule(base, '.le-app')).not.toContain('flex-wrap: wrap')
+  for (const selector of ['.le-side', '.le-sheet']) expect(rule(base, selector)).toContain('min-height: 0')
+  for (const selector of ['.le-page-fade', '.le-chat-view', '.le-inbox', '.le-inbox-list', '.le-mail-view']) expect(rule(app, selector)).toContain('min-height: 0')
+  for (const selector of ['.le-chat-messages', '.le-inbox-scroll', '.le-mail-scroll', '.le-accounts-scroll']) {
+    for (const property of ['min-height: 0', 'overflow-y: auto']) expect(rule(app, selector)).toContain(property)
+  }
+  for (const selector of ['.le-chat-composer', '.le-mail-bottom']) expect(rule(app, selector)).toContain('env(safe-area-inset-bottom)')
+})
+
+test('only the sidebar conversation list scrolls, with room for focus rings', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = (selector: string) => css.split(`${selector} {`)[1]?.split('}')[0] ?? ''
+  for (const property of ['flex: 1', 'min-height: 0', 'overflow-y: auto', 'margin-inline: calc(-1 * var(--space-1))', 'padding-inline: var(--space-1)', 'padding-bottom: var(--space-1)']) expect(rule('.le-side .le-shell-conversations')).toContain(property)
+  expect(rule('.le-shell-sidebar')).not.toContain('overflow')
+  expect(rule('.le-shell-status')).toContain('margin-top: auto')
+  expect(rule('.le-side .le-shell-status')).toBe('')
+  expect(rule('.le-drawer')).toContain('overflow: auto')
+  expect(rule('.le-drawer .le-shell-sidebar')).toContain('flex: 1 0 auto')
+})
+
+test('the model chip in the chat header gets a 44 px target on touch', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const coarse = css.split('@media (pointer: coarse) {').map(block => block.split('}')[0] ?? '')
+  expect(coarse.some(block => block.includes('.le-chat-topbar .le-menu-anchor > .le-chip') && block.includes('min-height: var(--control-height-lg)'))).toBe(true)
+})

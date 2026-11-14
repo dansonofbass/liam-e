@@ -5,6 +5,32 @@ export type ClientOptions = {
 };
 
 /**
+ * AccountOptionsOut
+ */
+export type AccountOptionsOut = {
+    /**
+     * Gmail Connector
+     */
+    gmail_connector: boolean;
+    /**
+     * Google Oauth
+     */
+    google_oauth: boolean;
+    /**
+     * Imap Presets
+     */
+    imap_presets: Array<ImapPresetOut>;
+    /**
+     * Microsoft Oauth
+     */
+    microsoft_oauth: boolean;
+    /**
+     * Outlook Connector
+     */
+    outlook_connector: boolean;
+};
+
+/**
  * AccountOut
  */
 export type AccountOut = {
@@ -12,6 +38,14 @@ export type AccountOut = {
      * Auth Type
      */
     auth_type: string;
+    /**
+     * Color Index
+     */
+    color_index: number;
+    /**
+     * Connection
+     */
+    connection: 'connector' | 'oauth' | 'imap';
     /**
      * Created At
      */
@@ -25,6 +59,10 @@ export type AccountOut = {
      */
     email_address: string;
     /**
+     * Error Code
+     */
+    error_code: string;
+    /**
      * Id
      */
     id: string;
@@ -33,9 +71,25 @@ export type AccountOut = {
      */
     is_active: boolean;
     /**
+     * Last Sync At
+     */
+    last_sync_at: string | null;
+    /**
+     * Message Count
+     */
+    message_count: number;
+    /**
      * Provider
      */
     provider: string;
+    /**
+     * State
+     */
+    state: 'ok' | 'syncing' | 'auth_expired' | 'error' | 'never';
+    /**
+     * Unread
+     */
+    unread: number;
     /**
      * Updated At
      */
@@ -89,6 +143,16 @@ export type AccountSummaryOut = {
 };
 
 /**
+ * AccountUpdateIn
+ */
+export type AccountUpdateIn = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+};
+
+/**
  * AttachmentOut
  */
 export type AttachmentOut = {
@@ -107,6 +171,61 @@ export type AttachmentOut = {
 };
 
 /**
+ * ChatConversationUpdateIn
+ */
+export type ChatConversationUpdateIn = {
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+};
+
+/**
+ * ChatEvent
+ *
+ * A discriminated event in the streamed response.
+ */
+export type ChatEvent = ({
+    event: 'start';
+} & StartEvent) | ({
+    event: 'status';
+} & StatusEvent) | ({
+    event: 'delta';
+} & DeltaEvent) | ({
+    event: 'mails';
+} & MailsEvent) | ({
+    event: 'proposal';
+} & ProposalEvent) | ({
+    event: 'suggestions';
+} & SuggestionsEvent) | ({
+    event: 'done';
+} & DoneEvent) | ({
+    event: 'error';
+} & ErrorEvent);
+
+/**
+ * ChatExtrasOut
+ */
+export type ChatExtrasOut = {
+    /**
+     * Mails
+     */
+    mails?: Array<string>;
+    /**
+     * Model
+     */
+    model?: string;
+    /**
+     * Suggestions
+     */
+    suggestions?: Array<string>;
+};
+
+/**
  * ChatMessageOut
  */
 export type ChatMessageOut = {
@@ -122,22 +241,72 @@ export type ChatMessageOut = {
      * Created At
      */
     created_at: string;
-    /**
-     * Draft Json
-     */
-    draft_json: string;
+    extras: ChatExtrasOut;
     /**
      * Id
      */
     id: string;
+    proposal: Proposal | null;
+    /**
+     * Proposal Status
+     */
+    proposal_status: string;
     /**
      * Role
      */
     role: string;
     /**
+     * Stopped
+     */
+    stopped: boolean;
+    /**
      * Tool Name
      */
     tool_name: string;
+};
+
+/**
+ * ChatModelOut
+ */
+export type ChatModelOut = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Default
+     */
+    is_default: boolean;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * ChatStreamRequest
+ */
+export type ChatStreamRequest = {
+    /**
+     * Account Id
+     */
+    account_id?: string | null;
+    /**
+     * Context Message Id
+     */
+    context_message_id?: string | null;
+    /**
+     * Conversation Id
+     */
+    conversation_id?: string | null;
+    /**
+     * Text
+     */
+    text: string;
 };
 
 /**
@@ -147,7 +316,7 @@ export type ChatTurnRequest = {
     /**
      * Conversation Id
      *
-     * Leer lassen für eine neue Konversation
+     * Leer lassen für eine neue Unterhaltung
      */
     conversation_id?: string;
     /**
@@ -217,6 +386,10 @@ export type ConversationOut = {
      */
     id: string;
     /**
+     * Model
+     */
+    model: string;
+    /**
      * Title
      */
     title: string;
@@ -224,6 +397,20 @@ export type ConversationOut = {
      * Updated At
      */
     updated_at: string;
+};
+
+/**
+ * DeltaEvent
+ */
+export type DeltaEvent = {
+    /**
+     * Event
+     */
+    event: 'delta';
+    /**
+     * Text
+     */
+    text: string;
 };
 
 /**
@@ -238,6 +425,42 @@ export type DependencyStatus = {
      * Reachable
      */
     reachable?: boolean | null;
+};
+
+/**
+ * DoneEvent
+ */
+export type DoneEvent = {
+    /**
+     * Conversation Id
+     */
+    conversation_id: string;
+    /**
+     * Event
+     */
+    event: 'done';
+    /**
+     * Message Id
+     */
+    message_id: string;
+    /**
+     * Stopped
+     */
+    stopped: boolean;
+};
+
+/**
+ * ErrorEvent
+ */
+export type ErrorEvent = {
+    /**
+     * Code
+     */
+    code: 'model_unavailable' | 'aborted' | 'internal';
+    /**
+     * Event
+     */
+    event: 'error';
 };
 
 /**
@@ -313,6 +536,102 @@ export type ImapConnectRequest = {
 };
 
 /**
+ * ImapPresetOut
+ */
+export type ImapPresetOut = {
+    /**
+     * Domain
+     */
+    domain: string;
+    /**
+     * Imap Host
+     */
+    imap_host: string;
+    /**
+     * Smtp Host
+     */
+    smtp_host: string;
+};
+
+/**
+ * InsightOut
+ */
+export type InsightOut = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Deadline
+     */
+    deadline: string | null;
+    /**
+     * Followups
+     */
+    followups: Array<string>;
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Needs Reply
+     */
+    needs_reply: boolean;
+    /**
+     * Points
+     */
+    points: Array<string>;
+};
+
+/**
+ * ItemProblem
+ */
+export type ItemProblem = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Id
+     */
+    id: string;
+};
+
+/**
+ * MailRefOut
+ */
+export type MailRefOut = {
+    /**
+     * Account Id
+     */
+    account_id: string;
+    /**
+     * Color Index
+     */
+    color_index: number;
+    /**
+     * Deadline
+     */
+    deadline: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Internal Date
+     */
+    internal_date: string | null;
+    /**
+     * Sender Name
+     */
+    sender_name: string;
+    /**
+     * Subject
+     */
+    subject: string;
+};
+
+/**
  * MailSummaryOut
  */
 export type MailSummaryOut = {
@@ -332,6 +651,34 @@ export type MailSummaryOut = {
      * Unread Total
      */
     unread_total: number;
+};
+
+/**
+ * MailsEvent
+ */
+export type MailsEvent = {
+    /**
+     * Event
+     */
+    event: 'mails';
+    /**
+     * Mails
+     */
+    mails: Array<MailRefOut>;
+};
+
+/**
+ * ManualStep
+ */
+export type ManualStep = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Link
+     */
+    link: string | null;
 };
 
 /**
@@ -524,6 +871,211 @@ export type OAuthAuthorizeOut = {
 };
 
 /**
+ * Proposal
+ */
+export type Proposal = {
+    draft?: SendDraft | null;
+    /**
+     * Irreversible
+     */
+    irreversible?: boolean;
+    /**
+     * Items
+     */
+    items: Array<ProposalItem>;
+    /**
+     * Kind
+     */
+    kind: 'send' | 'archive' | 'trash' | 'mark_read' | 'unsubscribe';
+    /**
+     * Reason
+     */
+    reason: string;
+    result?: ProposalResult | null;
+};
+
+/**
+ * ProposalConfirmIn
+ */
+export type ProposalConfirmIn = {
+    /**
+     * Body
+     */
+    body?: string | null;
+    /**
+     * Selected Ids
+     */
+    selected_ids: Array<string>;
+};
+
+/**
+ * ProposalEvent
+ */
+export type ProposalEvent = {
+    /**
+     * Event
+     */
+    event: 'proposal';
+    message: ChatMessageOut;
+};
+
+/**
+ * ProposalItem
+ */
+export type ProposalItem = {
+    /**
+     * Count
+     */
+    count?: number | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'mail' | 'sender';
+    /**
+     * Last Read At
+     */
+    last_read_at?: string | null;
+    /**
+     * Method
+     */
+    method?: string | null;
+    /**
+     * Selected
+     */
+    selected?: boolean;
+    /**
+     * Subtitle
+     */
+    subtitle: string;
+    /**
+     * Target
+     */
+    target?: string | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Unread
+     */
+    unread?: number | null;
+};
+
+/**
+ * ProposalResult
+ */
+export type ProposalResult = {
+    /**
+     * Done
+     */
+    done?: number;
+    /**
+     * Failed
+     */
+    failed?: Array<ItemProblem>;
+    /**
+     * Manual
+     */
+    manual?: Array<ManualStep>;
+    /**
+     * Undo Action Ids
+     */
+    undo_action_ids?: Array<string>;
+};
+
+/**
+ * SendDraft
+ */
+export type SendDraft = {
+    /**
+     * Account Id
+     */
+    account_id: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Cc
+     */
+    cc: Array<string>;
+    /**
+     * Mode
+     */
+    mode: 'new' | 'reply' | 'reply_all' | 'forward';
+    /**
+     * Quote
+     */
+    quote: string;
+    /**
+     * Reply To Message Id
+     */
+    reply_to_message_id: string | null;
+    /**
+     * Subject
+     */
+    subject: string;
+    /**
+     * To
+     */
+    to: Array<string>;
+};
+
+/**
+ * StartEvent
+ */
+export type StartEvent = {
+    /**
+     * Conversation Id
+     */
+    conversation_id: string;
+    /**
+     * Event
+     */
+    event: 'start';
+    /**
+     * User Message Id
+     */
+    user_message_id: string;
+};
+
+/**
+ * StatusEvent
+ */
+export type StatusEvent = {
+    /**
+     * Code
+     */
+    code: 'thinking' | 'searching' | 'reading' | 'checking_deadlines' | 'finding_newsletters' | 'preparing_proposal';
+    /**
+     * Count
+     */
+    count: number | null;
+    /**
+     * Event
+     */
+    event: 'status';
+};
+
+/**
+ * SuggestionsEvent
+ */
+export type SuggestionsEvent = {
+    /**
+     * Event
+     */
+    event: 'suggestions';
+    /**
+     * Items
+     */
+    items: Array<string>;
+};
+
+/**
  * SyncAllOut
  */
 export type SyncAllOut = {
@@ -662,65 +1214,35 @@ export type ChatConversationsListResponses = {
 
 export type ChatConversationsListResponse = ChatConversationsListResponses[keyof ChatConversationsListResponses];
 
-export type ChatDraftCancelData = {
-    body?: never;
+export type ChatConversationUpdateData = {
+    body: ChatConversationUpdateIn;
     path: {
         /**
-         * Draft Id
+         * Conversation Id
          */
-        draft_id: string;
+        conversation_id: string;
     };
     query?: never;
-    url: '/api/v1/chat/drafts/{draft_id}';
+    url: '/api/v1/chat/conversations/{conversation_id}';
 };
 
-export type ChatDraftCancelErrors = {
+export type ChatConversationUpdateErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type ChatDraftCancelError = ChatDraftCancelErrors[keyof ChatDraftCancelErrors];
+export type ChatConversationUpdateError = ChatConversationUpdateErrors[keyof ChatConversationUpdateErrors];
 
-export type ChatDraftCancelResponses = {
+export type ChatConversationUpdateResponses = {
     /**
      * Successful Response
      */
-    200: ChatMessageOut;
+    200: ConversationOut;
 };
 
-export type ChatDraftCancelResponse = ChatDraftCancelResponses[keyof ChatDraftCancelResponses];
-
-export type ChatDraftConfirmData = {
-    body?: never;
-    path: {
-        /**
-         * Draft Id
-         */
-        draft_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/drafts/{draft_id}/confirm';
-};
-
-export type ChatDraftConfirmErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ChatDraftConfirmError = ChatDraftConfirmErrors[keyof ChatDraftConfirmErrors];
-
-export type ChatDraftConfirmResponses = {
-    /**
-     * Successful Response
-     */
-    200: ChatMessageOut;
-};
-
-export type ChatDraftConfirmResponse = ChatDraftConfirmResponses[keyof ChatDraftConfirmResponses];
+export type ChatConversationUpdateResponse = ChatConversationUpdateResponses[keyof ChatConversationUpdateResponses];
 
 export type ChatHistoryData = {
     body?: never;
@@ -753,6 +1275,109 @@ export type ChatHistoryResponses = {
 };
 
 export type ChatHistoryResponse = ChatHistoryResponses[keyof ChatHistoryResponses];
+
+export type ChatModelsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/chat/models';
+};
+
+export type ChatModelsListResponses = {
+    /**
+     * Response Chat Models List
+     *
+     * Successful Response
+     */
+    200: Array<ChatModelOut>;
+};
+
+export type ChatModelsListResponse = ChatModelsListResponses[keyof ChatModelsListResponses];
+
+export type ChatProposalCancelData = {
+    body?: never;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/v1/chat/proposals/{proposal_id}/cancel';
+};
+
+export type ChatProposalCancelErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatProposalCancelError = ChatProposalCancelErrors[keyof ChatProposalCancelErrors];
+
+export type ChatProposalCancelResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatMessageOut;
+};
+
+export type ChatProposalCancelResponse = ChatProposalCancelResponses[keyof ChatProposalCancelResponses];
+
+export type ChatProposalConfirmData = {
+    body: ProposalConfirmIn;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/v1/chat/proposals/{proposal_id}/confirm';
+};
+
+export type ChatProposalConfirmErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatProposalConfirmError = ChatProposalConfirmErrors[keyof ChatProposalConfirmErrors];
+
+export type ChatProposalConfirmResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatMessageOut;
+};
+
+export type ChatProposalConfirmResponse = ChatProposalConfirmResponses[keyof ChatProposalConfirmResponses];
+
+export type ChatStreamData = {
+    body: ChatStreamRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/chat/stream';
+};
+
+export type ChatStreamErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatStreamError = ChatStreamErrors[keyof ChatStreamErrors];
+
+export type ChatStreamResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatEvent;
+};
+
+export type ChatStreamResponse = ChatStreamResponses[keyof ChatStreamResponses];
 
 export type MailAccountsListData = {
     body?: never;
@@ -805,7 +1430,12 @@ export type MailAccountOauthAuthorizeData = {
          */
         provider: 'google' | 'microsoft';
     };
-    query?: never;
+    query?: {
+        /**
+         * Account Id
+         */
+        account_id?: string | null;
+    };
     url: '/api/v1/mail/accounts/oauth/{provider}/authorize';
 };
 
@@ -835,15 +1465,19 @@ export type MailAccountOauthCallbackData = {
          */
         provider: 'google' | 'microsoft';
     };
-    query: {
+    query?: {
         /**
          * Code
          */
-        code: string;
+        code?: string | null;
         /**
          * State
          */
-        state: string;
+        state?: string | null;
+        /**
+         * Error
+         */
+        error?: string | null;
     };
     url: '/api/v1/mail/accounts/oauth/{provider}/callback';
 };
@@ -857,14 +1491,21 @@ export type MailAccountOauthCallbackErrors = {
 
 export type MailAccountOauthCallbackError = MailAccountOauthCallbackErrors[keyof MailAccountOauthCallbackErrors];
 
-export type MailAccountOauthCallbackResponses = {
+export type MailAccountOptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/mail/accounts/options';
+};
+
+export type MailAccountOptionsResponses = {
     /**
      * Successful Response
      */
-    200: AccountOut;
+    200: AccountOptionsOut;
 };
 
-export type MailAccountOauthCallbackResponse = MailAccountOauthCallbackResponses[keyof MailAccountOauthCallbackResponses];
+export type MailAccountOptionsResponse = MailAccountOptionsResponses[keyof MailAccountOptionsResponses];
 
 export type MailAccountDeleteData = {
     body?: never;
@@ -895,6 +1536,36 @@ export type MailAccountDeleteResponses = {
 };
 
 export type MailAccountDeleteResponse = MailAccountDeleteResponses[keyof MailAccountDeleteResponses];
+
+export type MailAccountUpdateData = {
+    body: AccountUpdateIn;
+    path: {
+        /**
+         * Account Id
+         */
+        account_id: string;
+    };
+    query?: never;
+    url: '/api/v1/mail/accounts/{account_id}';
+};
+
+export type MailAccountUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailAccountUpdateError = MailAccountUpdateErrors[keyof MailAccountUpdateErrors];
+
+export type MailAccountUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: AccountOut;
+};
+
+export type MailAccountUpdateResponse = MailAccountUpdateResponses[keyof MailAccountUpdateResponses];
 
 export type MailAccountSyncData = {
     body?: never;
@@ -1148,6 +1819,36 @@ export type MailMessageActionResponses = {
 };
 
 export type MailMessageActionResponse = MailMessageActionResponses[keyof MailMessageActionResponses];
+
+export type MailMessageInsightData = {
+    body?: never;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/mail/messages/{message_id}/insight';
+};
+
+export type MailMessageInsightErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailMessageInsightError = MailMessageInsightErrors[keyof MailMessageInsightErrors];
+
+export type MailMessageInsightResponses = {
+    /**
+     * Successful Response
+     */
+    200: InsightOut;
+};
+
+export type MailMessageInsightResponse = MailMessageInsightResponses[keyof MailMessageInsightResponses];
 
 export type MailSummaryData = {
     body?: never;
