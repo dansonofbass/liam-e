@@ -53,3 +53,13 @@ test('padding, margin and gap sit on the 4 px grid', async () => {
     }
   }
 })
+
+test('every base control reaches 44 px with a coarse pointer, wherever it sits', async () => {
+  const ds = await read('ds.css')
+  const block = ds.match(/@media \(pointer: coarse\) \{\n  ([^{}]+)\{ ([^{}]+) \}\n\}/u)
+  expect(block).not.toBeNull()
+  const selectors = block![1]!.split(',').map(selector => selector.trim())
+  for (const control of ['.le-btn', '.le-icon-btn', '.le-send', '.le-chip', '.le-nav-item', '.le-conv', '.le-menu-item']) expect(selectors).toContain(control)
+  expect(block![2]).toContain('min-width: var(--control-height-lg)')
+  expect(block![2]).toContain('min-height: var(--control-height-lg)')
+})

@@ -231,6 +231,12 @@ body { margin: 0; font-family: var(--font-sans); font-size: var(--font-size-body
 .le-status--syncing { color: var(--ink-muted); }
 .le-status--error { color: var(--danger); }
 
+/* DESIGN.md §7.2: with a coarse pointer every base control is at least 44 x 44 px, wherever it
+   sits. ds-app.css adds the containers whose targets are not base controls (links, labels). */
+@media (pointer: coarse) {
+  .le-btn, .le-icon-btn, .le-send, .le-chip, .le-nav-item, .le-conv, .le-menu-item { min-width: var(--control-height-lg); min-height: var(--control-height-lg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* Content still fades in; it only stops rising. Loops (dots, caret, spinner) hold still. */
   .le-rise { animation-name: le-fade; }

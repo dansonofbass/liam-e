@@ -320,7 +320,10 @@ Anfang an mit.
 ### 7.2 Touch
 
 - Bei `pointer: coarse` sind alle Tippziele mindestens **44 × 44 px**, ohne sich zu
-  überlappen.
+  überlappen. Für die Bausteine Button, IconButton, Senden, Chip, Navigationspunkt,
+  Unterhaltung und Menüeintrag gilt das allgemein (`ds.css`); `ds-app.css` ergänzt nur
+  Ziele, die keine Bausteine sind, etwa Links, Beschriftungen von Auswahlfeldern und die
+  Textarea im Composer.
 - **Nichts nur bei Hover.** Die Aktionsleiste einer Mailzeile erscheint am Desktop beim
   Hover; auf Touch öffnet ein sichtbarer Button „Weitere Aktionen“ dieselben Aktionen.
 - Der Fokusring bleibt auch mit Touch (Tastatur am Tablet).
