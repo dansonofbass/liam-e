@@ -20,7 +20,7 @@ function setup({ mobile = false, unread = false, missing = false, loading = fals
   }) as typeof fetch
   const rows = [{ ...mail, is_read: !unread }, { ...mail, id: 'm2', subject: 'Zweite', is_read: !unread }]
   const getInsight = spyOn(sdk, 'mailMessageInsight').mockImplementation((insight ?? (async () => ({ data: { points: [], deadline: null, followups: [], needs_reply: false, model: '', created_at: '' } }))) as never)
-  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' }], unread_total: unread ? 1 : 0, last_sync_at: null } })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' }], unread_total: unread ? 1 : 0, last_sync_at: null } })) as never)
   spyOn(sdk, 'mailMessagesList').mockImplementation((async () => ({ data: { items: rows, next_cursor: null } })) as never)
   const get = spyOn(sdk, 'mailMessageGet').mockImplementation((async (options: { path: { message_id: string } }) => { if (missing) return { error: { detail: 'Mail nicht gefunden.' }, response: new Response(null, { status: 404 }) }; if (failed) return { error: { detail: 'down' }, response: new Response(null, { status: 500 }) }; if (loading) return await new Promise(() => {}); return { data: rows.find(row => row.id === options.path.message_id) ?? mail } }) as never)
   const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => ({ data: { action_id: 'act', message: rows.find(row => row.id === options.path.message_id) }, response: { status: 200 } })) as never)
@@ -36,6 +36,12 @@ function setup({ mobile = false, unread = false, missing = false, loading = fals
   return { client, router, view, action, get, getInsight, request: () => request }
 }
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia; globalThis.fetch = originalFetch })
+
+test('open mail shows the provider when the account has no display name', async () => {
+  setup()
+  await screen.findByRole('heading', { name: 'Termin' })
+  await waitFor(() => expect(document.querySelector('.le-mail-header .le-tag')?.textContent).toBe('Gmail'))
+})
 
 test('opening unread mail marks it read once across rerender and refetch, updating list', async () => {
   const { action, client, view, router } = setup({ unread: true })

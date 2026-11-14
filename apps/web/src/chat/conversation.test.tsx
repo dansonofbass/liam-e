@@ -17,7 +17,7 @@ let requestBody: Record<string, unknown>
 let summary: MailSummaryOut = { accounts: [], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
 function setup(path = '/') {
   history = []
-  summary = { accounts: [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
+  summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; requestBody = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start(c) { stream = c } }))) }) as typeof fetch
   spyOn(sdk, 'chatHistory').mockImplementation((async () => ({ data: history })) as never)
@@ -137,6 +137,15 @@ test('selection survives the live proposal being replaced by history', async () 
   await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: undefined }, throwOnError: true }))
 })
 
+test('composer account menu falls back to the address', async () => {
+  const { client } = setup('/chat/c')
+  await waitFor(() => expect(client.getQueryData(['summary'])).toBeTruthy())
+  act(() => { client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail' }] }) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'ich@example.com' }))
+  expect(screen.getByRole('button', { name: 'ich@example.com' })).toBeTruthy()
+})
+
 test('composer scopes a request to the chosen account and clears the field', async () => {
   const { client } = setup('/chat/c')
   act(() => { client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: 'Privat' }] }) })
@@ -199,12 +208,12 @@ test('history renders safe text, model, mail account and only the latest suggest
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
   await waitFor(() => expect(screen.queryByText('Unterhaltung wird geladen …')).toBeNull())
   act(() => {
-    client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: 'Privat' }] })
+    client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail' }] })
     client.setQueryData(['models'], [{ id: 'model', label: 'Modellname', description: '', is_default: true }])
     client.setQueryData(['history', 'c'], [row('old', 'Alt', { suggestions: ['Alte Frage'] }), row('new', 'Neu', { model: 'model', mails: ['mail'], suggestions: ['Weiter fragen'] })])
   })
   expect(await screen.findByText('<b>Betreff</b>')).toBeTruthy()
-  expect(screen.getByText('Privat')).toBeTruthy()
+  expect(screen.getByText('Gmail')).toBeTruthy()
   expect(screen.getAllByText('Modellname')).toHaveLength(2)
   expect(screen.queryByText('Alte Frage')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Weiter fragen' }))

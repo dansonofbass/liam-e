@@ -10,6 +10,7 @@ import { IconButton } from './IconButton'
 import { Menu } from './Menu'
 import { Tooltip } from './Tooltip'
 import { TextField } from './TextField'
+import { providerLabel } from './providerLabel'
 
 export function AccountCard({ account, onSync, onReconnect, onRename, onRemove, onSaveName, syncPending = false, coarse = false }: { account: AccountOut; onSync: () => void; onReconnect: () => void; onRename: () => void; onRemove: () => void; onSaveName?: (name: string) => Promise<string | undefined>; syncPending?: boolean; coarse?: boolean }) {
   const [editing, setEditing] = useState(false), [value, setValue] = useState(''), [fieldError, setFieldError] = useState<string>(), [saving, setSaving] = useState(false)
@@ -29,9 +30,7 @@ export function AccountCard({ account, onSync, onReconnect, onRename, onRemove, 
   }
   const error = account.state === 'error' || account.state === 'auth_expired'
   const login = account.state === 'auth_expired' || account.error_code === 'auth_expired'
-  const domain = account.email_address.split('@')[1] ?? ''
-  const lower = domain.toLowerCase()
-  const provider = ['google', 'gmail', 'google_mail'].includes(account.provider) ? de.accountCard.providers.google : ['microsoft', 'outlook'].includes(account.provider) ? de.accountCard.providers.microsoft : account.provider === 'imap' ? ['icloud.com', 'me.com', 'mac.com'].includes(lower) ? de.accountCard.providers.icloud : ['yahoo.com', 'ymail.com', 'rocketmail.com'].includes(lower) ? de.accountCard.providers.yahoo : domain : account.provider
+  const provider = providerLabel(account)
   const errors: Record<string, unknown> = de.errors
   const codeText = errors[account.error_code]
   const status = account.state === 'auth_expired' ? account.connection === 'imap' ? de.accounts.state.imapAuthExpired : de.accounts.state.auth_expired : account.state === 'error' ? typeof codeText === 'string' ? codeText : de.accounts.state.unknownError : account.state === 'syncing' ? de.accounts.state.syncing : account.state === 'ok' && account.last_sync_at ? de.accounts.state.stand(formatTime(new Date(account.last_sync_at))) : de.accounts.state.never

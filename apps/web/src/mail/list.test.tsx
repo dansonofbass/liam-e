@@ -10,7 +10,7 @@ const originalMatchMedia = window.matchMedia
 const row = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', subject: 'Termin', snippet: '', internal_date: null, deadline: null, has_attachments: false, is_flagged: false, is_read: false, needs_reply: false }
 function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' = 'empty', path = '/mail', coarse = false) {
   window.matchMedia = ((query: string) => ({ matches: query.includes('1024px') || (coarse && query.includes('pointer: coarse')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
-  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' }], unread_total: 1, last_sync_at: null } })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' }], unread_total: 1, last_sync_at: null } })) as never)
   const list = spyOn(sdk, 'mailMessagesList').mockImplementation((async () => {
     if (mode === 'loading') return await new Promise(() => {})
     if (mode === 'error') throw new Error('unavailable')
@@ -39,6 +39,15 @@ test('coarse pointer inbox controls use the large touch target token', async () 
   setup('row', '/mail', true)
   await screen.findByText('Termin')
   for (const name of ['Suchen', 'Jetzt abrufen']) expect(screen.getByRole('button', { name }).classList.contains('le-icon-btn--lg')).toBe(true)
+})
+
+test('rows show provider tags and account filters fall back to the address', async () => {
+  setup('row')
+  const subject = await screen.findByText('Termin')
+  expect(subject.closest('.le-mailrow')?.querySelector('.le-mailrow-top .le-tag')?.textContent).toBe('Gmail')
+  fireEvent.click(screen.getByRole('button', { name: 'Alle Konten' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'ich@example.com' }))
+  expect(await screen.findByRole('button', { name: 'ich@example.com' })).toBeTruthy()
 })
 
 test('unread filter updates URL and query', async () => {

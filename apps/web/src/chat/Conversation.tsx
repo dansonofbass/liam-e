@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { historyQuery, messageQuery, modelsQuery, summaryQuery } from '../api/queries'
 import type { AccountSummaryOut, ChatMessageOut, MailRefOut } from '../api/generated/types.gen'
 import { Button, ChatMessage, Chip, Composer, MailReference, Notice } from '../ds'
+import { providerLabel } from '../ds/providerLabel'
 import { de } from '../i18n/de'
 import { ModelMenu } from './ModelMenu'
 import { ChatHeader } from './ChatHeader'
@@ -24,12 +25,12 @@ export function ChatComposer({ conversationId, contextMessageId, onSend, autoFoc
     onSend?.()
     void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId })
     setValue('')
-  }} onStop={stop} busy={busy} scope={scope} accounts={(summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name }))} onScopeChange={setScope} placeholder={de.chat.placeholder} autoFocus={autoFocus} />
+  }} onStop={stop} busy={busy} scope={scope} accounts={(summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name || account.email_address }))} onScopeChange={setScope} placeholder={de.chat.placeholder} autoFocus={autoFocus} />
 }
 
 function Reference({ mail, accounts }: { mail: MailRefOut; accounts: Accounts }) {
   const navigate = useNavigate()
-  return <MailReference mail={mail} accountLabel={accounts.find(account => account.id === mail.account_id)?.display_name} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} />
+  return <MailReference mail={mail} accountLabel={accounts.filter(account => account.id === mail.account_id).map(providerLabel)[0]} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} />
 }
 function HistoryReference({ id, accounts }: { id: string; accounts: Accounts }) {
   const { data } = useQuery(messageQuery(id))

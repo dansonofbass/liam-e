@@ -4,6 +4,7 @@ import type { MessageListItemOut } from '../api/generated/types.gen'
 import { MailRow } from './MailRow'
 import { MailReference } from './MailReference'
 import { QuickAction } from './QuickAction'
+import { providerLabel } from './providerLabel'
 import { formatTime } from '../i18n/format'
 
 afterEach(cleanup)
@@ -15,6 +16,19 @@ test('mail row formats deadline and displays account tag', () => {
   expect(screen.getByText('Frist Sa., 21.11.')).toBeTruthy()
   expect(screen.getByText('Privat').className).toContain('le-tag--on-surface')
   expect(screen.getByText('Privat').querySelector('.le-dot--a3')).toBeTruthy()
+})
+
+test('provider labels cover known providers and IMAP domains', () => {
+  for (const [provider, email_address, expected] of [['google_mail', 'a@example.org', 'Gmail'], ['outlook', 'a@example.org', 'Outlook'], ['imap', 'a@me.com', 'iCloud'], ['imap', 'a@ymail.com', 'Yahoo'], ['imap', 'a@example.org', 'example.org'], ['imap', 'address', 'address'], ['other', 'a@example.org', 'other']] as const) {
+    expect(providerLabel({ provider, email_address })).toBe(expected)
+  }
+})
+
+test('mobile row places the account and deadline beneath the snippet', async () => {
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-mailrow-snippet \{ grid-row: 3; \}/u)
+  expect(css).toMatch(/\.le-mailrow-top \.le-tag \{ grid-row: 4; grid-column: 1; \}/u)
+  expect(css).toMatch(/\.le-mailrow-deadline \{ grid-row: 4; grid-column: 2; \}/u)
 })
 
 test('mail reference formats deadline and displays account tag', () => {

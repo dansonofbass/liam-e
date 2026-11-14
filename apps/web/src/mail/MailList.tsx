@@ -5,6 +5,7 @@ import { mailSyncAll } from '../api/generated/sdk.gen'
 import type { MessageListItemOut } from '../api/generated/types.gen'
 import { messagesInfiniteQuery, summaryQuery } from '../api/queries'
 import { Chip, IconButton, MailRow, Menu, Notice, TextField } from '../ds'
+import { providerLabel } from '../ds/providerLabel'
 import { de } from '../i18n/de'
 import { formatTime } from '../i18n/format'
 import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
@@ -99,11 +100,13 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const buttons = <><IconButton className="le-inbox-control" icon="search" label={de.inbox.search} tip={de.inbox.searchTip} size={breakpoint === 'mobile' || coarse ? 'lg' : 'md'} onClick={() => { setSearchOpen(true); searchRef.current?.querySelector('input')?.focus() }} /><IconButton className="le-inbox-control" icon="refresh-cw" label={de.inbox.refresh} tip={de.inbox.refreshTip} size={breakpoint === 'mobile' || coarse ? 'lg' : 'md'} disabled={syncing} onClick={() => { void refresh() }} /></>
   const time = summary.data?.last_sync_at ? formatTime(new Date(summary.data.last_sync_at)) : undefined
   const accounts = summary.data?.accounts ?? []
-  const accountLabel = accounts.find(account => account.id === search.account?.[0])?.display_name ?? de.controls.allAccounts
+  const selectedAccount = accounts.find(account => account.id === search.account?.[0])
+  const accountLabel = selectedAccount ? selectedAccount.display_name || selectedAccount.email_address : de.controls.allAccounts
+  const labels = new Map(accounts.map(account => [account.id, providerLabel(account)]))
   const groups = groupByDay(items, new Date())
   return <>
     {breakpoint !== 'mobile' && <div className="le-topbar"><h1 className="le-crumb">{de.inbox.title}</h1>{time && <small className="le-muted le-num">{de.inbox.stand(time)}</small>}<span className="le-grow" />{buttons}</div>}
-    <div className="le-inbox-filters"><Menu trigger={props => <Chip {...props} quiet>{accountLabel}</Chip>} items={[{ label: de.controls.allAccounts, onSelect: () => changeSearch({ account: undefined }) }, ...accounts.map(account => ({ label: account.display_name, onSelect: () => changeSearch({ account: [account.id] }) }))]} />
+    <div className="le-inbox-filters"><Menu trigger={props => <Chip {...props} quiet>{accountLabel}</Chip>} items={[{ label: de.controls.allAccounts, onSelect: () => changeSearch({ account: undefined }) }, ...accounts.map(account => ({ label: account.display_name || account.email_address, onSelect: () => changeSearch({ account: [account.id] }) }))]} />
       {(['unread', 'important', 'attachments'] as const).map(key => <Chip key={key} pressed={Boolean(search[key])} quiet={!search[key]} onClick={() => changeSearch({ [key]: search[key] ? undefined : true })}>{de.inbox[key]}</Chip>)}
     </div>
     {breakpoint === 'mobile' && <div className="le-inbox-mobile-status"><small className="le-muted le-num">{de.inbox.unreadStand(summary.data?.unread_total ?? 0, time)}</small><span className="le-grow" />{buttons}</div>}
@@ -112,7 +115,7 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
       {messages.isPending && <><span className="le-sr" role="status">{de.inbox.loading}</span><div aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <div key={i} className="le-mailrow le-mailrow--placeholder"><span /><span /></div>)}</div></>}
       {messages.isError && !messages.data && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void messages.refetch() } }}>{de.inbox.loadError}</Notice>}
       {messages.data && !items.length && <p className="le-hint">{hasActiveFilters(search) ? de.inbox.emptyFiltered : de.inbox.empty}</p>}
-      {groups.map(group => <div key={group.label}><div className="le-side-label">{group.label}</div><ul className="le-maillist" aria-label={group.label}>{group.items.map(mail => <li key={mail.id} ref={node => { if (node) rowRefs.current.set(mail.id, node); else rowRefs.current.delete(mail.id) }}><MailRow mail={mail} selected={selected === mail.id} coarse={coarse} accountLabel={accounts.find(account => account.id === mail.account_id)?.display_name} onOpen={() => { setLocalSelected(mail.id); onOpen(mail.id) }} onArchive={() => remove(mail, 'archive')} onToggleRead={() => toggleRead(mail)} onTrash={() => remove(mail, 'trash')} /></li>)}</ul></div>)}
+      {groups.map(group => <div key={group.label}><div className="le-side-label">{group.label}</div><ul className="le-maillist" aria-label={group.label}>{group.items.map(mail => <li key={mail.id} ref={node => { if (node) rowRefs.current.set(mail.id, node); else rowRefs.current.delete(mail.id) }}><MailRow mail={mail} selected={selected === mail.id} coarse={coarse} accountLabel={labels.get(mail.account_id)} onOpen={() => { setLocalSelected(mail.id); onOpen(mail.id) }} onArchive={() => remove(mail, 'archive')} onToggleRead={() => toggleRead(mail)} onTrash={() => remove(mail, 'trash')} /></li>)}</ul></div>)}
       <div ref={sentinel} />{messages.isFetchingNextPage && <p className="le-hint">{de.inbox.loadingMore}</p>}
     </div>
     {toast && <div className="le-inbox-toast"><Notice tone={toast.tone} action={toast.undoable ? { label: de.proposal.undo, onClick: () => { void undo() } } : undefined}><span>{toast.text}</span></Notice></div>}
