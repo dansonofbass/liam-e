@@ -59,6 +59,18 @@ test('refreshes active messages after sync finishes or the last sync advances', 
   await waitFor(() => expect(fetchMessages).toHaveBeenCalledTimes(3))
   unsubscribe()
 })
+test('all twelve conversations appear as links in the sidebar', async () => {
+  width = 1200
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ error: {} })) as never)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  setup('/', client)
+  const entries = Array.from({ length: 12 }, (_, index) => ({ id: `conversation-${index}`, title: `Unterhaltung ${index + 1}`, updated_at: new Date().toISOString() }))
+  act(() => { client.setQueryData(['conversations'], entries) })
+  const last = await screen.findByRole('link', { name: /Unterhaltung 12/ })
+  const list = last.closest('.le-shell-conversations')
+  expect(list?.querySelectorAll('a')).toHaveLength(12)
+  for (const entry of entries) expect(list?.querySelector(`a[href="/chat/${entry.id}"]`)).toBeTruthy()
+})
 test('only conversations are inside the sidebar scroll container', async () => {
   width = 1200
   spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
