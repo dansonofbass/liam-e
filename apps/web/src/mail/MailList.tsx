@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { mailSyncAll } from '../api/generated/sdk.gen'
 import type { MessageListItemOut } from '../api/generated/types.gen'
 import { messagesInfiniteQuery, summaryQuery } from '../api/queries'
-import { Chip, IconButton, MailRow, Menu, Notice, TextField } from '../ds'
+import { Chip, Icon, IconButton, MailRow, Menu, Notice, TextField } from '../ds'
 import { providerLabel } from '../ds/providerLabel'
 import { de } from '../i18n/de'
 import { formatTime } from '../i18n/format'
@@ -106,7 +106,7 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const groups = groupByDay(items, new Date())
   return <>
     {breakpoint !== 'mobile' && <div className="le-topbar"><h1 className="le-crumb">{de.inbox.title}</h1>{time && <small className="le-muted le-num">{de.inbox.stand(time)}</small>}<span className="le-grow" />{buttons}</div>}
-    <div className="le-inbox-filters"><Menu trigger={props => <Chip {...props} quiet>{accountLabel}</Chip>} items={[{ label: de.controls.allAccounts, onSelect: () => changeSearch({ account: undefined }) }, ...accounts.map(account => ({ label: account.display_name || account.email_address, onSelect: () => changeSearch({ account: [account.id] }) }))]} />
+    <div className="le-inbox-filters"><Menu trigger={props => <Chip {...props} quiet>{accountLabel}<Icon name="chevron-down" size="sm" /></Chip>} items={[{ label: de.controls.allAccounts, onSelect: () => changeSearch({ account: undefined }) }, ...accounts.map(account => ({ label: account.display_name || account.email_address, onSelect: () => changeSearch({ account: [account.id] }) }))]} />
       {(['unread', 'important', 'attachments'] as const).map(key => <Chip key={key} pressed={Boolean(search[key])} quiet={!search[key]} onClick={() => changeSearch({ [key]: search[key] ? undefined : true })}>{de.inbox[key]}</Chip>)}
     </div>
     {breakpoint === 'mobile' && <div className="le-inbox-mobile-status"><small className="le-muted le-num">{de.inbox.unreadStand(summary.data?.unread_total ?? 0, time)}</small><span className="le-grow" />{buttons}</div>}
