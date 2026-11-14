@@ -27,7 +27,7 @@ test('shell navigation and composer have coarse pointer targets', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/@media \(pointer: coarse\) \{ (\.le-topbar \.le-icon-btn[^{}]+)\{ ([^{}]+) \} \.le-composer textarea \{ ([^{}]+) \} \}/u)
   expect(rule).toBeTruthy()
-  for (const selector of ['.le-topbar .le-icon-btn', '.le-side .le-icon-btn', '.le-side .le-nav-item', '.le-drawer .le-nav-item', '.le-drawer .le-conv']) expect(rule?.[1]).toContain(selector)
+  for (const selector of ['.le-topbar .le-icon-btn', '.le-side .le-icon-btn', '.le-side .le-nav-item', '.le-side .le-conv', '.le-drawer .le-nav-item', '.le-drawer .le-conv']) expect(rule?.[1]).toContain(selector)
   for (const property of ['min-width: var(--control-height-lg)', 'min-height: var(--control-height-lg)']) expect(rule?.[2]).toContain(property)
   expect(rule?.[3]).toContain('min-height: var(--control-height-lg)')
 })
