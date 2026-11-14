@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IconButton } from './IconButton'
 import { Menu } from './Menu'
 import { Drawer } from './Drawer'
-import { Avatar } from './Avatar'
+import { Avatar, initialsOf } from './Avatar'
 
 afterEach(() => { cleanup(); mock.restore() })
 
@@ -91,5 +91,18 @@ test('avatar uses name initials or address fallback', () => {
   const { rerender } = render(<Avatar name="Hausverwaltung Kurz" colorIndex={0} />)
   expect(screen.getByText('HK')).toBeTruthy()
   rerender(<Avatar name="" address="max@example.org" colorIndex={0} />)
-  expect(screen.getByText('M')).toBeTruthy()
+  expect(screen.getByText('MA')).toBeTruthy()
+})
+
+test('avatar shows two letters like the boards, one only when there is nothing more', () => {
+  expect(initialsOf('Meyer GmbH')).toBe('MG')
+  expect(initialsOf('Sportverein Lindenau')).toBe('SL')
+  expect(initialsOf('Kita Sonnenblume Süd')).toBe('KS')
+  expect(initialsOf('privat@example.com')).toBe('PR')
+  expect(initialsOf('Amazon')).toBe('AM')
+  expect(initialsOf('(Info) Team')).toBe('IT')
+  expect(initialsOf('Ärztehaus')).toBe('ÄR')
+  expect(initialsOf('X')).toBe('X')
+  expect(initialsOf('', 'z@example.org')).toBe('Z')
+  expect(initialsOf('  ', undefined)).toBe('')
 })
