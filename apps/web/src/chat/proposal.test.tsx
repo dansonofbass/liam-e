@@ -291,6 +291,13 @@ test.each([1, 2])('partial result uses the correct form for %i failures', async 
   expect(await screen.findByText(`1 Newsletter abbestellt. ${ending}`)).toBeTruthy()
 })
 
+test('manual unsubscribe links have a large touch target', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.match(/@media \(pointer: coarse\) \{ \.le-proposal-manual a \{ ([^{}]+) \} \}/u)
+  expect(rule).toBeTruthy()
+  for (const property of ['display: inline-flex', 'align-items: center', 'min-height: var(--control-height-lg)']) expect(rule?.[1]).toContain(property)
+})
+
 test('unsubscribe without archived mail and unsafe manual link', async () => {
   setup(message('partial', { done: 1, failed: [], manual: [{ id: 'a', link: 'javascript:alert(1)' }, { id: 'b', link: 'https://example.org/unsubscribe' }], undo_action_ids: [] }))
   expect(await screen.findByText('1 Newsletter abbestellt.')).toBeTruthy()
@@ -298,4 +305,5 @@ test('unsubscribe without archived mail and unsafe manual link', async () => {
   expect(links).toHaveLength(1)
   expect(links[0]?.getAttribute('href')).toBe('https://example.org/unsubscribe')
   expect(links[0]?.getAttribute('rel')).toBe('noopener noreferrer')
+  expect(links[0]?.parentElement?.classList.contains('le-proposal-manual')).toBe(true)
 })
