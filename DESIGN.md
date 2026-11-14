@@ -5,11 +5,10 @@
 > wie sie eingesetzt werden, wie Texte klingen und wie sich die App auf kleinen
 > Bildschirmen verhält.
 
-**Status:** gültig, Stand 2026-11-13. Quelle der Werte ist das Design-System „liam-e“ in
-Claude Design (https://claude.ai/artifact/MJRNJYUPnK6ciYFc2U2KAz, Stilrichtung C „Weich“).
-Mit dem Redesign entstehen daraus `apps/web/src/styles/tokens.css` (Tokens) und
-`apps/web/src/ds/` (Bausteine). Ab dann sind diese Dateien die Quelle der Werte, und das
-Design-System wird ihnen nachgeführt.
+**Status:** gültig, Stand 2026-11-14. Quelle der Werte sind `apps/web/src/styles/tokens.css`
+(Tokens) und `apps/web/src/ds/` (Bausteine). Das Design-System „liam-e“ in Claude Design
+(https://claude.ai/artifact/MJRNJYUPnK6ciYFc2U2KAz, Stilrichtung C „Weich“), aus dem sie
+entstanden sind, wird ihnen nachgeführt (§10).
 
 ## Konflikt-Hierarchie
 
@@ -154,7 +153,7 @@ Antworten des Assistenten.
   Bedienungsanleitung.
 - **Antworten des Assistenten:** mit dem Ergebnis beginnen, ohne Einleitung und ohne
   Schlussformel. Die Regeln aus §2.2 bis §2.5 gelten auch hier; der Systemprompt in
-  `apps/api/src/api/mail/agent.py` enthält sie.
+  `apps/api/src/api/mail/agent_prompt.py` enthält sie.
 
 ### 2.7 Prüfliste für jeden Text
 
@@ -169,9 +168,9 @@ Antworten des Assistenten.
 ### 2.8 Wo Texte stehen
 
 Alle Texte der Oberfläche stehen in einem Katalog, `apps/web/src/i18n/de.ts`, nach
-Ansichten gruppiert (entsteht mit dem Redesign). So steht jeder Begriff einmal und bleibt
-einheitlich. Technische Literale in TSX (Pfade, Klassen, englische Werte) tragen
-`// i18n-exempt`.
+Ansichten gruppiert. So steht jeder Begriff einmal und bleibt einheitlich. Pluralformen,
+Uhrzeiten, Daten und Größen bildet `apps/web/src/i18n/format.ts`. Technische Literale in TSX
+(Pfade, Klassen, englische Werte) tragen `// i18n-exempt`.
 
 ## 3. Farbe
 
@@ -190,8 +189,8 @@ einheitlich. Technische Literale in TSX (Pfade, Klassen, englische Werte) tragen
   Status.
 - Rahmen von Bedienelementen sind `control-border`; `line` und `line-strong` sind rein
   dekorativ.
-- **Dunkles Theme** folgt ohne eigene Wahl der Systemeinstellung (`prefers-color-scheme`).
-  Es ist kein invertiertes Hell: `accent` wird heller und trägt dunklen Text, Schatten werden
+- **Dunkles Theme** folgt der Systemeinstellung (`prefers-color-scheme`), solange keine
+  Darstellung gewählt ist. Es ist kein invertiertes Hell: `accent` wird heller und trägt dunklen Text, Schatten werden
   tiefer statt farbig.
 - **Darstellung wählen:** Ein Symbol-Button `sun-moon` („Darstellung“) unten in der
   Seitenleiste, rechts neben der Statuszeile, öffnet ein Menü mit „Hell“, „Dunkel“ und „Wie
@@ -199,8 +198,7 @@ einheitlich. Technische Literale in TSX (Pfade, Klassen, englische Werte) tragen
   am unteren Ende, auf dem Handy in der Schublade. Das Menü öffnet nach oben. Die Wahl gilt
   nur in diesem Browser (`localStorage`, „Wie im System“ speichert nichts) und wird vor dem
   ersten Zeichnen als `data-theme` auf `<html>` gesetzt, damit nichts aufblitzt.
-- Schublade und Dialoge dunkeln den Inhalt dahinter mit `scrim` ab. Der Token fehlt im
-  Design-System noch und kommt mit `apps/web/src/styles/tokens.css` dazu (hell
+- Schublade und Dialoge dunkeln den Inhalt dahinter mit `scrim` ab (`.le-scrim`; hell
   `rgba(13, 19, 17, .45)`, dunkel `rgba(0, 0, 0, .6)`).
 - In Komponenten nie Hex-Werte, immer `var(--…)`.
 
@@ -224,8 +222,8 @@ Paar über beide Themes.
 | `control-border` | `surface`, `surface-soft` | 3:1 | 3,19:1 |
 | `focus-ring` | `surface`, `surface-soft`, `surface-ground`, `accent-soft` | 3:1 | 5,36:1 |
 
-Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein Test in
-`apps/web` sie automatisch.
+Wer einen Farbwert ändert, misst diese Tabelle neu. `apps/web/src/styles/contrast.test.ts`
+prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der letzten Spalte.
 
 ## 4. Schrift
 
@@ -336,7 +334,8 @@ Anfang an mit.
   oberen rechten Ecke des Posteingangs (ab 1.000 „999+“); der zugängliche Name nennt ihn
   („Posteingang, 47 ungelesen“).
 - `mobile`: Die Hauptfläche füllt den Bildschirm, ohne Rahmen, Rundung und Schatten.
-  Kopfzeile mit Menü-Button links, Titel und „Neue Unterhaltung“ rechts. Das
+  Kopfzeile mit Menü-Button links, Titel und „Neue Unterhaltung“ rechts; in einer geöffneten
+  Mail (`/mail/<id>`) ersetzt sie die Leiste der Mail mit „Zurück“. Das
   Menü öffnet eine Schublade mit Navigation und Unterhaltungen, mit abgedunkeltem
   Hintergrund. Keine untere Navigationsleiste: Der Composer gehört an den unteren Rand.
 - Die Schublade ist 308 px breit, höchstens `100vw - 48px`, mit 12 px Innenabstand,
