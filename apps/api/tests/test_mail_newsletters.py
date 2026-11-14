@@ -33,7 +33,7 @@ def test_unsubscribe_method_http_link_is_manual_only():
 def test_one_click_to_private_target_fails_and_does_not_archive(monkeypatch):
     archive = AsyncMock()
     monkeypatch.setattr(newsletters.actions, 'apply_action', archive)
-    outcome = run(newsletters.unsubscribe(sender('one_click', 'https://127.0.0.1/u'), SimpleNamespace()))
+    outcome = run(newsletters.unsubscribe(sender('one_click', 'https://127.0.0.1/u'), SimpleNamespace(id='a')))
     assert (outcome.status, outcome.error_code) == ('failed', 'unsubscribe_blocked')
     archive.assert_not_called()
 
@@ -71,7 +71,7 @@ def test_mailto_sends_sanitized_values(monkeypatch):
     send = AsyncMock()
     monkeypatch.setattr(newsletters.send, 'send_message', send)
     monkeypatch.setattr(mail_message, 'message_ids_from_sender', AsyncMock(return_value=[]))
-    account = SimpleNamespace()
+    account = SimpleNamespace(id='a')
     link = 'mailto:leave@list.example.test?subject=Stop%0D%0ABcc:%20x@y.test&body=line1%0Aline2%09end'
     outcome = run(newsletters.unsubscribe(sender('mailto', link), account))
     assert outcome.status == 'done'
@@ -81,7 +81,7 @@ def test_mailto_sends_sanitized_values(monkeypatch):
 def test_mailto_invalid_target_sends_nothing(monkeypatch):
     send = AsyncMock()
     monkeypatch.setattr(newsletters.send, 'send_message', send)
-    outcome = run(newsletters.unsubscribe(sender('mailto', 'mailto:a@b.test,c@d.test'), SimpleNamespace()))
+    outcome = run(newsletters.unsubscribe(sender('mailto', 'mailto:a@b.test,c@d.test'), SimpleNamespace(id='a')))
     assert (outcome.status, outcome.error_code) == ('failed', 'unsubscribe_invalid')
     send.assert_not_called()
 
@@ -93,7 +93,7 @@ def test_unsubscribe_malformed_mailto_fails_without_send_or_archive(monkeypatch)
     monkeypatch.setattr(newsletters.actions, 'apply_action', archive)
     archive_ids = AsyncMock(return_value=['1'])
     monkeypatch.setattr(mail_message, 'message_ids_from_sender', archive_ids)
-    outcome = run(newsletters.unsubscribe(sender('mailto', 'mailto://[invalid]/leave@list.example.test'), SimpleNamespace()))
+    outcome = run(newsletters.unsubscribe(sender('mailto', 'mailto://[invalid]/leave@list.example.test'), SimpleNamespace(id='a')))
     assert (outcome.status, outcome.error_code) == ('failed', 'unsubscribe_invalid')
     send.assert_not_called()
     archive_ids.assert_not_called()
@@ -104,7 +104,7 @@ def test_mailto_sends_through_the_account(monkeypatch):
     send = AsyncMock()
     monkeypatch.setattr(newsletters.send, 'send_message', send)
     monkeypatch.setattr(mail_message, 'message_ids_from_sender', AsyncMock(return_value=[]))
-    account = SimpleNamespace()
+    account = SimpleNamespace(id='a')
     outcome = run(newsletters.unsubscribe(sender('mailto', 'mailto:news@beispiel-shop.test?Subject=Stop&body=Please'), account))
     assert outcome.status == 'done'
     send.assert_awaited_once_with(account, to=['news@beispiel-shop.test'], subject='Stop', body='Please')
@@ -115,7 +115,7 @@ def test_done_archives_all_inbox_mails_of_sender(monkeypatch):
     monkeypatch.setattr(mail_message, 'message_ids_from_sender', AsyncMock(return_value=['1', '2']))
     archive = AsyncMock(side_effect=[SimpleNamespace(id='x'), SimpleNamespace(id='y')])
     monkeypatch.setattr(newsletters.actions, 'apply_action', archive)
-    outcome = run(newsletters.unsubscribe(sender('one_click', 'https://example.test/u'), SimpleNamespace()))
+    outcome = run(newsletters.unsubscribe(sender('one_click', 'https://example.test/u'), SimpleNamespace(id='a')))
     assert outcome.archived_action_ids == ['x', 'y']
     assert archive.await_count == 2
 

@@ -161,6 +161,8 @@ async def _send(draft: SendDraft, result: ProposalResult) -> None:
         fail("host_not_allowed")
     except service.CredentialError:
         fail("credentials_invalid")
+    except send.SeedAccountError:
+        fail("send_failed")
     except Exception as error:
         logger.warning("%s", type(error).__name__)
         fail("send_failed")

@@ -13,6 +13,7 @@ from db.models.mail_message import MailMessage
 
 from api.mail import connectors, providers, service, transport
 from api.mail.actions import ActionKind, ActionUnsupportedError, write_connector_labels
+from api.mail.seed_ids import is_seed_account
 
 
 class ProviderBackend(Protocol):
@@ -21,6 +22,8 @@ class ProviderBackend(Protocol):
 
 
 def backend_for(account: MailAccount) -> ProviderBackend:
+    if is_seed_account(account.id):
+        return IndexBackend()
     if account.auth_type == connectors.CONNECTOR:
         return LabelBackend(account, connector=True)
     if account.provider == providers.IMAP:
@@ -30,6 +33,14 @@ def backend_for(account: MailAccount) -> ProviderBackend:
     if account.provider == providers.MICROSOFT:
         return GraphBackend(account)
     raise ActionUnsupportedError()
+
+
+class IndexBackend:
+    async def apply(self, message: MailMessage, kind: ActionKind) -> dict:
+        return {}
+
+    async def revert(self, message: MailMessage, previous: dict) -> dict:
+        return {}
 
 
 async def _headers(account: MailAccount) -> dict[str, str]:

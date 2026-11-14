@@ -20,6 +20,11 @@ from db.models.mail_account import MailAccount
 from db.models.mail_message import MailMessage
 
 from api.mail import connectors, providers, service, transport
+from api.mail.seed_ids import is_seed_account
+
+
+class SeedAccountError(RuntimeError):
+    """Sample accounts cannot send mail."""
 
 
 def reply_recipients(original: MailMessage, account: MailAccount, *, reply_all: bool) -> tuple[list[str], list[str]]:
@@ -116,6 +121,8 @@ async def send_message(
     reply_all: bool = False, credentials: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Send one confirmed message; provider failures are mapped by the caller."""
+    if is_seed_account(account.id):
+        raise SeedAccountError()
     if reply_to and not subject.lower().startswith("re:"):
         subject = "Re: " + subject
     elif forward_of and not subject.lower().startswith(("wg:", "fw:", "fwd:")):

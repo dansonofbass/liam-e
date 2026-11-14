@@ -13,6 +13,7 @@ from db.accessors import mail_account, mail_message
 from db.models.mail_account import MailAccount
 
 from api.mail import actions, connectors, headers, netguard, send
+from api.mail.seed_ids import is_seed_account
 
 logger = logging.getLogger(__name__)
 UnsubscribeMethod = Literal['one_click', 'mailto', 'link', 'none']
@@ -122,6 +123,9 @@ async def sender_by_id(sender_id: str) -> NewsletterSender | None:
 
 async def unsubscribe(sender: NewsletterSender, account: MailAccount) -> UnsubscribeOutcome:
     outcome = UnsubscribeOutcome(sender.sender_id, 'failed')
+    if is_seed_account(account.id) or is_seed_account(sender.account_id):
+        outcome.error_code = 'unsubscribe_blocked'
+        return outcome
     if sender.method == 'one_click':
         try:
             status = await netguard.safe_https_post(sender.link, data='List-Unsubscribe=One-Click')

@@ -58,7 +58,7 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `headers.py` — Adress- und Abbestell-Header verarbeiten.
 - `state.py` — Kontostatus und Farben aus Konten, Sync-Status und Jobs ableiten.
 - `models_catalog.py` — verfügbare Chat-Modelle kurzzeitig cachen.
-- `dev_seed.py` — lokale Datenbank mit den Beispieldaten der Designboards füllen.
+- `dev_seed.py` — lokale Datenbank mit den Beispieldaten der Designboards füllen. Seed-Konten erreichen nie einen Anbieter: Senden und Abbestellen werden abgelehnt, Aktionen ändern nur den Index, Abrufe werden übersprungen.
 
 Datenfluss: Ein Konto wird per Connector, OAuth2-Redirect oder IMAP-App-Passwort verbunden.
 OAuth-Credentials bzw. die IMAP-Secret-Referenz landen **Fernet-verschlüsselt** in

@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from email.utils import formataddr
 from urllib.parse import parse_qsl, urlsplit
-from uuid import UUID, uuid5
 from zoneinfo import ZoneInfo
 
 from db.accessors import chat_message as chat_access, dev_seed as seed_access, mail_insight
@@ -21,13 +20,9 @@ from env.db import env as db_env
 from api.mail import newsletters, proposals
 from api.mail.agent_tools import unsubscribe_subtitle
 from api.mail.chat_schemas import ChatExtrasOut
+from api.mail.seed_ids import SEED_NAMESPACE, seed_id
 
-SEED_NAMESPACE = UUID("e7a6334c-ec02-4ac7-b7b0-14e98b91e689")
 BERLIN = ZoneInfo("Europe/Berlin")
-
-
-def seed_id(kind: str, key: str) -> str:
-    return str(uuid5(SEED_NAMESPACE, f"{kind}:{key}"))
 
 
 @dataclass(frozen=True)

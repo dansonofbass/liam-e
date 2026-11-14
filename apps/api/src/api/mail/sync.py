@@ -10,6 +10,7 @@ from db.accessors import mail_sync_state as sync_state_access
 from env.mail import env as mail_env
 
 from api.mail import connectors, netguard, providers, secrets, service, sync_connector, sync_gmail, sync_graph, sync_imap, transport
+from api.mail.seed_ids import is_seed_account
 from api.mail.sync_types import SyncResult
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,8 @@ async def sync_account(account_id: str) -> SyncResult:
         raise LookupError(f"no mail account with id {account_id}")
     previous = await sync_state_access.get_state(account_id)
     cursor = previous.cursor if previous else ""
+    if is_seed_account(account_id):
+        return SyncResult("ok", 0, cursor, "")
     await sync_state_access.save_state(account_id=account_id, cursor=cursor, status="syncing")
     try:
         if account.auth_type == connectors.CONNECTOR:
