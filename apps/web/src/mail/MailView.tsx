@@ -66,8 +66,8 @@ export function MailView({ id }: { id: string }) {
     {data.can_unsubscribe && <Menu trigger={props => <IconButton {...props} label={de.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: de.mail.unsubscribe, icon: 'newspaper', onSelect: () => start(de.mail.unsubscribePrompt) }]} />}
   </>
   const chatButtons = <>
-    <Tooltip content={de.mail.askTip}><Button variant="secondary" icon={split ? undefined : 'message-circle'} className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{de.mail.askInChat}</Button></Tooltip>
-    <Tooltip content={de.mail.draftTip}><Button variant="primary" icon={split ? undefined : 'pencil'} className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={() => start(de.mail.draftPrompt)}>{de.mail.draftReply}</Button></Tooltip>
+    <Tooltip content={de.mail.askTip}><Button variant="secondary" icon="message-circle" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{de.mail.askInChat}</Button></Tooltip>
+    <Tooltip content={de.mail.draftTip}><Button variant="primary" icon="pencil" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={() => start(de.mail.draftPrompt)}>{de.mail.draftReply}</Button></Tooltip>
   </>
   const account = summary.data?.accounts.find(item => item.id === data?.account_id)
   return <div className="le-mail-view">

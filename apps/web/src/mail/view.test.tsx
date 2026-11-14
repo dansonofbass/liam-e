@@ -130,6 +130,14 @@ test('mobile bars contain the requested actions; desktop has no back button', as
   await settle()
 })
 
+test.each([{ mobile: false }, { mobile: true }])('"Im Chat fragen" and "Antwort entwerfen" carry their icons in the split view and on mobile (%o)', async ({ mobile }) => {
+  setup({ mobile }); await screen.findByRole('heading', { name: 'Termin' })
+  expect(screen.getByRole('button', { name: 'Im Chat fragen' }).querySelector('.lucide-message-circle')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Antwort entwerfen' }).querySelector('.lucide-pencil')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Antwort entwerfen' }).classList.contains('le-btn--sm')).toBe(!mobile)
+  await settle()
+})
+
 test('mail body is literal text and attachment is non-interactive', async () => {
   const { view } = setup(); await screen.findByRole('heading', { name: 'Termin' })
   expect(screen.getByText('<b>fett</b>')).toBeTruthy()
