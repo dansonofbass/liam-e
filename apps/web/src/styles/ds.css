@@ -10,6 +10,10 @@
 
 body { margin: 0; font-family: var(--font-sans); font-size: 14.5px; line-height: 1.55; color: var(--ink); background: var(--surface); -webkit-font-smoothing: antialiased; }
 *, *::before, *::after { box-sizing: border-box; }
+/* Native controls and scrollbars follow the theme that tokens.css shows. */
+:root { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 [hidden] { display: none !important; }
 .le-num { font-variant-numeric: tabular-nums; }
 .le-muted { color: var(--ink-muted); }

@@ -22,6 +22,8 @@ export const de = {
     chatTip: 'Mit deinen Mails chatten und Aufgaben erledigen', inboxTip: 'Mails aus allen Konten in einer Liste', accountsTip: 'Konten verbinden und verwalten',
     accountCount: (n: number) => plural(n, { zero: 'kein Konto', one: '# Konto', other: '# Konten' }),
     unread: (n: number) => plural(n, { zero: 'nichts ungelesen', one: '# ungelesen', other: '# ungelesen' }),
+    theme: 'Darstellung', themeTip: 'Zeigt liam-e hell, dunkel oder wie im System eingestellt',
+    themes: { light: 'Hell', dark: 'Dunkel', system: 'Wie im System' },
   },
   chat: {
     greeting: 'Hallo, was kann ich für dich tun?', greetingFirst: 'Hallo,', greetingSecond: 'was kann ich für dich tun?', placeholder: 'Frag etwas zu deinen Mails …',

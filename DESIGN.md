@@ -111,6 +111,7 @@ Antworten des Assistenten.
 | Bestätigen · Abbrechen | OK · Ja · Nein | Entscheidung über einen Vorschlag |
 | Rückgängig | Undo, Zurücknehmen | eine Aktion umkehren, solange es geht |
 | Modell | KI, LLM | das gewählte Mistral-Modell |
+| Darstellung | Theme, Modus, Design | hell, dunkel oder wie im System |
 | Secret | Geheimnis, Token | Workspace-Secret in Mistral Studio (Begriff der Plattform) |
 | liam-e | Bot, KI, Agent | Name des Assistenten, wo ein Name nötig ist |
 
@@ -189,9 +190,15 @@ einheitlich. Technische Literale in TSX (Pfade, Klassen, englische Werte) tragen
   Status.
 - Rahmen von Bedienelementen sind `control-border`; `line` und `line-strong` sind rein
   dekorativ.
-- **Dunkles Theme** folgt der Systemeinstellung (`prefers-color-scheme`), umschaltbar über
-  `data-theme`. Es ist kein invertiertes Hell: `accent` wird heller und trägt dunklen Text,
-  Schatten werden tiefer statt farbig.
+- **Dunkles Theme** folgt ohne eigene Wahl der Systemeinstellung (`prefers-color-scheme`).
+  Es ist kein invertiertes Hell: `accent` wird heller und trägt dunklen Text, Schatten werden
+  tiefer statt farbig.
+- **Darstellung wählen:** Ein Symbol-Button `sun-moon` („Darstellung“) unten in der
+  Seitenleiste, rechts neben der Statuszeile, öffnet ein Menü mit „Hell“, „Dunkel“ und „Wie
+  im System“; die gewählte Zeile trägt `check`. In der Symbolleiste am Tablet steht er allein
+  am unteren Ende, auf dem Handy in der Schublade. Das Menü öffnet nach oben. Die Wahl gilt
+  nur in diesem Browser (`localStorage`, „Wie im System“ speichert nichts) und wird vor dem
+  ersten Zeichnen als `data-theme` auf `<html>` gesetzt, damit nichts aufblitzt.
 - Schublade und Dialoge dunkeln den Inhalt dahinter mit `scrim` ab. Der Token fehlt im
   Design-System noch und kommt mit `apps/web/src/styles/tokens.css` dazu (hell
   `rgba(13, 19, 17, .45)`, dunkel `rgba(0, 0, 0, .6)`).
@@ -269,7 +276,8 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
   Anhalten · `sparkle` Assistent · `flag` Priorisieren · `newspaper` Newsletter · `clock`
   Frist · `paperclip` Anhang · `check`, `circle-alert`, `info` in Hinweisen · `menu` Menü
   öffnen · `x` Schließen · `arrow-left` Zurück · `plus` Neue Unterhaltung · `search` Suchen
-  · `chevron-down` Auswahl · `link` Connector · `key-round` Anmeldung beim Anbieter.
+  · `chevron-down` Auswahl · `link` Connector · `key-round` Anmeldung beim Anbieter ·
+  `sun-moon` Darstellung; `check` markiert außerdem die gewählte Zeile in einem Menü.
 - **Bausteine** (Klassen `le-*`, Beschreibung und Vorschau im Design-System): Button,
   IconButton, Chip (mit Tag, Badge, Punkt), Tooltip, Notice, AppShell, NavItem, Menu,
   QuickAction, Composer, ChatMessage, MailReference, ConfirmCard, MailRow, Avatar,

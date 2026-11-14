@@ -7,6 +7,9 @@
 .le-tooltip--top-end { bottom: calc(100% + 8px); right: 0; }
 @keyframes le-tooltip-fade { from { opacity: 0; } to { opacity: 1; } }
 .le-menu-anchor .le-menu { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; }
+/* Menus for triggers at the bottom of the screen open upwards and size to their items. */
+.le-menu-anchor .le-menu--up-start, .le-menu-anchor .le-menu--up-end { top: auto; bottom: calc(100% + var(--space-2)); width: max-content; min-width: calc(3 * var(--space-8)); max-width: calc(100vw - 2 * var(--space-4)); }
+.le-menu-anchor .le-menu--up-end { left: auto; right: 0; }
 .le-menu-item--danger, .le-menu-item--danger .le-ico { color: var(--danger); }
 .le-menu-item[aria-disabled="true"], .le-menu-item[aria-disabled="true"] .le-ico { color: var(--ink-muted); cursor: not-allowed; }
 .le-menu-item[aria-disabled="true"]:hover { background: transparent; }
@@ -33,7 +36,7 @@
 .le-chat-header .le-menu-anchor .le-menu, .le-chat-topbar .le-menu-anchor .le-menu { left: auto; right: 0; max-width: calc(100vw - 2 * var(--space-4)); max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain; }
 @media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } .le-mailrow:hover .le-mailrow-side, .le-mailrow:focus-within .le-mailrow-side, .le-mailrow.is-hover .le-mailrow-side { visibility: visible; } }
 @media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor .le-chip, .le-chat-topbar .le-menu-anchor .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
-@media (pointer: coarse) { .le-drawer-brand .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
+@media (pointer: coarse) { .le-drawer-brand .le-icon-btn, .le-shell-status .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-topbar .le-icon-btn, .le-side .le-icon-btn, .le-side .le-nav-item, .le-side .le-conv, .le-drawer .le-nav-item, .le-drawer .le-conv { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } .le-composer textarea { min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-mailref-actions .le-icon-btn, .le-confirm-item label { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-proposal-manual a { display: inline-flex; align-items: center; min-height: var(--control-height-lg); } }
@@ -72,7 +75,11 @@
 .le-dialog-actions { justify-content: flex-end; margin-top: var(--space-5); }
 
 .le-shell-sidebar { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.le-shell-status { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; margin-top: auto; padding: var(--space-3); }
+.le-shell-status { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; margin-top: auto; padding: var(--space-1) 0 0 var(--space-3); }
+.le-shell-stand { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; }
+.le-shell-status .le-menu-anchor { margin-left: auto; }
+.le-shell-status--collapsed { padding: var(--space-1) var(--space-1) 0; }
+.le-shell-status--collapsed .le-menu-anchor { margin-left: 0; }
 .le-side .le-shell-conversations { flex: 1; min-height: 0; overflow-y: auto; margin-inline: calc(-1 * var(--space-1)); padding-inline: var(--space-1); padding-bottom: var(--space-1); }
 .le-shell-conversations > .le-side-label { position: sticky; top: 0; z-index: 1; background: var(--surface); }
 .le-sheet:has(.le-chat-view) { min-height: 0; }
