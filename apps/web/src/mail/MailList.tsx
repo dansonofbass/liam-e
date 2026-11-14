@@ -54,8 +54,12 @@ export function MailList({ onOpen, selectedId }: { onOpen(id: string): void; sel
   }, [messages.hasNextPage, messages.isFetchingNextPage, messages.fetchNextPage])
 
   const remove = (mail: MessageListItemOut, kind: 'archive' | 'trash') => {
-    if (selected === mail.id) setLocalSelected(items[selectedIndex + 1]?.id ?? items[selectedIndex - 1]?.id)
-    void run(mail.id, kind)
+    const moved = selected === mail.id
+    const next = items[selectedIndex + 1]?.id ?? items[selectedIndex - 1]?.id
+    if (moved) setLocalSelected(next)
+    void run(mail.id, kind).then(restored => {
+      if (restored && moved) setLocalSelected(current => current === next ? mail.id : current)
+    })
   }
   const toggleRead = (mail: MessageListItemOut) => { void run(mail.id, mail.is_read ? 'mark_unread' : 'mark_read') }
   const current = items[selectedIndex]

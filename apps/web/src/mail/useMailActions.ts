@@ -77,9 +77,11 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       } else if (result.response?.status === 409) {
         rollback()
         if (current === sequence.current) show({ tone: 'danger', text: de.proposalErrors.action_unsupported, undoable: false })
+        return changes.length > 0
       } else if (!result.data || result.response?.status !== 200) {
         rollback()
         if (current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
+        return changes.length > 0
       } else {
         if ((kind === 'archive' || kind === 'trash') && current === sequence.current) {
           const text = breakpoint === 'mobile' ? de.inbox.doneShort[kind] : de.inbox.done[kind](result.data.message.subject)
@@ -91,6 +93,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     } catch {
       rollback()
       if (current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
+      return changes.length > 0
     }
   }
   const undo = async () => {

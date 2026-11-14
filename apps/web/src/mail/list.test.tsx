@@ -8,13 +8,13 @@ import { inboxSearchSchema } from './filters'
 
 const originalMatchMedia = window.matchMedia
 const row = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', subject: 'Termin', snippet: '', internal_date: null, deadline: null, has_attachments: false, is_flagged: false, is_read: false, needs_reply: false }
-function setup(mode: 'empty' | 'error' | 'loading' | 'row' = 'empty', path = '/mail') {
+function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' = 'empty', path = '/mail') {
   window.matchMedia = ((query: string) => ({ matches: query.includes('1024px'), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' }], unread_total: 1, last_sync_at: null } })) as never)
   const list = spyOn(sdk, 'mailMessagesList').mockImplementation((async () => {
     if (mode === 'loading') return await new Promise(() => {})
     if (mode === 'error') throw new Error('unavailable')
-    return { data: { items: mode === 'row' ? [row] : [], next_cursor: null } }
+    return { data: { items: mode === 'row' ? [row] : mode === 'rows' ? [row, { ...row, id: 'm2', subject: 'Zweite' }, { ...row, id: 'm3', subject: 'Dritte' }] : [], next_cursor: null } }
   }) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><Outlet /></QueryClientProvider> })
@@ -50,6 +50,37 @@ test('shows six placeholder rows while loading', async () => {
   await screen.findByText('Mails werden geladen …')
   expect(view.container.querySelectorAll('.le-mailrow--placeholder').length).toBe(6)
 })
+test('failed archive restores the highlight and the next archive targets the restored row', async () => {
+  let fail!: (value: unknown) => void
+  const action = spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(resolve => { fail = resolve })) as never)
+  setup('rows'); await screen.findByText('Termin')
+  fireEvent.keyDown(document.body, { key: 'j' })
+  expect(screen.getByText('Termin').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true')
+  fireEvent.keyDown(document.body, { key: 'e' })
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(screen.getByText('Zweite').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true'))
+  fail({ response: { status: 502 } })
+  await screen.findByText('Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.')
+  await waitFor(() => expect(screen.getByText('Termin').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true'))
+  fireEvent.keyDown(document.body, { key: 'e' })
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(2))
+  expect(action.mock.calls[1]?.[0]?.path).toEqual({ message_id: 'm1' })
+})
+
+test('failed removal does not replace a highlight moved by the user', async () => {
+  let fail!: (value: unknown) => void
+  spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(resolve => { fail = resolve })) as never)
+  setup('rows'); await screen.findByText('Termin')
+  fireEvent.keyDown(document.body, { key: 'j' })
+  fireEvent.keyDown(document.body, { key: 'e' })
+  await waitFor(() => expect(screen.getByText('Zweite').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true'))
+  fireEvent.keyDown(document.body, { key: 'j' })
+  expect(screen.getByText('Dritte').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true')
+  fail({ response: { status: 502 } })
+  await screen.findByText('Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.')
+  expect(screen.getByText('Dritte').closest('.le-mailrow')?.getAttribute('aria-selected')).toBe('true')
+})
+
 test('keyboard archives the selected row but not while typing search', async () => {
   const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'act', message: row }, response: { status: 200 } })) as never)
   setup('row'); await screen.findByText('Termin')
