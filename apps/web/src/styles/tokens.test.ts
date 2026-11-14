@@ -12,3 +12,16 @@ test('the six text styles take their sizes from font-size tokens', async () => {
   expect(tokens).toMatch(/^\.body-strong \{[^}]*font-size: var\(--font-size-body\);/mu)
   expect(tokens).not.toContain('tokens.json')
 })
+
+test('stylesheets have no free font sizes, no dead tooltip rules and no motion literals in app styles', async () => {
+  const [ds, app] = await Promise.all([read('ds.css'), read('ds-app.css')])
+  for (const css of [ds, app]) {
+    expect(css).not.toMatch(/font-size: \d/u)
+    expect(css).not.toMatch(/font: [^;]*\d+(\.\d+)?px/u)
+    expect(css).not.toContain('[data-tip')
+    expect(css).not.toContain('--le-tip-delay')
+  }
+  expect(app).not.toMatch(/\d+ms/u)
+  expect(app).not.toContain('cubic-bezier(')
+  for (const unused of ['.le-avatar--sm', '.le-notice--warm']) expect(ds).not.toContain(unused)
+})

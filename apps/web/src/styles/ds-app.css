@@ -1,5 +1,5 @@
 .le-tooltip-anchor, .le-menu-anchor { position: relative; display: inline-flex; }
-.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: 7px 10px; border-radius: 10px; background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-tooltip-fade 160ms ease; }
+.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: 7px 10px; border-radius: 10px; background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-tooltip-fade var(--le-dur-fast) ease; }
 .le-tooltip--top { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
 .le-tooltip--right { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
 .le-tooltip--bottom { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
@@ -14,8 +14,8 @@
 .le-menu-item[aria-disabled="true"], .le-menu-item[aria-disabled="true"] .le-ico { color: var(--ink-muted); cursor: not-allowed; }
 .le-menu-item[aria-disabled="true"]:hover { background: transparent; }
 .le-tag--warm { background: var(--warm-soft); color: var(--warm); }
-.le-scrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); animation: le-tooltip-fade 220ms ease; }
-.le-drawer { display: flex; flex-direction: column; height: 100%; width: min(308px, 100vw - 48px); padding: var(--space-3); box-sizing: border-box; background: var(--surface); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; box-shadow: var(--shadow-overlay); overflow: auto; animation: le-drawer-in 220ms ease; }
+.le-scrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); animation: le-tooltip-fade var(--le-dur) ease; }
+.le-drawer { display: flex; flex-direction: column; height: 100%; width: min(308px, 100vw - 48px); padding: var(--space-3); box-sizing: border-box; background: var(--surface); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; box-shadow: var(--shadow-overlay); overflow: auto; animation: le-drawer-in var(--le-dur) ease; }
 .le-crumb--center { justify-content: center; text-align: center; }
 .le-drawer-brand { padding: 2px 0 18px 8px; }
 .le-drawer .le-shell-sidebar { flex: 1 0 auto; }
@@ -83,7 +83,7 @@
 .le-side .le-shell-conversations { flex: 1; min-height: 0; overflow-y: auto; margin-inline: calc(-1 * var(--space-1)); padding-inline: var(--space-1); padding-bottom: var(--space-1); }
 .le-shell-conversations > .le-side-label { position: sticky; top: 0; z-index: 1; background: var(--surface); }
 .le-sheet:has(.le-chat-view) { min-height: 0; }
-.le-page-fade { animation: le-page-enter 220ms cubic-bezier(.2, .8, .2, 1) both; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.le-page-fade { animation: le-page-enter var(--le-dur) var(--le-ease) both; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .le-chat-view { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
 .le-chat-messages { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
 .le-chat-thread { width: 100%; max-width: var(--chat-width); align-self: center; box-sizing: border-box; }
