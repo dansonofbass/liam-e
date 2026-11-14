@@ -145,6 +145,7 @@ test('remounting a result does not extend the undo deadline', async () => {
 
 test.each([
   ['item_gone', 'Diesen Absender gibt es in deinen Mails nicht mehr.'],
+  ['item_changed', 'Der Absender hat seinen Abmeldeweg geändert. Lass dir einen neuen Vorschlag machen.'],
   ['action_unsupported', 'Das geht bei dieser Mail nicht.'],
   ['credentials_invalid', 'Die Mail wurde nicht gesendet, weil die Anmeldung für dieses Konto nicht mehr gilt. Melde dich unter Konten erneut an.'],
   ['send_failed', 'Die Mail wurde nicht gesendet. Der Anbieter hat sie nicht angenommen. Versuch es gleich noch mal.'],
@@ -158,6 +159,13 @@ test.each([
 ])('failure %s shows its mapped cause', async (code, text) => {
   setup(message('failed', { failed: [{ id: 'a', code }] }))
   expect(await screen.findByText(text)).toBeTruthy()
+})
+
+test('a failed mail item names a missing mail', async () => {
+  const initial = message('failed', { failed: [{ id: 'a', code: 'item_gone' }] })
+  initial.proposal = { ...initial.proposal!, kind: 'archive' }
+  setup(initial)
+  expect(await screen.findByText('Die Mail ist nicht mehr da.')).toBeTruthy()
 })
 
 test.each(['proposal_not_pending', 'selection_empty'])('confirmation refusal %s shows its cause', async code => {
@@ -189,10 +197,22 @@ test.each([
   ['mark_read', '1 Mail als gelesen markiert. 1 ließ sich nicht als gelesen markieren.'],
   ['send', 'Mail gesendet. 1 ließ sich nicht ändern.'],
 ] as const)('partial %s names the action', async (kind, text) => {
-  const initial = message('partial', { done: 1, failed: [{ id: 'a', code: 'item_gone' }] })
+  const initial = message('partial', { done: 1, failed: [{ id: 'a', code: 'action_failed' }] })
   initial.proposal = { ...initial.proposal!, kind }
   setup(initial)
   expect(await screen.findByText(text)).toBeTruthy()
+})
+
+test('partial archive names a missing mail', async () => {
+  const initial = message('partial', { done: 2, failed: [{ id: 'a', code: 'item_gone' }] })
+  initial.proposal = { ...initial.proposal!, kind: 'archive' }
+  setup(initial)
+  expect(await screen.findByText('2 Mails archiviert. 1 Mail ist nicht mehr da.')).toBeTruthy()
+})
+
+test('partial unsubscribe separates gone, changed and other failures', async () => {
+  setup(message('partial', { done: 1, failed: [{ id: 'a', code: 'item_gone' }, { id: 'b', code: 'item_changed' }, { id: 'c', code: 'action_failed' }] }))
+  expect(await screen.findByText('1 Newsletter abbestellt. 1 Absender ist nicht mehr da. 1 Absender hat seinen Abmeldeweg geändert. 1 ließ sich nicht abbestellen.')).toBeTruthy()
 })
 
 test('a send draft is editable and the edited body is confirmed', async () => {
@@ -208,14 +228,14 @@ test('a send draft is editable and the edited body is confirmed', async () => {
 })
 
 test.each([1, 2])('partial result uses the correct form for %i failures', async (count) => {
-  setup(message('partial', { done: 1, failed: Array.from({ length: count }, (_, i) => ({ id: String(i), code: 'item_gone' })) }))
+  setup(message('partial', { done: 1, failed: Array.from({ length: count }, (_, i) => ({ id: String(i), code: 'action_failed' })) }))
   const ending = count === 1 ? '1 ließ sich nicht abbestellen.' : '2 ließen sich nicht abbestellen.'
   expect(await screen.findByText(`1 Newsletter abbestellt. ${ending}`)).toBeTruthy()
 })
 
 test('unsubscribe without archived mail and unsafe manual link', async () => {
   setup(message('partial', { done: 1, failed: [], manual: [{ id: 'a', link: 'javascript:alert(1)' }, { id: 'b', link: 'https://example.org/unsubscribe' }], undo_action_ids: [] }))
-  expect(await screen.findByText('1 Newsletter abbestellt. 0 ließen sich nicht abbestellen.')).toBeTruthy()
+  expect(await screen.findByText('1 Newsletter abbestellt.')).toBeTruthy()
   const links = screen.getAllByRole('link', { name: 'Abmeldeseite öffnen' })
   expect(links).toHaveLength(1)
   expect(links[0]?.getAttribute('href')).toBe('https://example.org/unsubscribe')

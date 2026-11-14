@@ -48,6 +48,7 @@ function safeLink(value: string | null): string | null {
 function failureText(code: string | undefined, kind: Proposal['kind']): string {
   switch (code) {
     case 'item_gone': return kind === 'unsubscribe' ? de.proposalErrors.sender_gone : de.proposalErrors.item_gone
+    case 'item_changed': return de.proposalErrors.item_changed
     case 'action_unsupported': return de.proposalErrors.action_unsupported
     case 'credentials_invalid': return de.proposalErrors.credentials_invalid
     case 'send_failed': return de.proposalErrors.send_failed
@@ -85,8 +86,12 @@ function Result({ message, proposal, clock }: { message: ChatMessageOut; proposa
   }
   if (undone) return <Notice tone="info">{de.proposal.undone}</Notice>
   const text = proposal.kind === 'unsubscribe' ? de.proposal.results.unsubscribe(result?.done ?? 0, ids.length) : de.proposal.results[proposal.kind](result?.done ?? 0)
+  const failed = result?.failed ?? []
+  const gone = failed.filter(item => item.code === 'item_gone').length
+  const changed = failed.filter(item => item.code === 'item_changed').length
+  const other = failed.length - gone - changed
   return <><Notice tone={message.proposal_status === 'done' ? 'success' : 'info'} action={ids.length && visible && !busy ? { label: de.proposal.undo, onClick: () => { void undo() } } : undefined}>
-    <span>{text}{message.proposal_status === 'partial' && de.proposal.partial[proposal.kind](result?.failed?.length ?? 0)}</span>
+    <span>{text}{message.proposal_status === 'partial' && <>{gone > 0 && de.proposal.partialGone[proposal.kind](gone)}{changed > 0 && de.proposal.partialChanged(changed)}{other > 0 && de.proposal.partial[proposal.kind](other)}</>}</span>
   </Notice>{result?.manual?.map(entry => {
     const href = safeLink(entry.link)
     const item = proposal.items.find(candidate => candidate.id === entry.id)
