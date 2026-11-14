@@ -12,6 +12,7 @@ import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
 import { hasActiveFilters, toMessageFilters, type InboxSearch } from './filters'
 import { groupByDay } from './groups'
 import { useInboxKeys } from './useInboxKeys'
+import { ActionToast } from './ActionToast'
 import { useMailActionsContext } from './useMailActions'
 
 export function MailList({ onOpen }: { onOpen(id: string): void }) {
@@ -24,7 +25,7 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const breakpoint = useBreakpoint(), coarse = useCoarsePointer()
   const summary = useQuery(summaryQuery())
   const messages = useInfiniteQuery(messagesInfiniteQuery(toMessageFilters(search)))
-  const { run, undo, notify, toast } = useMailActionsContext()
+  const { run, notify } = useMailActionsContext()
   const [localSelected, setLocalSelected] = useState<string | undefined>()
   const [searchOpen, setSearchOpen] = useState(Boolean(search.q))
   const [value, setValue] = useState(search.q ?? '')
@@ -118,6 +119,6 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
       {groups.map(group => <div key={group.label}><div className="le-side-label">{group.label}</div><ul className="le-maillist" aria-label={group.label}>{group.items.map(mail => <li key={mail.id} ref={node => { if (node) rowRefs.current.set(mail.id, node); else rowRefs.current.delete(mail.id) }}><MailRow mail={mail} selected={selected === mail.id} coarse={coarse} accountLabel={labels.get(mail.account_id)} onOpen={() => { setLocalSelected(mail.id); onOpen(mail.id) }} onArchive={() => remove(mail, 'archive')} onToggleRead={() => toggleRead(mail)} onTrash={() => remove(mail, 'trash')} /></li>)}</ul></div>)}
       <div ref={sentinel} />{messages.isFetchingNextPage && <p className="le-hint">{de.inbox.loadingMore}</p>}
     </div>
-    {toast && <div className="le-inbox-toast"><Notice tone={toast.tone} action={toast.undoable ? { label: de.proposal.undo, onClick: () => { void undo() } } : undefined}><span>{toast.text}</span></Notice></div>}
+    <ActionToast />
   </>
 }

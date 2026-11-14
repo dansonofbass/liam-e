@@ -158,6 +158,20 @@ for (const mobile of [false, true]) test(`${mobile ? 'mobile' : 'desktop'} archi
   expect(await screen.findByText('Rückgängig')).toBeTruthy()
 })
 
+for (const mobile of [false, true]) test(`${mobile ? 'mobile' : 'desktop'} reading view shows a failed read change once`, async () => {
+  const { action } = setup({ mobile })
+  await screen.findByRole('heading', { name: 'Termin' })
+  action.mockImplementation((async () => ({ error: { detail: { code: 'provider_failed' } }, response: { status: 502 } })) as never)
+  const view = document.querySelector('.le-mail-view') as HTMLElement
+  fireEvent.click(within(view).getByRole('button', { name: 'Als ungelesen markieren' }))
+  await waitFor(() => expect(document.querySelectorAll('.le-inbox-toast')).toHaveLength(1))
+  const toast = document.querySelector('.le-inbox-toast') as HTMLElement
+  expect(toast.classList.contains('le-inbox-toast--inline')).toBe(mobile)
+  expect(view.contains(toast)).toBe(mobile)
+  expect(toast.textContent).toContain('Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.')
+  expect(within(view).getByRole('button', { name: 'Als ungelesen markieren' })).toBeTruthy()
+})
+
 test('silent auto read preserves an existing undo toast', async () => {
   const { router, action } = setup({ unread: true, path: '/mail' })
   await screen.findByText('Termin')

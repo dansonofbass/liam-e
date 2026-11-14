@@ -11,6 +11,7 @@ import { formatBytes, formatMailTime } from '../i18n/format'
 import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
 import { toMessageFilters, type InboxSearch } from './filters'
 import { InsightBox } from './InsightBox'
+import { ActionToast } from './ActionToast'
 import { useMailActionsContext } from './useMailActions'
 
 export function MailView({ id }: { id: string }) {
@@ -80,6 +81,7 @@ export function MailView({ id }: { id: string }) {
         {data.attachments.length > 0 && <div className="le-mail-attachments">{data.attachments.map((attachment, index) => <span key={index} className="le-mail-attachment"><Icon name="paperclip" size="sm" /><span className="le-mail-attachment-name">{attachment.name}</span><span className="le-mail-attachment-size">{formatBytes(attachment.size)}</span></span>)}</div>}
       </article>}
     </div>
+    {!split && <ActionToast inline />}
     {!split && data && <div className="le-mail-bottom">{chatButtons}</div>}
   </div>
 }
