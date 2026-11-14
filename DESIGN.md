@@ -251,10 +251,12 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
   der schwebenden Flächen `space-3` (ab `tablet`; auf `mobile` gibt es keinen Rahmen, §7.3),
   Innenabstand der Hauptfläche `space-5`, Kacheln und Karten `space-4`, das Panel „Konto
   verbinden“ 20 px (`space-4` + `space-1`).
-- **Radien:** `radius-pill` für alles, was man drückt (Buttons, Chips, Navigationspunkte,
-  Tags, Symbol-Buttons); `radius-sm` (12 px) für Zeilen und Felder; `radius-md` (18 px)
-  für Kacheln, Karten und Menüs; `radius-lg` (24 px) für schwebende Flächen, Composer und
-  Bestätigungskarte.
+- **Radien** nur aus den Tokens: `radius-pill` für Buttons, Chips, Navigationspunkte, Tags
+  und Symbol-Buttons; `radius-sm` (12 px) für Zeilen, Felder und Tooltips; `radius-md`
+  (18 px) für Kacheln, Karten und Menüs, auch für drückbare Kacheln (Schnellaktionen,
+  Optionen im Panel „Konto verbinden“); `radius-lg` (24 px) für schwebende Flächen,
+  Composer und Bestätigungskarte. Die eigene Blase im Chat hat `radius-md` mit einer
+  kleinen Ecke unten rechts (`radius-sm` / 2).
 - **Schatten** nur aus den Tokens: `shadow-sheet` für schwebende Flächen, `shadow-overlay`
   für Menüs, Popover und die Aktionsleiste in Listen, `shadow-lift` für den Hover von
   Kacheln und primären Buttons. Karten innerhalb einer Fläche haben keinen Schatten.

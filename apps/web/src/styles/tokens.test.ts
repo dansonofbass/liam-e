@@ -36,3 +36,12 @@ test('with reduced motion content still fades in but no longer rises, and page c
   expect(app).not.toMatch(/prefers-reduced-motion: reduce\) \{ \.le-page-fade/u)
   expect(app).toContain('@media (prefers-reduced-motion: reduce) { .le-drawer { animation-name: le-fade; } }')
 })
+
+test('every custom property the stylesheets read is defined, and radii come from the radius tokens', async () => {
+  const [tokens, ds, app] = await Promise.all([read('tokens.css'), read('ds.css'), read('ds-app.css')])
+  const defined = new Set([...`${tokens}\n${ds}\n${app}`.matchAll(/(--[\w-]+):/gu)].map(match => match[1]))
+  for (const css of [ds, app]) {
+    for (const [, name] of css.matchAll(/var\((--[\w-]+)/gu)) expect(defined.has(name!)).toBe(true)
+    for (const [, value] of css.matchAll(/border-radius: ([^;]+);/gu)) expect(value).not.toMatch(/(^|[\s(])\d+px/u)
+  }
+})

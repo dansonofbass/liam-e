@@ -1,5 +1,5 @@
 .le-tooltip-anchor, .le-menu-anchor { position: relative; display: inline-flex; }
-.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: 7px 10px; border-radius: 10px; background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-fade var(--le-dur-fast) ease; }
+.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-fade var(--le-dur-fast) ease; }
 .le-tooltip--top { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
 .le-tooltip--right { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
 .le-tooltip--bottom { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
@@ -127,7 +127,7 @@
 .le-inbox-toast--inline { position: static; flex: 0 0 auto; margin: 0 var(--space-3) var(--space-2); }
 @media (pointer: coarse) { .le-inbox-filters .le-chip, .le-inbox-control, .le-inbox-toast .le-link { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } .le-inbox-toast .le-link { display: inline-flex; align-items: center; justify-content: center; } }
 .le-mailrow--placeholder { min-height: var(--space-7); align-items: center; }
-.le-mailrow--placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface-soft)); }
+.le-mailrow--placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-soft); }
 .le-mailrow--placeholder span:first-child { width: var(--space-7); height: var(--space-7); }
 .le-mailrow--placeholder span:last-child { width: 100%; }
 @media (max-width: 1023px) { .le-inbox-list { flex: 1 1 100%; border-right: 0; } }
@@ -148,7 +148,7 @@
 .le-insight-points li + li { margin-top: var(--space-1); }
 .le-insight .le-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .le-insight-placeholder { display: flex; flex-direction: column; gap: var(--space-2); }
-.le-insight-placeholder-line { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface)); }
+.le-insight-placeholder-line { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface); }
 .le-insight-placeholder-line:last-child { width: 60%; }
 .le-mail-text { display: flex; flex-direction: column; gap: var(--space-3); overflow-wrap: anywhere; max-width: 64ch; }
 .le-mail-text p { margin: 0; white-space: pre-wrap; }
@@ -161,7 +161,7 @@
 .le-mail-bottom .le-btn { width: 100%; min-height: var(--control-height-lg); }
 .le-mail-error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
 .le-mail-placeholder { max-width: 720px; margin: auto; display: flex; flex-direction: column; gap: var(--space-3); }
-.le-mail-placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface-soft)); }
+.le-mail-placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-soft); }
 .le-mail-placeholder > span:nth-last-child(1) { width: 60%; }
 .le-mail-placeholder-head { display: flex; gap: var(--space-3); margin-bottom: var(--space-4); }
 .le-mail-placeholder-head > span { width: var(--space-7); height: var(--space-7); border-radius: var(--radius-pill); }

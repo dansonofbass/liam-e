@@ -132,7 +132,7 @@ body { margin: 0; font-family: var(--font-sans); font-size: var(--font-size-body
 
 /* Chat */
 .le-thread { display: flex; flex-direction: column; gap: 18px; }
-.le-msg-user { align-self: flex-end; max-width: 80%; padding: 11px 16px; border-radius: 20px 20px 6px 20px; background: var(--accent); color: var(--on-accent); }
+.le-msg-user { align-self: flex-end; max-width: 80%; padding: 11px 16px; border-radius: var(--radius-md) var(--radius-md) calc(var(--radius-sm) / 2) var(--radius-md); background: var(--accent); color: var(--on-accent); }
 .le-msg-user p { margin: 0; }
 .le-msg-ai { display: flex; flex-direction: column; gap: 12px; }
 .le-ai-meta { display: flex; align-items: center; gap: 8px; font-weight: 700; }
