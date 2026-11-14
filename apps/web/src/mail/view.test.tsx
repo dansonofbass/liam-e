@@ -43,6 +43,12 @@ test('open mail shows the provider when the account has no display name', async 
   await waitFor(() => expect(document.querySelector('.le-mail-header .le-tag')?.textContent).toBe('Gmail'))
 })
 
+test('insight points use disc markers, indentation and item spacing', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-insight-points \{[^}]*padding-left: calc\(var\(--space-4\) \+ var\(--space-1\)\);[^}]*list-style: disc;/u)
+  expect(css).toMatch(/\.le-insight-points li \+ li \{[^}]*margin-top: var\(--space-1\);/u)
+})
+
 test('opening unread mail marks it read once across rerender and refetch, updating list', async () => {
   const { action, client, view, router } = setup({ unread: true })
   await waitFor(() => expect(action.mock.calls.length).toBe(1))
