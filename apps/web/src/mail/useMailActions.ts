@@ -100,13 +100,12 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     undoPending.current = true
     try {
       const result = await mailActionsUndo({ body: { action_ids: [selected.actionId] } })
-      if (target.current !== selected) return
       if (result.data?.restored.includes(selected.actionId)) {
         restore(selected.changes, true)
-        clear()
+        if (target.current === selected) clear()
         void client.invalidateQueries({ queryKey: ['messages'] })
         void client.invalidateQueries({ queryKey: ['summary'] })
-      } else show({ tone: 'danger', text: de.proposal.requestError, undoable: false })
+      } else if (target.current === selected) show({ tone: 'danger', text: de.proposal.requestError, undoable: false })
     } catch {
       if (target.current === selected) show({ tone: 'danger', text: de.proposal.requestError, undoable: false })
     } finally { undoPending.current = false }

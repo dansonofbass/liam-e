@@ -60,6 +60,34 @@ test('undo sends the action id and restores the row', async () => {
   expect(screen.queryByRole('status')).toBeNull()
 })
 
+for (const replacement of ['new action', 'timeout']) {
+  test(`successful pending undo restores its row after ${replacement}`, async () => {
+    success()
+    let finishUndo!: (value: unknown) => void
+    spyOn(sdk, 'mailActionsUndo').mockImplementation((() => new Promise(resolve => { finishUndo = resolve })) as never)
+    const { client, advance } = setup()
+    fireEvent.click(screen.getByText('archive 1'))
+    fireEvent.click(await screen.findByText('Rückgängig'))
+    if (replacement === 'new action') {
+      fireEvent.click(screen.getByText('archive 2'))
+      await screen.findByText('„Zweite“ archiviert.')
+    } else {
+      act(() => advance(10_000))
+      expect(screen.queryByRole('status')).toBeNull()
+    }
+    const invalidate = spyOn(client, 'invalidateQueries')
+    await act(async () => { finishUndo({ data: { restored: ['action-1'] }, response: { status: 200 } }) })
+    await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['messages'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['summary'] })
+    if (replacement === 'new action') {
+      expect(screen.queryByText('Zweite:false')).toBeNull()
+      expect(screen.getByText('„Zweite“ archiviert.')).toBeTruthy()
+      expect(screen.getByText('Rückgängig')).toBeTruthy()
+    } else expect(screen.queryByRole('status')).toBeNull()
+  })
+}
+
 for (const [status, text, removed] of [[502, 'Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.', false], [409, 'Das geht bei diesem Konto nicht.', false], [404, 'Die Mail ist nicht mehr da.', true]] as const) {
   test(`${status} shows a danger notice and ${removed ? 'keeps removal' : 'restores the row'}`, async () => {
     spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ error: { detail: { code: status === 409 ? 'action_unsupported' : status === 404 ? 'message_not_found' : 'provider_failed' } }, response: { status } })) as never)
