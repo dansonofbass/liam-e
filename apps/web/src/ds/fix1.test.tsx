@@ -38,11 +38,14 @@ test('mail reference formats deadline and displays account tag', () => {
   expect(screen.getByText('Privat').querySelector('.le-dot--a3')).toBeTruthy()
 })
 
-test('mail reference shows the urgent dot, the time for today and a pencil that asks for a draft', () => {
+test('mail reference shows the urgent dot, the time for today and a pencil that asks for a draft', async () => {
   const now = new Date()
   const onDraft = mock(() => {})
   render(<MailReference mail={{ ...mail, is_flagged: true, internal_date: now.toISOString() }} onOpen={() => {}} onDraft={onDraft} />)
-  expect(screen.getByText('Dringend').classList.contains('le-sr')).toBe(true)
+  const dot = screen.getByRole('img', { name: 'Dringend' })
+  expect(dot.classList.contains('le-mailref-dot')).toBe(true)
+  fireEvent.mouseEnter(dot)
+  expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', 'Dringend')
   expect(document.querySelector('.le-mailref-dot.le-dot--warm')?.classList.contains('le-mailref-dot--none')).toBe(false)
   expect(screen.getByText(formatTime(now)).tagName).toBe('TIME')
   const pencil = screen.getByRole('button', { name: 'Antwort entwerfen' })
@@ -57,7 +60,7 @@ test('mail reference keeps the dot column for plain mails, says Gestern for yest
   yesterday.setDate(yesterday.getDate() - 1)
   yesterday.setHours(12, 0, 0, 0)
   const { container } = render(<MailReference mail={{ ...mail, is_flagged: false, internal_date: yesterday.toISOString() }} onOpen={() => {}} />)
-  expect(screen.queryByText('Dringend')).toBeNull()
+  expect(screen.queryByRole('img', { name: 'Dringend' })).toBeNull()
   expect(container.querySelector('.le-mailref-dot')?.classList.contains('le-mailref-dot--none')).toBe(true)
   expect(container.firstElementChild?.firstElementChild?.classList.contains('le-mailref-dot')).toBe(true)
   expect(screen.getByText('Gestern').tagName).toBe('TIME')
