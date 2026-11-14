@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
 import { mailSyncAll } from '../api/generated/sdk.gen'
 import { summaryQuery } from '../api/queries'
 import { AppShell, Drawer, Icon, IconButton } from '../ds'
@@ -16,6 +16,19 @@ export function Shell() {
   const breakpoint = useBreakpoint()
   const [open, setOpen] = useState(false)
   const client = useQueryClient()
+  const { data: summary } = useQuery(summaryQuery())
+  const previousSummary = useRef<{ syncing: boolean, lastSync: number | null } | null>(null)
+  useEffect(() => {
+    if (!summary) return
+    const syncing = summary.accounts.some(account => account.state === 'syncing')
+    const parsed = summary.last_sync_at ? Date.parse(summary.last_sync_at) : NaN
+    const lastSync = Number.isNaN(parsed) ? null : parsed
+    const previous = previousSummary.current
+    if (previous && ((previous.syncing && !syncing) || (lastSync !== null && (previous.lastSync === null || lastSync > previous.lastSync)))) {
+      void client.invalidateQueries({ queryKey: ['messages'] })
+    }
+    previousSummary.current = { syncing, lastSync }
+  }, [client, summary])
   const path = useLocation({ select: location => location.pathname })
   useEffect(() => {
     if (started) return

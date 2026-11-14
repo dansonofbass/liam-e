@@ -1,7 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
 import { Shell, resetShellSyncForTest } from '../routes/_app'
 
@@ -9,8 +9,7 @@ let width = 1200
 window.matchMedia = ((query: string) => ({ matches: query.includes('640') ? width >= 640 : query.includes('1024') ? width >= 1024 : query.includes('1440') ? width >= 1440 : false, media: query, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
 const summary = { accounts: Array.from({ length: 4 }, () => ({ state: 'ok' })), unread_total: 47, last_sync_at: '2026-01-01T08:57:00' }
 const conversations = [{ id: 'one', title: 'Erste Unterhaltung', updated_at: new Date().toISOString() }, { id: 'two', title: 'Zweite Unterhaltung', updated_at: new Date().toISOString() }]
-function setup(path = '/') {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+function setup(path = '/', client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })) {
   client.setQueryData(['summary'], summary)
   client.setQueryData(['conversations'], conversations)
   const root = createRootRoute({ component: Shell })
@@ -38,6 +37,27 @@ test('desktop navigation shows summary and conversations and syncs once across m
   await screen.findByText('47')
   expect(sync).toHaveBeenCalledTimes(1)
   expect(sync).toHaveBeenCalledWith({ body: { only_if_older_than_minutes: 10 } })
+})
+test('refreshes active messages after sync finishes or the last sync advances', async () => {
+  width = 1200
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ error: {} })) as never)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  const fetchMessages = mock(async () => [])
+  const observer = new QueryObserver(client, { queryKey: ['messages', {}], queryFn: fetchMessages, staleTime: Infinity })
+  const unsubscribe = observer.subscribe(() => {})
+  setup('/', client)
+  await screen.findByText('47')
+  await waitFor(() => expect(fetchMessages).toHaveBeenCalledTimes(1))
+  act(() => { client.setQueryData(['summary'], { ...summary, accounts: [{ state: 'syncing' }] }) })
+  await screen.findByText('1 Konto · Stand 08:57')
+  act(() => { client.setQueryData(['summary'], { ...summary, last_sync_at: '2026-01-01T09:00:00' }) })
+  await waitFor(() => expect(fetchMessages).toHaveBeenCalledTimes(2))
+  act(() => { client.setQueryData(['summary'], { ...summary, last_sync_at: '2026-01-01T09:00:00' }) })
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)) })
+  expect(fetchMessages).toHaveBeenCalledTimes(2)
+  act(() => { client.setQueryData(['summary'], { ...summary, last_sync_at: '2026-01-01T09:01:00' }) })
+  await waitFor(() => expect(fetchMessages).toHaveBeenCalledTimes(3))
+  unsubscribe()
 })
 test('only conversations are inside the sidebar scroll container', async () => {
   width = 1200
