@@ -19,7 +19,7 @@ def _refuse(error: Exception):
     if isinstance(error, proposals.ProposalNotFoundError):
         raise refuse(404, "proposal_not_found", "Der Vorschlag ist nicht mehr da. Lade die Unterhaltung neu.")
     if isinstance(error, proposals.ProposalStateError):
-        raise refuse(409, "proposal_not_pending", "Der Vorschlag ist nicht mehr offen. Lade die Unterhaltung neu.")
+        raise refuse(409, "proposal_not_pending", "Dieser Vorschlag ist schon erledigt oder abgebrochen. Lade die Unterhaltung neu, um den Stand zu sehen.")
     if isinstance(error, proposals.ProposalSelectionError):
         text = "Wähle mindestens einen Eintrag aus." if error.code == "selection_empty" else "Die Auswahl passt nicht zum Vorschlag. Lade die Unterhaltung neu."
         raise refuse(422, error.code, text)

@@ -39,6 +39,17 @@ async def test_compute_insight_parses_model_json(setup):
 
 
 @pytest.mark.anyio
+async def test_insight_prompt_contains_shared_rules_and_followup_guidance(setup):
+    from api.mail.agent_prompt import TERMS_AND_FORMATS
+    setup.responses.append(payload())
+    await insights.compute_insight(message(), today=date(2026, 2, 1))
+    prompt = setup.requests[0]['messages'][0]['content']
+    assert TERMS_AND_FORMATS in prompt
+    assert 'keine Emojis oder Ausrufezeichen und Verben statt Substantivketten' in prompt
+    assert 'bis zu zwei followups als kurze Aktionen im Infinitiv mit Objekt und einem bis vier Wörtern, keine Fragen' in prompt
+
+
+@pytest.mark.anyio
 async def test_compute_insight_caps_points_and_followups(setup):
     setup.responses.append(payload(points=["x" * 201] * 5, followups=["x"] * 4, deadline="invalid"))
     row = await insights.compute_insight(message(), today=date(2026, 2, 1))

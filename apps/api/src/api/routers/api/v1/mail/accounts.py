@@ -19,7 +19,7 @@ from db.accessors import mail_job as job_access
 from db.accessors import mail_sync_state as sync_state_access
 from db.models.mail_account import MailAccount
 from env.mail import env as mail_env
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, model_validator, field_validator
 
@@ -173,12 +173,12 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
         except secrets.SecretNameNotAllowedError as error:
             raise refuse(
                 422, "secret_not_allowed",
-                "Diesen Secret-Namen kannst du nicht für ein Mailkonto verwenden. Leg in Mistral Studio ein eigenes Secret mit einem Namen wie yahoo-app-password an und verbinde das Konto noch einmal.",
+                "Der Name muss auf „-app-password“ enden, etwa „yahoo-app-password“, und darf nur Kleinbuchstaben, Ziffern und Bindestriche enthalten. Leg das Secret in Mistral Studio unter so einem Namen an.",
             ) from error
         except (secrets.WorkspaceSecretNotFoundError, httpx.HTTPError) as error:
             raise refuse(
                 404, "secret_not_found",
-                "Das Secret wurde nicht gefunden oder ist nicht lesbar. Prüfe den Namen und die Freigabe in Mistral Studio und verbinde dein Konto noch einmal.",
+                "Das Secret wurde nicht gefunden oder ist nicht lesbar. Prüfe den Namen und die Freigabe in Mistral Studio.",
             ) from error
     try:
         await check_imap_login(
@@ -190,7 +190,7 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
     except (imaplib.IMAP4.error, OSError, BlockedAddressError, transport.MailHostNotAllowedError) as error:
         raise refuse(
             502, "login_failed",
-            "Die Anmeldung beim Mailserver hat nicht geklappt. Prüfe deine Serveradresse und das App-Passwort und verbinde das Konto noch einmal.",
+            "Die Anmeldung beim Mailserver hat nicht geklappt. Prüfe die Serveradresse und das App-Passwort.",
         ) from error
     try:
         account = await upsert_account(
@@ -239,9 +239,9 @@ async def oauth_authorize(
     if account_id is not None:
         account = await account_access.get_account(account_id)
         if account is None:
-            raise refuse(404, "account_not_found", "Das Konto wurde nicht gefunden.")
+            raise refuse(404, "account_not_found", "Das Konto gibt es nicht mehr.")
         if account.auth_type != "oauth2" or account.provider != provider:
-            raise refuse(422, "reconnect_unsupported", "Dieses Konto kannst du so nicht erneut verbinden.")
+            raise refuse(422, "reconnect_unsupported", "Dieses Konto lässt sich über diese Anmeldung nicht neu verbinden. Entferne es und verbinde es danach neu.")
     if not providers.oauth_configured(provider):
         raise refuse(503, "oauth_not_configured", "Die Anmeldung ist nicht eingerichtet. Prüfe die Einstellungen in Mistral Studio.")
     redirect_uri = (
@@ -329,7 +329,7 @@ async def update_account(account_id: str, body: AccountUpdateIn) -> AccountOut:
     """Rename an existing account."""
     account = await account_access.update_display_name(account_id, body.display_name)
     if account is None:
-        raise refuse(404, "account_not_found", "Das Konto wurde nicht gefunden.")
+        raise refuse(404, "account_not_found", "Das Konto gibt es nicht mehr.")
     return await current_account_out(account)
 
 
@@ -347,7 +347,7 @@ async def delete_account(account_id: str) -> None:
     """
     deleted = await account_access.delete_account(account_id)
     if not deleted:
-        raise refuse(404, "account_not_found", "Das Konto wurde nicht gefunden.")
+        raise refuse(404, "account_not_found", "Das Konto gibt es nicht mehr.")
     await insight_access.delete_for_account(account_id)
     await message_access.delete_for_account(account_id)
     await action_access.delete_for_account(account_id)
@@ -366,7 +366,7 @@ async def sync_account(account_id: str) -> AccountSummaryOut:
     """Schedule a sync for an existing account, deduplicating open jobs."""
     account = await account_access.get_account(account_id)
     if account is None:
-        raise HTTPException(status_code=404, detail="Konto nicht gefunden.")
+        raise refuse(404, "account_not_found", "Das Konto gibt es nicht mehr.")
     await jobs.enqueue_sync(account_id)
     accounts = await account_access.list_accounts()
     unread = await message_access.count_unread(folder="INBOX")

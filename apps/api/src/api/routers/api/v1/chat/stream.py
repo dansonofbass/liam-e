@@ -69,6 +69,6 @@ async def sse_frames(events: AsyncIterator[ChatEventUnion], is_disconnected: Cal
 @router.post('', operation_id='chat_stream', response_class=EventStreamResponse, response_model=ChatEvent, description='Streams one agent turn. It never sends mail itself; proposals require explicit confirmation.')
 async def chat_stream(body: ChatStreamRequest, request: Request) -> StreamingResponse:
     if body.conversation_id is not None and await chat_conversation.get_conversation(body.conversation_id) is None:
-        raise refuse(404, 'conversation_not_found', 'Diese Unterhaltung gibt es nicht mehr.')
+        raise refuse(404, 'conversation_not_found', 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.')
     events = run_turn_events(**body.model_dump())
     return event_stream_response(sse_frames(events, request.is_disconnected))

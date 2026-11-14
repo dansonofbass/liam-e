@@ -112,7 +112,8 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
             if kind == 'unsubscribe':
                 s = await newsletters.sender_by_id(id)
                 if not s: continue
-                subtitle = f'{s.address} · {s.total} Mails'
+                count = f'{s.total:,}'.replace(',', '.')
+                subtitle = f'{s.address} · {count} {"Mail" if s.total == 1 else "Mails"}'
                 if s.method == 'mailto':
                     target = newsletters.parse_mailto(s.link)
                     if target: subtitle += f' · {target.recipient} · {target.subject} · {target.body}'
@@ -121,7 +122,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
                 m = await mail_message.get_message(id)
                 if not m or m.folder != 'INBOX' or (kind == 'mark_read' and m.is_read): continue
                 account = await mail_account.get_account(m.account_id)
-                items.append(proposals.ProposalItem(id=id, kind='mail', title=m.subject or '(ohne Betreff)', subtitle=f'{headers.sender_name(m.sender)} · {account.email_address if account else ""}'))
+                items.append(proposals.ProposalItem(id=id, kind='mail', title=m.subject or 'Ohne Betreff', subtitle=f'{headers.sender_name(m.sender)} · {account.email_address if account else ""}'))
         if not items: return result({'error':'no_valid_items'})
         return await _proposal(ctx, proposals.Proposal(kind=kind, reason=arguments.get('reason',''), items=items))
     if name == 'create_draft':
