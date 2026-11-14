@@ -218,6 +218,10 @@ test('IMAP presets populate both servers without overwriting typed server fields
   expect((screen.getByLabelText('IMAP-Server') as HTMLInputElement).value).toBe('imap.mail.yahoo.com')
   expect((screen.getByLabelText('SMTP-Server') as HTMLInputElement).value).toBe('smtp.mail.yahoo.com')
 })
+test('IMAP secret name field disables autofill', async () => {
+  setup('empty'); await openImap()
+  expect(screen.getByLabelText('Secret mit dem App-Passwort').getAttribute('autocomplete')).toBe('off')
+})
 test('IMAP submits secret reference, syncs new account and shows success', async () => {
   const connect = spyOn(sdk, 'mailAccountConnectImap').mockImplementation((async () => ({ data: account })) as never)
   const sync = spyOn(sdk, 'mailAccountSync').mockImplementation((async () => ({ response: { ok: true } })) as never)

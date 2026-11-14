@@ -42,7 +42,7 @@ export function ImapForm({ presets, initialAddress = '', focusSecret = false, on
   return <form ref={formRef} className="le-imap-form" noValidate onSubmit={event => { event.preventDefault(); void submit() }}>
     <TextField label={de.accounts.email} type="email" autoComplete="off" value={email} onChange={event => setEmail(event.target.value)} error={errors.email} />
     <div className="le-imap-servers"><TextField label={de.accounts.imapServer} value={imap} onChange={event => { editedImap.current = true; setImap(event.target.value) }} error={errors.imap} /><TextField label={de.accounts.smtpServer} value={smtp} onChange={event => { editedSmtp.current = true; setSmtp(event.target.value) }} error={errors.smtp} /></div>
-    <TextField label={de.accounts.secret} name="password_secret" hint={de.accounts.secretHint} placeholder={de.accounts.secretPlaceholder(domain.split('.')[0] ?? '')} value={secret} onChange={event => setSecret(event.target.value)} error={errors.secret} />
+    <TextField label={de.accounts.secret} name="password_secret" autoComplete="off" hint={de.accounts.secretHint} placeholder={de.accounts.secretPlaceholder(domain.split('.')[0] ?? '')} value={secret} onChange={event => setSecret(event.target.value)} error={errors.secret} />
     {notice && <Notice tone="danger">{notice}</Notice>}
     <div className="le-connect-actions"><Tooltip content={de.accounts.imapTip}><Button variant="primary" type="submit" disabled={pending} aria-busy={pending}>{de.accounts.connect}</Button></Tooltip><Button variant="ghost" disabled={pending} onClick={onCancel}>{de.controls.cancel}</Button></div>
     <Notice tone="info">{de.accounts.secretNotice}</Notice>
