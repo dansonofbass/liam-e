@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
-import { historyQuery, messageQuery, modelsQuery, summaryQuery } from '../api/queries'
+import { historyQuery, messageQuery, MessageNotFoundError, modelsQuery, summaryQuery } from '../api/queries'
 import { errorCode } from '../api/unwrap'
 import type { AccountSummaryOut, ChatMessageOut, MailRefOut } from '../api/generated/types.gen'
 import { Button, ChatMessage, Chip, Composer, MailReference, Notice } from '../ds'
@@ -34,7 +34,7 @@ function Reference({ mail, accounts }: { mail: MailRefOut; accounts: Accounts })
   return <MailReference mail={mail} accountLabel={accounts.filter(account => account.id === mail.account_id).map(providerLabel)[0]} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} />
 }
 function HistoryReference({ id, accounts }: { id: string; accounts: Accounts }) {
-  const { data } = useQuery(messageQuery(id))
+  const { data } = useQuery({ ...messageQuery(id), retry: (count, error) => !(error instanceof MessageNotFoundError) && count < 2 })
   return data ? <Reference mail={data} accounts={accounts} /> : null
 }
 function Suggestions({ items, onSend }: { items: string[]; onSend: (text: string) => void }) {

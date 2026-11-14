@@ -23,7 +23,7 @@ function setup(path = '/', historyGone = false) {
   spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [] })) as never)
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
   const start = createRoute({ getParentRoute: () => root, path: '/', component: StartRoute.options.component })
   const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: () => <Conversation conversationId="c" /> })
@@ -224,6 +224,17 @@ test('model menu updates the conversation', async () => {
   fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei · Genau/ }))
   await waitFor(() => expect(update).toHaveBeenCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2' }, throwOnError: true }))
   await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['history', 'c'] }))
+})
+
+test('a missing history mail reference is requested only once', async () => {
+  const get = spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ response: new Response(null, { status: 404 }) })) as never)
+  const { client } = setup('/chat/c')
+  await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([]))
+  const row: ChatMessageOut = { id: 'm', conversation_id: 'c', role: 'assistant', content: 'Antwort', created_at: '', extras: { mails: ['missing'] }, proposal: null, proposal_status: '', stopped: false, tool_name: '' }
+  act(() => { client.setQueryData(['history', 'c'], [row]) })
+  await waitFor(() => expect(client.getQueryState(['message', 'missing'])?.status).toBe('error'))
+  expect(client.getQueryState(['message', 'missing'])?.fetchFailureCount).toBe(1)
+  expect(get).toHaveBeenCalledTimes(1)
 })
 
 test('history renders safe text, model, mail account and only the latest suggestions', async () => {
