@@ -59,6 +59,12 @@ test('unread coarse mail exposes its actions and markers', () => {
   expect(screen.getByRole('img', { name: 'Anhang' }).querySelector('.lucide-paperclip')).toBeTruthy()
 })
 
+test('the trash action of a mail row names the same shortcut as the open mail', async () => {
+  render(<MailRow mail={mail} selected={false} coarse={false} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  fireEvent.mouseEnter(screen.getByRole('button', { name: 'In den Papierkorb' }))
+  expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', 'In den Papierkorb (Entf)')
+})
+
 test('a flagged mail row shows the warm urgency dot with a name and a tooltip', async () => {
   const { rerender } = render(<MailRow mail={{ ...mail, is_flagged: true }} selected={false} coarse={false} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
   const dot = screen.getByRole('img', { name: 'Dringend' })
