@@ -4,7 +4,7 @@ import { THEME_STORAGE_KEY, applyTheme, readTheme, setTheme, themeScript } from 
 import { ThemeMenu } from './ThemeMenu'
 
 beforeEach(() => { window.localStorage.clear(); document.documentElement.removeAttribute('data-theme') })
-afterEach(() => { cleanup(); window.localStorage.clear(); document.documentElement.removeAttribute('data-theme') })
+afterEach(() => { cleanup(); setTheme('system') })
 // The script runs as a classic script in the browser, where `localStorage` and `document` are globals; here they come from jsdom.
 const runHeadScript = (storage: Pick<Storage, 'getItem'>) => new Function('localStorage', 'document', themeScript)(storage, document)
 
@@ -19,15 +19,22 @@ test('the head script applies a stored light or dark theme and ignores anything 
   expect(readTheme()).toBe('system')
 })
 
-test('the head script survives blocked storage', () => {
+test('with blocked storage the head script stays quiet and a choice still holds for the page', () => {
   const original = Object.getOwnPropertyDescriptor(window, 'localStorage')!
   Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new Error('blocked') } })
   try {
     expect(() => runHeadScript({ getItem() { throw new Error('blocked') } })).not.toThrow()
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false)
     expect(readTheme()).toBe('system')
-    expect(() => setTheme('dark')).not.toThrow()
+    render(<ThemeMenu placement="up-start" />)
+    const trigger = screen.getByRole('button', { name: 'Darstellung' })
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dunkel' }))
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+    expect(readTheme()).toBe('dark')
+    fireEvent.click(trigger)
+    expect(screen.getByRole('menuitemradio', { name: 'Dunkel' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('menuitemradio', { name: 'Wie im System' }).getAttribute('aria-checked')).toBe('false')
   } finally {
     Object.defineProperty(window, 'localStorage', original)
   }

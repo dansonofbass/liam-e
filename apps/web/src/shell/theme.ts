@@ -12,8 +12,11 @@ export const THEME_STORAGE_KEY = 'liam-e-theme' // i18n-exempt
 export const themeScript = `try{var t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}` // i18n-exempt
 
 const listeners = new Set<() => void>()
+// A choice that storage refused (blocked or full) still holds for this page.
+let unsaved: ThemeChoice | null = null
 
 export function readTheme(): ThemeChoice {
+  if (unsaved) return unsaved
   try {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
     return stored === 'light' || stored === 'dark' ? stored : 'system'
@@ -32,8 +35,10 @@ export function setTheme(choice: ThemeChoice) {
   try {
     if (choice === 'system') window.localStorage.removeItem(THEME_STORAGE_KEY)
     else window.localStorage.setItem(THEME_STORAGE_KEY, choice)
+    unsaved = null
   } catch {
     // Storage can be blocked (private window); the theme still applies for this page.
+    unsaved = choice
   }
   applyTheme(choice)
   listeners.forEach(listener => listener())
