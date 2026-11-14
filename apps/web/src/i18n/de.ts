@@ -120,7 +120,7 @@ export const de = {
       unsubscribe: (n: number) => ` ${plural(n, { one: '# Absender ist nicht mehr da.', other: '# Absender sind nicht mehr da.' })}`,
     },
     partialChanged: (n: number) => ` ${plural(n, { one: '# Absender hat seinen Abmeldeweg geändert.', other: '# Absender haben ihren Abmeldeweg geändert.' })}`,
-    undo: 'Rückgängig', undone: 'Rückgängig gemacht.', cancelled: 'Abgebrochen, es wurde nichts geändert.',
+    undo: 'Rückgängig', undone: 'Rückgängig gemacht.', cancelled: 'Abgebrochen, es wurde nichts geändert.', running: 'Wird ausgeführt …',
     requestError: 'Das hat nicht geklappt. Versuch es gleich noch mal.',
   },
   proposalErrors: {

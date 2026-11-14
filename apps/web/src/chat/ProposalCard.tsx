@@ -103,8 +103,20 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   const [error, setError] = useState<string>()
   const [, refresh] = useState(0)
   const pending = useRef(false)
-  const current = updated?.id === message.id ? updated : message
+  const current = updated?.id === message.id && !(updated.proposal_status === 'running' && message.proposal_status !== 'pending' && message.proposal_status !== 'running') ? updated : message
   const proposal = current.proposal
+  useEffect(() => {
+    if (current.proposal_status !== 'running') return
+    let count = 0
+    let timer: ReturnType<typeof setTimeout>
+    const poll = () => {
+      void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
+      count += 1
+      if (count < 20) timer = clock.setTimeout(poll, 3_000)
+    }
+    timer = clock.setTimeout(poll, 3_000)
+    return () => clock.clearTimeout(timer)
+  }, [client, clock, current.conversation_id, current.id, current.proposal_status])
   const apply = async (operation: () => Promise<ChatMessageOut>, confirm = false) => {
     if (pending.current) return
     pending.current = true; setBusy(true); setError(undefined)
@@ -126,6 +138,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
     } finally { pending.current = false; setBusy(false) }
   }
   if (!proposal) return null
+  if (current.proposal_status === 'running') return <p className="le-hint">{de.proposal.running}</p>
   if (current.proposal_status === 'cancelled') return <p className="le-hint">{de.proposal.cancelled}</p>
   if (current.proposal_status === 'failed') return <Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code, proposal.kind)}</Notice>
   if (current.proposal_status === 'done' || current.proposal_status === 'partial') return <Result key={current.id} message={current} proposal={proposal} clock={clock} />

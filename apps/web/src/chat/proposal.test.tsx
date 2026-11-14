@@ -77,6 +77,47 @@ test('edited draft survives a card remount and confirmation', async () => {
   await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: 'Neuer Text' }, throwOnError: true }))
 })
 
+test('running proposal refreshes history at most twenty times and clears its timer', () => {
+  let next = 0
+  const timers = new Map<number, () => void>()
+  const clock = { now: () => 0, setTimeout: (fn: () => void, ms: number) => { expect(ms).toBe(3000); const id = ++next; timers.set(id, fn); return id as unknown as ReturnType<typeof setTimeout> }, clearTimeout: (id: ReturnType<typeof setTimeout>) => { timers.delete(id as unknown as number) } }
+  const client = new QueryClient()
+  const invalidate = spyOn(client, 'invalidateQueries')
+  const card = (row: ChatMessageOut) => <QueryClientProvider client={client}><ProposalCard message={row} clock={clock} /></QueryClientProvider>
+  const view = render(card(message('running')))
+  expect(screen.getByText('Wird ausgeführt …').className).toBe('le-hint')
+  for (let i = 0; i < 20; i++) {
+    expect(timers.size).toBe(1)
+    const [id, callback] = [...timers.entries()][0]!
+    timers.delete(id)
+    act(callback)
+  }
+  expect(invalidate).toHaveBeenCalledTimes(20)
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['history', 'c'] })
+  expect(timers.size).toBe(0)
+  view.unmount()
+  const second = render(card(message('running')))
+  expect(timers.size).toBe(1)
+  second.unmount()
+  expect(timers.size).toBe(0)
+})
+
+test('running confirmation yields to the completed history row and stops polling', async () => {
+  let next = 0
+  const timers = new Map<number, number>()
+  const clock = { now: () => 0, setTimeout: (_fn: () => void, ms: number) => { const id = ++next; timers.set(id, ms); return id as unknown as ReturnType<typeof setTimeout> }, clearTimeout: (id: ReturnType<typeof setTimeout>) => { timers.delete(id as unknown as number) } }
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: message('running') })) as never)
+  const client = new QueryClient()
+  const card = (row: ChatMessageOut) => <QueryClientProvider client={client}><ProposalCard message={row} clock={clock} /></QueryClientProvider>
+  const view = render(card(message()))
+  fireEvent.click(screen.getByRole('button', { name: '2 abbestellen und archivieren' }))
+  expect(await screen.findByText('Wird ausgeführt …')).toBeTruthy()
+  expect([...timers.values()]).toContain(3000)
+  view.rerender(card(message('done', { done: 1 })))
+  expect(screen.getByText('1 Newsletter abbestellt.')).toBeTruthy()
+  expect([...timers.values()]).not.toContain(3000)
+})
+
 test('cancelled proposal is quiet', async () => {
   setup(message('cancelled'))
   expect(await screen.findByText('Abgebrochen, es wurde nichts geändert.')).toBeTruthy()
