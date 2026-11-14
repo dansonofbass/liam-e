@@ -23,6 +23,15 @@ test('start content is centred and quick actions use four columns or two on mobi
   expect(css).toContain('@media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }')
 })
 
+test('shell navigation and composer have coarse pointer targets', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.match(/@media \(pointer: coarse\) \{ (\.le-topbar \.le-icon-btn[^{}]+)\{ ([^{}]+) \} \.le-composer textarea \{ ([^{}]+) \} \}/u)
+  expect(rule).toBeTruthy()
+  for (const selector of ['.le-topbar .le-icon-btn', '.le-side .le-icon-btn', '.le-side .le-nav-item', '.le-drawer .le-nav-item', '.le-drawer .le-conv']) expect(rule?.[1]).toContain(selector)
+  for (const property of ['min-width: var(--control-height-lg)', 'min-height: var(--control-height-lg)']) expect(rule?.[2]).toContain(property)
+  expect(rule?.[3]).toContain('min-height: var(--control-height-lg)')
+})
+
 test('the viewport bounds the shell and its independently scrolling content', async () => {
   const base = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
   const app = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
