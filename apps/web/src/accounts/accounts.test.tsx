@@ -45,6 +45,17 @@ test('accounts scroll area is bounded by the viewport', async () => {
   for (const property of ['flex: 1', 'min-height: 0', 'overflow-y: auto']) expect(scroll).toContain(property)
 })
 
+test('account cards have spaced lists and mobile actions below the content', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-accounts-list > h2 \{[^}]*margin: 0 0 var\(--space-5\);/u)
+  expect(css).toMatch(/\.le-accounts-list ul \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*gap: 10px;/u)
+  expect(css).toMatch(/@media \(max-width: 639px\) \{ \.le-account \{ grid-template-columns: auto minmax\(0, 1fr\); \} \.le-account-actions \{ grid-column: 2; flex-direction: row; \} \}/u)
+  const { container } = render(<AccountCard account={{ ...account, unread: 7, message_count: 23 }} {...props} />)
+  expect(container.querySelector('.le-account-meta .le-badge')).toBeNull()
+  expect(screen.getByText('23 Mails')).toBeTruthy()
+  expect(screen.getByText('IMAP')).toBeTruthy()
+})
+
 test('card shows each state and connection', () => {
   const { rerender } = render(<AccountCard account={account} {...props} />)
   expect(screen.getByText('Yahoo')).toBeTruthy(); expect(screen.getByText('IMAP')).toBeTruthy(); expect(screen.getByText('Noch nicht abgerufen')).toBeTruthy()
