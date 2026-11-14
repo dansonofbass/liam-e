@@ -183,7 +183,7 @@ async def seed(now: datetime | None = None) -> SeedResult:
             id=f"{by_key[account].id}|{address}", kind="sender", title=sender, subtitle=subtitle,
             count=len(sender_mails), unread=sum(not m.is_read for m in sender_mails),
             last_read_at=max((m.internal_date for m in sender_mails if m.is_read and m.internal_date), default=None),
-            method=method,
+            method=method, target=uri,
         ))
     await proposals.create_proposal(second.id, proposals.Proposal(
         kind="unsubscribe", reason="Du hast sie seit über drei Monaten nicht geöffnet.", items=items))

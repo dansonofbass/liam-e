@@ -169,7 +169,8 @@ async def test_unsubscribe_results_and_manual_steps(store, monkeypatch):
     proposal.kind = "unsubscribe"
     for item in proposal.items:
         item.kind = "sender"
-    monkeypatch.setattr(proposals.newsletters, "sender_by_id", AsyncMock(return_value=SimpleNamespace(account_id=store.id)))
+        item.method = "none"
+    monkeypatch.setattr(proposals.newsletters, "sender_by_id", AsyncMock(return_value=SimpleNamespace(account_id=store.id, method="none", link=None)))
     monkeypatch.setattr(proposals.newsletters, "unsubscribe", AsyncMock(side_effect=[
         SimpleNamespace(status="done", archived_action_ids=["undo-1"]),
         SimpleNamespace(status="manual", link="https://newsletter.example.org/leave", archived_action_ids=["undo-2"]),
@@ -187,7 +188,7 @@ async def test_unsubscribe_results_and_manual_steps(store, monkeypatch):
 
 async def test_unsubscribe_without_link_is_manual_step(store, monkeypatch):
     proposal = proposals.Proposal(kind="unsubscribe", reason="Newsletter", items=[proposals.ProposalItem(id="sender|news@example.org", kind="sender", title="News", subtitle="", count=2, unread=0, last_read_at=None, method="none")], draft=None, irreversible=True, result=None)
-    monkeypatch.setattr(proposals.newsletters, "sender_by_id", AsyncMock(return_value=SimpleNamespace(account_id=store.id, method="none")))
+    monkeypatch.setattr(proposals.newsletters, "sender_by_id", AsyncMock(return_value=SimpleNamespace(account_id=store.id, method="none", link=None)))
     monkeypatch.setattr(proposals.newsletters, "unsubscribe", AsyncMock(return_value=SimpleNamespace(status="manual", link=None, archived_action_ids=["a1", "a2"])))
     row = await proposals.create_proposal("chat", proposal)
     await proposals.confirm(row.id, selected_ids=["sender|news@example.org"])
@@ -196,6 +197,53 @@ async def test_unsubscribe_without_link_is_manual_step(store, monkeypatch):
     assert [step.model_dump() for step in result.manual] == [{"id": "sender|news@example.org", "link": None}]
     assert result.failed == []
     assert result.undo_action_ids == ["a1", "a2"]
+
+
+@pytest.mark.parametrize("old,new,changed", [
+    ("mailto:old@example.org", "mailto:new@example.org", True),
+    ("https://example.org/leave", "mailto:new@example.org", True),
+    ("mailto:old@example.org", "mailto:old@example.org", False),
+])
+async def test_unsubscribe_binds_latest_sender_target(store, monkeypatch, old, new, changed):
+    from db.accessors.mail_message import NewsletterRow
+
+    latest = [old]
+    async def rows(*, account_ids=None):
+        return [NewsletterRow(store.id, "news@example.org", "News", len(latest), 0, None, f"<{latest[-1]}>", "", "[]")]
+
+    monkeypatch.setattr(proposals.newsletters.mail_message, "newsletter_senders", rows)
+    sender_id = f"{store.id}|news@example.org"
+    sender = await proposals.newsletters.sender_by_id(sender_id)
+    item = proposals.ProposalItem(id=sender_id, kind="sender", title="News", subtitle="", method=sender.method, target=sender.link)
+    row = await proposals.create_proposal("chat", proposals.Proposal(kind="unsubscribe", reason="Alt", items=[item]))
+    latest.append(new)
+    send_call = AsyncMock()
+    archive = AsyncMock(return_value=SimpleNamespace(id="undo"))
+    monkeypatch.setattr(proposals.send, "send_message", send_call)
+    monkeypatch.setattr(proposals.actions, "apply_action", archive)
+    monkeypatch.setattr(proposals.newsletters.mail_message, "message_ids_from_sender", AsyncMock(return_value=["mail"]))
+    await proposals.confirm(row.id, selected_ids=[sender_id])
+    result = proposals.proposal_view(row).result
+    if changed:
+        assert [(f.id, f.code) for f in result.failed] == [(sender_id, "item_changed")]
+        send_call.assert_not_awaited()
+        archive.assert_not_awaited()
+    else:
+        assert result.done == 1
+        send_call.assert_awaited_once()
+        archive.assert_awaited_once()
+
+
+async def test_unsubscribe_missing_stored_target_fails_closed(store, monkeypatch):
+    sender = SimpleNamespace(account_id=store.id, method="mailto", link=None)
+    monkeypatch.setattr(proposals.newsletters, "sender_by_id", AsyncMock(return_value=sender))
+    unsubscribe = AsyncMock()
+    monkeypatch.setattr(proposals.newsletters, "unsubscribe", unsubscribe)
+    item = proposals.ProposalItem(id="sender", kind="sender", title="News", subtitle="", method="mailto")
+    row = await proposals.create_proposal("chat", proposals.Proposal(kind="unsubscribe", reason="Alt", items=[item]))
+    await proposals.confirm(row.id, selected_ids=[item.id])
+    assert proposals.proposal_view(row).result.failed[0].code == "item_changed"
+    unsubscribe.assert_not_awaited()
 
 
 async def test_unexpected_failure_never_leaves_running(store, monkeypatch):

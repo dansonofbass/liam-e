@@ -1514,6 +1514,17 @@
             "title": "Subtitle",
             "type": "string"
           },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
           "title": {
             "title": "Title",
             "type": "string"

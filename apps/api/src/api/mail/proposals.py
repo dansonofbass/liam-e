@@ -28,6 +28,7 @@ class ProposalItem(BaseModel):
     unread: int | None = None
     last_read_at: datetime | None = None
     method: str | None = None
+    target: str | None = None
     selected: bool = True
 
 
@@ -175,6 +176,10 @@ async def _apply(item: ProposalItem, kind: ProposalKind, result: ProposalResult)
             account = await account_access.get_account(sender.account_id) if sender else None
             if sender is None or account is None:
                 fail("item_gone")
+                return
+            if (sender.method != item.method or (sender.link or None) != (item.target or None)
+                    or (item.method != "none" and not item.target)):
+                fail("item_changed")
                 return
             outcome = await newsletters.unsubscribe(sender, account)
             if outcome.status == "failed":

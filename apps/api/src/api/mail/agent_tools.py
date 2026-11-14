@@ -124,7 +124,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
                 s = await newsletters.sender_by_id(id)
                 if not s: continue
                 subtitle = unsubscribe_subtitle(s.total, s.address, s.method, s.link if s.method == 'mailto' else None)
-                items.append(proposals.ProposalItem(id=id, kind='sender', title=s.display_name, subtitle=subtitle, count=s.total, unread=s.unread, last_read_at=s.last_read_at, method=s.method))
+                items.append(proposals.ProposalItem(id=id, kind='sender', title=s.display_name, subtitle=subtitle, count=s.total, unread=s.unread, last_read_at=s.last_read_at, method=s.method, target=s.link))
             else:
                 m = await mail_message.get_message(id)
                 if not m or m.folder != 'INBOX' or (kind == 'mark_read' and m.is_read): continue

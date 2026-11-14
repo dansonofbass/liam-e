@@ -952,6 +952,10 @@ export type ProposalItem = {
      */
     subtitle: string;
     /**
+     * Target
+     */
+    target?: string | null;
+    /**
      * Title
      */
     title: string;

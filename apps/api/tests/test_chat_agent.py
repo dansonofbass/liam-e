@@ -141,7 +141,7 @@ async def test_system_prompt_contains_tone_and_safety_rules():
 @pytest.mark.parametrize('total,expected', [(1, '1 Mail'), (2314, '2.314 Mails')])
 async def test_unsubscribe_proposal_formats_mail_count(store, monkeypatch, total, expected):
     from api.mail.agent_tools import execute_tool, TurnContext
-    sender = NS(address='news@example.org', total=total, display_name='News', unread=0, last_read_at=None, method='post')
+    sender = NS(address='news@example.org', total=total, display_name='News', unread=0, last_read_at=None, method='post', link=None)
     monkeypatch.setattr(newsletters, 'sender_by_id', AsyncMock(return_value=sender))
     outcome = await execute_tool('propose_action', {'kind': 'unsubscribe', 'sender_ids': ['s'], 'reason': 'Alt'}, TurnContext('chat', None, date.today()))
     from api.mail.proposals import proposal_view
@@ -160,6 +160,7 @@ async def test_unsubscribe_proposal_describes_method(store, monkeypatch, method,
     monkeypatch.setattr(newsletters, 'sender_by_id', AsyncMock(return_value=sender))
     outcome = await execute_tool('propose_action', {'kind': 'unsubscribe', 'sender_ids': ['s'], 'reason': 'Alt'}, TurnContext('chat', None, date.today()))
     assert proposal_view(outcome.proposal_message).items[0].subtitle == expected
+    assert proposal_view(outcome.proposal_message).items[0].target == link
 
 
 async def test_mail_proposal_without_subject(store):
