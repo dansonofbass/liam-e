@@ -20,6 +20,6 @@ export function Sidebar({ collapsed = false, hideBrand = false, onConversations,
     <NavItem to="/mail" icon="inbox" label={de.shell.inbox} tip={de.shell.inboxTip} badge={data?.unread_total || undefined} collapsed={collapsed} />
     <NavItem to="/accounts" icon="at-sign" label={de.shell.accounts} tip={de.shell.accountsTip} collapsed={collapsed} />
     {collapsed ? <IconButton label={de.shell.conversations} icon="message-circle" onClick={onConversations} /> : <Conversations onNavigate={onNavigate} />}
-    {!collapsed && data && <small className="le-muted le-shell-status">{data.last_sync_at ? formatStand(count, new Date(data.last_sync_at)) : de.shell.accountCount(count)}</small>}
+    {!collapsed && data && <small className="le-muted le-shell-status"><span className="le-dot le-dot--accent" aria-hidden="true" />{data.last_sync_at ? formatStand(count, new Date(data.last_sync_at)) : de.shell.accountCount(count)}</small>}
   </div>
 }

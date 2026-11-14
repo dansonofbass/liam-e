@@ -55,7 +55,7 @@
 .le-dialog-actions { justify-content: flex-end; margin-top: var(--space-5); }
 
 .le-shell-sidebar { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.le-shell-status { flex-shrink: 0; margin-top: auto; padding: var(--space-3); }
+.le-shell-status { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; margin-top: auto; padding: var(--space-3); }
 .le-app:has(.le-chat-view) { height: 100dvh; overflow: hidden; }
 .le-sheet:has(.le-chat-view) { min-height: 0; }
 .le-page-fade { animation: le-page-enter 220ms cubic-bezier(.2, .8, .2, 1) both; flex: 1; min-height: 0; display: flex; flex-direction: column; }
