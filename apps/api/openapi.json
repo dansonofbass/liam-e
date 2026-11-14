@@ -1132,6 +1132,10 @@
             "title": "Body Text",
             "type": "string"
           },
+          "can_show_original": {
+            "title": "Can Show Original",
+            "type": "boolean"
+          },
           "can_unsubscribe": {
             "title": "Can Unsubscribe",
             "type": "boolean"
@@ -1238,9 +1242,28 @@
           "body_text",
           "attachments",
           "thread_id",
-          "can_unsubscribe"
+          "can_unsubscribe",
+          "can_show_original"
         ],
         "title": "MessageDetailOut",
+        "type": "object"
+      },
+      "MessageHeaderOut": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "MessageHeaderOut",
         "type": "object"
       },
       "MessageListItemOut": {
@@ -1330,6 +1353,32 @@
           "needs_reply"
         ],
         "title": "MessageListItemOut",
+        "type": "object"
+      },
+      "MessageOriginalOut": {
+        "properties": {
+          "headers": {
+            "items": {
+              "$ref": "#/components/schemas/MessageHeaderOut"
+            },
+            "title": "Headers",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "headers",
+          "source",
+          "truncated"
+        ],
+        "title": "MessageOriginalOut",
         "type": "object"
       },
       "MessagePageOut": {
@@ -2972,6 +3021,46 @@
           }
         },
         "summary": "Get a concise mail insight"
+      }
+    },
+    "/api/v1/mail/messages/{message_id}/original": {
+      "get": {
+        "description": "Fetch the original without storing it or changing its read status.",
+        "operationId": "mail_message_original",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOriginalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read the original headers and source of one message"
       }
     },
     "/api/v1/mail/summary": {
