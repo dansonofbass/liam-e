@@ -41,6 +41,22 @@ function Suggestions({ items, onSend }: { items: string[]; onSend: (text: string
   return <div className="le-chat-suggestions">{items.map(text => <Chip key={text} onClick={() => onSend(text)}>{text}</Chip>)}</div>
 }
 
+// The agent saves a proposal while it works and its answer at the end of the turn. Live, the card
+// follows the answer; the history shows it there too, so nothing jumps once the history reloads.
+export function turnOrder(messages: ChatMessageOut[]): ChatMessageOut[] {
+  const ordered: ChatMessageOut[] = []
+  let held: ChatMessageOut[] = []
+  const flush = () => { ordered.push(...held); held = [] }
+  for (const message of messages) {
+    if (message.role === 'proposal' || message.role === 'draft') { held.push(message); continue }
+    if (message.role === 'user') flush()
+    ordered.push(message)
+    if (message.role === 'assistant') flush()
+  }
+  flush()
+  return ordered
+}
+
 export function Conversation({ conversationId }: { conversationId: string }) {
   const navigate = useNavigate()
   const history = useQuery(historyQuery(conversationId))
@@ -52,7 +68,11 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const { showEnd, scrollToEnd } = useFollowScroll(scrollRef, [history.data, state, conversationId])
   const accounts = summary?.accounts ?? []
   const messages = history.data ?? []
+  const ordered = turnOrder(messages)
   const lastAssistant = messages.findLast(message => message.role === 'assistant')
+  // Follow-ups come after the last answer and the cards of its turn.
+  let suggestionsAfter = lastAssistant ? ordered.indexOf(lastAssistant) : -1
+  while (suggestionsAfter >= 0 && (ordered[suggestionsAfter + 1]?.role === 'proposal' || ordered[suggestionsAfter + 1]?.role === 'draft')) suggestionsAfter += 1
   const live = state.conversationId === conversationId && !(state.messageId && messages.some(message => message.id === state.messageId))
   const userIndex = state.userMessageId ? messages.findIndex(message => message.id === state.userMessageId) : -1
   const savedPartial = (state.phase === 'stopped' || state.phase === 'error') && userIndex >= 0 && messages.slice(userIndex + 1).some(message => message.role === 'assistant')
@@ -64,7 +84,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
     if (message.role === 'proposal' || message.role === 'draft') return <ProposalCard key={message.id} message={message} />
     if (message.role !== 'assistant') return null
-    return <><ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} />)}{message.id === lastAssistant?.id && !live && <Suggestions items={message.extras.suggestions ?? []} onSend={submitSuggestion} />}</>
+    return <><ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} />)}</>
   }
   const status = state.status?.code === 'searching' ? de.status.searching(state.status.count ?? 0) : state.status ? de.status[state.status.code] : null
   const liveModel = modelLabel(selectedModel?.conversationId === conversationId ? selectedModel.id : lastAssistant?.extras.model) ?? models.find(model => model.is_default)?.label
@@ -73,7 +93,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   return <div className="le-chat-view"><ChatHeader conversationId={conversationId}><ModelMenu key={conversationId} conversationId={conversationId} model={lastAssistant?.extras.model} onChange={id => setSelectedModel({ conversationId, id })} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
     {history.isPending && <p className="le-hint">{de.chat.loadingHistory}</p>}
     {history.isError && <Notice tone="danger" action={historyGone ? newConversation : { label: de.chat.retry, onClick: () => { void history.refetch() } }}>{historyGone ? de.errors.conversation_not_found : de.chat.historyError}</Notice>}
-    {messages.map(message => <div className="le-chat-entry" key={message.id}>{renderMessage(message)}</div>)}
+    {ordered.map((message, index) => <div className="le-chat-entry" key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={submitSuggestion} />}</div>)}
     {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={liveModel} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{de.chat.askAgain}</Button></div>}
       {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'conversation_not_found' ? newConversation : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}

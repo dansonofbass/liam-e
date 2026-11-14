@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import * as sdk from '../api/generated/sdk.gen'
 import type { ChatMessageOut, MailSummaryOut } from '../api/generated/types.gen'
 import { Route as StartRoute } from '../routes/_app/index'
-import { Conversation } from './Conversation'
+import { Conversation, turnOrder } from './Conversation'
 import { ChatSessionProvider } from './session'
 
 const originalFetch = globalThis.fetch
@@ -277,4 +277,25 @@ test('history renders safe text, model, mail account and only the latest suggest
   expect(requestBody.conversation_id).toBe('c')
   fireEvent.click(screen.getByRole('button', { name: 'Mail öffnen' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/mail/mail'))
+})
+
+const historyRow = (id: string, role: string, extras: ChatMessageOut['extras'] = {}): ChatMessageOut => ({ id, conversation_id: 'c', role, content: role === 'assistant' ? `Antwort ${id}` : role === 'user' ? `Frage ${id}` : '', created_at: '', extras, proposal: role === 'proposal' ? { kind: 'archive', reason: 'Erledigt.', items: [{ id: 'm', kind: 'mail', title: 'Rechnung', subtitle: 'Anna' }] } : null, proposal_status: role === 'proposal' ? 'pending' : '', stopped: false, tool_name: '' })
+
+test('turn order puts a proposal after the answer of its turn', () => {
+  const rows = ['u1:user', 'p1:proposal', 'a1:assistant', 'u2:user', 'a2:assistant', 'u3:user', 'p3:proposal'].map(entry => { const [id, role] = entry.split(':') as [string, string]; return historyRow(id, role) })
+  expect(turnOrder(rows).map(row => row.id)).toEqual(['u1', 'a1', 'p1', 'u2', 'a2', 'u3', 'p3'])
+  expect(turnOrder([])).toEqual([])
+})
+
+test('history shows answer, card and follow-ups in the same order as live', async () => {
+  const { client } = setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  await waitFor(() => expect(screen.queryByText('Unterhaltung wird geladen …')).toBeNull())
+  act(() => { client.setQueryData(['history', 'c'], [historyRow('u', 'user'), historyRow('p', 'proposal'), historyRow('a', 'assistant', { suggestions: ['Weiter fragen'] })]) })
+  const answer = await screen.findByText('Antwort a')
+  const card = screen.getByText('1 Mail archivieren?')
+  const chip = screen.getByRole('button', { name: 'Weiter fragen' })
+  expect(answer.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(card.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(screen.getAllByRole('button', { name: 'Weiter fragen' })).toHaveLength(1)
 })
