@@ -421,7 +421,8 @@ Anfang an mit.
   Rand.
 - Auf `mobile` und bei `pointer: coarse` trägt jede Mailzeile einen sichtbaren Button
   „Weitere Aktionen“; mit Maus erscheint auf `tablet` und `desktop` beim Hover die
-  Aktionsleiste (§7.2).
+  Aktionsleiste (§7.2). Sie liegt über dem Ende der Textspalte, damit Uhrzeit,
+  Dringend-Punkt und Anhang-Symbol sichtbar bleiben und ihr Tooltip erreichbar ist.
 - Eine Frist steht auf allen Breakpoints als Schild in `warm-soft` unter dem Vorschautext,
   auf `mobile` neben dem Konto-Tag.
 - Das Menü „Weitere Aktionen“ der geöffneten Mail enthält „Newsletter abbestellen“; es

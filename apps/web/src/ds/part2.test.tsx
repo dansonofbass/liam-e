@@ -76,6 +76,28 @@ test('a flagged mail row shows the warm urgency dot with a name and a tooltip', 
   expect(screen.queryByRole('img', { name: 'Dringend' })).toBeNull()
 })
 
+test('the urgency dot stays visible and reachable while the row shows its action bar', async () => {
+  // jsdom has no layout and no :hover; `is-hover` is the state class that shares the hover rules.
+  const style = document.createElement('style')
+  style.textContent = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  document.head.append(style)
+  try {
+    const { container } = render(<MailRow mail={{ ...mail, is_flagged: true, internal_date: '2026-11-14T08:57:00Z' }} selected={false} coarse={false} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+    const row = container.querySelector('.le-mailrow')!
+    const actions = container.querySelector('.le-mailrow-actions')!
+    row.classList.add('is-hover')
+    expect(getComputedStyle(actions).opacity).toBe('1')
+    expect(getComputedStyle(screen.getByRole('img', { name: 'Dringend' })).visibility).toBe('visible')
+    expect(getComputedStyle(container.querySelector('time')!).visibility).toBe('visible')
+    // The bar covers the end of the text column, not the column with time and marks.
+    expect(style.textContent).toMatch(/^\.le-mailrow-actions \{ position: absolute; z-index: 2; grid-column: 2 \/ 3; right: 0;/mu)
+    fireEvent.mouseEnter(screen.getByRole('img', { name: 'Dringend' }))
+    expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', 'Dringend')
+  } finally {
+    style.remove()
+  }
+})
+
 test('selected mail row is current and keeps its selected styling', async () => {
   const props = { mail, coarse: true, onOpen: () => {}, onArchive: () => {}, onToggleRead: () => {}, onTrash: () => {} }
   const { container, rerender } = render(<MailRow {...props} selected />)
