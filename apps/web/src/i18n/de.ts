@@ -33,6 +33,7 @@ export const de = {
     unreachable: 'Das Konto ist gerade nicht erreichbar. Versuch es gleich noch mal.',
     host_not_allowed: 'Der Server ist nicht erreichbar. Prüfe die Serveradresse.',
     provider_error: 'Der Anbieter antwortet gerade nicht. Versuch es gleich noch mal.',
+    provider_failed: 'Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.',
     oauth_denied: 'Die Anmeldung wurde abgebrochen. Versuch es bei Bedarf noch mal.',
     oauth_state_invalid: 'Die Anmeldung ist abgelaufen. Starte sie erneut.',
     oauth_exchange_failed: 'Die Anmeldung beim Anbieter hat nicht geklappt. Versuch es erneut.',
@@ -87,7 +88,11 @@ export const de = {
     item_gone: 'Die Mail ist nicht mehr da.', action_unsupported: 'Das geht bei diesem Konto nicht.',
   },
   assistant: { name: 'liam-e' },
-  inbox: { title: 'Posteingang', groups: { today: 'Heute', yesterday: 'Gestern', week: 'Diese Woche', older: 'Älter' } },
+  inbox: {
+    title: 'Posteingang', groups: { today: 'Heute', yesterday: 'Gestern', week: 'Diese Woche', older: 'Älter' },
+    done: { archive: (subject: string) => `„${subject}“ archiviert.`, trash: (subject: string) => `„${subject}“ in den Papierkorb gelegt.` },
+    doneShort: { archive: 'Mail archiviert.', trash: 'Mail in den Papierkorb gelegt.' },
+  },
   mail: { summary: 'Kurz gefasst', draftReply: 'Antwort entwerfen', askInChat: 'Im Chat fragen' },
   accounts: { title: 'Konten', connect: 'Konto verbinden' },
   quickActions: {
