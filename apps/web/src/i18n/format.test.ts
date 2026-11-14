@@ -8,6 +8,38 @@ test('formats list dates for today and yesterday in the requested time zone', ()
   expect(formatListDate(new Date('2026-11-12T08:57:00+01:00'), now, 'Europe/Berlin')).toBe('Gestern')
 })
 
+test('list dates follow DESIGN.md 2.5: time today, then Gestern, weekday this week, date, year only when not current', () => {
+  const tz = 'Europe/Berlin' // i18n-exempt
+  const now = new Date('2026-11-13T10:00:00+01:00') // a Friday
+  expect(formatListDate(new Date('2026-11-13T08:57:00+01:00'), now, tz)).toBe('08:57')
+  expect(formatListDate(new Date('2026-11-12T17:20:00+01:00'), now, tz)).toBe('Gestern')
+  expect(formatListDate(new Date('2026-11-11T17:20:00+01:00'), now, tz)).toBe('Mi.')
+  expect(formatListDate(new Date('2026-11-09T07:00:00+01:00'), now, tz)).toBe('Mo.')
+  expect(formatListDate(new Date('2026-11-08T23:59:00+01:00'), now, tz)).toBe('8.11.')
+  expect(formatListDate(new Date('2025-11-13T08:57:00+01:00'), now, tz)).toBe('13.11.2025')
+})
+
+test('list dates switch exactly at local midnight', () => {
+  const tz = 'Europe/Berlin' // i18n-exempt
+  const justAfterMidnight = new Date('2026-11-13T00:00:30+01:00')
+  expect(formatListDate(new Date('2026-11-12T23:59:59+01:00'), justAfterMidnight, tz)).toBe('Gestern')
+  expect(formatListDate(new Date('2026-11-13T00:00:00+01:00'), justAfterMidnight, tz)).toBe('00:00')
+  const justBeforeMidnight = new Date('2026-11-12T23:59:30+01:00')
+  expect(formatListDate(new Date('2026-11-12T00:00:00+01:00'), justBeforeMidnight, tz)).toBe('00:00')
+  expect(formatListDate(new Date('2026-11-11T23:59:59+01:00'), justBeforeMidnight, tz)).toBe('Gestern')
+})
+
+test('list dates use the weekday only inside the running week, also across the year boundary', () => {
+  const tz = 'Europe/Berlin' // i18n-exempt
+  const monday = new Date('2026-11-16T09:00:00+01:00')
+  expect(formatListDate(new Date('2026-11-15T20:00:00+01:00'), monday, tz)).toBe('Gestern')
+  expect(formatListDate(new Date('2026-11-14T20:00:00+01:00'), monday, tz)).toBe('14.11.')
+  const newYear = new Date('2026-01-01T09:00:00+01:00')
+  expect(formatListDate(new Date('2025-12-31T23:00:00+01:00'), newYear, tz)).toBe('Gestern')
+  expect(formatListDate(new Date('2025-12-30T23:00:00+01:00'), newYear, tz)).toBe('Di.')
+  expect(formatListDate(new Date('2025-12-28T23:00:00+01:00'), newYear, tz)).toBe('28.12.2025')
+})
+
 test('formats date-only deadlines without a time zone shift', () => {
   expect(formatDeadline('2026-11-21', new Date('2026-01-01'))).toBe('Sa., 21.11.')
   expect(formatDeadline('2027-01-08', new Date('2026-01-01'))).toBe('Fr., 8.1.2027')
