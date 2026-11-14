@@ -1,5 +1,15 @@
 import { expect, test } from 'bun:test'
-import { plural, formatTime, formatDayShort, formatRelativeDay, formatBytes, formatStand } from './format'
+import { plural, formatTime, formatDayShort, formatRelativeDay, formatListDate, formatDeadline, formatBytes, formatStand } from './format'
+
+test('formats list dates for today and yesterday in the requested time zone', () => {
+  const now = new Date('2026-11-13T10:00:00+01:00')
+  expect(formatListDate(new Date('2026-11-13T08:57:00+01:00'), now, 'Europe/Berlin')).toBe('08:57')
+  expect(formatListDate(new Date('2026-11-12T08:57:00+01:00'), now, 'Europe/Berlin')).toBe('Gestern')
+})
+
+test('formats date-only deadlines without a time zone shift', () => {
+  expect(formatDeadline('2026-11-21')).toBe('Sa., 21.11.')
+})
 
 test('formats German dates, numbers and plurals', () => {
   const tz = 'Europe/Berlin' // i18n-exempt

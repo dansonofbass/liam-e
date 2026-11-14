@@ -13,6 +13,11 @@ export function formatDayShort(d: Date, timeZone?: string): string {
   return new Intl.DateTimeFormat(locale, { timeZone, weekday: 'short', day: 'numeric', month: 'numeric' }).format(d)
 }
 
+export function formatDeadline(value: string): string {
+  const [year, month, day] = value.split('-').map(Number)
+  return formatDayShort(new Date(Date.UTC(year, month - 1, day)), 'UTC')
+}
+
 function calendarDay(d: Date, timeZone?: string): number {
   const parts = new Intl.DateTimeFormat(locale, { timeZone, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(d)
   const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value)
@@ -30,6 +35,10 @@ export function formatRelativeDay(d: Date, now: Date, timeZone?: string): string
   }
   const year = new Date(day * 86400000).getUTCFullYear() !== new Date(today * 86400000).getUTCFullYear() ? 'numeric' : undefined
   return new Intl.DateTimeFormat(locale, { timeZone, day: 'numeric', month: 'numeric', year }).format(d)
+}
+
+export function formatListDate(d: Date, now: Date, timeZone?: string): string {
+  return calendarDay(d, timeZone) === calendarDay(now, timeZone) ? formatTime(d, timeZone) : formatRelativeDay(d, now, timeZone)
 }
 
 export function formatBytes(n: number): string {
