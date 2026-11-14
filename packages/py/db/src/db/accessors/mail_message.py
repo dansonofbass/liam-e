@@ -79,7 +79,7 @@ async def search_messages(
     *, query: str = "", account_id: str = "", limit: int = 50
 ) -> list[MailMessage]:
     """Case-insensitive substring search over subject, sender, and body across accounts."""
-    stmt = select(MailMessage)
+    stmt = select(MailMessage).where(MailMessage.folder != "SPAM")
     if account_id:
         stmt = stmt.where(MailMessage.account_id == account_id)
     if query:
@@ -216,7 +216,7 @@ async def message_ids_from_sender(account_id: str, sender_address: str, *, folde
 
 
 async def unread_without_insight(*, since: datetime, limit: int, exclude_account_ids: Collection[str] = ()) -> list[MailMessage]:
-    stmt = select(MailMessage).where(MailMessage.is_read.is_(False), MailMessage.internal_date >= since, ~exists(select(MailInsight.id).where(MailInsight.message_id == MailMessage.id)))
+    stmt = select(MailMessage).where(MailMessage.folder != "SPAM", MailMessage.is_read.is_(False), MailMessage.internal_date >= since, ~exists(select(MailInsight.id).where(MailInsight.message_id == MailMessage.id)))
     if exclude_account_ids:
         stmt = stmt.where(MailMessage.account_id.not_in(list(exclude_account_ids)))
     stmt = stmt.order_by(MailMessage.internal_date.desc()).limit(limit)

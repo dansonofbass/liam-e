@@ -702,7 +702,7 @@ export type MessageActionIn = {
     /**
      * Kind
      */
-    kind: 'archive' | 'trash' | 'mark_read' | 'mark_unread' | 'restore';
+    kind: 'archive' | 'trash' | 'spam' | 'mark_read' | 'mark_unread' | 'restore';
 };
 
 /**

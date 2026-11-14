@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 
 from api.errors import refuse
 
-ActionKind = Literal["archive", "trash", "mark_read", "mark_unread", "restore"]
+ActionKind = Literal["archive", "trash", "spam", "mark_read", "mark_unread", "restore"]
 logger = logging.getLogger(__name__)
 
 
@@ -67,7 +67,7 @@ async def apply_action(message_id: str, kind: ActionKind) -> MailAction:
     message = await message_access.get_message(message_id)
     if message is None:
         raise refuse(404, "message_not_found", "Die Mail ist nicht mehr da.")
-    sources = {"archive": ("INBOX",), "trash": ("INBOX", "ARCHIVE"), "restore": ("ARCHIVE", "TRASH")}
+    sources = {"archive": ("INBOX",), "trash": ("INBOX", "ARCHIVE"), "spam": ("INBOX", "ARCHIVE"), "restore": ("ARCHIVE", "TRASH")}
     if kind in sources and message.folder not in sources[kind]:
         raise ActionUnsupportedError()
     account = await account_access.get_account(message.account_id)
@@ -75,7 +75,7 @@ async def apply_action(message_id: str, kind: ActionKind) -> MailAction:
         raise ActionUnsupportedError()
     backend = action_backends.backend_for(account)
     previous = {key: getattr(message, key) for key in ("folder", "is_read", "provider_uid", "labels_json")}
-    changes = {"folder": {"archive": "ARCHIVE", "trash": "TRASH", "restore": "INBOX"}[kind]} if kind in sources else {"is_read": kind == "mark_read"}
+    changes = {"folder": {"archive": "ARCHIVE", "trash": "TRASH", "spam": "SPAM", "restore": "INBOX"}[kind]} if kind in sources else {"is_read": kind == "mark_read"}
     optimistic_written = False
     try:
         await message_access.set_state(message_id, **changes)

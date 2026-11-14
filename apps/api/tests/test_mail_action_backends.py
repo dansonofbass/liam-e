@@ -264,6 +264,75 @@ async def test_connector_retry_repeats_idempotent_labels(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_spam_gmail_and_connector_revert(http, monkeypatch):
+    call = AsyncMock(return_value="{}")
+    monkeypatch.setattr(connectors, "call_write_tool", call)
+    previous = {"folder": "INBOX", "is_read": True, "labels_json": '["SPAM", "custom"]'}
+    for connector in (False, True):
+        backend = backends.LabelBackend(account("gmail" if connector else "google", "oauth2"), connector=connector)
+        result = await backend.apply(message(is_read=True, labels_json='["custom"]'), "spam")
+        assert json.loads(result["labels_json"]) == ["SPAM", "custom"]
+        await backend.revert(message(folder="SPAM", is_read=True, labels_json='["custom"]'), previous)
+        if connector:
+            assert [c.args[1:] for c in call.await_args_list] == [
+                ("label_message", {"messageId": "12", "labelIds": ["SPAM"]}),
+                ("unlabel_message", {"messageId": "12", "labelIds": ["INBOX"]}),
+                ("label_message", {"messageId": "12", "labelIds": ["INBOX"]}),
+                ("unlabel_message", {"messageId": "12", "labelIds": ["SPAM"]}),
+            ]
+        else:
+            assert [c[2] for c in http] == [
+                {"addLabelIds": ["SPAM"], "removeLabelIds": ["INBOX"]},
+                {"addLabelIds": ["INBOX"], "removeLabelIds": ["SPAM"]},
+            ]
+
+
+@pytest.mark.anyio
+async def test_graph_spam_and_revert(http):
+    backend = backends.backend_for(account("microsoft", "oauth2"))
+    assert await backend.apply(message(), "spam") == {"provider_uid": "new-id"}
+    row = message(folder="SPAM")
+    row.provider_uid = "new-id"
+    assert await backend.revert(row, {"folder": "INBOX", "is_read": False}) == {"provider_uid": "new-id"}
+    assert http[0][2] == {"destinationId": "junkemail"}
+    assert http[-1][1].endswith("/new-id/move") and http[-1][2] == {"destinationId": "inbox"}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("listing,capability,target", [
+    ([b'(\\Junk) "/" "Special"'], b"MOVE", "Special"),
+    ([b'() "/" "Junk E-Mail"'], b"UIDPLUS", "Junk E-Mail"),
+])
+async def test_imap_spam_and_revert(imap, listing, capability, target):
+    imap.list.return_value = ("OK", listing)
+    imap.capabilities = (capability,)
+    backend = backends.backend_for(account())
+    await backend.apply(message(), "spam")
+    command = "MOVE" if capability == b"MOVE" else "COPY"
+    imap.uid.assert_any_call(command, "12", f'"{target}"')
+    if command == "COPY":
+        imap.uid.assert_any_call("EXPUNGE", "12")
+    imap.uid.reset_mock()
+    result = await backend.revert(message(folder="SPAM"), {"folder": "INBOX", "is_read": False})
+    imap.uid.assert_any_call(command, "91", '"INBOX"')
+    assert result["provider_uid"] == "91"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("reason", ["folder", "capability", "message_id"])
+async def test_imap_spam_unsupported(imap, reason):
+    imap.list.return_value = ("OK", [] if reason == "folder" else [b'(\\Junk) "/" "Junk"'])
+    if reason == "capability":
+        imap.capabilities = ()
+    row = message()
+    if reason == "message_id":
+        row.rfc_message_id = ""
+    with pytest.raises(ActionUnsupportedError):
+        await backends.backend_for(account()).apply(row, "spam")
+    imap.uid.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_connector_trash_uses_label_or_reports_unsupported(monkeypatch):
     call = AsyncMock(return_value="{}")
     monkeypatch.setattr(connectors, "call_write_tool", call)

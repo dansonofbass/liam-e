@@ -148,6 +148,25 @@ async def test_sync_account_applies_changes_and_reports_new_ids(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_sync_moved_out_leaves_spam_untouched(monkeypatch, fake_store):
+    from unittest.mock import AsyncMock
+    from db.models.mail_message import MailMessage
+
+    fake_store.accounts["a"] = account()
+    fake_store.messages["m"] = MailMessage(id="m", account_id="a", provider_uid="old", folder="SPAM")
+    async def known(account_id, folder):
+        return {row.provider_uid: row.id for row in fake_store.messages.values() if row.account_id == account_id and row.folder == folder}
+    monkeypatch.setattr(sync.message_access, "known_uids", known)
+    monkeypatch.setattr(sync.sync_state_access, "get_state", AsyncMock(return_value=None))
+    monkeypatch.setattr(sync.sync_state_access, "save_state", AsyncMock())
+    monkeypatch.setattr(sync_imap, "fetch_changes", AsyncMock(return_value=sync_types.SyncChanges(moved_out=["old"], cursor="1")))
+    result = await sync.sync_account("a")
+    assert result.status == "ok"
+    assert fake_store.messages["m"].folder == "SPAM"
+    assert await sync.message_access.known_uids("a", "INBOX") == {}
+
+
+@pytest.mark.anyio
 async def test_connector_paginates_past_empty_threads(monkeypatch):
     calls = []
     async def call(provider, tool, args):

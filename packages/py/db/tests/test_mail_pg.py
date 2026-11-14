@@ -55,6 +55,21 @@ def test_unread_without_insight_can_exclude_accounts(pg_db):
     asyncio.run(run())
 
 
+def test_spam_excluded_from_search_and_insight_backlog(pg_db):
+    async def run():
+        from db.accessors import mail_message as m
+
+        now = datetime.now(UTC)
+        for folder in ("INBOX", "ARCHIVE", "TRASH", "SPAM"):
+            await m.upsert_message(account_id="a", folder=folder, provider_uid=folder, subject="needle", internal_date=now)
+        expected = {"INBOX", "ARCHIVE", "TRASH"}
+        assert {row.folder for row in await m.search_messages(query="needle")} == expected
+        assert {row.folder for row in await m.unread_without_insight(since=now - timedelta(days=1), limit=10)} == expected
+        assert {row.folder for row in await m.list_page()} == {"INBOX"}
+        assert await m.count_unread() == {"a": 1}
+    asyncio.run(run())
+
+
 def test_delete_duplicate_only_merges_same_identified_mail(pg_db):
     async def run():
         from db.accessors import mail_message as m

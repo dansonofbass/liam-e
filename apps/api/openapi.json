@@ -1083,6 +1083,7 @@
             "enum": [
               "archive",
               "trash",
+              "spam",
               "mark_read",
               "mark_unread",
               "restore"
