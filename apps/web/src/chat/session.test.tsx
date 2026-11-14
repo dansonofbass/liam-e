@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { de } from '../i18n/de'
 import { ChatSessionProvider, useChatSession } from './session'
 
-const originalFetch = globalThis.fetch
+const originalFetch = globalThis.fetch, originalMatchMedia = window.matchMedia
 let controller: ReadableStreamDefaultController<Uint8Array>, signal: AbortSignal
 function setup() {
   window.matchMedia = (() => ({ matches: true })) as unknown as typeof window.matchMedia
@@ -17,7 +17,7 @@ function setup() {
   fireEvent.click(screen.getByText('send'))
 }
 function frame(value: object) { controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`)) }
-afterEach(() => { cleanup(); globalThis.fetch = originalFetch })
+afterEach(() => { cleanup(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
 test('buffers cards until done and text', async () => {
   setup(); await act(async () => { frame({ event: 'start', conversation_id: 'c' }); frame({ event: 'delta', text: 'Hallo' }); frame({ event: 'mails', mails: [{}] }) })
   expect(screen.getByTestId('text').textContent).toBe('Hallo'); expect(screen.getByTestId('mails').textContent).toBe('0')
