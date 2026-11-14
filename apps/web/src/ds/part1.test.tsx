@@ -5,6 +5,7 @@ import { Button } from './Button'
 import { Menu } from './Menu'
 import { Drawer } from './Drawer'
 import { Avatar, initialsOf } from './Avatar'
+import { Notice } from './Notice'
 
 afterEach(() => { cleanup(); mock.restore() })
 
@@ -105,6 +106,16 @@ test('Escape in a menu inside the drawer closes only the menu and returns to its
   expect(close).not.toHaveBeenCalled()
   fireEvent.keyDown(trigger, { key: 'Escape' })
   expect(close).toHaveBeenCalledTimes(1)
+})
+
+test('every notice draws its symbol at the small 16 px size', () => {
+  render(<><Notice tone="success">Erledigt</Notice><Notice tone="danger">Fehler</Notice><Notice tone="info">Angehalten</Notice></>)
+  const symbols = [...screen.getAllByRole('status'), screen.getByRole('alert')].map(notice => notice.querySelector('svg.le-ico'))
+  expect(symbols).toHaveLength(3)
+  for (const symbol of symbols) {
+    expect(symbol?.classList.contains('le-ico--sm')).toBe(true)
+    expect(symbol?.getAttribute('width')).toBe('16')
+  }
 })
 
 test('avatar uses name initials or address fallback', () => {
