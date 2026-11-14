@@ -46,6 +46,18 @@ test('error notice retries the query', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Noch mal versuchen' }))
   await waitFor(() => expect(list.mock.calls.length).toBe(2))
 })
+test('archive toast replaces a failed refresh notice', async () => {
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ error: {}, response: { ok: false } })) as never)
+  spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'act', message: row }, response: { status: 200 } })) as never)
+  setup('row'); await screen.findByText('Termin')
+  fireEvent.click(screen.getByRole('button', { name: 'Jetzt abrufen' }))
+  expect(await screen.findByText('Die Mails konnten nicht abgerufen werden. Versuch es gleich noch mal.')).toBeTruthy()
+  fireEvent.keyDown(document.body, { key: 'j' }); fireEvent.keyDown(document.body, { key: 'e' })
+  expect(await screen.findByText('„Termin“ archiviert.')).toBeTruthy()
+  expect(screen.getByText('Rückgängig')).toBeTruthy()
+  expect(screen.queryByText('Die Mails konnten nicht abgerufen werden. Versuch es gleich noch mal.')).toBeNull()
+})
+
 test('shows six placeholder rows while loading', async () => {
   const { view } = setup('loading')
   await screen.findByText('Mails werden geladen …')

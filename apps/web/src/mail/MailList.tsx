@@ -23,12 +23,11 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const breakpoint = useBreakpoint(), coarse = useCoarsePointer()
   const summary = useQuery(summaryQuery())
   const messages = useInfiniteQuery(messagesInfiniteQuery(toMessageFilters(search)))
-  const { run, undo, toast } = useMailActions()
+  const { run, undo, notify, toast } = useMailActions()
   const [localSelected, setLocalSelected] = useState<string | undefined>()
   const [searchOpen, setSearchOpen] = useState(Boolean(search.q))
   const [value, setValue] = useState(search.q ?? '')
   const [syncing, setSyncing] = useState(false)
-  const [syncError, setSyncError] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null), sentinel = useRef<HTMLDivElement>(null)
   const rowRefs = useRef(new Map<string, HTMLLIElement>())
   const selected = messageId ?? localSelected
@@ -90,12 +89,12 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   })
   const refresh = async () => {
     if (syncing) return
-    setSyncing(true); setSyncError(false)
+    setSyncing(true)
     try {
       const result = await mailSyncAll({ body: {} })
       if (result.error || !result.response?.ok) throw new Error('sync failed')
       void client.invalidateQueries({ queryKey: ['summary'] }); void client.invalidateQueries({ queryKey: ['messages'] })
-    } catch { setSyncError(true) } finally { setSyncing(false) }
+    } catch { notify(de.inbox.refreshError) } finally { setSyncing(false) }
   }
   const buttons = <><IconButton icon="search" label={de.inbox.search} tip={de.inbox.searchTip} size={breakpoint === 'mobile' ? 'lg' : 'md'} onClick={() => { setSearchOpen(true); searchRef.current?.querySelector('input')?.focus() }} /><IconButton icon="refresh-cw" label={de.inbox.refresh} tip={de.inbox.refreshTip} size={breakpoint === 'mobile' ? 'lg' : 'md'} disabled={syncing} onClick={() => { void refresh() }} /></>
   const time = summary.data?.last_sync_at ? formatTime(new Date(summary.data.last_sync_at)) : undefined
@@ -116,6 +115,6 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
       {groups.map(group => <div key={group.label}><div className="le-side-label">{group.label}</div><ul className="le-maillist" aria-label={group.label}>{group.items.map(mail => <li key={mail.id} ref={node => { if (node) rowRefs.current.set(mail.id, node); else rowRefs.current.delete(mail.id) }}><MailRow mail={mail} selected={selected === mail.id} coarse={coarse} accountLabel={accounts.find(account => account.id === mail.account_id)?.display_name} onOpen={() => { setLocalSelected(mail.id); onOpen(mail.id) }} onArchive={() => remove(mail, 'archive')} onToggleRead={() => toggleRead(mail)} onTrash={() => remove(mail, 'trash')} /></li>)}</ul></div>)}
       <div ref={sentinel} />{messages.isFetchingNextPage && <p className="le-hint">{de.inbox.loadingMore}</p>}
     </div>
-    {(syncError || toast) && <div className="le-inbox-toast">{syncError ? <Notice tone="danger">{de.inbox.refreshError}</Notice> : toast && <Notice tone={toast.tone} action={toast.undoable ? { label: de.proposal.undo, onClick: () => { void undo() } } : undefined}><span>{toast.text}</span></Notice>}</div>}
+    {toast && <div className="le-inbox-toast"><Notice tone={toast.tone} action={toast.undoable ? { label: de.proposal.undo, onClick: () => { void undo() } } : undefined}><span>{toast.text}</span></Notice></div>}
   </>
 }

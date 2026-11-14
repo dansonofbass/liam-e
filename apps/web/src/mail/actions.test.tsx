@@ -21,9 +21,10 @@ function setup(mobile = false) {
   const time = makeClock()
   function Harness() {
     const { data } = useQuery<InfiniteData<MessagePageOut>>({ queryKey: key, queryFn: async () => client.getQueryData<InfiniteData<MessagePageOut>>(key)!, enabled: false })
-    const { run, undo, toast } = useMailActions({ clock: time.clock })
+    const { run, undo, notify, toast } = useMailActions({ clock: time.clock })
     return <><div>{data?.pages.flatMap(page => page.items).map(row => <div key={row.id}>{row.subject}:{String(row.is_read)}</div>)}</div>
       <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'archive') }}>archive 2</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button>
+      <button onClick={() => notify('refresh failed')}>notify</button><button onClick={() => { void undo() }}>force undo</button>
       {toast && <div role="status" data-tone={toast.tone}>{toast.text}{toast.undoable && <button onClick={() => { void undo() }}>Rückgängig</button>}</div>}</>
   }
   render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
@@ -50,6 +51,21 @@ test('second action replaces toast and its timer', async () => {
   fireEvent.click(screen.getByText('trash 2')); await screen.findByText('„Zweite“ in den Papierkorb gelegt.')
   act(() => time.advance(5000)); expect(screen.getByRole('status')).toBeTruthy()
   act(() => time.advance(5000)); expect(screen.queryByRole('status')).toBeNull()
+})
+
+test('notification replaces the undo target and expires after ten seconds', async () => {
+  success()
+  const undo = spyOn(sdk, 'mailActionsUndo')
+  const time = setup()
+  fireEvent.click(screen.getByText('archive 1')); await screen.findByText('Rückgängig')
+  act(() => time.advance(5000))
+  fireEvent.click(screen.getByText('notify'))
+  expect(screen.getByRole('status').getAttribute('data-tone')).toBe('danger')
+  expect(screen.getByText('refresh failed')).toBeTruthy()
+  expect(screen.queryByText('Rückgängig')).toBeNull()
+  fireEvent.click(screen.getByText('force undo')); expect(undo).not.toHaveBeenCalled()
+  act(() => time.advance(9999)); expect(screen.getByRole('status')).toBeTruthy()
+  act(() => time.advance(1)); expect(screen.queryByRole('status')).toBeNull()
 })
 
 test('undo sends the action id and restores the row', async () => {

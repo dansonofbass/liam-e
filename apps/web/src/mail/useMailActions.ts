@@ -113,5 +113,9 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       if (target.current === selected) show({ tone: 'danger', text: de.proposal.requestError, undoable: false })
     } finally { undoPending.current = false }
   }
-  return { run, undo, toast }
+  const notify = (text: string) => {
+    ++sequence.current
+    show({ tone: 'danger', text, undoable: false })
+  }
+  return { run, undo, notify, toast }
 }
