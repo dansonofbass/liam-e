@@ -26,7 +26,9 @@ export function MailView({ id }: { id: string }) {
   const { run } = useMailActionsContext()
   const { state, send, retry } = useChatSession()
   const [started, setStarted] = useState(false)
-  const [original, setOriginal] = useState(false)
+  const [original, setOriginal] = useState<string | null>(null)
+  // The dialog belongs to the mail it was opened for: moving to another mail (browser back) closes it.
+  if (original !== null && original !== id) setOriginal(null)
   const opened = useRef(new Set<string>())
   const busy = state.phase === 'working' || state.phase === 'streaming'
   const data = message.data
@@ -65,7 +67,7 @@ export function MailView({ id }: { id: string }) {
     <IconButton label={de.controls.archive} icon="archive" size={iconSize} shortcut={split ? 'E' : undefined} onClick={() => remove('archive')} />
     <IconButton label={data.is_read ? de.controls.markUnread : de.controls.markRead} icon="mail-open" size={iconSize} shortcut={split ? 'U' : undefined} onClick={() => { void run(id, data.is_read ? 'mark_unread' : 'mark_read') }} />
     <IconButton label={de.controls.trash} icon="trash-2" size={iconSize} tone="danger" shortcut={split ? 'Entf' : undefined} onClick={() => remove('trash')} />
-    <Menu trigger={props => <IconButton {...props} label={de.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: de.mail.forward, icon: 'forward', onSelect: () => start(de.mail.forwardPrompt) }, { label: de.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : de.mail.unsubscribeUnavailable, onSelect: () => start(de.mail.unsubscribePrompt) }, { label: de.mail.spam, icon: 'ban', onSelect: () => remove('spam') }, { label: de.mail.original, icon: 'file-code', disabled: !data.can_show_original, hint: data.can_show_original ? undefined : de.mail.originalUnavailable, onSelect: () => setOriginal(true) }]} />
+    <Menu trigger={props => <IconButton {...props} label={de.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: de.mail.forward, icon: 'forward', onSelect: () => start(de.mail.forwardPrompt) }, { label: de.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : de.mail.unsubscribeUnavailable, onSelect: () => start(de.mail.unsubscribePrompt) }, { label: de.mail.spam, icon: 'ban', onSelect: () => remove('spam') }, { label: de.mail.original, icon: 'file-code', disabled: !data.can_show_original, hint: data.can_show_original ? undefined : de.mail.originalUnavailable, onSelect: () => setOriginal(id) }]} />
   </>
   const chatButtons = <>
     <Tooltip content={de.mail.askTip}><Button variant="secondary" icon="message-circle" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{de.mail.askInChat}</Button></Tooltip>
@@ -84,7 +86,7 @@ export function MailView({ id }: { id: string }) {
         {data.attachments.length > 0 && <div className="le-mail-attachments">{data.attachments.map((attachment, index) => <span key={index} className="le-mail-attachment"><Icon name="paperclip" size="sm" /><span className="le-mail-attachment-name">{attachment.name}</span><span className="le-mail-attachment-size">{formatBytes(attachment.size)}</span></span>)}</div>}
       </article>}
     </div>
-    {original && <OriginalDialog id={id} onClose={() => setOriginal(false)} />}
+    {original === id && <OriginalDialog id={id} onClose={() => setOriginal(null)} />}
     {!split && <ActionToast inline />}
     {!split && data && <div className="le-mail-bottom">{chatButtons}</div>}
   </div>

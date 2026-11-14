@@ -415,6 +415,21 @@ test('each mail gets its own original', async () => {
   expect(fetchOriginal.mock.calls.map(([options]) => (options as { path: { message_id: string } }).path.message_id)).toEqual(['m1', 'm2'])
 })
 
+test('moving to another mail closes the dialog, fetches nothing for that mail and does not reopen on the way back', async () => {
+  const fetchOriginal = spyOn(sdk, 'mailMessageOriginal').mockImplementation((async () => ({ error: { detail: { code: 'provider_failed' } }, response: { status: 502 } })) as never)
+  const { router } = setup()
+  const { dialog } = await openOriginal()
+  ;(await within(dialog).findByRole('button', { name: 'Noch mal versuchen' })).focus()
+  await act(async () => { await router.navigate({ to: '/mail/$messageId', params: { messageId: 'm2' } }) })
+  await screen.findByRole('heading', { name: 'Zweite' })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  await act(async () => { await router.navigate({ to: '/mail/$messageId', params: { messageId: 'm1' } }) })
+  await screen.findByRole('heading', { name: 'Termin' })
+  await settle()
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(fetchOriginal.mock.calls.map(([options]) => (options as { path: { message_id: string } }).path.message_id)).toEqual(['m1'])
+})
+
 test('where the original cannot be fetched the entry is disabled, explains why and opens nothing', async () => {
   const fetchOriginal = spyOn(sdk, 'mailMessageOriginal')
   mail.can_show_original = false

@@ -437,6 +437,7 @@ Anfang an mit.
   Die Mail verschwindet sofort aus der Liste, und der Hinweis bietet „Rückgängig“.
   „Original anzeigen“ öffnet einen Dialog mit Kopfzeilen und Quelltext, nur lesend und in
   der normalen Schrift; er holt beides erst beim Öffnen vom Anbieter und speichert nichts.
+  Er gehört zu seiner Mail: Wechselt die Mail, etwa über „Zurück“ im Browser, schließt er.
   Bei Konten, die das Original nicht liefern (Connector), ist der Eintrag gesperrt, mit
   Hinweis. Das Menü bleibt im Lesebereich: Unter `desktop` hängt es rechtsbündig an seinem
   Knopf, in der geteilten Ansicht am Anfang der Leiste unter deren erster Zeile, weil der
