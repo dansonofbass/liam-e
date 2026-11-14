@@ -102,6 +102,7 @@ export const de = {
   },
   mail: {
     summary: 'Kurz gefasst', draftReply: 'Antwort entwerfen', askInChat: 'Im Chat fragen',
+    insightLabel: 'Zusammenfassung von liam-e', insightLoading: 'Kurz gefasst wird geladen …', insightError: 'Kurz gefasst ist gerade nicht verfügbar.',
     back: 'Zurück zum Posteingang', toInbox: 'Zum Posteingang', more: 'Weitere Aktionen',
     loading: 'Mail wird geladen …', loadError: 'Die Mail konnte nicht geladen werden. Versuch es gleich noch mal.',
     askTip: 'Öffnet den Chat mit dieser Mail als Bezug', draftTip: 'Schreibt einen Entwurf im Chat. Gesendet wird erst, wenn du zustimmst.',

@@ -80,6 +80,13 @@
 .le-mail-sender { flex: 1; min-width: 0; }
 .le-mail-sender > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .le-mail-header time { flex-shrink: 0; }
+.le-insight { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-soft); min-width: 0; }
+.le-insight .le-ai-meta { min-width: 0; flex-wrap: wrap; }
+.le-insight-points { margin: 0; padding-left: var(--space-5); overflow-wrap: anywhere; }
+.le-insight .le-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.le-insight-placeholder { display: flex; flex-direction: column; gap: var(--space-2); }
+.le-insight-placeholder-line { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface)); }
+.le-insight-placeholder-line:last-child { width: 60%; }
 .le-mail-text { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 64ch; }
 .le-mail-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .le-mail-bottom { display: flex; gap: var(--space-2); border-top: 1px solid var(--line); padding: var(--space-2) var(--space-3) max(var(--space-3), env(safe-area-inset-bottom)); }

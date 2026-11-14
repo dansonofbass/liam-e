@@ -9,6 +9,7 @@ import { de } from '../i18n/de'
 import { formatBytes, formatMailTime } from '../i18n/format'
 import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
 import { toMessageFilters, type InboxSearch } from './filters'
+import { InsightBox } from './InsightBox'
 import { useMailActionsContext } from './useMailActions'
 
 function notFound(error: Error): boolean {
@@ -78,7 +79,7 @@ export function MailView({ id }: { id: string }) {
       {message.isPending && <><span className="le-sr" role="status">{de.mail.loading}</span><div className="le-mail-placeholder" aria-hidden="true"><div className="le-mail-placeholder-head"><span /><div><span /><span /></div></div><span /><span /><span /><span /></div></>}
       {message.isError && <div className="le-mail-error">{notFound(message.error) ? <Notice tone="danger" action={{ label: de.mail.toInbox, onClick: back }}>{de.proposalErrors.item_gone}</Notice> : <><Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void message.refetch() } }}>{de.mail.loadError}</Notice><Button variant="secondary" className="le-mail-to-inbox" onClick={back}>{de.mail.toInbox}</Button></>}</div>}
       {data && <article className="le-mail-article"><h1 className="title">{data.subject}</h1><div className="le-mail-header"><Avatar name={data.sender_name || data.sender_address} address={data.sender_address} colorIndex={data.color_index} size="lg" /><div className="le-mail-sender"><div className="body-strong">{data.sender_name || data.sender_address}</div>{breakpoint !== 'mobile' && <div className="small le-muted le-mail-address">{data.to.length ? de.mail.addressTo(data.sender_address, data.to.join(', ')) : data.sender_address}</div>}</div>{account && <Tag tone="on-surface" dot={data.color_index}>{account.display_name}</Tag>}{data.internal_date && <time className="small le-muted le-num" dateTime={data.internal_date}>{formatMailTime(new Date(data.internal_date), new Date())}</time>}</div>
-        {/* Insight belongs here, above the mail text. */}
+        <InsightBox id={id} onFollowup={start} />
         {data.body_text && <div className="le-mail-text body">{data.body_text}</div>}
         {data.attachments.length > 0 && <div className="le-mail-attachments">{data.attachments.map((attachment, index) => <Tag key={index} icon="paperclip">{de.mail.attachment(attachment.name, formatBytes(attachment.size))}</Tag>)}</div>}
       </article>}

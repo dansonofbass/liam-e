@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useParams } from '@tanstack/react-router'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
+import type { InsightOut } from '../api/generated/types.gen'
 import { ChatSessionProvider } from '../chat/session'
 import { Route as MailRoute } from '../routes/_app/mail'
 import { inboxSearchSchema } from './filters'
@@ -10,7 +11,7 @@ import { MailView } from './MailView'
 
 const originalMatchMedia = window.matchMedia, originalFetch = globalThis.fetch
 const mail = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', to: ['ich@example.com'], cc: [], subject: 'Termin', snippet: '', body_text: '<b>fett</b>', internal_date: null, deadline: null, has_attachments: true, attachments: [{ name: 'Abrechnung_2025.pdf', size: 217088, content_type: 'application/pdf' }], is_flagged: false, is_read: true, needs_reply: false, can_unsubscribe: true, thread_id: null }
-function setup({ mobile = false, unread = false, missing = false, loading = false, failed = false, path = '/mail/m1', stream = false }: { mobile?: boolean; unread?: boolean; missing?: boolean; loading?: boolean; failed?: boolean; path?: string; stream?: boolean } = {}) {
+function setup({ mobile = false, unread = false, missing = false, loading = false, failed = false, path = '/mail/m1', stream = false, insight }: { mobile?: boolean; unread?: boolean; missing?: boolean; loading?: boolean; failed?: boolean; path?: string; stream?: boolean; insight?: () => Promise<{ data: InsightOut }> } = {}) {
   window.matchMedia = ((q: string) => ({ matches: !mobile && (q.includes('1024px') || q.includes('640px')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   let request: Record<string, unknown> | undefined
   globalThis.fetch = ((_url: unknown, init: RequestInit) => {
@@ -18,6 +19,7 @@ function setup({ mobile = false, unread = false, missing = false, loading = fals
     return Promise.resolve(new Response(new ReadableStream({ start(controller) { if (stream) controller.enqueue(new TextEncoder().encode('event: start\ndata: {"event":"start","conversation_id":"c1","user_message_id":"u1"}\n\n')) } })))
   }) as typeof fetch
   const rows = [{ ...mail, is_read: !unread }, { ...mail, id: 'm2', subject: 'Zweite', is_read: !unread }]
+  const getInsight = spyOn(sdk, 'mailMessageInsight').mockImplementation((insight ?? (async () => ({ data: { points: [], deadline: null, followups: [], needs_reply: false, model: '', created_at: '' } }))) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' }], unread_total: unread ? 1 : 0, last_sync_at: null } })) as never)
   spyOn(sdk, 'mailMessagesList').mockImplementation((async () => ({ data: { items: rows, next_cursor: null } })) as never)
   const get = spyOn(sdk, 'mailMessageGet').mockImplementation((async (options: { path: { message_id: string } }) => { if (missing) throw { detail: { code: 'message_not_found' } }; if (failed) throw new Error('unavailable'); if (loading) return await new Promise(() => {}); return { data: rows.find(row => row.id === options.path.message_id) ?? mail } }) as never)
@@ -31,7 +33,7 @@ function setup({ mobile = false, unread = false, missing = false, loading = fals
   const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: () => <div>Chat</div> })
   const router = createRouter({ routeTree: root.addChildren([home, inbox.addChildren([index, detail]), chat]), history: createMemoryHistory({ initialEntries: [path] }) })
   const view = render(<RouterProvider router={router} />)
-  return { client, router, view, action, get, request: () => request }
+  return { client, router, view, action, get, getInsight, request: () => request }
 }
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia; globalThis.fetch = originalFetch })
 
@@ -149,4 +151,54 @@ test('other load errors can retry or return to the filtered inbox', async () => 
   fireEvent.click(await screen.findByRole('button', { name: 'Zum Posteingang' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
   expect(router.state.location.searchStr).toContain('unread=true')
+})
+
+
+const insightData: InsightOut = { points: ['Erster Punkt', '**fett**', 'Dritter Punkt', 'Vierter Punkt'], deadline: '2026-11-20', followups: ['Was ist wichtig?', 'Termin prüfen', 'Dritter Vorschlag'], needs_reply: false, model: 'm', created_at: '' }
+
+test('insight shows loading then up to three literal points and a deadline', async () => {
+  let finish!: (value: { data: InsightOut }) => void
+  const { view } = setup({ insight: () => new Promise(resolve => { finish = resolve }) })
+  const section = await screen.findByRole('region', { name: 'Zusammenfassung von liam-e' })
+  expect(section.getAttribute('aria-busy')).toBe('true')
+  expect(within(section).getByText('Kurz gefasst wird geladen …')).toBeTruthy()
+  expect(section.querySelectorAll('[aria-hidden="true"] .le-insight-placeholder-line')).toHaveLength(3)
+  await act(async () => { finish({ data: insightData }) })
+  expect(await within(section).findByText('Erster Punkt')).toBeTruthy()
+  expect(within(section).getByText('**fett**')).toBeTruthy()
+  expect(section.querySelector('strong')).toBeNull()
+  expect(within(section).getByText('Frist Fr., 20.11.')).toBeTruthy()
+  expect(within(section).queryByText('Vierter Punkt')).toBeNull()
+  expect(within(section).queryByText('Dritter Vorschlag')).toBeNull()
+  expect(view.container.querySelector('.le-mail-header')?.nextElementSibling).toBe(section)
+  expect(section.nextElementSibling?.classList.contains('le-mail-text')).toBe(true)
+})
+
+test('insight error shows quiet fallback without retry', async () => {
+  const { getInsight } = setup({ insight: async () => { throw { detail: { code: 'insight_unavailable' }, status: 503 } } })
+  expect(await screen.findByText('Kurz gefasst ist gerade nicht verfügbar.')).toBeTruthy()
+  expect(getInsight.mock.calls.length).toBe(1)
+})
+
+test('insight followup sends context and disables chips while working', async () => {
+  const { request } = setup({ insight: async () => ({ data: insightData }) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Was ist wichtig?' }))
+  await waitFor(() => expect(request()).toMatchObject({ text: 'Was ist wichtig?', context_message_id: 'm1' }))
+  expect(request()?.account_id).toBeUndefined()
+  expect((screen.getByRole('button', { name: 'Termin prüfen' }) as HTMLButtonElement).disabled).toBe(true)
+})
+
+test('empty insight renders no box', async () => {
+  const { getInsight } = setup()
+  await screen.findByRole('heading', { name: 'Termin' })
+  await waitFor(() => expect(getInsight.mock.calls.length).toBe(1))
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Zusammenfassung von liam-e' })).toBeNull())
+})
+
+
+test('insight followup opens the conversation when the turn starts', async () => {
+  const { router, request } = setup({ stream: true, insight: async () => ({ data: insightData }) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Was ist wichtig?' }))
+  await waitFor(() => expect(request()).toMatchObject({ text: 'Was ist wichtig?', context_message_id: 'm1' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c1'))
 })
