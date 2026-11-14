@@ -276,6 +276,14 @@ def test_graph_parse_reads_reply_to():
     assert json.loads(sync_graph.parse_message(fixture("graph_message.json"), folder="INBOX", max_body_chars=100)["reply_to_json"]) == []
 
 
+def test_graph_parse_falls_back_to_the_reply_to_header_without_reply_to_field():
+    # An old delta cursor's projection has no replyTo, but it still selects internetMessageHeaders.
+    message = {"id": "1", "internetMessageHeaders": [{"name": "Reply-To", "value": "Help <help@example.org>, other@example.org"}]}
+    assert json.loads(sync_graph.parse_message(message, folder="INBOX", max_body_chars=100)["reply_to_json"]) == ["help@example.org", "other@example.org"]
+    selected = {**message, "replyTo": [{"emailAddress": {"address": "field@example.org"}}]}
+    assert json.loads(sync_graph.parse_message(selected, folder="INBOX", max_body_chars=100)["reply_to_json"]) == ["field@example.org"]
+
+
 def test_connector_parse_has_no_reply_to():
     parsed = sync_connector.parse_message(fixture("connector_thread.json")["messages"][0], thread_id="1", folder="INBOX", max_body_chars=100)
     assert "reply_to_json" not in parsed

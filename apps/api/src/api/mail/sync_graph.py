@@ -10,7 +10,7 @@ from db.models.mail_account import MailAccount
 
 from api.mail import service
 from api.mail.providers import GRAPH_API
-from api.mail.sync_types import SyncChanges, attachments, common, strip_html
+from api.mail.sync_types import SyncChanges, addresses, attachments, common, strip_html
 
 
 def _safe_delta_url(url: str) -> bool:
@@ -99,9 +99,11 @@ def parse_message(message: dict[str, Any], *, folder: str, max_body_chars: int) 
     def recipients(key: str) -> str:
         return json.dumps([r.get('emailAddress', {}).get('address', '') for r in message.get(key) or [] if r.get('emailAddress', {}).get('address')])
     received = message.get('receivedDateTime')
+    # A delta cursor from before replyTo joined $select keeps its old projection; its headers still carry Reply-To.
+    reply_to = recipients('replyTo') if 'replyTo' in message else addresses(headers.get('reply-to', ''))
     return {**common(sender, headers), 'folder': folder, 'provider_uid': message['id'],
             'thread_id': message.get('conversationId', ''), 'subject': message.get('subject') or '',
-            'sender': sender, 'recipients_json': recipients('toRecipients'), 'cc_json': recipients('ccRecipients'), 'reply_to_json': recipients('replyTo'),
+            'sender': sender, 'recipients_json': recipients('toRecipients'), 'cc_json': recipients('ccRecipients'), 'reply_to_json': reply_to,
             'snippet': ' '.join(text.split())[:500], 'body_text': text,
             'internal_date': datetime.fromisoformat(received) if received else None,
             'has_attachments': bool(message.get('hasAttachments')), 'attachments_json': json.dumps(attachments(message.get('attachments') or [])),
