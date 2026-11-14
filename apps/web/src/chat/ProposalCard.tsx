@@ -77,7 +77,11 @@ function Result({ message, proposal, clock }: { message: ChatMessageOut; proposa
       if (outcome.expired.length || outcome.failed.length || outcome.skipped.length) setError(true)
       else { expire(); setUndone(true) }
       void client.invalidateQueries({ queryKey: ['summary'] })
-    } catch { setError(true) } finally { pending.current = false; setBusy(false) }
+    } catch { setError(true) } finally {
+      void client.invalidateQueries({ queryKey: ['messages'] })
+      void client.invalidateQueries({ queryKey: ['message'] })
+      pending.current = false; setBusy(false)
+    }
   }
   if (undone) return <Notice tone="info">{de.proposal.undone}</Notice>
   const text = proposal.kind === 'unsubscribe' ? de.proposal.results.unsubscribe(result?.done ?? 0, ids.length) : de.proposal.results[proposal.kind](result?.done ?? 0)
@@ -99,7 +103,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   const pending = useRef(false)
   const current = updated?.id === message.id ? updated : message
   const proposal = current.proposal
-  const apply = async (operation: () => Promise<ChatMessageOut>) => {
+  const apply = async (operation: () => Promise<ChatMessageOut>, confirm = false) => {
     if (pending.current) return
     pending.current = true; setBusy(true); setError(undefined)
     try {
@@ -108,6 +112,10 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
       client.setQueryData<ChatMessageOut[]>(['history', current.conversation_id], rows => rows?.map(row => row.id === result.id ? result : row))
       void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
       void client.invalidateQueries({ queryKey: ['summary'] })
+      if (confirm) {
+        void client.invalidateQueries({ queryKey: ['messages'] })
+        void client.invalidateQueries({ queryKey: ['message'] })
+      }
     } catch (failure) { setError(errorCode(failure instanceof Error ? failure.cause : failure) ?? 'action_failed') } finally { pending.current = false; setBusy(false) }
   }
   if (!proposal) return null
@@ -118,5 +126,5 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   const saved = cardState(client, current.id)
   const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${de.proposal.manualSubtitle}` } : item)
   const irreversibleNote = proposal.irreversible ? proposal.kind === 'unsubscribe' ? de.proposal.irreversibleUnsubscribe : proposal.kind === 'send' ? de.proposal.irreversibleSend : undefined : undefined
-  return <><ConfirmCard key={current.id} title={de.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={de.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} deselected={saved.deselected ?? new Set<string>()} onDeselectedChange={value => { saved.deselected = value; refresh(n => n + 1) }} body={saved.body ?? proposal.draft?.body ?? ''} onBodyChange={value => { saved.body = value; refresh(n => n + 1) }} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true }))) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger">{failureText(error, proposal.kind)}</Notice>}</>
+  return <><ConfirmCard key={current.id} title={de.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={de.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} deselected={saved.deselected ?? new Set<string>()} onDeselectedChange={value => { saved.deselected = value; refresh(n => n + 1) }} body={saved.body ?? proposal.draft?.body ?? ''} onBodyChange={value => { saved.body = value; refresh(n => n + 1) }} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true })), true) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger">{failureText(error, proposal.kind)}</Notice>}</>
 }
