@@ -288,6 +288,20 @@ async def test_spam_gmail_and_connector_revert(http, monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_spam_gmail_from_archive_keeps_unread_and_never_adds_inbox(http):
+    backend = backends.LabelBackend(account("google", "oauth2"))
+    labels = '["UNREAD", "custom"]'
+    result = await backend.apply(message(folder="ARCHIVE", is_read=False, labels_json=labels), "spam")
+    assert json.loads(result["labels_json"]) == ["SPAM", "UNREAD", "custom"]
+    previous = {"folder": "ARCHIVE", "is_read": False, "labels_json": labels}
+    await backend.revert(message(folder="SPAM", is_read=False, labels_json=result["labels_json"]), previous)
+    assert [c[2] for c in http] == [
+        {"addLabelIds": ["SPAM"], "removeLabelIds": []},
+        {"addLabelIds": [], "removeLabelIds": ["SPAM"]},
+    ]
+
+
+@pytest.mark.anyio
 async def test_graph_spam_and_revert(http):
     backend = backends.backend_for(account("microsoft", "oauth2"))
     assert await backend.apply(message(), "spam") == {"provider_uid": "new-id"}

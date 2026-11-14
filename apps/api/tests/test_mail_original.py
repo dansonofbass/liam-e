@@ -285,3 +285,11 @@ def test_imap_message_not_found_returns_502(client, monkeypatch, imap_connection
     response = client.get('/api/v1/mail/messages/m/original')
     assert response.status_code == 502 and response.json()['detail']['code'] == 'provider_failed'
     imap_connection.logout.assert_called_once()
+
+
+@pytest.mark.parametrize('minimal,raw', [({}, {'raw': 'eA'}), ({'sizeEstimate': 'big'}, {'raw': 'eA'}), ({'sizeEstimate': 4}, {})])
+def test_malformed_gmail_response_returns_502(client, monkeypatch, http_transport, minimal, raw):
+    mock_route(monkeypatch, message(), account('google', 'oauth2'))
+    http_transport(lambda request: httpx.Response(200, json=minimal if request.url.params['format'] == 'minimal' else raw))
+    response = client.get('/api/v1/mail/messages/m/original')
+    assert response.status_code == 502 and response.json()['detail']['code'] == 'provider_failed'
