@@ -23,6 +23,14 @@ function setup(initial: ChatMessageOut, clock?: { now: () => number; setTimeout:
 }
 afterEach(() => { cleanup(); mock.restore() })
 
+async function setupConfirmed(done: ChatMessageOut, clock?: Parameters<typeof setup>[1]) {
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)
+  const client = setup(message(), clock)
+  fireEvent.click(await screen.findByRole('button', { name: '2 abbestellen und archivieren' }))
+  await screen.findByRole('button', { name: 'Rückgängig' })
+  return client
+}
+
 test('confirmation submits selected ids and replaces the card in history', async () => {
   const done = message('done', { done: 1, undo_action_ids: ['u'] })
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)
@@ -87,7 +95,7 @@ test('cancelling uses the SDK and invalidates history and summary', async () => 
 
 test('undo sends all action ids and the notice changes', async () => {
   const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['u', 'v'], skipped: [], expired: [], failed: [] } })) as never)
-  const client = setup(message('done', { done: 2, undo_action_ids: ['u', 'v'] }))
+  const client = await setupConfirmed(message('done', { done: 2, undo_action_ids: ['u', 'v'] }))
   const invalidate = spyOn(client, 'invalidateQueries')
   fireEvent.click(await screen.findByRole('button', { name: 'Rückgängig' }))
   await waitFor(() => expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['u', 'v'] }, throwOnError: true }))
@@ -99,7 +107,7 @@ test('undo sends all action ids and the notice changes', async () => {
 
 test('failed undo also invalidates inbox queries', async () => {
   spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => { throw new Error('network') }) as never)
-  const client = setup(message('done', { done: 1, undo_action_ids: ['u'] }))
+  const client = await setupConfirmed(message('done', { done: 1, undo_action_ids: ['u'] }))
   const invalidate = spyOn(client, 'invalidateQueries')
   fireEvent.click(await screen.findByRole('button', { name: 'Rückgängig' }))
   await screen.findByText('Das hat nicht geklappt. Versuch es gleich noch mal.')
@@ -110,7 +118,7 @@ test('failed undo also invalidates inbox queries', async () => {
 test('undo expires after ten seconds without waiting in real time', async () => {
   let callback = () => {}, delay = 0, now = 0
   const clock = { now: () => now, setTimeout: (fn: () => void, ms: number) => { callback = fn; delay = ms; return 1 as unknown as ReturnType<typeof setTimeout> }, clearTimeout: () => {} }
-  setup(message('done', { done: 1, undo_action_ids: ['u'] }), clock)
+  await setupConfirmed(message('done', { done: 1, undo_action_ids: ['u'] }), clock)
   expect(await screen.findByRole('button', { name: 'Rückgängig' })).toBeTruthy()
   expect(delay).toBe(10000)
   act(() => { now = 10000; callback() })
@@ -121,24 +129,33 @@ test('a delayed timer cannot permit undo after the deadline', async () => {
   let now = 0
   const clock = { now: () => now, setTimeout: () => 1 as unknown as ReturnType<typeof setTimeout>, clearTimeout: () => {} }
   const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: {} })) as never)
-  setup(message('done', { done: 1, undo_action_ids: ['u'] }), clock)
+  await setupConfirmed(message('done', { done: 1, undo_action_ids: ['u'] }), clock)
   const button = await screen.findByRole('button', { name: 'Rückgängig' })
   now = 10001
   fireEvent.click(button)
   expect(undo).not.toHaveBeenCalled()
 })
 
-test('remounting a result does not extend the undo deadline', async () => {
+test.each(['done', 'partial'])('a %s history card has no undo without a local confirmation', async status => {
+  setup(message(status, { done: 1, undo_action_ids: ['u'] }))
+  expect(await screen.findByText('1 Newsletter abbestellt, 1 Mail archiviert.')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Rückgängig' })).toBeNull()
+})
+
+test('remounting a confirmed result does not extend the undo deadline', async () => {
   let now = 0, delay = 0
   const clock = { now: () => now, setTimeout: (_fn: () => void, ms: number) => { delay = ms; return 1 as unknown as ReturnType<typeof setTimeout> }, clearTimeout: () => {} }
   const done = message('done', { done: 1, undo_action_ids: ['u'] })
-  const client = setup(done, clock)
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)
+  const client = new QueryClient()
+  const card = (row: ChatMessageOut) => <QueryClientProvider client={client}><ProposalCard message={row} clock={clock} /></QueryClientProvider>
+  const view = render(card(message()))
+  fireEvent.click(screen.getByRole('button', { name: '2 abbestellen und archivieren' }))
   await screen.findByRole('button', { name: 'Rückgängig' })
   expect(delay).toBe(10000)
-  act(() => { client.setQueryData(['history', 'c'], [message('pending')]) })
-  await screen.findByText('2 Newsletter abbestellen?')
+  view.unmount()
   now = 5000
-  act(() => { client.setQueryData(['history', 'c'], [done]) })
+  render(card(done))
   await screen.findByRole('button', { name: 'Rückgängig' })
   expect(delay).toBe(5000)
 })

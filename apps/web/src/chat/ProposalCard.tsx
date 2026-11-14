@@ -19,10 +19,7 @@ function cardState(client: QueryClient, id: string): CardState {
   return entry
 }
 function useUndoWindow(client: QueryClient, id: string, clock: Clock) {
-  const [deadline] = useState(() => {
-    const entry = cardState(client, id)
-    return entry.deadline ??= clock.now() + 10_000
-  })
+  const [deadline] = useState(() => cardState(client, id).deadline ?? 0)
   const [visible, setVisible] = useState(() => clock.now() < deadline)
   useEffect(() => {
     const remaining = deadline - clock.now()
@@ -113,6 +110,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
     pending.current = true; setBusy(true); setError(undefined)
     try {
       const result = await operation()
+      if (confirm) cardState(client, result.id).deadline = clock.now() + 10_000
       setUpdated(result)
       client.setQueryData<ChatMessageOut[]>(['history', current.conversation_id], rows => rows?.map(row => row.id === result.id ? result : row))
       void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
