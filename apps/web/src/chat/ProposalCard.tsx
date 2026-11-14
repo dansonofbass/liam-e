@@ -8,17 +8,20 @@ import { de } from '../i18n/de'
 
 type Clock = { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }
 const systemClock: Clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id) }
-// A live card can be replaced by its history row; that remount must not extend undo.
-const deadlines = new WeakMap<QueryClient, Map<string, number>>()
+// A live card can be replaced by its history row; preserve edits and the undo deadline.
+type CardState = { deadline?: number; deselected?: Set<string>; body?: string }
+const cards = new WeakMap<QueryClient, Map<string, CardState>>()
+function cardState(client: QueryClient, id: string): CardState {
+  let entries = cards.get(client)
+  if (!entries) { entries = new Map(); cards.set(client, entries) }
+  let entry = entries.get(id)
+  if (!entry) { entry = {}; entries.set(id, entry) }
+  return entry
+}
 function useUndoWindow(client: QueryClient, id: string, clock: Clock) {
   const [deadline] = useState(() => {
-    let entries = deadlines.get(client)
-    if (!entries) { entries = new Map(); deadlines.set(client, entries) }
-    const existing = entries.get(id)
-    if (existing !== undefined) return existing
-    const end = clock.now() + 10_000
-    entries.set(id, end)
-    return end
+    const entry = cardState(client, id)
+    return entry.deadline ??= clock.now() + 10_000
   })
   const [visible, setVisible] = useState(() => clock.now() < deadline)
   useEffect(() => {
@@ -30,7 +33,7 @@ function useUndoWindow(client: QueryClient, id: string, clock: Clock) {
   return {
     visible: visible && clock.now() < deadline,
     beforeDeadline: () => clock.now() < deadline,
-    expire: () => { deadlines.get(client)?.set(id, 0); setVisible(false) },
+    expire: () => { cardState(client, id).deadline = 0; setVisible(false) },
   }
 }
 
@@ -87,6 +90,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   const [updated, setUpdated] = useState<ChatMessageOut | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
+  const [, refresh] = useState(0)
   const pending = useRef(false)
   const current = updated?.id === message.id ? updated : message
   const proposal = current.proposal
@@ -106,7 +110,8 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   if (current.proposal_status === 'failed') return <Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code)}</Notice>
   if (current.proposal_status === 'done' || current.proposal_status === 'partial') return <Result key={current.id} message={current} proposal={proposal} clock={clock} />
   if (current.proposal_status !== 'pending') return null
+  const saved = cardState(client, current.id)
   const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${de.proposal.manualSubtitle}` } : item)
   const irreversibleNote = proposal.irreversible ? proposal.kind === 'unsubscribe' ? de.proposal.irreversibleUnsubscribe : proposal.kind === 'send' ? de.proposal.irreversibleSend : undefined : undefined
-  return <><ConfirmCard key={current.id} title={de.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={de.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true }))) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger">{de.proposal.requestError}</Notice>}</>
+  return <><ConfirmCard key={current.id} title={de.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={de.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} deselected={saved.deselected ?? new Set<string>()} onDeselectedChange={value => { saved.deselected = value; refresh(n => n + 1) }} body={saved.body ?? proposal.draft?.body ?? ''} onBodyChange={value => { saved.body = value; refresh(n => n + 1) }} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true }))) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger">{de.proposal.requestError}</Notice>}</>
 }

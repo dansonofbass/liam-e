@@ -85,6 +85,26 @@ test('history replaces the live turn when the answer is persisted', async () => 
   expect(screen.getAllByText('Gespeichert', { selector: 'p' })).toHaveLength(1)
 })
 
+test('selection survives the live proposal being replaced by history', async () => {
+  const proposal: ChatMessageOut = { id: 'p', conversation_id: 'c', role: 'proposal', content: '', created_at: '', extras: {}, proposal_status: 'pending', stopped: false, tool_name: '', proposal: { kind: 'unsubscribe', reason: 'Nicht mehr gelesen.', items: [{ id: 'a', kind: 'sender', title: 'Alpha', subtitle: '', method: 'post' }, { id: 'b', kind: 'sender', title: 'Beta', subtitle: '', method: 'post' }] } }
+  const answer: ChatMessageOut = { id: 'm', conversation_id: 'c', role: 'assistant', content: 'Fertig', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, tool_name: '' }
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: { ...proposal, proposal_status: 'done' } })) as never)
+  const { client } = setup('/chat/c')
+  await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([]))
+  let resolveHistory!: (value: { data: ChatMessageOut[] }) => void
+  spyOn(sdk, 'chatHistory').mockImplementation((() => new Promise(resolve => { resolveHistory = resolve })) as never)
+  await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'proposal', message: proposal }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  fireEvent.click(await screen.findByRole('checkbox', { name: /Beta/ }))
+  await waitFor(() => expect(resolveHistory).toBeDefined())
+  await act(async () => { resolveHistory({ data: [answer, proposal] }) })
+  await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([answer, proposal]))
+  const beta = await screen.findByRole('checkbox', { name: /Beta/ })
+  expect((beta as HTMLInputElement).checked).toBe(false)
+  fireEvent.click(screen.getByRole('button', { name: '1 abbestellen und archivieren' }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: undefined }, throwOnError: true }))
+})
+
 test('composer scopes a request to the chosen account and clears the field', async () => {
   const { client } = setup('/chat/c')
   act(() => { client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: 'Privat' }] }) })

@@ -37,6 +37,35 @@ test('confirmation submits selected ids and replaces the card in history', async
   expect(client.getQueryData<ChatMessageOut[]>(['history', 'c'])?.[0]?.proposal_status).toBe('done')
 })
 
+test('selection survives a card remount and confirmation', async () => {
+  const initial = message()
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: message('done', { done: 1 }) })) as never)
+  const client = new QueryClient()
+  const card = () => <QueryClientProvider client={client}><ProposalCard message={initial} /></QueryClientProvider>
+  const view = render(card())
+  fireEvent.click(screen.getByRole('checkbox', { name: /Beta/ }))
+  view.unmount()
+  render(card())
+  expect((screen.getByRole('checkbox', { name: /Beta/ }) as HTMLInputElement).checked).toBe(false)
+  fireEvent.click(screen.getByRole('button', { name: '1 abbestellen und archivieren' }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: undefined }, throwOnError: true }))
+})
+
+test('edited draft survives a card remount and confirmation', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'send', reason: 'Antwort.', items: [{ id: 'a', kind: 'mail', title: 'Antwort', subtitle: 'An Anna' }], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: { ...initial, proposal_status: 'done' } })) as never)
+  const client = new QueryClient()
+  const card = () => <QueryClientProvider client={client}><ProposalCard message={initial} /></QueryClientProvider>
+  const view = render(card())
+  fireEvent.change(screen.getByLabelText('Entwurf'), { target: { value: 'Neuer Text' } })
+  view.unmount()
+  render(card())
+  expect((screen.getByLabelText('Entwurf') as HTMLTextAreaElement).value).toBe('Neuer Text')
+  fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: 'Neuer Text' }, throwOnError: true }))
+})
+
 test('cancelled proposal is quiet', async () => {
   setup(message('cancelled'))
   expect(await screen.findByText('Abgebrochen, es wurde nichts geändert.')).toBeTruthy()
