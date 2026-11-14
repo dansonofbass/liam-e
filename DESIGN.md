@@ -180,7 +180,9 @@ einheitlich. Technische Literale in TSX (Pfade, Klassen, englische Werte) tragen
 - `accent` ist die **einzige Handlungsfarbe**: primäre Buttons, aktiver
   Navigationspunkt, Senden, Links, Assistent-Marke, Erfolg. Text darauf in `on-accent`.
   Hover über Kacheln, Chips und Symbol-Buttons: `accent-soft` mit `accent`-Text.
-- `warm` heißt nur **Dringlichkeit** (Prioritätspunkt, Frist), nie Aktion oder Schmuck.
+- `warm` heißt nur **Dringlichkeit**, nie Aktion oder Schmuck: der Punkt einer markierten
+  Mail (in der Mailzeile neben der Uhrzeit, auf der Mailkarte im Chat vor dem Absender) mit
+  dem Namen und Tooltip „Dringend“, und das Frist-Schild.
 - `danger` nur für Löschen und Fehler, immer mit Wort oder Symbol.
 - `acc-1` bis `acc-4` färben **Konten** in der Reihenfolge ihrer Verbindung (Avatar,
   Konto-Punkt); ab dem fünften Konto beginnt die Reihe von vorn. Sie bedeuten nie einen

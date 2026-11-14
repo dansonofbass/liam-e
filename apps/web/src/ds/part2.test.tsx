@@ -59,6 +59,17 @@ test('unread coarse mail exposes its actions and markers', () => {
   expect(screen.getByRole('img', { name: 'Anhang' }).querySelector('.lucide-paperclip')).toBeTruthy()
 })
 
+test('a flagged mail row shows the warm urgency dot with a name and a tooltip', async () => {
+  const { rerender } = render(<MailRow mail={{ ...mail, is_flagged: true }} selected={false} coarse={false} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  const dot = screen.getByRole('img', { name: 'Dringend' })
+  expect(dot.classList.contains('le-dot--warm')).toBe(true)
+  expect(dot.closest('.le-mailrow-side')).toBeTruthy()
+  fireEvent.mouseEnter(dot)
+  expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', 'Dringend')
+  rerender(<MailRow mail={{ ...mail, is_flagged: false }} selected={false} coarse={false} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  expect(screen.queryByRole('img', { name: 'Dringend' })).toBeNull()
+})
+
 test('selected mail row is current and keeps its selected styling', async () => {
   const props = { mail, coarse: true, onOpen: () => {}, onArchive: () => {}, onToggleRead: () => {}, onTrash: () => {} }
   const { container, rerender } = render(<MailRow {...props} selected />)
