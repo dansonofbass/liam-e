@@ -46,6 +46,17 @@ test('the viewport bounds the shell and its independently scrolling content', as
   for (const selector of ['.le-chat-composer', '.le-mail-bottom']) expect(rule(app, selector)).toContain('env(safe-area-inset-bottom)')
 })
 
+test('only the sidebar conversation list scrolls, with room for focus rings', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = (selector: string) => css.split(`${selector} {`)[1]?.split('}')[0] ?? ''
+  for (const property of ['flex: 1', 'min-height: 0', 'overflow-y: auto', 'margin-inline: calc(-1 * var(--space-1))', 'padding-inline: var(--space-1)', 'padding-bottom: var(--space-1)']) expect(rule('.le-side .le-shell-conversations')).toContain(property)
+  expect(rule('.le-shell-sidebar')).not.toContain('overflow')
+  expect(rule('.le-shell-status')).toContain('margin-top: auto')
+  expect(rule('.le-side .le-shell-status')).toBe('')
+  expect(rule('.le-drawer')).toContain('overflow: auto')
+  expect(rule('.le-drawer .le-shell-sidebar')).toContain('flex: 1 0 auto')
+})
+
 test('the model chip in the chat header gets a 44 px target on touch', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const coarse = css.split('@media (pointer: coarse) {').map(block => block.split('}')[0])

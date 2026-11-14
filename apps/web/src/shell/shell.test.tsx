@@ -39,6 +39,19 @@ test('desktop navigation shows summary and conversations and syncs once across m
   expect(sync).toHaveBeenCalledTimes(1)
   expect(sync).toHaveBeenCalledWith({ body: { only_if_older_than_minutes: 10 } })
 })
+test('only conversations are inside the sidebar scroll container', async () => {
+  width = 1200
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
+  setup()
+  const conversation = await screen.findByRole('link', { name: /Erste Unterhaltung/ })
+  const list = conversation.closest('.le-shell-conversations')
+  expect(list).toBeTruthy()
+  expect(list?.contains(screen.getByRole('link', { name: /Zweite Unterhaltung/ }))).toBe(true)
+  expect(list?.textContent).toContain('Unterhaltungen')
+  for (const name of ['Chat', /Posteingang/, 'Konten']) expect(list?.contains(screen.getByRole('link', { name }))).toBe(false)
+  expect(list?.contains(screen.getByText('4 Konten · Stand 08:57'))).toBe(false)
+})
 test('chat navigation and the open conversation show their current state', async () => {
   width = 1200
   spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
