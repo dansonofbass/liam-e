@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { THEME_STORAGE_KEY, applyTheme, readTheme, setTheme, themeScript } from './theme'
+import { THEME_STORAGE_KEY, applyTheme, readTheme, setTheme, themeScript, useThemeSync } from './theme'
 import { ThemeMenu } from './ThemeMenu'
 
 beforeEach(() => { window.localStorage.clear(); document.documentElement.removeAttribute('data-theme') })
@@ -71,7 +71,25 @@ test('a choice made in another tab applies here too', () => {
   applyTheme('system')
 })
 
+function ThemeSync() { useThemeSync(); return null }
+
+test('the root keeps the page on the stored choice and follows other tabs without a theme menu', () => {
+  // The head script set dark, then another tab stored light before this page hydrated.
+  document.documentElement.setAttribute('data-theme', 'dark')
+  window.localStorage.setItem(THEME_STORAGE_KEY, 'light')
+  render(<ThemeSync />)
+  expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+  // On the phone the theme menu sits in the closed drawer, so only the root is listening.
+  window.localStorage.setItem(THEME_STORAGE_KEY, 'dark')
+  act(() => { window.dispatchEvent(new window.StorageEvent('storage', { key: THEME_STORAGE_KEY })) })
+  expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+  render(<ThemeMenu placement="up-start" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Darstellung' }))
+  expect(screen.getByRole('menuitemradio', { name: 'Dunkel' }).getAttribute('aria-checked')).toBe('true')
+})
+
 test('the root document runs the theme script in the head before anything else', async () => {
   const root = await Bun.file(new URL('../routes/__root.tsx', import.meta.url)).text()
+  expect(root).toMatch(/const RootDocument = [^]*?useThemeSync\(\);[^]*?<html/u)
   expect(root).toMatch(/<head>\s*\{\/\*[^]*?\*\/\}\s*<script dangerouslySetInnerHTML=\{\{ __html: themeScript \}\} \/>\s*<HeadContent \/>/u)
 })

@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 
 /**
  * The reader's choice between the light theme, the dark theme or following the system setting.
@@ -44,21 +44,35 @@ export function setTheme(choice: ThemeChoice) {
   listeners.forEach(listener => listener())
 }
 
+// Another tab changed the stored choice: follow it here too.
+function onStorage(event: StorageEvent) {
+  if (event.key !== THEME_STORAGE_KEY && event.key !== null) return
+  unsaved = null
+  applyTheme(readTheme())
+  listeners.forEach(listener => listener())
+}
+
 function subscribe(listener: () => void) {
+  if (!listeners.size) window.addEventListener('storage', onStorage)
   listeners.add(listener)
-  // Another tab changed the choice: follow it here too.
-  const onStorage = (event: StorageEvent) => {
-    if (event.key !== THEME_STORAGE_KEY && event.key !== null) return
-    applyTheme(readTheme())
-    listener()
-  }
-  window.addEventListener('storage', onStorage)
   return () => {
     listeners.delete(listener)
-    window.removeEventListener('storage', onStorage)
+    if (!listeners.size) window.removeEventListener('storage', onStorage)
   }
 }
 
 export function useTheme(): ThemeChoice {
   return useSyncExternalStore(subscribe, readTheme, () => 'system' as const)
+}
+
+/**
+ * Mounted once in the root document. It brings the page in line with the stored choice after
+ * hydration and follows other tabs even while no theme menu is mounted (on the phone the menu
+ * lives in the closed drawer).
+ */
+export function useThemeSync() {
+  useEffect(() => {
+    applyTheme(readTheme())
+    return subscribe(() => {})
+  }, [])
 }
