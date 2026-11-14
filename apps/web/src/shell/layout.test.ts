@@ -91,3 +91,9 @@ test('on a phone the main sheet fills the screen without frame, rounding or shad
   for (const property of ['padding: 0', 'gap: 0']) expect(rule?.[1]).toContain(property)
   for (const property of ['border-radius: 0', 'box-shadow: none']) expect(rule?.[2]).toContain(property)
 })
+
+test('a long conversation title cannot widen the sidebar past its token width', async () => {
+  // A flex item's min-width defaults to its min-content width, and conversation titles do not wrap.
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  expect(css).toMatch(/^\.le-side \{ flex: 0 0 var\(--sidebar-width\); min-width: 0;/mu)
+})
