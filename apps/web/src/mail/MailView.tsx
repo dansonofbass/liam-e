@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-que
 import { useNavigate, useRouter, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import type { MessagePageOut } from '../api/generated/types.gen'
-import { messageQuery, messagesInfiniteQuery, summaryQuery } from '../api/queries'
+import { MessageNotFoundError, messageQuery, messagesInfiniteQuery, summaryQuery } from '../api/queries'
 import { useChatSession } from '../chat/session'
 import { Avatar, Button, IconButton, Menu, Notice, Tag, Tooltip } from '../ds'
 import { de } from '../i18n/de'
@@ -12,17 +12,12 @@ import { toMessageFilters, type InboxSearch } from './filters'
 import { InsightBox } from './InsightBox'
 import { useMailActionsContext } from './useMailActions'
 
-function notFound(error: Error): boolean {
-  const cause = error.cause
-  return typeof cause === 'object' && cause !== null && 'detail' in cause && typeof cause.detail === 'object' && cause.detail !== null && 'code' in cause.detail && cause.detail.code === 'message_not_found'
-}
-
 export function MailView({ id }: { id: string }) {
   const client = useQueryClient(), router = useRouter(), navigate = useNavigate()
   const search = useSearch({ strict: false }) as InboxSearch
   const breakpoint = useBreakpoint(), coarse = useCoarsePointer()
   const split = breakpoint === 'desktop' || breakpoint === 'wide'
-  const message = useQuery({ ...messageQuery(id), retry: (count, error) => !notFound(error) && count < 2 })
+  const message = useQuery({ ...messageQuery(id), retry: (count, error) => !(error instanceof MessageNotFoundError) && count < 2 })
   const summary = useQuery(summaryQuery())
   const { run } = useMailActionsContext()
   const { state, send, retry } = useChatSession()
@@ -77,7 +72,7 @@ export function MailView({ id }: { id: string }) {
     <div className="le-mail-scroll">
       {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
       {message.isPending && <><span className="le-sr" role="status">{de.mail.loading}</span><div className="le-mail-placeholder" aria-hidden="true"><div className="le-mail-placeholder-head"><span /><div><span /><span /></div></div><span /><span /><span /><span /></div></>}
-      {message.isError && <div className="le-mail-error">{notFound(message.error) ? <Notice tone="danger" action={{ label: de.mail.toInbox, onClick: back }}>{de.proposalErrors.item_gone}</Notice> : <><Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void message.refetch() } }}>{de.mail.loadError}</Notice><Button variant="secondary" className="le-mail-to-inbox" onClick={back}>{de.mail.toInbox}</Button></>}</div>}
+      {message.isError && <div className="le-mail-error">{message.error instanceof MessageNotFoundError ? <Notice tone="danger" action={{ label: de.mail.toInbox, onClick: back }}>{de.proposalErrors.item_gone}</Notice> : <><Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void message.refetch() } }}>{de.mail.loadError}</Notice><Button variant="secondary" className="le-mail-to-inbox" onClick={back}>{de.mail.toInbox}</Button></>}</div>}
       {data && <article className="le-mail-article"><h1 className="title">{data.subject}</h1><div className="le-mail-header"><Avatar name={data.sender_name || data.sender_address} address={data.sender_address} colorIndex={data.color_index} size="lg" /><div className="le-mail-sender"><div className="body-strong">{data.sender_name || data.sender_address}</div>{breakpoint !== 'mobile' && <div className="small le-muted le-mail-address">{data.to.length ? de.mail.addressTo(data.sender_address, data.to.join(', ')) : data.sender_address}</div>}</div>{account && <Tag tone="on-surface" dot={data.color_index}>{account.display_name}</Tag>}{data.internal_date && <time className="small le-muted le-num" dateTime={data.internal_date}>{formatMailTime(new Date(data.internal_date), new Date())}</time>}</div>
         <InsightBox id={id} onFollowup={start} />
         {data.body_text && <div className="le-mail-text body">{data.body_text}</div>}
