@@ -144,7 +144,9 @@
 
 .le-mail-view { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .le-mail-topbar { flex-shrink: 0; }
-.le-mail-topbar .le-menu-anchor .le-menu { left: auto; right: 0; }
+/* Below desktop the actions end the bar, and the menu hangs from its trigger's right edge. In the split view they start the bar and the reading pane can be narrower than trigger plus menu, so the menu hangs from the bar's start, below its first row. */
+@media (max-width: 1023px) { .le-mail-topbar .le-menu-anchor .le-menu { left: auto; right: 0; } }
+@media (min-width: 1024px) { .le-mail-topbar { position: relative; } .le-mail-topbar .le-menu-anchor { position: static; } .le-mail-topbar .le-menu-anchor .le-menu { top: calc(var(--space-4) + var(--control-height-lg) + var(--space-1)); left: var(--space-5); } }
 .le-mail-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
 .le-mail-article { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-4); }
 .le-mail-header { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }

@@ -214,7 +214,9 @@ Uhrzeiten, Daten und Größen bildet `apps/web/src/i18n/format.ts`. Technische L
   nur in diesem Browser (`localStorage`, „Wie im System“ speichert nichts) und wird vor dem
   ersten Zeichnen als `data-theme` auf `<html>` gesetzt, damit nichts aufblitzt.
 - Schublade und Dialoge dunkeln den Inhalt dahinter mit `scrim` ab (`.le-scrim`; hell
-  `rgba(13, 19, 17, .45)`, dunkel `rgba(0, 0, 0, .6)`).
+  `rgba(13, 19, 17, .45)`, dunkel `rgba(0, 0, 0, .6)`). Dialoge hängen direkt im `<body>`
+  (`createPortal`): In der Seite läge die Abdunklung unter der haftenden Überschrift der
+  Seitenleiste.
 - In Komponenten nie Hex-Werte, immer `var(--…)`.
 
 ### Kontrast (WCAG AA, hell und dunkel)
@@ -436,7 +438,9 @@ Anfang an mit.
   „Original anzeigen“ öffnet einen Dialog mit Kopfzeilen und Quelltext, nur lesend und in
   der normalen Schrift; er holt beides erst beim Öffnen vom Anbieter und speichert nichts.
   Bei Konten, die das Original nicht liefern (Connector), ist der Eintrag gesperrt, mit
-  Hinweis.
+  Hinweis. Das Menü bleibt im Lesebereich: Unter `desktop` hängt es rechtsbündig an seinem
+  Knopf, in der geteilten Ansicht am Anfang der Leiste unter deren erster Zeile, weil der
+  Lesebereich bei 1024 px schmaler ist als Knopfabstand plus Menü.
 - Filter-Chips stehen auf `mobile` in einer Zeile, die für sich seitlich scrollt; die Seite
   scrollt nie seitlich.
 

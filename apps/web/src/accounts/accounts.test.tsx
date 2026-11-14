@@ -172,6 +172,8 @@ test('remove traps focus and Escape returns it without deleting', async () => {
   const remove = spyOn(sdk, 'mailAccountDelete')
   setup(); const trigger = await openAction('Entfernen')
   const dialog = screen.getByRole('dialog', { name: 'Privat entfernen?' })
+  // The scrim sits in the body: inside the page it would stack below the sticky label of the sidebar.
+  expect(dialog.parentElement?.className).toBe('le-scrim'); expect(dialog.parentElement?.parentElement).toBe(document.body)
   expect(screen.getAllByText('liam-e löscht nur die eigene Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.')).toHaveLength(1)
   expect(screen.getByText('Entfernst du ein Konto, löscht liam-e nur seine Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.')).toBeTruthy()
   expect(within(dialog).getByText(/liam-e löscht nur die eigene Kopie der Mails/)).toBeTruthy()

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useId } from 'react'
+import { createPortal } from 'react-dom'
 import { mailMessageOriginal } from '../api/generated/sdk.gen'
 import { IconButton, Notice } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
@@ -23,7 +24,8 @@ export function OriginalDialog({ id, onClose }: { id: string; onClose: () => voi
     },
   })
   const data = original.data
-  return <div className="le-scrim" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><div className="le-dialog le-dialog--wide" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={ref}>
+  // In the body, so the scrim also covers what stacks above the page (the sticky label in the sidebar).
+  return createPortal(<div className="le-scrim" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><div className="le-dialog le-dialog--wide" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={ref}>
     <div className="le-dialog-head"><h2 className="heading" id={titleId}>{de.mail.originalTitle}</h2><IconButton label={de.shell.close} icon="x" onClick={onClose} /></div>
     <div className="le-original-body" tabIndex={0}>
       {original.isPending && <p className="le-muted" role="status">{de.mail.originalLoading}</p>}
@@ -34,5 +36,5 @@ export function OriginalDialog({ id, onClose }: { id: string; onClose: () => voi
         <section className="le-original-section"><h3 className="body-strong">{de.mail.originalSource}</h3>{data.source ? <pre className="le-original-source small">{data.source}</pre> : <p className="le-muted">{de.mail.originalEmpty}</p>}</section>
       </>}
     </div>
-  </div></div>
+  </div></div>, document.body)
 }

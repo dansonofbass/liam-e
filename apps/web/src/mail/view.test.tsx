@@ -266,6 +266,15 @@ test.each([{ mobile: false }, { mobile: true }])('the more-actions button is alw
   } finally { mail.can_unsubscribe = original }
 })
 
+test('the "Weitere Aktionen" menu stays inside the reading pane: right-aligned below desktop, hung from the start of the bar in the split view', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toContain('@media (max-width: 1023px) { .le-mail-topbar .le-menu-anchor .le-menu { left: auto; right: 0; } }')
+  const split = css.match(/@media \(min-width: 1024px\) \{ \.le-mail-topbar \{ position: relative; \} \.le-mail-topbar \.le-menu-anchor \{ position: static; \} \.le-mail-topbar \.le-menu-anchor \.le-menu \{ ([^}]+)\} \}/u)?.[1]
+  for (const property of ['top: calc(var(--space-4) + var(--control-height-lg) + var(--space-1))', 'left: var(--space-5)']) expect(split).toContain(property)
+  // No rule may align it with the trigger at every width: at 1024 px the pane is narrower than trigger offset plus menu.
+  expect(css).not.toMatch(/^\.le-mail-topbar \.le-menu-anchor \.le-menu \{/mu)
+})
+
 test('with an unsubscribe route the entry is enabled and has no hint', async () => {
   setup(); await screen.findByRole('heading', { name: 'Termin' })
   fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
@@ -290,6 +299,8 @@ test('original shows loading, then headers and literal source, fetched once; Esc
   const fetchOriginal = spyOn(sdk, 'mailMessageOriginal').mockImplementation((() => new Promise(done => { resolve = done })) as never)
   setup()
   const { more, dialog } = await openOriginal()
+  // The scrim sits in the body: inside the page it would stack below the sticky label of the sidebar.
+  expect(dialog.parentElement?.className).toBe('le-scrim'); expect(dialog.parentElement?.parentElement).toBe(document.body)
   expect(within(dialog).getByRole('status').textContent).toBe('Original wird abgerufen …')
   expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Schließen' }))
   await act(async () => { resolve({ data: originalData, response: { status: 200 } }) })
