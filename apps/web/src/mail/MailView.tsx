@@ -63,7 +63,7 @@ export function MailView({ id }: { id: string }) {
     <IconButton label={de.controls.archive} icon="archive" size={iconSize} shortcut={split ? 'E' : undefined} onClick={() => remove('archive')} />
     <IconButton label={data.is_read ? de.controls.markUnread : de.controls.markRead} icon="mail-open" size={iconSize} shortcut={split ? 'U' : undefined} onClick={() => { void run(id, data.is_read ? 'mark_unread' : 'mark_read') }} />
     <IconButton label={de.controls.trash} icon="trash-2" size={iconSize} tone="danger" shortcut={split ? 'Entf' : undefined} onClick={() => remove('trash')} />
-    <Menu trigger={props => <IconButton {...props} label={de.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: de.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : de.mail.unsubscribeUnavailable, onSelect: () => start(de.mail.unsubscribePrompt) }]} />
+    <Menu trigger={props => <IconButton {...props} label={de.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: de.mail.forward, icon: 'forward', onSelect: () => start(de.mail.forwardPrompt) }, { label: de.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : de.mail.unsubscribeUnavailable, onSelect: () => start(de.mail.unsubscribePrompt) }]} />
   </>
   const chatButtons = <>
     <Tooltip content={de.mail.askTip}><Button variant="secondary" icon="message-circle" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{de.mail.askInChat}</Button></Tooltip>

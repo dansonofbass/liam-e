@@ -304,7 +304,7 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   Schnellaktionen tragen 19 px. Keine Emojis, keine Logos der Anbieter.
 - **Lexikon:** `message-circle` Chat · `messages-square` Unterhaltungen (Symbolleiste am Tablet) · `inbox` Posteingang · `at-sign` Konten · `archive`
   Archivieren · `trash-2` In den Papierkorb · `reply` Antworten · `pencil` Antwort
-  entwerfen · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`
+  entwerfen · `forward` Weiterleiten · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`
   Weitere Aktionen · `external-link` Mail öffnen · `arrow-up` Senden · `square` (gefüllt)
   Anhalten · `sparkle` Assistent · `flag` Priorisieren · `newspaper` Newsletter · `clock`
   Frist · `paperclip` Anhang · `check`, `circle-alert`, `info` in Hinweisen · `menu` Menü
@@ -425,10 +425,11 @@ Anfang an mit.
   Dringend-Punkt und Anhang-Symbol sichtbar bleiben und ihr Tooltip erreichbar ist.
 - Eine Frist steht auf allen Breakpoints als Schild in `warm-soft` unter dem Vorschautext,
   auf `mobile` neben dem Konto-Tag.
-- Das Menü „Weitere Aktionen“ der geöffneten Mail enthält „Newsletter abbestellen“; es
-  schlägt das Abbestellen im Chat vor (§9.2) und ist gesperrt, mit Hinweis, wo die Mail
-  keinen Weg zum Abbestellen nennt. Geplant sind „Weiterleiten“, „Als Spam markieren“ und
-  „Original anzeigen“ (Entscheidung 4 vom 2026-11-14).
+- Das Menü „Weitere Aktionen“ der geöffneten Mail enthält „Weiterleiten“ und „Newsletter
+  abbestellen“. Beide schlagen ihre Aktion im Chat vor (§9.2): „Weiterleiten“ bittet um
+  einen Entwurf, und der Assistent fragt dort nach dem Empfänger; „Newsletter abbestellen“
+  ist gesperrt, mit Hinweis, wo die Mail keinen Weg zum Abbestellen nennt. Geplant sind
+  „Als Spam markieren“ und „Original anzeigen“ (Entscheidung 4 vom 2026-11-14).
 - Filter-Chips stehen auf `mobile` in einer Zeile, die für sich seitlich scrollt; die Seite
   scrollt nie seitlich.
 

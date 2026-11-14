@@ -220,6 +220,14 @@ test('loading displays placeholders and mobile back button', async () => {
   await settle()
 })
 
+test('forward menu entry asks the assistant to forward this mail', async () => {
+  const { request } = setup({ mobile: true }); await screen.findByRole('heading', { name: 'Termin' })
+  fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Weiterleiten' }))
+  await waitFor(() => expect(request()).toMatchObject({ text: 'Leite diese Mail weiter.', context_message_id: 'm1' }))
+  expect(request()?.account_id).toBeUndefined()
+})
+
 test('newsletter menu starts the contextual confirmation turn', async () => {
   const { request } = setup({ mobile: true }); await screen.findByRole('heading', { name: 'Termin' })
   fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
