@@ -10,10 +10,10 @@ import { ChatSessionProvider } from './session'
 
 const originalFetch = globalThis.fetch, originalMatchMedia = window.matchMedia
 let request: Record<string, unknown>
-function setup(accounts = true, path = '/', unread = 3, lastSync: string | null = null) {
+function setup(accounts = true, path = '/', unread = 3, lastSync: string | null = null, displayName = 'Privat') {
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { request = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start() {} }))) }) as typeof fetch
-  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: accounts ? [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' }] : [], unread_total: unread, newsletter_senders: 2, last_sync_at: lastSync } })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: accounts ? [{ id: 'a', display_name: displayName, provider: 'gmail', email_address: 'a@example.com', color_index: 0, state: 'ok' }] : [], unread_total: unread, newsletter_senders: 2, last_sync_at: lastSync } })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [{ id: 'm', label: 'Standardmodell', description: '', is_default: true }] })) as never)
   spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail1', account_id: 'a', color_index: 0, sender_name: 'Anna', subject: 'Termin', internal_date: null, deadline: null } })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -80,7 +80,7 @@ test('about displays a mail and sends its context, which can be removed', async 
   const router = setup(true, '/?about=mail1')
   expect(await screen.findByText('Termin')).toBeTruthy()
   expect(screen.getByText('Anna')).toBeTruthy()
-  expect(screen.getByText('Privat')).toBeTruthy()
+  expect(screen.getByText('Gmail')).toBeTruthy()
   fireEvent.change(screen.getByPlaceholderText(de.chat.placeholder), { target: { value: 'Was steht drin?' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
   expect(request.context_message_id).toBe('mail1')
@@ -88,6 +88,12 @@ test('about displays a mail and sends its context, which can be removed', async 
   await waitFor(() => expect(router.state.location.searchStr).toBe(''))
 })
 
+
+test('mail reference shows the provider when the account name is empty', async () => {
+  setup(true, '/?about=mail1', 3, null, '')
+  await screen.findByText('Termin')
+  expect(screen.getByText('Gmail').closest('.le-chat-reference')).toBeTruthy()
+})
 
 test('mail reference opens its detail route', async () => {
   const router = setup(true, '/?about=mail1')
