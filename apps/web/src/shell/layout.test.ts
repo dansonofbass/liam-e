@@ -45,3 +45,9 @@ test('the viewport bounds the shell and its independently scrolling content', as
   }
   for (const selector of ['.le-chat-composer', '.le-mail-bottom']) expect(rule(app, selector)).toContain('env(safe-area-inset-bottom)')
 })
+
+test('the model chip in the chat header gets a 44 px target on touch', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const coarse = css.split('@media (pointer: coarse) {').map(block => block.split('}')[0])
+  expect(coarse.some(block => block.includes('.le-chat-topbar .le-menu-anchor > .le-chip') && block.includes('min-height: var(--control-height-lg)'))).toBe(true)
+})
