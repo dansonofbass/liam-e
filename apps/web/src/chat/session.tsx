@@ -5,7 +5,7 @@ import { ChatStreamError, streamChatTurn } from './transport'
 import { createTypewriter } from './typewriter'
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal'
-type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string }
+type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; request?: ChatStreamRequest }
 type Session = { state: State; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
@@ -33,7 +33,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     if (active.current) return
     last.current = request
     conversation.current = request.conversation_id ?? undefined
-    setState({ ...initial(), phase: 'working' })
+    setState({ ...initial(), phase: 'working', request, conversationId: request.conversation_id ?? undefined })
     const controller = new AbortController()
     const writer = createTypewriter({ reducedMotion: typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches, onText: text => setState(s => ({ ...s, text, phase: 'streaming', status: undefined })) })
     const turn = { controller, writer, conversationId: conversation.current }

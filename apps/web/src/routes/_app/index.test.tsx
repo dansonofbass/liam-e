@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ChatSessionProvider } from '../../chat/session'
 import { createMemoryHistory, createRootRouteWithContext, createRoute, createRouter, RouterProvider } from '@tanstack/react-router'
 import { render, screen, waitFor } from '@testing-library/react'
 import { landingPath } from '../../landing'
@@ -10,12 +11,13 @@ function renderRouter(withMail: boolean) {
   const root = createRootRouteWithContext<RouterContext>()()
   const index = createRoute({ getParentRoute: () => root, path: '/', staticData: Route.options.staticData, beforeLoad: Route.options.beforeLoad as (args: { context: RouterContext }) => void, component: Route.options.component })
   const mail = createRoute({ getParentRoute: () => root, path: '/mail', staticData: { landing: 1 }, component: () => <div>Mail test page</div> })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const router = createRouter({
     routeTree: root.addChildren(withMail ? [index, mail] : [index]),
     history: createMemoryHistory({ initialEntries: ['/'] }),
-    context: { queryClient: new QueryClient(), landingPath: (): string | undefined => landingPath(router) },
+    context: { queryClient: client, landingPath: (): string | undefined => landingPath(router) },
   })
-  render(<RouterProvider router={router} />)
+  render(<QueryClientProvider client={client}><ChatSessionProvider><RouterProvider router={router} /></ChatSessionProvider></QueryClientProvider>)
   return router
 }
 

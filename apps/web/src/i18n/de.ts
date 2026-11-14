@@ -9,7 +9,8 @@ export const de = {
   },
   chat: {
     greeting: 'Hallo, was kann ich für dich tun?', greetingFirst: 'Hallo,', greetingSecond: 'was kann ich für dich tun?', placeholder: 'Frag etwas zu deinen Mails …',
-    stopped: 'Angehalten – die Antwort ist unvollständig.', retry: 'Noch mal versuchen',
+    stopped: 'Angehalten – die Antwort ist unvollständig.', retry: 'Noch mal versuchen', askAgain: 'Noch mal fragen',
+    loadingHistory: 'Unterhaltung wird geladen …', historyError: 'Die Unterhaltung konnte nicht geladen werden. Versuch es gleich noch mal.',
   },
   status: {
     thinking: 'Denke nach …',

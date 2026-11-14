@@ -25,7 +25,16 @@
 
 .le-shell-sidebar { display: flex; flex-direction: column; flex: 1; min-height: 100%; }
 .le-shell-status { margin-top: auto; padding: var(--space-3); }
-.le-page-fade { animation: le-page-enter 220ms cubic-bezier(.2, .8, .2, 1) both; }
+.le-app:has(.le-chat-view) { height: 100dvh; overflow: hidden; }
+.le-sheet:has(.le-chat-view) { min-height: 0; }
+.le-page-fade { animation: le-page-enter 220ms cubic-bezier(.2, .8, .2, 1) both; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.le-chat-view { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
+.le-chat-messages { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
+.le-chat-messages .le-greeting { padding: 0; }
+.le-chat-entry { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
+.le-chat-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.le-chat-composer { width: 100%; max-width: var(--chat-width); box-sizing: border-box; align-self: center; padding: var(--space-3) var(--space-5) max(var(--space-3), env(safe-area-inset-bottom)); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @keyframes le-page-enter { from { opacity: 0; } to { opacity: 1; } }
 .le-greeting { padding: var(--space-5); }
 .le-greeting span { color: var(--accent); }
