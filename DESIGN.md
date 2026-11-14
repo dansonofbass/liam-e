@@ -180,6 +180,8 @@ Uhrzeiten, Daten und Größen bildet `apps/web/src/i18n/format.ts`. Technische L
 - `accent` ist die **einzige Handlungsfarbe**: primäre Buttons, aktiver
   Navigationspunkt, Senden, Links, Assistent-Marke, Erfolg. Text darauf in `on-accent`.
   Hover über Kacheln, Chips und Symbol-Buttons: `accent-soft` mit `accent`-Text.
+  `accent-line` ist nur die Unterstreichung von Links (`le-link`); beim Hover wird sie
+  `accent`.
 - `warm` heißt nur **Dringlichkeit**, nie Aktion oder Schmuck: der Punkt einer markierten
   Mail (in der Mailzeile neben der Uhrzeit, auf der Mailkarte im Chat vor dem Absender) mit
   dem Namen und Tooltip „Dringend“, und das Frist-Schild.
@@ -227,7 +229,8 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
 
 ## 4. Schrift
 
-- **Plus Jakarta Sans** in 400, 500, 600 und 700 für alles. In der App selbst gehostet
+- **Plus Jakarta Sans** (`font-sans`, dahinter die Systemschriften) in 400, 500, 600 und 700
+  für alles. In der App selbst gehostet
   über Fontsource, exakt gepinnt; keine Übertragung an Google. Nur die Vorschauen in Claude
   Design laden sie von Google Fonts.
 - Stile aus den Tokens: `display` (36 px, nur die Begrüßung), `title` (24 px, Seitentitel
@@ -254,6 +257,10 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   der schwebenden Flächen `space-3` (ab `tablet`; auf `mobile` gibt es keinen Rahmen, §7.3),
   Innenabstand der Hauptfläche `space-5`, Kacheln und Karten `space-4`, das Panel „Konto
   verbinden“ 20 px (`space-4` + `space-1`).
+- **Maße:** `sidebar-width` 236 px (Seitenleiste am Desktop), `list-width` 400 px (Mailliste
+  neben dem Lesebereich), `chat-width` 780 px (Höchstbreite von Verlauf und Composer),
+  `control-height` 38 px (Bedienelemente) und `control-height-lg` 44 px (große Symbol-Buttons,
+  Tippziel bei Touch, §7.2).
 - **Radien** nur aus den Tokens: `radius-pill` für Buttons, Chips, Navigationspunkte, Tags
   und Symbol-Buttons; `radius-sm` (12 px) für Zeilen, Felder und Tooltips; `radius-md`
   (18 px) für Kacheln, Karten und Menüs, auch für drückbare Kacheln (Schnellaktionen,
@@ -267,7 +274,8 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   Listen, Konturen nur an Bedienelementen (`control-border`).
 - **Bewegung:** 160 ms für Hover und Tooltips, 220 ms für Zustandswechsel, 420 ms für
   erscheinende Inhalte (`le-rise`), Kurve `cubic-bezier(.2, .8, .2, 1)`. Tooltips nach
-  350 ms Verweilen, bei Tastaturfokus sofort. Seitenwechsel blenden den Inhalt der
+  350 ms Verweilen, bei Tastaturfokus sofort. Schleifen: Spinner 0,8 s je Umdrehung,
+  Tipp-Punkte 1,2 s, Caret 1 s. Seitenwechsel blenden den Inhalt der
   Hauptfläche über; Seitenleiste und Composer bleiben stehen.
 - **`prefers-reduced-motion`** immer beachten: dann nur Überblenden (`le-rise` wird zu
   `le-fade`, Seitenwechsel und Schublade blenden weiter über), kein Aufsteigen, kein
@@ -292,11 +300,34 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
 - **Bausteine** (Klassen `le-*`, Beschreibung und Vorschau im Design-System): Button,
   IconButton, Chip (mit Tag, Badge, Punkt), Tooltip, Notice, AppShell, NavItem, Menu,
   QuickAction, Composer, ChatMessage, MailReference, ConfirmCard, MailRow, Avatar,
-  TextField, AccountCard. In der App liegen sie unter `apps/web/src/ds/` mit denselben
-  Namen. Screens unter `src/routes/` und die app-weiten Fehler- und Hinweisseiten
-  (`src/root-screens/de.tsx`: neue Version, Fehler, Seite nicht gefunden) setzen keine
-  eigenen Bedienelemente aus rohem `<button>` oder `<input>` zusammen und nutzen keine
-  Tailwind-Größen; `routes/no-raw-controls.test.ts` prüft das.
+  TextField, AccountCard, Drawer (Schublade) und NavButton (Navigationspunkt, der eine
+  Schublade öffnet, „Unterhaltungen“ am Tablet). In der App liegen sie unter
+  `apps/web/src/ds/` mit denselben Namen. Screens unter `src/routes/` und die app-weiten
+  Fehler- und Hinweisseiten (`src/root-screens/de.tsx`: neue Version, Fehler, Seite nicht
+  gefunden) setzen keine eigenen Bedienelemente aus rohem `<button>` oder `<input>` zusammen
+  und nutzen keine Tailwind-Größen; `routes/no-raw-controls.test.ts` prüft das.
+- **Zusammengesetzt** aus diesen, im Ordner ihrer Ansicht: ChatHeader und ModelMenu
+  (`chat/`, §9.6), InsightBox („Kurz gefasst“, §9.4) und ActionToast (Hinweis mit
+  „Rückgängig“, §9.2) in `mail/`, der Dialog „Konto entfernen“ (`accounts/RemoveDialog.tsx`,
+  Klasse `le-dialog`, mit `scrim`, Fokus bleibt im Dialog) und ThemeMenu (`shell/`, §3).
+- **Varianten:**
+  - Button `primary`, `secondary`, `ghost`, `danger`; klein mit `le-btn--sm` (obere Leiste
+    der Mail am Desktop, §7.4).
+  - IconButton `tone="danger"` (Papierkorb), `size="lg"` (44 px, Leisten auf `mobile`);
+    `shortcut` hängt das Tastenkürzel in Klammern an den Tooltip.
+  - Chip gedrückt (`aria-pressed`, aktiver Filter) und `quiet` (ohne Rand auf
+    `surface-soft`, für Auswahl-Chips wie Konto und Modell).
+  - Notice `info`, `success`, `danger`, wahlweise mit einer Aktion als Link.
+  - Tag `default`, `warm` (Frist, mit `clock`) und `on-surface` (Konto in Listen, mit
+    Konto-Punkt).
+  - Avatar `md` und `lg` (Kontenkarte).
+  - Badge zeigt ab 1.000 „999+“.
+  - Tooltip an fünf Stellen: `top` (Standard), `top-end`, `bottom`, `bottom-end` und
+    `right` (Symbolleiste am Tablet).
+  - Menu: Einträge mit Symbol, `tone: 'danger'`, `disabled` mit `hint` (bleibt fokussierbar
+    und sagt, warum der Eintrag nicht geht) und `checked` (Auswahl, Rolle `menuitemradio`,
+    `check` an der gewählten Zeile; der Fokus beginnt dort). Pfeiltasten bewegen den Fokus,
+    Escape schließt. `placement` `up-start` oder `up-end` öffnet nach oben.
 - **Zustände ohne Inhalt sind Pflicht:** jede Liste und Ansicht hat Leer, Laden
   (Platzhalterzeilen, kein Spinner über der ganzen Fläche) und Fehler mit Ursache und
   nächstem Schritt.
@@ -344,6 +375,12 @@ Anfang an mit.
 
 ### 7.4 Posteingang je Breakpoint
 
+- Aufbau der Liste: Auf `desktop` und `tablet` steht oben eine Leiste mit „Posteingang“,
+  Stand, Suchen (`search`) und Abrufen (`refresh-cw`). Darunter stehen die Filter-Chips:
+  Konto (Menü mit „Alle Konten“), „Ungelesen“, „Wichtig“ und „Mit Anhang“. Auf `mobile`
+  trägt die Kopfzeile den Titel, und unter den Filtern stehen „47 ungelesen · Stand 08:57“
+  und die beiden Buttons. Suchen öffnet ein Feld „In allen Konten suchen …“. Die Liste
+  gruppiert nach Tagen: „Heute“, „Gestern“, „Diese Woche“ (ab Montag) und „Älter“.
 - `desktop`: Liste (`list-width`) und Lesebereich nebeneinander.
 - `tablet` und `mobile`: nur die Liste; eine Mail öffnet als eigene Ansicht mit Zurück.
   Archivieren, Gelesen/Ungelesen, Papierkorb und „Weitere Aktionen“ stehen in der Leiste am
@@ -369,6 +406,10 @@ Anfang an mit.
   Rand in `accent`), der Composer als Ganzes, sobald sein Textfeld den Fokus hat; einen
   eigenen Schein statt des Rings gibt es nicht. Logische Reihenfolge, Escape schließt Menüs und Schubladen, der Fokus
   bleibt in offenen Schubladen und Dialogen und kehrt danach an den Auslöser zurück.
+- **Tastenkürzel im Posteingang**, nur auf `desktop` und `wide` und nicht in Feldern,
+  Menüs und Dialogen: j und k nächste und vorige Mail, Enter öffnen, e archivieren, u
+  gelesen/ungelesen, Entf oder # in den Papierkorb. Tooltips nennen das Kürzel in Klammern,
+  für den Papierkorb „Entf“.
 - Symbol-Buttons tragen `aria-label`. Tooltips sind `role="tooltip"` und hängen über
   `aria-describedby` am Element.
 - Status nie nur über Farbe: Dringlichkeit hat Punkt **und** Text oder Tooltip, Fehler ein
@@ -407,7 +448,8 @@ erscheint.
 - Nach dem Klick ersetzt ein Hinweis die Karte, mit Ergebnis und „Rückgängig“, wo es geht.
   Nie automatisch bestätigen, nie zwei offene Karten gleichzeitig.
 - **Einzelaktionen im Posteingang** (eine Mail archivieren, gelesen/ungelesen, in den
-  Papierkorb) löst du selbst aus; sie wirken sofort und zeigen danach „Rückgängig“. Alles,
+  Papierkorb) löst du selbst aus; sie wirken sofort und zeigen danach 10 Sekunden lang
+  einen Hinweis mit „Rückgängig“. Alles,
   was mehrere Mails betrifft, läuft über den Chat und eine Bestätigungskarte.
 
 ### 9.3 Herkunft und Inhalte aus Mails
@@ -438,6 +480,22 @@ erscheint.
   erreichbar („Das Modell antwortet gerade nicht. Versuch es gleich noch mal.“), Abbruch
   mitten in der Antwort („Die Antwort ist abgebrochen.“ mit Button „Noch mal versuchen“),
   Konto nicht erreichbar (Hinweis nennt das Konto, die übrigen Konten arbeiten weiter).
+
+### 9.6 Kopf, Composer und Mailbezug
+
+- **Kopf:** Auf `desktop` und `tablet` steht über dem Verlauf eine Leiste mit „Chat“ und, in
+  einer Unterhaltung, „/ Titel“. Ein langer Titel endet mit Auslassung, der volle steht im
+  Tooltip. Rechts stehen das Modellmenü und „Neue Unterhaltung“ (`plus`). Auf `mobile`
+  tragen die Kopfzeile (§7.3) Titel und Plus; darunter steht nur das Modellmenü.
+- **Modellmenü:** ein Chip mit dem Namen des Modells und `chevron-down`, Tooltip „Modell
+  für diese Unterhaltung wählen“. Die Einträge zeigen „Name · Beschreibung“. In einer
+  Unterhaltung wird die Wahl gespeichert und gilt für ihre nächsten Antworten, auf der
+  Startseite für die erste Bitte.
+- **Composer:** Das Textfeld wächst bis 200 px Höhe. Enter sendet, Umschalt+Enter beginnt
+  eine neue Zeile. Der Konto-Chip links unten („Alle Konten“ oder der Name eines Kontos)
+  legt fest, in welchen Konten der Assistent sucht.
+- **Mailbezug:** „Im Chat fragen“ öffnet die Startseite mit der Mail als Bezug. Über dem
+  Composer steht dann ihre Mail-Karte mit dem Symbol-Button „Bezug entfernen“ (`x`).
 
 ## 10. Erweitern und pflegen
 
