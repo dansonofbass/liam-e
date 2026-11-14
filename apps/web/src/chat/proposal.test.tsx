@@ -193,12 +193,13 @@ test('remounting a confirmed result does not extend the undo deadline', async ()
   const view = render(card(message()))
   fireEvent.click(screen.getByRole('button', { name: '2 abbestellen und archivieren' }))
   await screen.findByRole('button', { name: 'Rückgängig' })
-  expect(delay).toBe(10000)
+  // The button renders before the passive effect that arms the timer.
+  await waitFor(() => expect(delay).toBe(10000))
   view.unmount()
   now = 5000
   render(card(done))
   await screen.findByRole('button', { name: 'Rückgängig' })
-  expect(delay).toBe(5000)
+  await waitFor(() => expect(delay).toBe(5000))
 })
 
 test.each([
