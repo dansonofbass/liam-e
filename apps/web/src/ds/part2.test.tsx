@@ -61,7 +61,7 @@ test('account status reflects syncing and login errors', () => {
   const props = { onSync: () => {}, onReconnect: reconnect, onRename: () => {}, onRemove: () => {} }
   const { rerender } = render(<AccountCard account={account} {...props} />)
   expect(screen.getByText('Wird abgerufen …')).toBeTruthy()
-  expect((screen.getByRole('button', { name: 'Abrufen' }) as HTMLButtonElement).disabled).toBe(true)
+  expect((screen.getByRole('button', { name: 'Wird gerade abgerufen' }) as HTMLButtonElement).disabled).toBe(true)
   rerender(<AccountCard account={{ ...account, state: 'error', error_code: 'auth_expired' }} {...props} />)
   expect(screen.getByText('Die Anmeldung ist abgelaufen. Melde dich erneut beim Anbieter an.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Erneut anmelden' }))

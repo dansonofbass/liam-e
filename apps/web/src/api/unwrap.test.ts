@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { dataOr404, unwrap } from "./unwrap";
+import { dataOr404, errorCode, unwrap } from "./unwrap";
+
+test("errorCode reads only a string detail code", () => {
+  expect(errorCode({ detail: { code: 'login_failed' } })).toBe('login_failed');
+  expect(errorCode({ detail: { code: 42 } })).toBeUndefined();
+  expect(errorCode(null)).toBeUndefined();
+});
 
 describe("unwrap", () => {
   test("normalizes FastAPI detail responses into Error instances", async () => {

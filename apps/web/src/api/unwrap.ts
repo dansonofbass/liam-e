@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+export const errorCode = (error: unknown): string | undefined => {
+  const parsed = z.object({ detail: z.object({ code: z.string() }) }).safeParse(error);
+  return parsed.success ? parsed.data.detail.code : undefined;
+};
+
 /** One field FastAPI refused (422), named by its path under the request: "phone: …". */
 const fieldProblem = z
   .object({ loc: z.array(z.union([z.string(), z.number()])), msg: z.string() })
