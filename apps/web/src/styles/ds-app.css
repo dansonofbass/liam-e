@@ -47,7 +47,7 @@
 .le-accounts-list > h2 { margin: 0 0 var(--space-5); }
 .le-accounts-list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .le-accounts-note { margin: var(--space-4) var(--space-1) 0; }
-.le-accounts-connect { flex: 1 1 400px; min-width: 0; max-width: 520px; background: var(--surface-soft); border-radius: var(--radius-lg); padding: var(--space-5); }
+.le-accounts-connect { flex: 1 1 400px; min-width: 0; max-width: 520px; background: var(--surface-soft); border-radius: var(--radius-lg); padding: calc(var(--space-4) + var(--space-1)); }
 .le-account-content { min-width: 0; flex: 1; }
 .le-account-name, .le-account-address { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .le-account--placeholder span { display: block; background: var(--surface-soft); border-radius: var(--radius-sm); height: var(--space-5); flex: 1; }

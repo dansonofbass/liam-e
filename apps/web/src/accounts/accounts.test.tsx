@@ -60,6 +60,11 @@ test('the footnote is a small block paragraph below the list and the connect pan
   await settle()
 })
 
+test('the connect panel has 20 px inner padding on the 4 px grid', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-accounts-connect \{[^}]*padding: calc\(var\(--space-4\) \+ var\(--space-1\)\);/u)
+})
+
 test('account cards have spaced lists and mobile actions below the content', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   expect(css).toMatch(/\.le-accounts-list > h2 \{[^}]*margin: 0 0 var\(--space-5\);/u)

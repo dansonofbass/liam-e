@@ -238,7 +238,8 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
 
 - **4-px-Raster**, Schritte `space-1` bis `space-8` (4 bis 64 px). App-Rahmen und Abstand
   der schwebenden Flächen `space-3` (ab `tablet`; auf `mobile` gibt es keinen Rahmen, §7.3),
-  Innenabstand der Hauptfläche `space-5`, Kacheln und Karten `space-4`.
+  Innenabstand der Hauptfläche `space-5`, Kacheln und Karten `space-4`, das Panel „Konto
+  verbinden“ 20 px (`space-4` + `space-1`).
 - **Radien:** `radius-pill` für alles, was man drückt (Buttons, Chips, Navigationspunkte,
   Tags, Symbol-Buttons); `radius-sm` (12 px) für Zeilen und Felder; `radius-md` (18 px)
   für Kacheln, Karten und Menüs; `radius-lg` (24 px) für schwebende Flächen, Composer und
