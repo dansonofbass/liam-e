@@ -622,6 +622,10 @@ export type MailRefOut = {
      */
     internal_date: string | null;
     /**
+     * Is Flagged
+     */
+    is_flagged: boolean;
+    /**
      * Sender Name
      */
     sender_name: string;

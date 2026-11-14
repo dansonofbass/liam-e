@@ -35,6 +35,7 @@ class MailRefOut(EventModel):
     sender_name: str
     internal_date: datetime | None
     deadline: date | None
+    is_flagged: bool
 
 
 class MailsEvent(EventModel):

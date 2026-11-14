@@ -29,13 +29,14 @@ export function ChatComposer({ conversationId, contextMessageId, onSend, autoFoc
   }} onStop={stop} busy={busy} scope={scope} accounts={(summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name || account.email_address }))} onScopeChange={setScope} placeholder={de.chat.placeholder} autoFocus={autoFocus} />
 }
 
-function Reference({ mail, accounts }: { mail: MailRefOut; accounts: Accounts }) {
+type Draft = { onDraft: (id: string) => void; disabled: boolean }
+function Reference({ mail, accounts, draft }: { mail: MailRefOut; accounts: Accounts; draft: Draft }) {
   const navigate = useNavigate()
-  return <MailReference mail={mail} accountLabel={accounts.filter(account => account.id === mail.account_id).map(providerLabel)[0]} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} />
+  return <MailReference mail={mail} accountLabel={accounts.filter(account => account.id === mail.account_id).map(providerLabel)[0]} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} onDraft={() => draft.onDraft(mail.id)} draftDisabled={draft.disabled} />
 }
-function HistoryReference({ id, accounts }: { id: string; accounts: Accounts }) {
+function HistoryReference({ id, accounts, draft }: { id: string; accounts: Accounts; draft: Draft }) {
   const { data } = useQuery({ ...messageQuery(id), retry: (count, error) => !(error instanceof MessageNotFoundError) && count < 2 })
-  return data ? <Reference mail={data} accounts={accounts} /> : null
+  return data ? <Reference mail={data} accounts={accounts} draft={draft} /> : null
 }
 function Suggestions({ items, onSend }: { items: string[]; onSend: (text: string) => void }) {
   return <div className="le-chat-suggestions">{items.map(text => <Chip key={text} onClick={() => onSend(text)}>{text}</Chip>)}</div>
@@ -79,12 +80,14 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const busy = state.phase === 'working' || state.phase === 'streaming'
   // Follow-ups keep the account the composer shows, like a typed question.
   const submitSuggestion = (text: string) => { void send({ text, account_id: scope, conversation_id: conversationId }) }
+  // The pencil on a mail card asks for a reply draft to that mail in this conversation, like the button on the open mail.
+  const draft: Draft = { onDraft: id => { void send({ text: de.mail.draftPrompt, conversation_id: conversationId, context_message_id: id }) }, disabled: state.phase === 'working' || state.phase === 'streaming' }
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
   const renderMessage = (message: ChatMessageOut) => {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
     if (message.role === 'proposal' || message.role === 'draft') return <ProposalCard key={message.id} message={message} />
     if (message.role !== 'assistant') return null
-    return <><ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} />)}</>
+    return <><ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}</>
   }
   const status = state.status?.code === 'searching' ? de.status.searching(state.status.count ?? 0) : state.status ? de.status[state.status.code] : null
   const liveModel = modelLabel(selectedModel?.conversationId === conversationId ? selectedModel.id : lastAssistant?.extras.model) ?? models.find(model => model.is_default)?.label
@@ -97,7 +100,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={liveModel} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{de.chat.askAgain}</Button></div>}
       {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'conversation_not_found' ? newConversation : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
-      {state.phase === 'done' && <>{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}
+      {state.phase === 'done' && <>{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}
     </div>}
     <div className="sr-only" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
   </div>{showEnd && <div className="le-chat-end"><Button variant="secondary" onClick={scrollToEnd}>{de.chat.toEnd}</Button></div>}<div className="le-chat-composer"><ChatComposer conversationId={conversationId} autoFocus={busy && state.conversationId === conversationId} /></div></div>

@@ -122,6 +122,15 @@ test('a follow-up suggestion keeps the selected account', async () => {
   expect(requestBody.conversation_id).toBe('c')
 })
 
+test('the pencil on a mail card asks for a reply draft to that mail in the same conversation', async () => {
+  setup('/chat/c'); await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  expect(await screen.findByText('Dringend')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
+  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
+  expect(requestBody.account_id).toBeUndefined()
+})
+
 test('a follow-up suggestion without a selected account searches all accounts', async () => {
   setup('/chat/c'); await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
@@ -259,8 +268,8 @@ test('a missing history mail reference is requested only once', async () => {
 
 test('history renders safe text, model, mail account and only the latest suggestions', async () => {
   const { client, router } = setup('/chat/c')
-  spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail', account_id: 'a', color_index: 0, sender_name: 'Absender', subject: '<b>Betreff</b>', internal_date: null, deadline: null } })) as never)
-  const row = (id: string, content: string, extras: ChatMessageOut['extras']): ChatMessageOut => ({ id, conversation_id: 'c', role: 'assistant', content, created_at: '', extras, proposal: null, proposal_status: '', stopped: false, tool_name: '' })
+  spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail', account_id: 'a', color_index: 0, sender_name: 'Absender', subject: '<b>Betreff</b>', internal_date: null, deadline: null, is_flagged: true } })) as never)
+  const row =(id: string, content: string, extras: ChatMessageOut['extras']): ChatMessageOut => ({ id, conversation_id: 'c', role: 'assistant', content, created_at: '', extras, proposal: null, proposal_status: '', stopped: false, tool_name: '' })
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
   await waitFor(() => expect(screen.queryByText('Unterhaltung wird geladen …')).toBeNull())
   act(() => {
@@ -270,6 +279,8 @@ test('history renders safe text, model, mail account and only the latest suggest
   })
   expect(await screen.findByText('<b>Betreff</b>')).toBeTruthy()
   expect(screen.getByText('Gmail')).toBeTruthy()
+  expect(screen.getByText('Dringend')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Antwort entwerfen' })).toBeTruthy()
   expect(screen.getAllByText('Modellname')).toHaveLength(2)
   expect(screen.queryByText('Alte Frage')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Weiter fragen' }))

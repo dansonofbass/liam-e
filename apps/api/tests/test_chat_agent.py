@@ -70,6 +70,17 @@ async def test_cards_and_suggestions_arrive_after_text_then_done(store, monkeypa
     assert [e.event for e in events if e.event in {'delta', 'mails', 'suggestions', 'done'}] == ['delta', 'mails', 'suggestions', 'done']
 
 
+async def test_mail_cards_carry_the_priority_flag(store, monkeypatch):
+    flagged = MailMessage(account_id=store.account.id, provider_uid='1', subject='Frist', is_flagged=True)
+    plain = MailMessage(account_id=store.account.id, provider_uid='2', subject='Hallo')
+    store.mail.messages[flagged.id] = flagged
+    store.mail.messages[plain.id] = plain
+    events, _ = await run(store, monkeypatch, [[chunk('show_mails', {'message_ids': [flagged.id, plain.id]})], ['Antwort']])
+    refs = next(e for e in events if e.event == 'mails').mails
+    assert [(ref.subject, ref.is_flagged) for ref in refs] == [('Frist', True), ('Hallo', False)]
+    assert refs[0].model_dump(mode='json')['is_flagged'] is True
+
+
 async def test_no_tool_path_sends_or_changes_mail(store, monkeypatch):
     for obj, name in [(send, 'send_message'), (actions, 'apply_action'), (connectors, 'call_write_tool'), (newsletters, 'unsubscribe')]: monkeypatch.setattr(obj, name, AsyncMock(side_effect=AssertionError('write')))
     calls = [('list_accounts', {}), ('search_messages', {}), ('get_message', {'message_id':'missing'}), ('get_insights', {'message_ids': []}), ('find_newsletters', {}), ('propose_action', {'kind':'archive', 'message_ids':[], 'reason':'Aufräumen'}), ('create_draft', {'to':['toni@example.org'], 'subject':'Hallo', 'body':'Text'}), ('show_mails', {'message_ids':[]}), ('suggest_followups', {'texts':[]})]

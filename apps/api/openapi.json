@@ -947,6 +947,10 @@
             ],
             "title": "Internal Date"
           },
+          "is_flagged": {
+            "title": "Is Flagged",
+            "type": "boolean"
+          },
           "sender_name": {
             "title": "Sender Name",
             "type": "string"
@@ -963,7 +967,8 @@
           "subject",
           "sender_name",
           "internal_date",
-          "deadline"
+          "deadline",
+          "is_flagged"
         ],
         "title": "MailRefOut",
         "type": "object"
