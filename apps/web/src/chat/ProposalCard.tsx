@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { chatProposalCancel, chatProposalConfirm, mailActionsUndo } from '../api/generated/sdk.gen'
 import type { ChatMessageOut, Proposal } from '../api/generated/types.gen'
 import { errorCode, unwrap } from '../api/unwrap'
@@ -9,7 +9,8 @@ import { de } from '../i18n/de'
 type Clock = { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }
 const systemClock: Clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id) }
 // A live card can be replaced by its history row; preserve edits and the undo deadline.
-type CardState = { deadline?: number; deselected?: Set<string>; body?: string }
+// After a confirmation or cancellation the clicked button is gone; `focus` moves the focus to the outcome.
+type CardState = { deadline?: number; deselected?: Set<string>; body?: string; focus?: boolean }
 const cards = new WeakMap<QueryClient, Map<string, CardState>>()
 function cardState(client: QueryClient, id: string): CardState {
   let entries = cards.get(client)
@@ -58,7 +59,7 @@ function failureText(code: string | undefined, kind: Proposal['kind']): string {
   }
 }
 
-function Result({ message, proposal, clock }: { message: ChatMessageOut; proposal: Proposal; clock: Clock }) {
+function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOut; proposal: Proposal; clock: Clock; onUndone: () => void }) {
   const client = useQueryClient()
   const { visible, beforeDeadline, expire } = useUndoWindow(client, message.id, clock)
   const [undone, setUndone] = useState(false)
@@ -73,7 +74,7 @@ function Result({ message, proposal, clock }: { message: ChatMessageOut; proposa
     try {
       const outcome = await unwrap(mailActionsUndo({ body: { action_ids: ids }, throwOnError: true }))
       if (outcome.expired.length || outcome.failed.length || outcome.skipped.length) setError(true)
-      else { expire(); setUndone(true) }
+      else { expire(); setUndone(true); onUndone() }
       void client.invalidateQueries({ queryKey: ['summary'] })
     } catch { setError(true) } finally {
       void client.invalidateQueries({ queryKey: ['messages'] })
@@ -103,6 +104,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   const [error, setError] = useState<string>()
   const [, refresh] = useState(0)
   const pending = useRef(false)
+  const outcome = useRef<HTMLDivElement>(null)
   const current = updated?.id === message.id && !(updated.proposal_status === 'running' && message.proposal_status !== 'pending' && message.proposal_status !== 'running') ? updated : message
   const proposal = current.proposal
   useEffect(() => {
@@ -123,6 +125,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
     try {
       const result = await operation()
       if (confirm) cardState(client, result.id).deadline = clock.now() + 10_000
+      cardState(client, result.id).focus = true
       setUpdated(result)
       client.setQueryData<ChatMessageOut[]>(['history', current.conversation_id], rows => rows?.map(row => row.id === result.id ? result : row))
       void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
@@ -137,11 +140,16 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
       if (code === 'proposal_not_pending') void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
     } finally { pending.current = false; setBusy(false) }
   }
+  useEffect(() => {
+    const saved = cardState(client, current.id)
+    if (current.proposal_status !== 'pending' && saved.focus) { saved.focus = false; outcome.current?.focus() }
+  })
   if (!proposal) return null
-  if (current.proposal_status === 'running') return <p className="le-hint">{de.proposal.running}</p>
-  if (current.proposal_status === 'cancelled') return <p className="le-hint">{de.proposal.cancelled}</p>
-  if (current.proposal_status === 'failed') return <Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code, proposal.kind)}</Notice>
-  if (current.proposal_status === 'done' || current.proposal_status === 'partial') return <Result key={current.id} message={current} proposal={proposal} clock={clock} />
+  const settled = (content: ReactNode) => <div ref={outcome} tabIndex={-1} className="le-proposal-outcome">{content}</div>
+  if (current.proposal_status === 'running') return settled(<p className="le-hint">{de.proposal.running}</p>)
+  if (current.proposal_status === 'cancelled') return settled(<p className="le-hint">{de.proposal.cancelled}</p>)
+  if (current.proposal_status === 'failed') return settled(<Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code, proposal.kind)}</Notice>)
+  if (current.proposal_status === 'done' || current.proposal_status === 'partial') return settled(<Result key={current.id} message={current} proposal={proposal} clock={clock} onUndone={() => outcome.current?.focus()} />)
   if (current.proposal_status !== 'pending') return null
   const saved = cardState(client, current.id)
   const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${de.proposal.manualSubtitle}` } : item)

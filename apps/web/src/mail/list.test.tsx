@@ -184,3 +184,45 @@ test('keyboard archives the selected row but not while typing search', async () 
   await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
   expect(action.mock.calls[0]?.[0]?.body).toEqual({ kind: 'archive' })
 })
+
+const rowOf = async (subject: string) => (await screen.findByText(subject)).closest('.le-mailrow') as HTMLElement
+const linkOf = (subject: string) => (screen.getByText(subject).closest('.le-mailrow') as HTMLElement).querySelector('.le-mailrow-link')
+const archiveFrom = (element: HTMLElement) => { const button = element.querySelector<HTMLButtonElement>('button[aria-label="Archivieren"]')!; button.focus(); fireEvent.click(button) }
+// Like the server: an archived mail no longer comes back from the list.
+function archivingServer(list: ReturnType<typeof setup>['list'], mode: 'row' | 'rows') {
+  const removed = new Set<string>()
+  const all = mode === 'row' ? [row] : [row, { ...row, id: 'm2', subject: 'Zweite' }, { ...row, id: 'm3', subject: 'Dritte' }]
+  list.mockImplementation((async () => ({ data: { items: all.filter(item => !removed.has(item.id)), next_cursor: null } })) as never)
+  return spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => { removed.add(options.path.message_id); return { data: { action_id: 'act', message: row }, response: { status: 200 } } }) as never)
+}
+
+test('removing a focused row moves the focus to the next row', async () => {
+  const { list } = setup('rows'); archivingServer(list, 'rows')
+  archiveFrom(await rowOf('Zweite'))
+  await waitFor(() => expect(screen.queryByText('Zweite')).toBeNull())
+  await waitFor(() => expect(document.activeElement).toBe(linkOf('Dritte')))
+})
+
+test('removing the focused last row moves the focus to the previous row', async () => {
+  const { list } = setup('rows'); archivingServer(list, 'rows')
+  archiveFrom(await rowOf('Dritte'))
+  await waitFor(() => expect(screen.queryByText('Dritte')).toBeNull())
+  await waitFor(() => expect(document.activeElement).toBe(linkOf('Zweite')))
+})
+
+test('removing the only focused row moves the focus to the list', async () => {
+  const { list } = setup('row'); archivingServer(list, 'row')
+  archiveFrom(await rowOf('Termin'))
+  await waitFor(() => expect(screen.queryByText('Termin')).toBeNull())
+  await waitFor(() => expect(document.activeElement?.classList.contains('le-inbox-scroll')).toBe(true))
+})
+
+test('a keyboard removal without focus in the row leaves the focus alone', async () => {
+  const { list } = setup('rows'); const action = archivingServer(list, 'rows')
+  await rowOf('Termin')
+  ;(document.activeElement as HTMLElement | null)?.blur()
+  fireEvent.keyDown(document.body, { key: 'j' }); fireEvent.keyDown(document.body, { key: 'e' })
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(screen.queryByText('Termin')).toBeNull())
+  expect(document.activeElement).toBe(document.body)
+})

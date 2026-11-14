@@ -32,6 +32,9 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const [syncing, setSyncing] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null), sentinel = useRef<HTMLDivElement>(null)
   const rowRefs = useRef(new Map<string, HTMLLIElement>())
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // When a removed row held the focus, it moves to the neighbouring row, else to the list.
+  const focusAfter = useRef<{ removed: string; target?: string } | null>(null)
   const selected = messageId ?? localSelected
   const items = messages.data?.pages.flatMap(page => page.items) ?? []
   const selectedIndex = items.findIndex(item => item.id === selected)
@@ -47,6 +50,13 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   useEffect(() => { if (searchOpen) searchRef.current?.querySelector('input')?.focus() }, [searchOpen])
   useEffect(() => { if (selected) rowRefs.current.get(selected)?.scrollIntoView?.({ block: 'nearest' }) }, [selected])
   useEffect(() => {
+    const pending = focusAfter.current
+    if (!pending || items.some(item => item.id === pending.removed)) return
+    focusAfter.current = null
+    const link = pending.target ? rowRefs.current.get(pending.target)?.querySelector<HTMLElement>('.le-mailrow-link') : null
+    ;(link ?? scrollRef.current)?.focus()
+  }, [items])
+  useEffect(() => {
     const node = sentinel.current
     if (!node || typeof IntersectionObserver === 'undefined') return
     const observer = new IntersectionObserver(entries => {
@@ -57,6 +67,11 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   }, [messages.hasNextPage, messages.isFetchingNextPage, messages.fetchNextPage])
 
   const remove = (mail: MessageListItemOut, kind: 'archive' | 'trash') => {
+    const active = typeof document === 'undefined' ? null : document.activeElement
+    if (active && rowRefs.current.get(mail.id)?.contains(active)) {
+      const index = items.findIndex(item => item.id === mail.id)
+      focusAfter.current = { removed: mail.id, target: items[index + 1]?.id ?? items[index - 1]?.id }
+    }
     const moved = selected === mail.id
     const next = items[selectedIndex + 1]?.id ?? items[selectedIndex - 1]?.id
     if (moved) {
@@ -112,7 +127,7 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
     </div>
     {breakpoint === 'mobile' && <div className="le-inbox-mobile-status"><small className="le-muted le-num">{de.inbox.unreadStand(summary.data?.unread_total ?? 0, time)}</small><span className="le-grow" />{buttons}</div>}
     {searchOpen && <div className="le-inbox-search" ref={searchRef}><TextField label={de.inbox.search} type="search" placeholder={de.inbox.searchPlaceholder} value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setValue(''); setSearchOpen(false); changeSearch({ q: undefined }) } }} /></div>}
-    <div className="le-inbox-scroll">
+    <div className="le-inbox-scroll" ref={scrollRef} tabIndex={-1}>
       {messages.isPending && <><span className="le-sr" role="status">{de.inbox.loading}</span><div aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <div key={i} className="le-mailrow le-mailrow--placeholder"><span /><span /></div>)}</div></>}
       {messages.isError && !messages.data && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void messages.refetch() } }}>{de.inbox.loadError}</Notice>}
       {messages.data && !items.length && <p className="le-hint">{hasActiveFilters(search) ? de.inbox.emptyFiltered : de.inbox.empty}</p>}

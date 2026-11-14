@@ -328,3 +328,38 @@ test('unsubscribe without archived mail and unsafe manual link', async () => {
   expect(links[0]?.getAttribute('rel')).toBe('noopener noreferrer')
   expect(links[0]?.parentElement?.classList.contains('le-proposal-manual')).toBe(true)
 })
+
+test('after confirming, the focus moves from the gone button to the result', async () => {
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: message('done', { done: 2, undo_action_ids: ['u'] }) })) as never)
+  setup(message())
+  const button = await screen.findByRole('button', { name: '2 abbestellen und archivieren' })
+  button.focus(); fireEvent.click(button)
+  await screen.findByRole('button', { name: 'Rückgängig' })
+  await waitFor(() => expect(document.activeElement?.classList.contains('le-proposal-outcome')).toBe(true))
+  expect(document.activeElement?.textContent).toContain('2 Newsletter abbestellt')
+})
+
+test('after cancelling, the focus moves to the cancelled hint', async () => {
+  spyOn(sdk, 'chatProposalCancel').mockImplementation((async () => ({ data: message('cancelled') })) as never)
+  setup(message())
+  const button = await screen.findByRole('button', { name: 'Abbrechen' })
+  button.focus(); fireEvent.click(button)
+  await screen.findByText('Abgebrochen, es wurde nichts geändert.')
+  await waitFor(() => expect(document.activeElement?.classList.contains('le-proposal-outcome')).toBe(true))
+  expect(document.activeElement?.textContent).toBe('Abgebrochen, es wurde nichts geändert.')
+})
+
+test('after undoing, the focus stays on the result', async () => {
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['u'], expired: [], failed: [], skipped: [] } })) as never)
+  await setupConfirmed(message('done', { done: 1, undo_action_ids: ['u'] }))
+  const undo = screen.getByRole('button', { name: 'Rückgängig' })
+  undo.focus(); fireEvent.click(undo)
+  await screen.findByText('Rückgängig gemacht.')
+  expect(document.activeElement?.classList.contains('le-proposal-outcome')).toBe(true)
+})
+
+test('a settled card loaded from the history does not take the focus', async () => {
+  setup(message('done', { done: 1 }))
+  await screen.findByText('1 Newsletter abbestellt.')
+  expect(document.activeElement).toBe(document.body)
+})
