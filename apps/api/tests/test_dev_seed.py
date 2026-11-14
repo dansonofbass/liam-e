@@ -100,6 +100,7 @@ async def test_seed_is_repeatable_and_preserves_other_rows(fake_store, monkeypat
         assert proposal is not None and proposal.kind == "unsubscribe"
         assert [item.title for item in proposal.items] == ["Wohnwelt Deals", "Laufschuh-Club", "TechDigest Weekly", "Gartenfreunde Post", "ReiseRadar"]
         assert [item.count for item in proposal.items] == [23, 11, 14, 6, 7]
+        assert proposal.items[0].subtitle == "23 Mails · newsletter@wohnwelt-deals.example · Abmeldung per Mail an abmelden@wohnwelt-deals.example, Betreff „unsubscribe“"
         for item in proposal.items:
             account_id, address = item.id.split("|", 1)
             matching = [m for m in fake_store.messages.values() if m.account_id == account_id and m.sender_address == address]

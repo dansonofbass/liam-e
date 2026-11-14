@@ -72,6 +72,17 @@ def _valid_addresses(addresses):
     return all(isinstance(a, str) and '@' in a and not any(c.isspace() or c == ',' for c in a) for a in addresses)
 
 
+def unsubscribe_subtitle(total: int, address: str, method: str, link: str | None) -> str:
+    count = f'{total:,}'.replace(',', '.')
+    subtitle = f'{count} {"Mail" if total == 1 else "Mails"} · {address}'
+    target = newsletters.parse_mailto(link) if method == 'mailto' else None
+    if target:
+        subtitle += f' · Abmeldung per Mail an {target.recipient}, Betreff „{target.subject}“'
+        if target.body and target.body != target.subject:
+            subtitle += f', Text „{target.body}“'
+    return subtitle
+
+
 async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutcome:
     if name == 'list_accounts':
         return result([{'id': a.id, 'provider': a.provider, 'email_address': a.email_address, 'is_active': a.is_active} for a in await mail_account.list_accounts()])
@@ -112,11 +123,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
             if kind == 'unsubscribe':
                 s = await newsletters.sender_by_id(id)
                 if not s: continue
-                count = f'{s.total:,}'.replace(',', '.')
-                subtitle = f'{s.address} · {count} {"Mail" if s.total == 1 else "Mails"}'
-                if s.method == 'mailto':
-                    target = newsletters.parse_mailto(s.link)
-                    if target: subtitle += f' · {target.recipient} · {target.subject} · {target.body}'
+                subtitle = unsubscribe_subtitle(s.total, s.address, s.method, s.link if s.method == 'mailto' else None)
                 items.append(proposals.ProposalItem(id=id, kind='sender', title=s.display_name, subtitle=subtitle, count=s.total, unread=s.unread, last_read_at=s.last_read_at, method=s.method))
             else:
                 m = await mail_message.get_message(id)

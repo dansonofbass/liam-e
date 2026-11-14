@@ -19,6 +19,7 @@ from db.models.mail_sync_state import MailSyncState
 from env.db import env as db_env
 
 from api.mail import newsletters, proposals
+from api.mail.agent_tools import unsubscribe_subtitle
 from api.mail.chat_schemas import ChatExtrasOut
 
 SEED_NAMESPACE = UUID("e7a6334c-ec02-4ac7-b7b0-14e98b91e689")
@@ -177,10 +178,7 @@ async def seed(now: datetime | None = None) -> SeedResult:
         sender_mails = [m for m in messages if m.account_id == by_key[account].id and m.sender_address == address]
         link = f"<mailto:abmelden@{slug}.example>"
         method, uri = newsletters.unsubscribe_method(link, "")
-        target = newsletters.parse_mailto(uri)
-        subtitle = f"{address} · {len(sender_mails)} Mails"
-        if target:
-            subtitle += f" · {target.recipient} · {target.subject} · {target.body}"
+        subtitle = unsubscribe_subtitle(len(sender_mails), address, method, uri)
         items.append(proposals.ProposalItem(
             id=f"{by_key[account].id}|{address}", kind="sender", title=sender, subtitle=subtitle,
             count=len(sender_mails), unread=sum(not m.is_read for m in sender_mails),

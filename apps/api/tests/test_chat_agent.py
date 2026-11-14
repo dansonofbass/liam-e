@@ -145,7 +145,21 @@ async def test_unsubscribe_proposal_formats_mail_count(store, monkeypatch, total
     monkeypatch.setattr(newsletters, 'sender_by_id', AsyncMock(return_value=sender))
     outcome = await execute_tool('propose_action', {'kind': 'unsubscribe', 'sender_ids': ['s'], 'reason': 'Alt'}, TurnContext('chat', None, date.today()))
     from api.mail.proposals import proposal_view
-    assert proposal_view(outcome.proposal_message).items[0].subtitle == f'news@example.org · {expected}'
+    assert proposal_view(outcome.proposal_message).items[0].subtitle == f'{expected} · news@example.org'
+
+
+@pytest.mark.parametrize('method,link,expected', [
+    ('mailto', 'mailto:leave@example.org?subject=stop&body=stop', '1 Mail · news@example.org · Abmeldung per Mail an leave@example.org, Betreff „stop“'),
+    ('mailto', 'mailto:leave@example.org?subject=stop&body=remove', '1 Mail · news@example.org · Abmeldung per Mail an leave@example.org, Betreff „stop“, Text „remove“'),
+    ('link', 'https://example.org/unsubscribe', '1 Mail · news@example.org'),
+])
+async def test_unsubscribe_proposal_describes_method(store, monkeypatch, method, link, expected):
+    from api.mail.agent_tools import execute_tool, TurnContext
+    from api.mail.proposals import proposal_view
+    sender = NS(address='news@example.org', total=1, display_name='News', unread=0, last_read_at=None, method=method, link=link)
+    monkeypatch.setattr(newsletters, 'sender_by_id', AsyncMock(return_value=sender))
+    outcome = await execute_tool('propose_action', {'kind': 'unsubscribe', 'sender_ids': ['s'], 'reason': 'Alt'}, TurnContext('chat', None, date.today()))
+    assert proposal_view(outcome.proposal_message).items[0].subtitle == expected
 
 
 async def test_mail_proposal_without_subject(store):
