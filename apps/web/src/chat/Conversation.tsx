@@ -16,7 +16,7 @@ import { useChatSession } from './session'
 
 type Accounts = AccountSummaryOut[]
 
-export function ChatComposer({ conversationId, contextMessageId, onSend, autoFocus }: { conversationId?: string; contextMessageId?: string; onSend?: () => void; autoFocus?: boolean }) {
+export function ChatComposer({ conversationId, contextMessageId, model, onSend, autoFocus }: { conversationId?: string; contextMessageId?: string; model?: string; onSend?: () => void; autoFocus?: boolean }) {
   const { data: summary } = useQuery(summaryQuery())
   const { state, send, stop, scope, setScope } = useChatSession()
   const [value, setValue] = useState('')
@@ -24,7 +24,7 @@ export function ChatComposer({ conversationId, contextMessageId, onSend, autoFoc
   return <Composer value={value} onChange={setValue} onSubmit={() => {
     if (busy || !value.trim()) return
     onSend?.()
-    void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId })
+    void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, model })
     setValue('')
   }} onStop={stop} busy={busy} scope={scope} accounts={(summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name || account.email_address }))} onScopeChange={setScope} placeholder={de.chat.placeholder} autoFocus={autoFocus} />
 }

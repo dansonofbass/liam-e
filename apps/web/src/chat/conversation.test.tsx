@@ -72,7 +72,7 @@ test('coarse pointer chat controls use the large touch target token', async () =
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/@media \(pointer: coarse\) \{ ([^{}]+)\{ ([^{}]+) \} \}/u)
   expect(rule).toBeTruthy()
-  for (const selector of ['.le-chat-suggestions .le-chip', '.le-chat-header .le-menu-anchor > .le-chip', '.le-chat-end .le-btn', '.le-chat-retry .le-btn', '.le-chat-reference .le-icon-btn']) expect(rule?.[1]).toContain(selector)
+  for (const selector of ['.le-chat-suggestions .le-chip', '.le-chat-header .le-menu-anchor .le-chip', '.le-chat-end .le-btn', '.le-chat-retry .le-btn', '.le-chat-reference .le-icon-btn']) expect(rule?.[1]).toContain(selector)
   expect(rule?.[2]).toContain('min-width: var(--control-height-lg)')
   expect(rule?.[2]).toContain('min-height: var(--control-height-lg)')
 })

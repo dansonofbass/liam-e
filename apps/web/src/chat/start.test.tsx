@@ -10,11 +10,12 @@ import { ChatSessionProvider } from './session'
 
 const originalFetch = globalThis.fetch, originalMatchMedia = window.matchMedia
 let request: Record<string, unknown>
-function setup(accounts = true, path = '/', unread = 3, lastSync: string | null = null, displayName = 'Privat') {
+const oneModel = [{ id: 'm', label: 'Standardmodell', description: '', is_default: true }]
+function setup(accounts = true, path = '/', unread = 3, lastSync: string | null = null, displayName = 'Privat', models = oneModel) {
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { request = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start() {} }))) }) as typeof fetch
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: accounts ? [{ id: 'a', display_name: displayName, provider: 'gmail', email_address: 'a@example.com', color_index: 0, state: 'ok' }] : [], unread_total: unread, newsletter_senders: 2, last_sync_at: lastSync } })) as never)
-  spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [{ id: 'm', label: 'Standardmodell', description: '', is_default: true }] })) as never)
+  spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: models })) as never)
   spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail1', account_id: 'a', color_index: 0, sender_name: 'Anna', subject: 'Termin', internal_date: null, deadline: null } })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
@@ -74,6 +75,50 @@ test('a failed start shows a retry that sends the same text', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Noch mal versuchen' }))
   await waitFor(() => expect(requests).toHaveLength(2))
   expect(requests.map(item => item.text)).toEqual(['Was steht drin?', 'Was steht drin?'])
+})
+
+const twoModels = [{ id: 'm', label: 'Standardmodell', description: 'Alltag', is_default: true }, { id: 'big', label: 'Großmodell', description: 'Gründlich', is_default: false }]
+
+test('the model on the start page is a chip with a menu and a tooltip, like in a conversation', async () => {
+  setup(true, '/', 3, null, 'Privat', twoModels)
+  const chip = await screen.findByRole('button', { name: 'Standardmodell' })
+  expect(chip.classList.contains('le-chip--quiet')).toBe(true)
+  expect(chip.getAttribute('aria-haspopup')).toBe('menu')
+  expect(chip.querySelector('.lucide-chevron-down')).toBeTruthy()
+  expect(document.querySelector('.le-hint')?.textContent).not.toBe('Standardmodell')
+  fireEvent.mouseEnter(chip)
+  expect((await screen.findByRole('tooltip', {}, { timeout: 2000 })).textContent).toBe('Modell für diese Unterhaltung wählen')
+  fireEvent.click(chip)
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Standardmodell · Alltag', 'Großmodell · Gründlich'])
+})
+
+test('the model chosen on the start page travels with the first message, typed or from a quick action', async () => {
+  setup(true, '/', 3, null, 'Privat', twoModels)
+  fireEvent.click(await screen.findByRole('button', { name: 'Standardmodell' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: /Großmodell/ }))
+  expect(await screen.findByRole('button', { name: 'Großmodell' })).toBeTruthy()
+  expect(screen.queryByRole('menuitem')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /Priorisieren/ }))
+  expect(request.model).toBe('big')
+  expect(request.conversation_id).toBeUndefined()
+  cleanup(); mock.restore()
+  setup(true, '/', 3, null, 'Privat', twoModels)
+  fireEvent.change(await screen.findByPlaceholderText(de.chat.placeholder), { target: { value: 'Was steht drin?' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+  expect(request.text).toBe('Was steht drin?')
+  expect(request.model).toBeUndefined()
+})
+
+test('a model that is gone is named, the chip falls back to the default and there is nothing to retry', async () => {
+  setup(true, '/', 3, null, 'Privat', twoModels)
+  globalThis.fetch = ((_url: unknown, _init: RequestInit) => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'model_unknown' } }), { status: 422 }))) as typeof fetch
+  fireEvent.click(await screen.findByRole('button', { name: 'Standardmodell' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: /Großmodell/ }))
+  fireEvent.change(await screen.findByPlaceholderText(de.chat.placeholder), { target: { value: 'Was steht drin?' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+  expect((await screen.findByRole('alert')).textContent).toBe('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')
+  expect(screen.queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
+  expect(await screen.findByRole('button', { name: 'Standardmodell' })).toBeTruthy()
 })
 
 test('about displays a mail and sends its context, which can be removed', async () => {

@@ -29,6 +29,7 @@ export const de = {
     loadingSummary: 'Konten werden geladen …', summaryError: 'Die Konten konnten nicht geladen werden. Versuch es gleich noch mal.',
     noAccounts: 'Verbinde ein Konto, dann kann ich deine Mails lesen.', removeReference: 'Bezug entfernen', toEnd: 'Zum Ende',
     loadingReference: 'Mail wird geladen …', referenceError: 'Die Mail konnte nicht geladen werden. Versuch es gleich noch mal.',
+    modelTip: 'Modell für diese Unterhaltung wählen',
     modelError: 'Das Modell konnte nicht geändert werden. Versuch es gleich noch mal.', modelUnknown: 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.',
     stand: (unread: number, accounts: number, time?: string) => `${plural(unread, { zero: 'Keine ungelesenen Mails', one: '# ungelesene Mail', other: '# ungelesene Mails' })} in ${plural(accounts, { one: '# Konto', other: '# Konten' })}${time ? ` · Stand ${time}` : ''}`,
   },
@@ -43,6 +44,7 @@ export const de = {
   errors: {
     request_failed: 'Die Anfrage hat nicht geklappt.',
     model_unavailable: 'Das Modell antwortet gerade nicht. Versuch es gleich noch mal.',
+    model_unknown: 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.',
     aborted: 'Die Antwort ist abgebrochen.',
     internal: 'Die Antwort konnte nicht erstellt werden. Versuch es gleich noch mal.',
     conversation_not_found: 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.',

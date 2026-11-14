@@ -66,7 +66,7 @@ test('the conversations heading stays put while the list scrolls', async () => {
 test('the model chip in the chat header gets a 44 px target on touch', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const coarse = css.split('@media (pointer: coarse) {').map(block => block.split('}')[0] ?? '')
-  expect(coarse.some(block => block.includes('.le-chat-topbar .le-menu-anchor > .le-chip') && block.includes('min-height: var(--control-height-lg)'))).toBe(true)
+  expect(coarse.some(block => block.includes('.le-chat-topbar .le-menu-anchor .le-chip') && block.includes('min-height: var(--control-height-lg)'))).toBe(true)
 })
 
 test('views with their own scroll area share one viewport-height rule', async () => {
