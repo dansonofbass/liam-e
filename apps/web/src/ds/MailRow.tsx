@@ -1,0 +1,13 @@
+import type { MessageListItemOut } from '../api/generated/types.gen'
+import { de } from '../i18n/de'
+import { formatRelativeDay } from '../i18n/format'
+import { Avatar } from './Avatar'
+import { Tag } from './Chip'
+import { Icon } from './Icon'
+import { IconButton } from './IconButton'
+import { Menu } from './Menu'
+export function MailRow({ mail, selected, coarse, onOpen, onArchive, onToggleRead, onTrash }: { mail: MessageListItemOut; selected: boolean; coarse: boolean; onOpen: () => void; onArchive: () => void; onToggleRead: () => void; onTrash: () => void }) {
+  const readLabel = mail.is_read ? de.controls.markUnread : de.controls.markRead
+  const items = [{ label: de.controls.archive, icon: 'archive' as const, onSelect: onArchive }, { label: readLabel, icon: 'mail-open' as const, onSelect: onToggleRead }, { label: de.controls.trash, icon: 'trash-2' as const, tone: 'danger' as const, onSelect: onTrash }]
+  return <div className={`le-mailrow${mail.is_read ? '' : ' is-unread'}`} aria-selected={selected}><Avatar name={mail.sender_name} address={mail.sender_address} colorIndex={mail.color_index} /><div className="le-mailrow-main"><div className="le-mailrow-top"><span className="le-mailrow-from">{mail.sender_name || mail.sender_address}</span></div><button type="button" className="le-mailrow-link le-mailrow-subject" onClick={onOpen}>{mail.subject}</button><span className="le-mailrow-snippet">{mail.snippet}</span>{mail.deadline && <span><Tag tone="warm" icon="clock">{de.controls.deadline(mail.deadline)}</Tag></span>}</div><div className="le-mailrow-side">{mail.internal_date && <time className="le-mailrow-time" dateTime={mail.internal_date}>{formatRelativeDay(new Date(mail.internal_date), new Date())}</time>}{mail.has_attachments && <span aria-label={de.controls.attachment}><Icon name="paperclip" size="sm" /></span>}</div><div className={coarse ? 'le-mailrow-more le-mailrow-more--coarse' : 'le-mailrow-more'}><Menu trigger={props => <IconButton {...props} label={de.controls.moreMail(mail.subject)} icon="more-horizontal" size="lg" />} items={items} /></div>{!coarse && <div className="le-mailrow-actions"><IconButton label={de.controls.archive} shortcut="E" icon="archive" onClick={onArchive} /><IconButton label={readLabel} shortcut="U" icon="mail-open" onClick={onToggleRead} /><IconButton label={de.controls.trash} shortcut="#" icon="trash-2" tone="danger" onClick={onTrash} /></div>}</div>
+}

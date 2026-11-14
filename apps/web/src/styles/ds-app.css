@@ -12,4 +12,13 @@
 .le-scrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); animation: le-tooltip-fade 220ms ease; }
 .le-drawer { height: 100%; width: min(100%, var(--sidebar-width)); box-sizing: border-box; background: var(--surface); box-shadow: var(--shadow-overlay); overflow: auto; animation: le-drawer-in 220ms ease; }
 @keyframes le-drawer-in { from { opacity: 0; transform: translateX(-100%); } to { opacity: 1; transform: translateX(0); } }
+.le-composer-spacer { flex: 1; }
+.le-confirm-draft { padding: var(--space-3); }
+.le-confirm-draft .le-input { width: 100%; }
+.le-mailrow-link { border: 0; padding: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.le-mailrow-more { display: none; position: relative; z-index: 3; }
+.le-mailrow-more--coarse { display: block; }
+.le-mailrow-more .le-menu-anchor .le-menu { left: auto; right: 0; }
+@media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } }
+@media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (prefers-reduced-motion: reduce) { .le-drawer { animation-name: le-tooltip-fade; } }
