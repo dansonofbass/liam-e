@@ -155,6 +155,25 @@ test('the tablet bar lists the conversations as a navigation entry with its own 
   expect((await screen.findByRole('tooltip', {}, { timeout: 2000 })).textContent).toBe('Öffnet die Liste deiner Unterhaltungen')
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 })
+test('the tablet bar shows the unread count on the inbox entry and names it', async () => {
+  width = 800
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  setup('/', client)
+  const inbox = await screen.findByRole('link', { name: 'Posteingang, 47 ungelesen' })
+  const badge = inbox.querySelector('.le-nav-badge')
+  expect(badge?.getAttribute('aria-hidden')).toBe('true')
+  expect(badge?.textContent).toBe('47')
+  act(() => { client.setQueryData(['summary'], { ...summary, unread_total: 1234 }) })
+  expect((await screen.findByRole('link', { name: 'Posteingang, 1.234 ungelesen' })).querySelector('.le-nav-badge')?.textContent).toBe('999+')
+  act(() => { client.setQueryData(['summary'], { ...summary, unread_total: 0 }) })
+  expect((await screen.findByRole('link', { name: 'Posteingang' })).querySelector('.le-nav-badge')).toBeNull()
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-nav-badge \{[^}]*position: absolute;/u)
+  expect(css).toMatch(/\.le-nav-item \{[^}]*position: relative;/u)
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+})
 test('the mobile header centres its title between the menu and the new-conversation button', async () => {
   width = 375
   spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)

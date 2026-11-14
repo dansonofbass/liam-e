@@ -17,7 +17,7 @@ export function Sidebar({ collapsed = false, hideBrand = false, onConversations,
   return <div className="le-shell-sidebar" onClick={event => { if ((event.target as HTMLElement).closest('a')) onNavigate?.() }}>
     {!hideBrand && <div className="le-brand"><span className="le-mark"><Icon name="sparkle" /></span>{!collapsed && de.assistant.name}</div>}
     <NavItem to="/" icon="message-circle" label={de.shell.chat} tip={de.shell.chatTip} collapsed={collapsed} current={path === '/' || path.startsWith('/chat/')} />
-    <NavItem to="/mail" icon="inbox" label={de.shell.inbox} tip={de.shell.inboxTip} badge={data?.unread_total || undefined} collapsed={collapsed} />
+    <NavItem to="/mail" icon="inbox" label={de.shell.inbox} tip={de.shell.inboxTip} badge={data?.unread_total || undefined} badgeLabel={data?.unread_total ? de.shell.unread(data.unread_total) : undefined} collapsed={collapsed} />
     <NavItem to="/accounts" icon="at-sign" label={de.shell.accounts} tip={de.shell.accountsTip} collapsed={collapsed} />
     {collapsed ? <NavButton icon="messages-square" label={de.shell.conversations} tip={de.shell.conversationsTip} collapsed onClick={onConversations} /> :<div className="le-shell-conversations"><Conversations onNavigate={onNavigate} /></div>}
     {!collapsed && data && <small className="le-muted le-shell-status"><span className="le-dot le-dot--accent" aria-hidden="true" />{data.last_sync_at ? formatStand(count, new Date(data.last_sync_at)) : de.shell.accountCount(count)}</small>}

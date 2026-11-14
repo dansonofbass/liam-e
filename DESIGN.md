@@ -306,7 +306,9 @@ Anfang an mit.
 
 - `desktop`: Seitenleiste (`sidebar-width`) und Hauptfläche schweben nebeneinander.
 - `tablet`: Seitenleiste als schmale Symbolleiste mit Tooltips; „Unterhaltungen“ öffnet
-  eine Schublade über dem Inhalt.
+  eine Schublade über dem Inhalt. Der Zähler der ungelesenen Mails sitzt als Badge an der
+  oberen rechten Ecke des Posteingangs (ab 1.000 „999+“); der zugängliche Name nennt ihn
+  („Posteingang, 47 ungelesen“).
 - `mobile`: Die Hauptfläche füllt den Bildschirm, ohne Rahmen, Rundung und Schatten.
   Kopfzeile mit Menü-Button links, Titel und „Neue Unterhaltung“ rechts. Das
   Menü öffnet eine Schublade mit Navigation und Unterhaltungen, mit abgedunkeltem
