@@ -76,3 +76,10 @@ test('views with their own scroll area share one viewport-height rule', async ()
   for (const view of ['.le-accounts-scroll', '.le-chat-view', '.le-inbox']) expect(rules[0]).toContain(`.le-app:has(${view})`)
   for (const property of ['height: 100dvh', 'overflow: hidden']) expect(rules[0]).toContain(property)
 })
+
+test('the model menu in the chat header opens to the left of its right-aligned chip', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.split('.le-chat-header .le-menu-anchor .le-menu, .le-chat-topbar .le-menu-anchor .le-menu {')[1]?.split('}')[0] ?? ''
+  for (const property of ['left: auto', 'right: 0', 'max-width: calc(100vw - 2 * var(--space-4))', 'max-height: 60dvh', 'overflow-y: auto']) expect(rule).toContain(property)
+  expect(css.indexOf('.le-chat-header .le-menu-anchor .le-menu')).toBeGreaterThan(css.indexOf('.le-menu-anchor .le-menu {'))
+})

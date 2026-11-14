@@ -28,6 +28,8 @@
 .le-mailrow-more--coarse { display: block; }
 .le-mailrow:has(.le-mailrow-more--coarse) .le-mailrow-side { visibility: visible; }
 .le-mailrow-more .le-menu-anchor .le-menu { left: auto; right: 0; }
+/* The model chip sits at the right end of the chat header, so its menu opens to the left; the long model list scrolls instead of running off screen. */
+.le-chat-header .le-menu-anchor .le-menu, .le-chat-topbar .le-menu-anchor .le-menu { left: auto; right: 0; max-width: calc(100vw - 2 * var(--space-4)); max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain; }
 @media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } .le-mailrow:hover .le-mailrow-side, .le-mailrow:focus-within .le-mailrow-side, .le-mailrow.is-hover .le-mailrow-side { visibility: visible; } }
 @media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor .le-chip, .le-chat-topbar .le-menu-anchor .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-drawer-brand .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
