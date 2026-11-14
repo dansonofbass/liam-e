@@ -77,6 +77,13 @@ test('drawer frame has inset padding, right radii and a coarse close target', as
   for (const property of ['width: min(308px, 100vw - 48px)', 'padding: var(--space-3)', 'border-radius: 0 var(--radius-lg) var(--radius-lg) 0', 'box-shadow: var(--shadow-overlay)']) expect(rule).toContain(property)
   expect(css).toContain('@media (pointer: coarse) { .le-drawer-brand .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }')
 })
+test('drawer stacks its content so the sidebar footer sits at the bottom', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.match(/\.le-drawer \{([^}]*)\}/u)?.[1]
+  for (const property of ['display: flex', 'flex-direction: column']) expect(rule).toContain(property)
+  expect(css).toContain('.le-drawer .le-shell-sidebar { flex: 1 0 auto; }')
+  expect(css).toMatch(/\.le-shell-status \{[^}]*margin-top: auto/u)
+})
 test('mobile menu opens and closes on Escape', async () => {
   width = 375
   spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
