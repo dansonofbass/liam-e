@@ -4,7 +4,7 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from datetime import date
+from datetime import datetime
 
 from db.accessors import chat_conversation as conversation_access, chat_message as message_access
 from db.accessors import mail_account, mail_insight, mail_message
@@ -14,6 +14,7 @@ from api.mail.agent_prompt import system_prompt
 from api.mail.agent_tools import TOOLS, TurnContext, execute_tool, tool_status
 from api.mail.chat_events import ChatEvent, StartEvent, StatusEvent, DeltaEvent, MailsEvent, MailRefOut, ProposalEvent, SuggestionsEvent, DoneEvent, ErrorEvent
 from api.mail.chat_schemas import ChatExtrasOut, to_message_out
+from api.mail.insights import BERLIN
 from api.mail import headers, state
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def _to_model_messages(history, *, prompt=None):
     """Repair incomplete tool exchanges before sending history to the model."""
-    result = [{'role': 'system', 'content': prompt or system_prompt(today=date.today(), account_scope=None)}]
+    result = [{'role': 'system', 'content': prompt or system_prompt(today=datetime.now(BERLIN).date(), account_scope=None)}]
     kept = set()
     for i, row in enumerate(history):
         if row.role == 'tool':
@@ -78,7 +79,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         yield StartEvent(conversation_id=conversation.id, user_message_id=user.id)
         yield StatusEvent(code='thinking')
         account = await mail_account.get_account(account_id) if account_id else None
-        ctx = TurnContext(conversation.id, account.id if account else None, date.today())
+        ctx = TurnContext(conversation.id, account.id if account else None, datetime.now(BERLIN).date())
         history = await message_access.list_messages(conversation.id)
         messages = _to_model_messages(history, prompt=system_prompt(today=ctx.today, account_scope=account.email_address if account else None))
         if context_message_id and await mail_message.get_message(context_message_id):

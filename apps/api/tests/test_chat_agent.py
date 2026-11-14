@@ -1,6 +1,6 @@
 """Contract tests for streamed chat turns."""
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
@@ -121,6 +121,18 @@ async def test_conversation_model_is_used(store, monkeypatch):
     fake = FakeMistral(streams=[['Antwort']]); monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     _ = [e async for e in agent.run_turn_events(conversation_id=c.id, text='Hallo')]
     assert fake.requests[0]['model'] == c.model
+
+
+async def test_turn_prompt_uses_berlin_date(store, monkeypatch):
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 13, 23, 30, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(agent, 'datetime', FixedDatetime)
+    _, fake = await run(store, monkeypatch, [['Antwort']])
+    assert '14.11.2026' in fake.requests[0]['messages'][0]['content']
+    assert '14.11.2026' in agent._to_model_messages([])[0]['content']
 
 
 async def test_system_prompt_contains_tone_and_safety_rules():
