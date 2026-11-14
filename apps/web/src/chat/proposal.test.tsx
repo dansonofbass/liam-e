@@ -64,7 +64,7 @@ test('selection survives a card remount and confirmation', async () => {
 
 test('edited draft survives a card remount and confirmation', async () => {
   const initial = message()
-  initial.proposal = { kind: 'send', reason: 'Antwort.', items: [{ id: 'a', kind: 'mail', title: 'Antwort', subtitle: 'An Anna' }], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
+  initial.proposal = { kind: 'send', reason: 'Antwort.', items: [], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: { ...initial, proposal_status: 'done' } })) as never)
   const client = new QueryClient()
   const card = () => <QueryClientProvider client={client}><ProposalCard message={initial} /></QueryClientProvider>
@@ -74,7 +74,7 @@ test('edited draft survives a card remount and confirmation', async () => {
   render(card())
   expect((screen.getByLabelText('Entwurf') as HTMLTextAreaElement).value).toBe('Neuer Text')
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
-  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: 'Neuer Text' }, throwOnError: true }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: [], body: 'Neuer Text' }, throwOnError: true }))
 })
 
 test('running proposal refreshes history at most twenty times and clears its timer', () => {
@@ -275,13 +275,13 @@ test('partial unsubscribe separates gone, changed and other failures', async () 
 
 test('a send draft is editable and the edited body is confirmed', async () => {
   const initial = message()
-  initial.proposal = { kind: 'send', reason: 'Antwort.', irreversible: true, items: [{ id: 'a', kind: 'mail', title: 'Antwort', subtitle: 'An Anna' }], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
+  initial.proposal = { kind: 'send', reason: 'Antwort.', irreversible: true, items: [], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: { ...initial, proposal_status: 'done', proposal: { ...initial.proposal!, result: { done: 1 } } } })) as never)
   setup(initial)
   expect(await screen.findByText('Gesendete Mails lassen sich nicht zurückholen.')).toBeTruthy()
   fireEvent.change(screen.getByLabelText('Entwurf'), { target: { value: 'Neuer Text' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
-  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: 'Neuer Text' }, throwOnError: true }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: [], body: 'Neuer Text' }, throwOnError: true }))
   expect(await screen.findByText('Mail gesendet.')).toBeTruthy()
 })
 
