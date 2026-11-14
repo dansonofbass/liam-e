@@ -371,6 +371,50 @@ test('retrying keeps the focus in the dialog, and list shortcuts do nothing behi
   expect(dialog.contains(document.activeElement)).toBe(true)
 })
 
+test('closing drops the original: nothing stays in the cache, and opening again fetches it again', async () => {
+  const fetchOriginal = spyOn(sdk, 'mailMessageOriginal').mockImplementation((async () => ({ data: originalData, response: { status: 200 } })) as never)
+  const { client } = setup()
+  const cached = () => client.getQueryCache().findAll({ queryKey: ['original'] }).length
+  const first = await openOriginal()
+  await waitFor(() => expect(first.dialog.querySelector('pre')?.textContent).toBe(source))
+  expect(cached()).toBe(1)
+  fireEvent.keyDown(first.dialog, { key: 'Escape' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await waitFor(() => expect(cached()).toBe(0))
+  const second = await openOriginal()
+  await waitFor(() => expect(second.dialog.querySelector('pre')?.textContent).toBe(source))
+  expect(fetchOriginal).toHaveBeenCalledTimes(2)
+})
+
+test('an answer that arrives after closing is dropped as well', async () => {
+  let answer!: (value: unknown) => void
+  spyOn(sdk, 'mailMessageOriginal').mockImplementation((() => new Promise(done => { answer = done })) as never)
+  const { client } = setup()
+  const { dialog } = await openOriginal()
+  expect(within(dialog).getByRole('status')).toBeTruthy()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Schließen' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await act(async () => { answer({ data: originalData, response: { status: 200 } }) })
+  await waitFor(() => expect(client.getQueryCache().findAll({ queryKey: ['original'] })).toHaveLength(0))
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+test('each mail gets its own original', async () => {
+  const fetchOriginal = spyOn(sdk, 'mailMessageOriginal').mockImplementation((async (options: { path: { message_id: string } }) => ({ data: { headers: [], source: `Quelle ${options.path.message_id}`, truncated: false }, response: { status: 200 } })) as never)
+  const { router } = setup()
+  const first = await openOriginal()
+  await waitFor(() => expect(first.dialog.querySelector('pre')?.textContent).toBe('Quelle m1'))
+  fireEvent.keyDown(first.dialog, { key: 'Escape' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await act(async () => { await router.navigate({ to: '/mail/$messageId', params: { messageId: 'm2' } }) })
+  await screen.findByRole('heading', { name: 'Zweite' })
+  fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Original anzeigen' }))
+  const second = await screen.findByRole('dialog', { name: 'Original der Mail' })
+  await waitFor(() => expect(second.querySelector('pre')?.textContent).toBe('Quelle m2'))
+  expect(fetchOriginal.mock.calls.map(([options]) => (options as { path: { message_id: string } }).path.message_id)).toEqual(['m1', 'm2'])
+})
+
 test('where the original cannot be fetched the entry is disabled, explains why and opens nothing', async () => {
   const fetchOriginal = spyOn(sdk, 'mailMessageOriginal')
   mail.can_show_original = false

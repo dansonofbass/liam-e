@@ -190,6 +190,20 @@ test('spam removes the row, names the mail and can be undone', async () => {
   expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['action-1'] } })
 })
 
+test('spam removes the row before the provider answers and puts it back when the provider fails', async () => {
+  let answer!: (value: unknown) => void
+  const action = spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(done => { answer = done })) as never)
+  setup()
+  fireEvent.click(screen.getByText('spam 1'))
+  await waitFor(() => expect(screen.queryByText('Erste:false')).toBeNull())
+  expect(action).toHaveBeenCalledTimes(1)
+  expect(screen.queryByRole('status')).toBeNull()
+  await act(async () => { answer({ response: { status: 502 }, error: { detail: { code: 'provider_failed' } } }) })
+  expect(await screen.findByText('Erste:false')).toBeTruthy()
+  expect(screen.getByRole('status').getAttribute('data-tone')).toBe('danger')
+  expect(screen.queryByRole('button', { name: 'Rückgängig' })).toBeNull()
+})
+
 test('spam on mobile uses the short success text', async () => {
   success(); setup(true); fireEvent.click(screen.getByText('spam 1'))
   expect(await screen.findByText('Mail als Spam markiert.')).toBeTruthy()
