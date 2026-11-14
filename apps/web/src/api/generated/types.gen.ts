@@ -636,6 +636,10 @@ export type MailRefOut = {
      */
     sender_name: string;
     /**
+     * Snippet
+     */
+    snippet: string;
+    /**
      * Subject
      */
     subject: string;

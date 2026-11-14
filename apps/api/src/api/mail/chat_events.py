@@ -33,6 +33,7 @@ class MailRefOut(EventModel):
     color_index: int
     subject: str
     sender_name: str
+    snippet: str
     internal_date: datetime | None
     deadline: date | None
     is_flagged: bool

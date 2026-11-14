@@ -84,7 +84,7 @@ async def test_a_new_conversation_takes_the_requested_model_and_an_existing_one_
 
 
 async def test_mail_cards_carry_the_priority_flag(store, monkeypatch):
-    flagged = MailMessage(account_id=store.account.id, provider_uid='1', subject='Frist', is_flagged=True)
+    flagged = MailMessage(account_id=store.account.id, provider_uid='1', subject='Frist', snippet='Einwände bis Freitag möglich', is_flagged=True)
     plain = MailMessage(account_id=store.account.id, provider_uid='2', subject='Hallo')
     store.mail.messages[flagged.id] = flagged
     store.mail.messages[plain.id] = plain
@@ -92,6 +92,7 @@ async def test_mail_cards_carry_the_priority_flag(store, monkeypatch):
     refs = next(e for e in events if e.event == 'mails').mails
     assert [(ref.subject, ref.is_flagged) for ref in refs] == [('Frist', True), ('Hallo', False)]
     assert refs[0].model_dump(mode='json')['is_flagged'] is True
+    assert [ref.snippet for ref in refs] == ['Einwände bis Freitag möglich', '']
 
 
 async def test_no_tool_path_sends_or_changes_mail(store, monkeypatch):

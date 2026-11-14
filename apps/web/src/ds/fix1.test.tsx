@@ -67,6 +67,20 @@ test('mail reference keeps the dot column for plain mails, says Gestern for yest
   expect((screen.getByRole('button', { name: 'Antwort entwerfen' }) as HTMLButtonElement).disabled).toBe(true)
 })
 
+test('mail reference shows one muted line of the opening text below the subject, and none without text', async () => {
+  const { container } = render(<MailReference mail={{ ...mail, snippet: 'Einwände bis Fr., 20.11. möglich' }} onOpen={() => {}} />)
+  const line = screen.getByText('Einwände bis Fr., 20.11. möglich')
+  expect(line.classList.contains('le-mailref-snippet')).toBe(true)
+  expect(line.classList.contains('le-muted')).toBe(true)
+  expect(screen.getByText('Betreff').compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  for (const property of ['white-space: nowrap', 'overflow: hidden', 'text-overflow: ellipsis']) expect(css.split('.le-mailref-snippet {')[1]?.split('}')[0]).toContain(property)
+  cleanup()
+  render(<MailReference mail={{ ...mail, snippet: '' }} onOpen={() => {}} />)
+  expect(container.querySelector('.le-mailref-snippet')).toBeNull()
+  expect(document.querySelector('.le-mailref-snippet')).toBeNull()
+})
+
 test('the mail reference dot keeps its place and aligns with the first line', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   expect(css).toMatch(/\.le-mailref-dot \{ margin-top: 8px; \}/u)

@@ -357,6 +357,8 @@ Anfang an mit.
 3. Der Text läuft gleichmäßig ein (gepuffert, etwa drei Zeichen je 24 ms, nie ganze
    Absätze auf einmal), am Ende pulsiert ein Punkt in `accent`.
 4. Mail-Karten und Bestätigungskarten erscheinen erst, wenn ihr Inhalt vollständig ist.
+   Eine Mail-Karte zeigt Absender, Konto und Uhrzeit, darunter den Betreff und eine Zeile
+   Vorschautext in `small` und `ink-muted`, die mit Auslassung endet.
 5. Danach bis zu drei Folgevorschläge als Chips.
 
 Während der Antwort wird Senden zu Anhalten. Eine angehaltene Antwort bleibt stehen und

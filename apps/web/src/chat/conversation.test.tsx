@@ -124,8 +124,9 @@ test('a follow-up suggestion keeps the selected account', async () => {
 
 test('the pencil on a mail card asks for a reply draft to that mail in the same conversation', async () => {
   setup('/chat/c'); await send()
-  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', snippet: 'Einwände bis Freitag möglich', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   expect(await screen.findByText('Dringend')).toBeTruthy()
+  expect(screen.getByText('Einwände bis Freitag möglich').classList.contains('le-mailref-snippet')).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
   expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
   expect(requestBody.account_id).toBeUndefined()

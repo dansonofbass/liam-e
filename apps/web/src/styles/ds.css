@@ -161,6 +161,7 @@ body { margin: 0; font-family: var(--font-sans); font-size: 14.5px; line-height:
 .le-mailref-body { flex: 1 1 auto; min-width: 0; }
 .le-mailref-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .le-mailref-body p { margin: 3px 0 0; }
+.le-mailref-snippet { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .le-mailref-actions { display: flex; gap: 2px; flex: none; }
 
 /* Mail row (inbox list) */

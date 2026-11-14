@@ -967,6 +967,10 @@
             "title": "Sender Name",
             "type": "string"
           },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
           "subject": {
             "title": "Subject",
             "type": "string"
@@ -978,6 +982,7 @@
           "color_index",
           "subject",
           "sender_name",
+          "snippet",
           "internal_date",
           "deadline",
           "is_flagged"
