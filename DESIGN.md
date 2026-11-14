@@ -459,8 +459,9 @@ Anfang an mit.
   Rand in `accent`), der Composer als Ganzes, sobald sein Textfeld den Fokus hat; einen
   eigenen Schein statt des Rings gibt es nicht. Logische Reihenfolge, Escape schließt Menüs und Schubladen, der Fokus
   bleibt in offenen Schubladen und Dialogen und kehrt danach an den Auslöser zurück.
-- **Tastenkürzel im Posteingang**, nur auf `desktop` und `wide` und nicht in Feldern,
-  Menüs und Dialogen: j und k nächste und vorige Mail, Enter öffnen, e archivieren, u
+- **Tastenkürzel im Posteingang**, nur auf `desktop` und `wide`, nicht in Feldern und
+  Menüs und nie, solange ein Dialog offen ist (auch wenn der Fokus gerade nicht in ihm
+  liegt): j und k nächste und vorige Mail, Enter öffnen, e archivieren, u
   gelesen/ungelesen, Entf oder # in den Papierkorb. Tooltips nennen das Kürzel in Klammern,
   für den Papierkorb „Entf“.
 - Symbol-Buttons tragen `aria-label`. Tooltips sind `role="tooltip"` und hängen über

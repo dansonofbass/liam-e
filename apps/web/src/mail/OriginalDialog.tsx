@@ -24,12 +24,14 @@ export function OriginalDialog({ id, onClose }: { id: string; onClose: () => voi
     },
   })
   const data = original.data
+  // The retry button goes away while the original loads again; its focus would fall to the page behind the dialog.
+  const retry = () => { ref.current?.focus(); void original.refetch() }
   // In the body, so the scrim also covers what stacks above the page (the sticky label in the sidebar).
   return createPortal(<div className="le-scrim" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><div className="le-dialog le-dialog--wide" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={ref}>
     <div className="le-dialog-head"><h2 className="heading" id={titleId}>{de.mail.originalTitle}</h2><IconButton label={de.shell.close} icon="x" onClick={onClose} /></div>
     <div className="le-original-body" tabIndex={0}>
       {original.isPending && <p className="le-muted" role="status">{de.mail.originalLoading}</p>}
-      {original.isError && <Notice tone="danger" action={original.error instanceof OriginalRefusedError ? undefined : { label: de.chat.retry, onClick: () => { void original.refetch() } }}>{original.error.message}</Notice>}
+      {original.isError && <Notice tone="danger" action={original.error instanceof OriginalRefusedError ? undefined : { label: de.chat.retry, onClick: retry }}>{original.error.message}</Notice>}
       {data && <>
         {data.truncated && <Notice tone="info">{de.mail.originalTruncated}</Notice>}
         {data.headers.length > 0 && <section className="le-original-section"><h3 className="body-strong">{de.mail.originalHeaders}</h3><dl className="le-original-headers small">{data.headers.map((header, index) => <div key={index}><dt>{header.name}</dt><dd>{header.value}</dd></div>)}</dl></section>}

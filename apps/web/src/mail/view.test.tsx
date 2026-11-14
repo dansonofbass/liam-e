@@ -350,6 +350,27 @@ test('a provider failure offers a retry that fetches the original again', async 
   expect(fetchOriginal).toHaveBeenCalledTimes(2)
 })
 
+test('retrying keeps the focus in the dialog, and list shortcuts do nothing behind it', async () => {
+  let answer!: (value: unknown) => void
+  let calls = 0
+  spyOn(sdk, 'mailMessageOriginal').mockImplementation((() => ++calls === 1 ? Promise.resolve({ error: { detail: { code: 'provider_failed' } }, response: { status: 502 } }) : new Promise(done => { answer = done })) as never)
+  const { action } = setup()
+  const { dialog } = await openOriginal()
+  const retry = await within(dialog).findByRole('button', { name: 'Noch mal versuchen' })
+  retry.focus()
+  fireEvent.click(retry)
+  // The button is gone while the original loads again.
+  expect(await within(dialog).findByRole('status')).toBeTruthy()
+  expect(within(dialog).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
+  expect(document.activeElement).toBe(dialog)
+  for (const target of [dialog, document.body]) for (const key of ['e', 'Delete', '#', 'u']) fireEvent.keyDown(target, { key })
+  await settle()
+  expect(action).not.toHaveBeenCalled()
+  await act(async () => { answer({ data: originalData, response: { status: 200 } }) })
+  await waitFor(() => expect(dialog.querySelector('pre')?.textContent).toBe(source))
+  expect(dialog.contains(document.activeElement)).toBe(true)
+})
+
 test('where the original cannot be fetched the entry is disabled, explains why and opens nothing', async () => {
   const fetchOriginal = spyOn(sdk, 'mailMessageOriginal')
   mail.can_show_original = false
