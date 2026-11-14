@@ -63,6 +63,21 @@ def test_reply_all_never_adds_own_address():
     assert "mira@example.org" not in [address.casefold() for address in to + cc]
 
 
+def test_reply_to_drops_the_own_address():
+    account = MailAccount(email_address="Mira@Example.org")
+    message = with_reply_to("MIRA@example.org", "support@hv-kurz.example")
+    assert send.reply_recipients(message, account, reply_all=False) == (["support@hv-kurz.example"], [])
+    to, cc = send.reply_recipients(message, account, reply_all=True)
+    assert to == ["support@hv-kurz.example"]
+    assert "mira@example.org" not in [address.casefold() for address in cc]
+
+
+def test_reply_to_with_only_the_own_address_goes_to_the_sender():
+    account = MailAccount(email_address="mira@example.org")
+    message = with_reply_to("Mira@example.org")
+    assert send.reply_recipients(message, account, reply_all=False) == (["info@hv-kurz.example"], [])
+
+
 @pytest.mark.parametrize("value", [[], [""], ["not-an-address"], ["a b@example.org"], ["Name <x@example.org>"], [None, 3], ["a@b@example.org"]])
 def test_invalid_reply_to_falls_back_to_sender(value):
     account = MailAccount(email_address="mira@example.org")

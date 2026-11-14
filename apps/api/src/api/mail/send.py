@@ -31,18 +31,19 @@ class SeedAccountError(RuntimeError):
 def reply_recipients(original: MailMessage, account: MailAccount, *, reply_all: bool) -> tuple[list[str], list[str]]:
     """Return (to, cc) for a reply; the confirmation card shows exactly these addresses.
 
-    ``to`` is the Reply-To address list when it holds a valid address, else the sender. A reply to
-    all moves the sender (when not in Reply-To) and the original To/Cc into ``cc``, without the
-    account's own address and without anyone already in ``to``.
+    ``to`` is the Reply-To address list without the account's own address when that leaves a valid
+    address, else the sender. A reply to all moves the sender (when not in Reply-To) and the
+    original To/Cc into ``cc``, without the account's own address and without anyone already in
+    ``to``.
     """
+    own = account.email_address.casefold()
     to: list[str] = []
     for address in json.loads(original.reply_to_json or "[]"):
         valid = plain_address(address) if isinstance(address, str) else ""
-        if valid and valid not in to:
+        if valid and valid != own and valid not in to:
             to.append(valid)
     if not to and original.sender_address:
         to.append(original.sender_address)
-    own = account.email_address.casefold()
     cc: list[str] = []
     seen = {own, *(address.casefold() for address in to)}
     if reply_all:
