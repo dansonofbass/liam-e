@@ -42,6 +42,19 @@ def test_reply_to_json_round_trips_and_old_inserts_get_the_server_default(pg_db)
     asyncio.run(run())
 
 
+def test_unread_without_insight_can_exclude_accounts(pg_db):
+    async def run():
+        from db.accessors import mail_message as m
+
+        now = datetime.now(UTC)
+        for account in ("keep", "skip"):
+            await m.upsert_message(account_id=account, folder="INBOX", provider_uid="1", internal_date=now)
+        since = now - timedelta(days=1)
+        assert {row.account_id for row in await m.unread_without_insight(since=since, limit=10)} == {"keep", "skip"}
+        assert [row.account_id for row in await m.unread_without_insight(since=since, limit=10, exclude_account_ids=frozenset({"skip"}))] == ["keep"]
+    asyncio.run(run())
+
+
 def test_delete_duplicate_only_merges_same_identified_mail(pg_db):
     async def run():
         from db.accessors import mail_message as m

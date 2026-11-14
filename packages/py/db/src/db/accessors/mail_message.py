@@ -1,5 +1,6 @@
 """Accessor for ``mail_message`` rows: upsert during sync, search for the chat agent."""
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -214,8 +215,11 @@ async def message_ids_from_sender(account_id: str, sender_address: str, *, folde
         return list((await session.execute(select(MailMessage.id).where(MailMessage.account_id == account_id, MailMessage.sender_address == sender_address.lower(), MailMessage.folder == folder))).scalars().all())
 
 
-async def unread_without_insight(*, since: datetime, limit: int) -> list[MailMessage]:
-    stmt = select(MailMessage).where(MailMessage.is_read.is_(False), MailMessage.internal_date >= since, ~exists(select(MailInsight.id).where(MailInsight.message_id == MailMessage.id))).order_by(MailMessage.internal_date.desc()).limit(limit)
+async def unread_without_insight(*, since: datetime, limit: int, exclude_account_ids: Collection[str] = ()) -> list[MailMessage]:
+    stmt = select(MailMessage).where(MailMessage.is_read.is_(False), MailMessage.internal_date >= since, ~exists(select(MailInsight.id).where(MailInsight.message_id == MailMessage.id)))
+    if exclude_account_ids:
+        stmt = stmt.where(MailMessage.account_id.not_in(list(exclude_account_ids)))
+    stmt = stmt.order_by(MailMessage.internal_date.desc()).limit(limit)
     async with get_session_maker()() as session:
         return list((await session.execute(stmt)).scalars().all())
 

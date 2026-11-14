@@ -58,7 +58,7 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `headers.py` — Adress- und Abbestell-Header verarbeiten.
 - `state.py` — Kontostatus und Farben aus Konten, Sync-Status und Jobs ableiten.
 - `models_catalog.py` — verfügbare Chat-Modelle kurzzeitig cachen.
-- `dev_seed.py` — lokale Datenbank mit den Beispieldaten der Designboards füllen. Seed-Konten erreichen nie einen Anbieter: Senden und Abbestellen werden abgelehnt, Aktionen ändern nur den Index, Abrufe werden übersprungen.
+- `dev_seed.py` — lokale Datenbank mit den Beispieldaten der Designboards füllen. Seed-Konten erreichen nie einen Anbieter: Senden und Abbestellen werden abgelehnt, Aktionen ändern nur den Index, Abrufe werden übersprungen, und Kurzfassungen entstehen nie per Modell (nur die gesäten sind abrufbar, sonst `503 insight_unavailable`).
 
 Datenfluss: Ein Konto wird per Connector, OAuth2-Redirect oder IMAP-App-Passwort verbunden.
 OAuth-Credentials bzw. die IMAP-Secret-Referenz landen **Fernet-verschlüsselt** in
@@ -175,7 +175,7 @@ in der Probe HTTP 401.
 - Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus. `.../cancel` verwirft sie.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
 - liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_messages_list`, `mail_summary`
-  `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails).
+  `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
   Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.
   Neue verändernde Operationen gehören bewusst in `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, sonst scheitert der Inventur-Test.
 

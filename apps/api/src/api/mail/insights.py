@@ -13,6 +13,7 @@ from pydantic import BaseModel, ValidationError, field_validator
 from utils.mistral import mistral_client
 
 from api.mail.agent_prompt import TERMS_AND_FORMATS
+from api.mail.seed_ids import SEED_ACCOUNT_IDS, is_seed_account
 
 logger = logging.getLogger(__name__)
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -58,6 +59,9 @@ def escape_delimiters(text: str) -> str:
 
 
 async def compute_insight(message: MailMessage, *, today: date) -> MailInsight:
+    if is_seed_account(message.account_id):
+        # Sample mail never costs model calls; only insights seeded up front are served.
+        raise InsightError("Sample accounts have no generated insights")
     system = (
         "Du fasst Mails für den Empfänger kurz zusammen. Antworte ausschließlich als JSON mit "
         'den Feldern points (Liste von bis zu drei kurzen Sätzen), deadline (Datum YYYY-MM-DD oder null), '
@@ -100,7 +104,7 @@ async def get_or_compute(message_id: str) -> MailInsight:
 
 
 async def fill_missing(*, limit: int, days: int) -> int:
-    messages = await mail_message.unread_without_insight(since=datetime.now(UTC) - timedelta(days=days), limit=limit)
+    messages = await mail_message.unread_without_insight(since=datetime.now(UTC) - timedelta(days=days), limit=limit, exclude_account_ids=SEED_ACCOUNT_IDS)
     count = 0
     for message in messages:
         try:
