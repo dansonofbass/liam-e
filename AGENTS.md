@@ -125,8 +125,6 @@ Einreihen aktiver Konten; kürzlich abgerufene Konten und Konten mit letztem Feh
 Verbinden reihen auch solche Konten ein; zur Ausführung muss der Worker laufen. `MAIL_SYNC_STALE_MINUTES` (Standard
 `10`) bestimmt, wann ein gesperrter Job als veraltet gilt. Nach einem erfolgreichen Abruf mit
 neuen Mails wird ein Insight-Job eingereiht, der fehlende Kurzfassungen auffüllt.
-`MAIL_SYNC_ENABLED` ist als Setting deklariert (Standard `true`), wird derzeit im Worker- und
-Sync-Code aber nicht ausgewertet.
 
 Stoppt Studio eine inaktive Instanz, pausiert auch der Worker und damit das Polling, bis eine
 neue Anfrage die Instanz wieder startet. Gemessen wurden 31 Minuten Leerlauf **ohne** Stopp;
