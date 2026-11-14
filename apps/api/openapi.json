@@ -481,6 +481,18 @@
             ],
             "title": "Conversation Id"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Model for a new conversation; ignored when conversation_id is set (use PATCH on the conversation).",
+            "title": "Model"
+          },
           "text": {
             "maxLength": 8000,
             "minLength": 1,

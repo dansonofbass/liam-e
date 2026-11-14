@@ -70,6 +70,19 @@ async def test_cards_and_suggestions_arrive_after_text_then_done(store, monkeypa
     assert [e.event for e in events if e.event in {'delta', 'mails', 'suggestions', 'done'}] == ['delta', 'mails', 'suggestions', 'done']
 
 
+async def test_a_new_conversation_takes_the_requested_model_and_an_existing_one_keeps_its_own(store, monkeypatch):
+    events, fake = await run(store, monkeypatch, [['Hallo']], model='mistral-large-latest')
+    conversation_id = next(e for e in events if e.event == 'start').conversation_id
+    assert store.conversations[conversation_id].model == 'mistral-large-latest'
+    assert fake.requests[0]['model'] == 'mistral-large-latest'
+    monkeypatch.setattr(agent, 'mistral_client', lambda: FakeMistral(streams=[['Noch mal']]))
+    events = [e async for e in agent.run_turn_events(conversation_id=conversation_id, text='Weiter', model='mistral-small-latest')]
+    assert events[-1].event == 'done'
+    assert store.conversations[conversation_id].model == 'mistral-large-latest'
+    default_events, _ = await run(store, monkeypatch, [['Hallo']])
+    assert store.conversations[next(e for e in default_events if e.event == 'start').conversation_id].model == ''
+
+
 async def test_mail_cards_carry_the_priority_flag(store, monkeypatch):
     flagged = MailMessage(account_id=store.account.id, provider_uid='1', subject='Frist', is_flagged=True)
     plain = MailMessage(account_id=store.account.id, provider_uid='2', subject='Hallo')

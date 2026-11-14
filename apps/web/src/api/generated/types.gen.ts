@@ -304,6 +304,12 @@ export type ChatStreamRequest = {
      */
     conversation_id?: string | null;
     /**
+     * Model
+     *
+     * Model for a new conversation; ignored when conversation_id is set (use PATCH on the conversation).
+     */
+    model?: string | null;
+    /**
      * Text
      */
     text: string;
