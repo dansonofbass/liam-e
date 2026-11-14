@@ -9,6 +9,8 @@
 
 body { margin: 0; font-family: var(--font-sans); font-size: var(--font-size-body); line-height: 1.55; color: var(--ink); background: var(--surface); -webkit-font-smoothing: antialiased; }
 *, *::before, *::after { box-sizing: border-box; }
+/* `<small>` would otherwise shrink to the browser's `smaller`, a size outside the six tokens. */
+small { font-size: var(--font-size-small); }
 /* Native controls and scrollbars follow the theme that tokens.css shows. */
 :root { color-scheme: light dark; }
 :root[data-theme="light"] { color-scheme: light; }

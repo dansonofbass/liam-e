@@ -24,6 +24,8 @@ test('stylesheets have no free font sizes, no dead tooltip rules and no motion l
   expect(app).not.toMatch(/\d+ms/u)
   expect(app).not.toContain('cubic-bezier(')
   for (const unused of ['.le-avatar--sm', '.le-notice--warm']) expect(ds).not.toContain(unused)
+  // A bare `<small>` would shrink to the browser's `smaller` (11.6 px measured), outside the six sizes.
+  expect(ds).toMatch(/^small \{ font-size: var\(--font-size-small\); \}$/mu)
 })
 
 test('with reduced motion content still fades in but no longer rises, and page changes keep their fade', async () => {
