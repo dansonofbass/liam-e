@@ -258,8 +258,9 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
 ## 6. Symbole und Bausteine
 
 - **Symbole: Lucide** (`lucide-react`, exakt gepinnt), 24er-Raster, Strich 1,8, runde
-  Enden, `currentColor`. Größen 19 px (Standard) und 16 px (klein). Keine Emojis, keine
-  Logos der Anbieter.
+  Enden, `currentColor`. Größen 19 px (Standard) und 16 px (klein): Symbole neben Text in
+  Buttons, Chips, Tags und Hinweisen sind 16 px; Symbol-Buttons, Navigationspunkte und
+  Schnellaktionen tragen 19 px. Keine Emojis, keine Logos der Anbieter.
 - **Lexikon:** `message-circle` Chat · `messages-square` Unterhaltungen (Symbolleiste am Tablet) · `inbox` Posteingang · `at-sign` Konten · `archive`
   Archivieren · `trash-2` In den Papierkorb · `reply` Antworten · `pencil` Antwort
   entwerfen · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`

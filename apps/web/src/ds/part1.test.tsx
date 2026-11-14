@@ -1,6 +1,7 @@
 import { describe, expect, test, mock, afterEach, spyOn } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IconButton } from './IconButton'
+import { Button } from './Button'
 import { Menu } from './Menu'
 import { Drawer } from './Drawer'
 import { Avatar, initialsOf } from './Avatar'
@@ -105,4 +106,12 @@ test('avatar shows two letters like the boards, one only when there is nothing m
   expect(initialsOf('X')).toBe('X')
   expect(initialsOf('', 'z@example.org')).toBe('Z')
   expect(initialsOf('  ', undefined)).toBe('')
+})
+
+test('icons beside button text are 16 px, icon-only buttons keep 19 px', () => {
+  render(<><Button variant="primary" icon="pencil">Antwort entwerfen</Button><IconButton label="Archivieren" icon="archive" /></>)
+  const text = screen.getByRole('button', { name: 'Antwort entwerfen' }).querySelector('svg')!
+  expect(text.getAttribute('width')).toBe('16')
+  expect(text.classList.contains('le-ico--sm')).toBe(true)
+  expect(screen.getByRole('button', { name: 'Archivieren' }).querySelector('svg')!.getAttribute('width')).toBe('19')
 })
