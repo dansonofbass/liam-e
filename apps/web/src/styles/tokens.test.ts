@@ -45,3 +45,11 @@ test('every custom property the stylesheets read is defined, and radii come from
     for (const [, value] of css.matchAll(/border-radius: ([^;]+);/gu)) expect(value).not.toMatch(/(^|[\s(])\d+px/u)
   }
 })
+
+test('padding, margin and gap sit on the 4 px grid', async () => {
+  for (const css of await Promise.all([read('ds.css'), read('ds-app.css')])) {
+    for (const [, property, value] of css.matchAll(/(?<![\w-])(padding|margin|gap|row-gap|column-gap)(?:-[a-z]+)?: ([^;}]+)/gu)) {
+      for (const [, px] of value!.matchAll(/(-?\d+(?:\.\d+)?)px/gu)) expect({ property, px: Number(px) % 4 }).toEqual({ property, px: 0 })
+    }
+  }
+})

@@ -102,6 +102,6 @@ export function Conversation({ conversationId }: { conversationId: string }) {
       {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'conversation_not_found' ? newConversation : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
       {state.phase === 'done' && <>{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}
     </div>}
-    <div className="sr-only" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
+    <div className="le-sr" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
   </div>{showEnd && <div className="le-chat-end"><Button variant="secondary" onClick={scrollToEnd}>{de.chat.toEnd}</Button></div>}<div className="le-chat-composer"><ChatComposer conversationId={conversationId} autoFocus={busy && state.conversationId === conversationId} /></div></div>
 }

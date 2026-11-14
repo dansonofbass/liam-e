@@ -20,7 +20,7 @@ test('start content is centred and quick actions use four columns or two on mobi
   expect(css).toContain('.le-chat-start-scroll { display: flex; flex-direction: column; }')
   expect(css).toMatch(/\.le-chat-start \{[^}]*width: 100%; margin: auto 0;/u)
   expect(css).toMatch(/\.le-chat-quick-actions \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/u)
-  expect(css).toContain('@media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }')
+  expect(css).toContain('@media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }')
 })
 
 test('shell navigation and composer have coarse pointer targets', async () => {

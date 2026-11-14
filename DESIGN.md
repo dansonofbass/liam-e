@@ -247,7 +247,12 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
 
 ## 5. Raum, Form, Schatten, Bewegung
 
-- **4-px-Raster**, Schritte `space-1` bis `space-8` (4 bis 64 px). App-Rahmen und Abstand
+- **4-px-Raster**, Schritte `space-1` bis `space-8` (4 bis 64 px). Jeder Innen- und
+  Außenabstand und jede Lücke (`padding`, `margin`, `gap`) liegt auf dem Raster und kommt aus
+  diesen Schritten oder ihrer Summe (20 px = `space-4` + `space-1`). Ausgenommen sind Größen
+  von Bausteinen (Höhen, Breiten, Symbole); Steuerhöhen kommen aus `control-height` (38 px)
+  und `control-height-lg` (44 px). Symbol und Text stehen 8 px auseinander, Punkt und Text
+  in Tags 4 px. App-Rahmen und Abstand
   der schwebenden Flächen `space-3` (ab `tablet`; auf `mobile` gibt es keinen Rahmen, §7.3),
   Innenabstand der Hauptfläche `space-5`, Kacheln und Karten `space-4`, das Panel „Konto
   verbinden“ 20 px (`space-4` + `space-1`).

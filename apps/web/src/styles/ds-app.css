@@ -1,5 +1,5 @@
 .le-tooltip-anchor, .le-menu-anchor { position: relative; display: inline-flex; }
-.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-fade var(--le-dur-fast) ease; }
+.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-fade var(--le-dur-fast) ease; }
 .le-tooltip--top { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
 .le-tooltip--right { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
 .le-tooltip--bottom { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
@@ -16,7 +16,7 @@
 .le-scrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); animation: le-fade var(--le-dur) ease; }
 .le-drawer { display: flex; flex-direction: column; height: 100%; width: min(308px, 100vw - 48px); padding: var(--space-3); box-sizing: border-box; background: var(--surface); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; box-shadow: var(--shadow-overlay); overflow: auto; animation: le-drawer-in var(--le-dur) ease; }
 .le-crumb--center { justify-content: center; text-align: center; }
-.le-drawer-brand { padding: 2px 0 18px 8px; }
+.le-drawer-brand { padding: 0 0 var(--space-4) var(--space-2); }
 .le-drawer .le-shell-sidebar { flex: 1 0 auto; }
 @keyframes le-drawer-in { from { opacity: 0; transform: translateX(-100%); } to { opacity: 1; transform: translateX(0); } }
 .le-composer-spacer { flex: 1; }
@@ -47,7 +47,7 @@
 .le-accounts-layout { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: flex-start; max-width: 1180px; }
 .le-accounts-list { flex: 1 1 460px; min-width: 0; }
 .le-accounts-list > h2 { margin: 0 0 var(--space-5); }
-.le-accounts-list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.le-accounts-list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 .le-accounts-note { margin: var(--space-4) var(--space-1) 0; }
 .le-accounts-connect { flex: 1 1 400px; min-width: 0; max-width: 520px; background: var(--surface-soft); border-radius: var(--radius-lg); padding: calc(var(--space-4) + var(--space-1)); }
 .le-account-content { min-width: 0; flex: 1; }
@@ -99,11 +99,10 @@
 .le-mailref-dot { margin-top: 8px; }
 .le-mailref-dot--none { visibility: hidden; }
 .le-chat-end { align-self: center; padding: var(--space-2); }
-@media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+@media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .le-chat-entry { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
 .le-chat-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .le-chat-composer { width: 100%; max-width: var(--chat-width); box-sizing: border-box; align-self: center; padding: var(--space-3) var(--space-5) max(var(--space-3), env(safe-area-inset-bottom)); }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .le-greeting { padding: var(--space-5); }
 .le-greeting span { color: var(--accent); }
 @media (min-width: 640px) and (max-width: 1023px) { .le-side { flex: 0 0 auto; } }

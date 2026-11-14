@@ -68,7 +68,7 @@ test('the connect panel has 20 px inner padding on the 4 px grid', async () => {
 test('account cards have spaced lists and mobile actions below the content', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   expect(css).toMatch(/\.le-accounts-list > h2 \{[^}]*margin: 0 0 var\(--space-5\);/u)
-  expect(css).toMatch(/\.le-accounts-list ul \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*gap: 10px;/u)
+  expect(css).toMatch(/\.le-accounts-list ul \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*gap: var\(--space-3\);/u)
   expect(css).toMatch(/@media \(max-width: 639px\) \{ \.le-account \{ grid-template-columns: auto minmax\(0, 1fr\); \} \.le-account-actions \{ grid-column: 2; flex-direction: row; \} \}/u)
   const { container } = render(<AccountCard account={{ ...account, unread: 7, message_count: 23 }} {...props} />)
   expect(container.querySelector('.le-account-meta .le-badge')).toBeNull()
