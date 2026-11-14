@@ -366,6 +366,39 @@ test('after undoing, the focus stays on the result', async () => {
   expect(document.activeElement?.classList.contains('le-proposal-outcome')).toBe(true)
 })
 
+function liveThenHistory() {
+  const done = message('done', { done: 2, undo_action_ids: ['u'] })
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)
+  const client = new QueryClient()
+  // The live card and the history row sit in different places, so React mounts a new card.
+  const view = (inHistory: boolean) => <QueryClientProvider client={client}>{inHistory ? <section key="history"><ProposalCard message={done} /></section> : <div key="live"><ProposalCard message={message()} /><input aria-label="Frage" /></div>}</QueryClientProvider>
+  return { view, ...render(view(false)) }
+}
+
+test('the focus follows a settled card when its history row replaces the live card', async () => {
+  const { view, rerender } = liveThenHistory()
+  const button = screen.getByRole('button', { name: '2 abbestellen und archivieren' })
+  button.focus(); fireEvent.click(button)
+  await screen.findByRole('button', { name: 'Rückgängig' })
+  await waitFor(() => expect(document.activeElement?.classList.contains('le-proposal-outcome')).toBe(true))
+  rerender(view(true))
+  await waitFor(() => expect(document.querySelector('section .le-proposal-outcome')).toBe(document.activeElement))
+})
+
+test('a replaced card hands the focus on only when it holds it', async () => {
+  const { view, rerender } = liveThenHistory()
+  fireEvent.click(screen.getByRole('button', { name: '2 abbestellen und archivieren' }))
+  await screen.findByRole('button', { name: 'Rückgängig' })
+  const question = screen.getByLabelText('Frage')
+  act(() => { question.focus() })
+  rerender(view(true))
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+  expect(document.activeElement).toBe(document.body)
+  cleanup()
+  render(<QueryClientProvider client={new QueryClient()}><ProposalCard message={message('done', { done: 2 })} /></QueryClientProvider>)
+  expect(document.activeElement).toBe(document.body)
+})
+
 test('a settled card loaded from the history does not take the focus', async () => {
   setup(message('done', { done: 1 }))
   await screen.findByText('1 Newsletter abbestellt.')

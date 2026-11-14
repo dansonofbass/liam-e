@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { chatProposalCancel, chatProposalConfirm, mailActionsUndo } from '../api/generated/sdk.gen'
 import type { ChatMessageOut, Proposal } from '../api/generated/types.gen'
 import { errorCode, unwrap } from '../api/unwrap'
@@ -10,7 +10,8 @@ type Clock = { now: () => number; setTimeout: (fn: () => void, ms: number) => Re
 const systemClock: Clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id) }
 // A live card can be replaced by its history row; preserve edits and the undo deadline.
 // After a confirmation or cancellation the clicked button is gone; `focus` moves the focus to the outcome.
-type CardState = { deadline?: number; deselected?: Set<string>; body?: string; focus?: boolean }
+// `handoff` passes a held focus to the history row that replaces a settled card in the same commit.
+type CardState = { deadline?: number; deselected?: Set<string>; body?: string; focus?: boolean; handoff?: boolean }
 const cards = new WeakMap<QueryClient, Map<string, CardState>>()
 function cardState(client: QueryClient, id: string): CardState {
   let entries = cards.get(client)
@@ -140,9 +141,19 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
       if (code === 'proposal_not_pending') void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
     } finally { pending.current = false; setBusy(false) }
   }
-  useEffect(() => {
+  // Layout effects: the replaced card's cleanup and the new card's setup run in one commit, before the microtask.
+  useLayoutEffect(() => {
+    const node = outcome.current
+    return () => {
+      if (!node?.contains(document.activeElement)) return
+      const saved = cardState(client, current.id)
+      saved.handoff = true
+      queueMicrotask(() => { saved.handoff = false })
+    }
+  }, [client, current.id, current.proposal_status])
+  useLayoutEffect(() => {
     const saved = cardState(client, current.id)
-    if (current.proposal_status !== 'pending' && saved.focus) { saved.focus = false; outcome.current?.focus() }
+    if (current.proposal_status !== 'pending' && (saved.focus || saved.handoff)) { saved.focus = false; saved.handoff = false; outcome.current?.focus() }
   })
   if (!proposal) return null
   const settled = (content: ReactNode) => <div ref={outcome} tabIndex={-1} className="le-proposal-outcome">{content}</div>
