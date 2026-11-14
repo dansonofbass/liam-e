@@ -9,6 +9,7 @@ from db.models.mail_message import MailMessage
 from support.fake_mistral import FakeMistral
 
 from api.mail import insights, jobs
+from api.mail.seed_ids import SEED_ACCOUNT_IDS, seed_id
 
 
 def message(**kwargs):
@@ -163,3 +164,63 @@ async def test_sync_job_enqueues_insights_after_new_mail(monkeypatch):
         enqueue.reset_mock()
         await jobs._sync({"account_id": "a1"})
         enqueue.assert_not_awaited()
+
+
+@pytest.fixture
+def forbidden_model(monkeypatch):
+    calls = []
+    def client():
+        calls.append(1)
+        raise AssertionError("the model must not be called for sample mail")
+    monkeypatch.setattr(insights, "mistral_client", client)
+    return calls
+
+
+def seed_message():
+    return MailMessage(id="seed-m", account_id=seed_id("account", "privat"), provider_uid="seed-1")
+
+
+@pytest.mark.anyio
+async def test_seed_mail_without_insight_never_calls_the_model(monkeypatch, forbidden_model):
+    monkeypatch.setattr(insights.mail_insight, "get", AsyncMock(return_value=None))
+    monkeypatch.setattr(insights.mail_message, "get_message", AsyncMock(return_value=seed_message()))
+    with pytest.raises(insights.InsightError):
+        await insights.get_or_compute("seed-m")
+    with pytest.raises(insights.InsightError):
+        await insights.compute_insight(seed_message(), today=date(2026, 2, 1))
+    assert forbidden_model == []
+
+
+@pytest.mark.anyio
+async def test_seed_mail_with_stored_insight_is_served(monkeypatch, forbidden_model):
+    stored = MailInsight(message_id="seed-m", points_json='["Gespeichert"]', followups_json="[]")
+    monkeypatch.setattr(insights.mail_insight, "get", AsyncMock(return_value=stored))
+    assert await insights.get_or_compute("seed-m") is stored
+    assert forbidden_model == []
+
+
+@pytest.mark.anyio
+async def test_regular_mail_still_calls_the_model(monkeypatch, setup):
+    setup.responses.append(payload())
+    monkeypatch.setattr(insights.mail_insight, "get", AsyncMock(return_value=None))
+    monkeypatch.setattr(insights.mail_message, "get_message", AsyncMock(return_value=message()))
+    assert (await insights.get_or_compute("m1")).model
+    assert len(setup.requests) == 1
+
+
+@pytest.mark.anyio
+async def test_fill_missing_excludes_seed_accounts_and_survives_a_seed_row(monkeypatch, forbidden_model):
+    accessor = AsyncMock(return_value=[seed_message()])
+    monkeypatch.setattr(insights.mail_message, "unread_without_insight", accessor)
+    assert await insights.fill_missing(limit=50, days=14) == 0
+    assert accessor.await_args.kwargs["exclude_account_ids"] == SEED_ACCOUNT_IDS
+    assert forbidden_model == []
+
+
+def test_insight_endpoint_refuses_seed_mail_without_model_call(client, monkeypatch, forbidden_model):
+    monkeypatch.setattr(insights.mail_insight, "get", AsyncMock(return_value=None))
+    monkeypatch.setattr(insights.mail_message, "get_message", AsyncMock(return_value=seed_message()))
+    response = client.get("/api/v1/mail/messages/seed-m/insight")
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "insight_unavailable"
+    assert forbidden_model == []

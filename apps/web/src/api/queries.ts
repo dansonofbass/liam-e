@@ -5,7 +5,12 @@ import { dataOr404, unwrap } from './unwrap'
 
 export class MessageNotFoundError extends Error {}
 
-export const summaryQuery = () => queryOptions({ queryKey: ['summary'], queryFn: () => unwrap(mailSummary({ throwOnError: true })), refetchInterval: query => query.state.data?.accounts.some(a => a.state === 'syncing') ? 3000 : false })
+// Poll fast while an account syncs. While idle, keep a slow poll so syncs the worker schedules on
+// its own (every few minutes) still refresh unread counts, the inbox and the sync time. Polling
+// pauses while the tab is hidden; a refetch on window focus covers the return.
+export const SUMMARY_SYNCING_POLL_MS = 3_000
+export const SUMMARY_IDLE_POLL_MS = 60_000
+export const summaryQuery = () => queryOptions({ queryKey: ['summary'], queryFn: () => unwrap(mailSummary({ throwOnError: true })), refetchInterval: query => !query.state.data ? false : query.state.data.accounts.some(a => a.state === 'syncing') ? SUMMARY_SYNCING_POLL_MS : SUMMARY_IDLE_POLL_MS })
 export const conversationsQuery = () => queryOptions({ queryKey: ['conversations'], queryFn: () => unwrap(chatConversationsList({ throwOnError: true })) })
 export const accountsQuery = () => queryOptions({ queryKey: ['accounts'], queryFn: () => unwrap(mailAccountsList({ throwOnError: true })) })
 export const accountOptionsQuery = () => queryOptions({ queryKey: ['account-options'], queryFn: () => unwrap(mailAccountOptions({ throwOnError: true })) })

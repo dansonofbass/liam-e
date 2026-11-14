@@ -36,6 +36,8 @@ function setup({ mobile = false, unread = false, missing = false, loading = fals
   return { client, router, view, action, get, getInsight, request: () => request }
 }
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia; globalThis.fetch = originalFetch })
+// Lets queries a view starts on mount settle inside act() before the test moves on or ends.
+const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 
 test('open mail shows the provider when the account has no display name', async () => {
   setup()
@@ -47,6 +49,22 @@ test('insight points use disc markers, indentation and item spacing', async () =
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   expect(css).toMatch(/\.le-insight-points \{[^}]*padding-left: calc\(var\(--space-4\) \+ var\(--space-1\)\);[^}]*list-style: disc;/u)
   expect(css).toMatch(/\.le-insight-points li \+ li \{[^}]*margin-top: var\(--space-1\);/u)
+})
+
+test('mail text becomes one paragraph per block, spaced by the paragraph gap and not by blank lines', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-mail-text \{[^}]*display: flex; flex-direction: column; gap: var\(--space-3\);/u)
+  expect(css).toMatch(/\.le-mail-text p \{[^}]*margin: 0; white-space: pre-wrap;/u)
+  const original = mail.body_text
+  mail.body_text = 'Sehr geehrte Damen und Herren,\n\nanbei die Abrechnung.\n\n\nMit freundlichen Grüßen\nIhre Hausverwaltung'
+  try {
+    setup()
+    await screen.findByRole('heading', { name: 'Termin' })
+    const text = document.querySelector('.le-mail-text')
+    expect(Array.from(text?.querySelectorAll('p') ?? []).map(p => p.textContent)).toEqual(['Sehr geehrte Damen und Herren,', 'anbei die Abrechnung.', 'Mit freundlichen Grüßen\nIhre Hausverwaltung'])
+    expect(text?.textContent).not.toContain('\n\n')
+    await settle()
+  } finally { mail.body_text = original }
 })
 
 test('opening unread mail marks it read once across rerender and refetch, updating list', async () => {
@@ -107,8 +125,17 @@ test('manual unread waits for pending automatic read and remains unread in both 
 test('mobile bars contain the requested actions; desktop has no back button', async () => {
   setup({ mobile: true }); await screen.findByRole('heading', { name: 'Termin' })
   for (const name of ['Zurück zum Posteingang', 'Archivieren', 'Als ungelesen markieren', 'In den Papierkorb', 'Weitere Aktionen', 'Im Chat fragen', 'Antwort entwerfen']) expect(screen.getByRole('button', { name })).toBeTruthy()
-  cleanup(); mock.restore(); setup(); await screen.findByRole('heading', { name: 'Termin' })
+  await settle(); cleanup(); mock.restore(); setup(); await screen.findByRole('heading', { name: 'Termin' })
   expect(screen.queryByRole('button', { name: 'Zurück zum Posteingang' })).toBeNull()
+  await settle()
+})
+
+test.each([{ mobile: false }, { mobile: true }])('"Im Chat fragen" and "Antwort entwerfen" carry their icons in the split view and on mobile (%o)', async ({ mobile }) => {
+  setup({ mobile }); await screen.findByRole('heading', { name: 'Termin' })
+  expect(screen.getByRole('button', { name: 'Im Chat fragen' }).querySelector('.lucide-message-circle')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Antwort entwerfen' }).querySelector('.lucide-pencil')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Antwort entwerfen' }).classList.contains('le-btn--sm')).toBe(!mobile)
+  await settle()
 })
 
 test('mail body is literal text and attachment is non-interactive', async () => {
@@ -120,6 +147,7 @@ test('mail body is literal text and attachment is non-interactive', async () => 
   expect(within(chip).getByText('212 KB')).toBeTruthy()
   expect(chip.querySelector('.lucide-paperclip')).toBeTruthy()
   expect(chip.querySelector('button, a')).toBeNull()
+  await settle()
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/\.le-mail-attachment \{([^}]+)\}/u)?.[1]
   for (const property of ['min-height: 36px', 'border: 1px solid var(--control-border)', 'border-radius: var(--radius-pill)']) expect(rule).toContain(property)
@@ -158,6 +186,20 @@ for (const mobile of [false, true]) test(`${mobile ? 'mobile' : 'desktop'} archi
   expect(await screen.findByText('Rückgängig')).toBeTruthy()
 })
 
+for (const mobile of [false, true]) test(`${mobile ? 'mobile' : 'desktop'} reading view shows a failed read change once`, async () => {
+  const { action } = setup({ mobile })
+  await screen.findByRole('heading', { name: 'Termin' })
+  action.mockImplementation((async () => ({ error: { detail: { code: 'provider_failed' } }, response: { status: 502 } })) as never)
+  const view = document.querySelector('.le-mail-view') as HTMLElement
+  fireEvent.click(within(view).getByRole('button', { name: 'Als ungelesen markieren' }))
+  await waitFor(() => expect(document.querySelectorAll('.le-inbox-toast')).toHaveLength(1))
+  const toast = document.querySelector('.le-inbox-toast') as HTMLElement
+  expect(toast.classList.contains('le-inbox-toast--inline')).toBe(mobile)
+  expect(view.contains(toast)).toBe(mobile)
+  expect(toast.textContent).toContain('Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.')
+  expect(within(view).getByRole('button', { name: 'Als ungelesen markieren' })).toBeTruthy()
+})
+
 test('silent auto read preserves an existing undo toast', async () => {
   const { router, action } = setup({ unread: true, path: '/mail' })
   await screen.findByText('Termin')
@@ -175,6 +217,7 @@ test('loading displays placeholders and mobile back button', async () => {
   expect(screen.getByText('Mail wird geladen …')).toBeTruthy()
   expect(view.container.querySelector('.le-mail-placeholder[aria-hidden="true"]')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Zurück zum Posteingang' })).toBeTruthy()
+  await settle()
 })
 
 test('newsletter menu starts the contextual confirmation turn', async () => {
@@ -186,6 +229,34 @@ test('newsletter menu starts the contextual confirmation turn', async () => {
   expect((screen.getByRole('button', { name: 'Antwort entwerfen' }) as HTMLButtonElement).disabled).toBe(true)
 })
 
+test.each([{ mobile: false }, { mobile: true }])('the more-actions button is always there; without an unsubscribe route its only entry is disabled and explains why (%o)', async ({ mobile }) => {
+  const original = mail.can_unsubscribe
+  mail.can_unsubscribe = false
+  try {
+    const { request } = setup({ mobile }); await screen.findByRole('heading', { name: 'Termin' })
+    const more = screen.getByRole('button', { name: 'Weitere Aktionen' })
+    expect(more.getAttribute('aria-haspopup')).toBe('menu')
+    fireEvent.click(more)
+    const item = screen.getByRole('menuitem', { name: /Newsletter abbestellen/ })
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    expect(within(item).getByText('In dieser Mail steht kein Weg zum Abbestellen.')).toBeTruthy()
+    fireEvent.click(item)
+    expect(screen.getByRole('menuitem', { name: /Newsletter abbestellen/ })).toBeTruthy()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+    expect(request()).toBeUndefined()
+    expect(screen.getByRole('button', { name: 'Antwort entwerfen' }).hasAttribute('disabled')).toBe(false)
+    expect(await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()).toMatch(/\.le-menu-item\[aria-disabled="true"\][^{]*\{[^}]*cursor: not-allowed/u)
+  } finally { mail.can_unsubscribe = original }
+})
+
+test('with an unsubscribe route the entry is enabled and has no hint', async () => {
+  setup(); await screen.findByRole('heading', { name: 'Termin' })
+  fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
+  const item = screen.getByRole('menuitem', { name: 'Newsletter abbestellen' })
+  expect(item.hasAttribute('aria-disabled')).toBe(false)
+  expect(item.querySelector('.le-menu-sub')).toBeNull()
+  await settle()
+})
 
 test('other load errors can retry or return to the filtered inbox', async () => {
   const { router, get } = setup({ mobile: true, failed: true, path: '/mail/m1?unread=true' })

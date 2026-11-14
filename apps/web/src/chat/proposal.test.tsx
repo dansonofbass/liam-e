@@ -64,7 +64,7 @@ test('selection survives a card remount and confirmation', async () => {
 
 test('edited draft survives a card remount and confirmation', async () => {
   const initial = message()
-  initial.proposal = { kind: 'send', reason: 'Antwort.', items: [{ id: 'a', kind: 'mail', title: 'Antwort', subtitle: 'An Anna' }], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
+  initial.proposal = { kind: 'send', reason: 'Antwort.', items: [], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: { ...initial, proposal_status: 'done' } })) as never)
   const client = new QueryClient()
   const card = () => <QueryClientProvider client={client}><ProposalCard message={initial} /></QueryClientProvider>
@@ -74,7 +74,7 @@ test('edited draft survives a card remount and confirmation', async () => {
   render(card())
   expect((screen.getByLabelText('Entwurf') as HTMLTextAreaElement).value).toBe('Neuer Text')
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
-  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: 'Neuer Text' }, throwOnError: true }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: [], body: 'Neuer Text' }, throwOnError: true }))
 })
 
 test('running proposal refreshes history at most twenty times and clears its timer', () => {
@@ -193,12 +193,13 @@ test('remounting a confirmed result does not extend the undo deadline', async ()
   const view = render(card(message()))
   fireEvent.click(screen.getByRole('button', { name: '2 abbestellen und archivieren' }))
   await screen.findByRole('button', { name: 'Rückgängig' })
-  expect(delay).toBe(10000)
+  // The button renders before the passive effect that arms the timer.
+  await waitFor(() => expect(delay).toBe(10000))
   view.unmount()
   now = 5000
   render(card(done))
   await screen.findByRole('button', { name: 'Rückgängig' })
-  expect(delay).toBe(5000)
+  await waitFor(() => expect(delay).toBe(5000))
 })
 
 test.each([
@@ -275,14 +276,35 @@ test('partial unsubscribe separates gone, changed and other failures', async () 
 
 test('a send draft is editable and the edited body is confirmed', async () => {
   const initial = message()
-  initial.proposal = { kind: 'send', reason: 'Antwort.', irreversible: true, items: [{ id: 'a', kind: 'mail', title: 'Antwort', subtitle: 'An Anna' }], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
+  initial.proposal = { kind: 'send', reason: 'Antwort.', irreversible: true, items: [], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: { ...initial, proposal_status: 'done', proposal: { ...initial.proposal!, result: { done: 1 } } } })) as never)
   setup(initial)
   expect(await screen.findByText('Gesendete Mails lassen sich nicht zurückholen.')).toBeTruthy()
   fireEvent.change(screen.getByLabelText('Entwurf'), { target: { value: 'Neuer Text' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
-  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: 'Neuer Text' }, throwOnError: true }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: [], body: 'Neuer Text' }, throwOnError: true }))
   expect(await screen.findByText('Mail gesendet.')).toBeTruthy()
+})
+
+test('a reply-all draft shows every recipient and the quoted mail before sending', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'send', reason: 'Antwort an alle: anna@example.org.', irreversible: true, items: [], draft: { account_id: 'a', body: 'Danke', cc: ['ben@example.org', 'cara@example.org'], mode: 'reply_all', quote: 'Am 3.11. um 09:00 schrieb Anna:\n> Termin am Montag?', reply_to_message_id: 'm', subject: 'Re: Termin', to: ['anna@example.org'] } }
+  setup(initial)
+  expect(await screen.findByText('An: anna@example.org')).toBeTruthy()
+  expect(screen.getByText('Kopie: ben@example.org, cara@example.org')).toBeTruthy()
+  const quote = screen.getByRole('blockquote', { name: 'Zitierte Mail – wird mitgesendet' })
+  expect(quote.textContent).toBe('Am 3.11. um 09:00 schrieb Anna:\n> Termin am Montag?')
+  expect((screen.getByRole('button', { name: 'Senden' }) as HTMLButtonElement).disabled).toBe(false)
+})
+
+test('a new draft without copy or quote shows neither', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'send', reason: 'Neue Mail an anna@example.org.', irreversible: true, items: [], draft: { account_id: 'a', body: 'Hallo', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
+  setup(initial)
+  expect(await screen.findByText('An: anna@example.org')).toBeTruthy()
+  expect(screen.queryByText(/^Kopie:/u)).toBeNull()
+  expect(screen.queryByRole('blockquote')).toBeNull()
+  expect(screen.queryByRole('list')).toBeNull()
 })
 
 test.each([1, 2])('partial result uses the correct form for %i failures', async (count) => {
@@ -306,4 +328,110 @@ test('unsubscribe without archived mail and unsafe manual link', async () => {
   expect(links[0]?.getAttribute('href')).toBe('https://example.org/unsubscribe')
   expect(links[0]?.getAttribute('rel')).toBe('noopener noreferrer')
   expect(links[0]?.parentElement?.classList.contains('le-proposal-manual')).toBe(true)
+  expect(screen.getByText('Alpha: Kein Abmeldelink bekannt. Öffne eine Mail dieses Newsletters und bestell ihn dort ab.').classList.contains('le-proposal-manual')).toBe(true)
+})
+
+test('a manual unsubscribe without a link names the next step', async () => {
+  setup(message('done', { done: 0, failed: [], manual: [{ id: 'b', link: null }], undo_action_ids: ['u1', 'u2'] }))
+  expect(await screen.findByText('Kein Newsletter abbestellt, 2 Mails archiviert.')).toBeTruthy()
+  expect(screen.getByText('Beta: Kein Abmeldelink bekannt. Öffne eine Mail dieses Newsletters und bestell ihn dort ab.')).toBeTruthy()
+  expect(screen.queryByRole('link')).toBeNull()
+})
+
+test('after confirming, the focus moves from the gone button to the result', async () => {
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: message('done', { done: 2, undo_action_ids: ['u'] }) })) as never)
+  setup(message())
+  const button = await screen.findByRole('button', { name: '2 abbestellen und archivieren' })
+  button.focus(); fireEvent.click(button)
+  await screen.findByRole('button', { name: 'Rückgängig' })
+  await waitFor(() => expect(document.activeElement?.classList.contains('le-proposal-outcome')).toBe(true))
+  expect(document.activeElement?.textContent).toContain('2 Newsletter abbestellt')
+})
+
+test('after cancelling, the focus moves to the cancelled hint', async () => {
+  spyOn(sdk, 'chatProposalCancel').mockImplementation((async () => ({ data: message('cancelled') })) as never)
+  setup(message())
+  const button = await screen.findByRole('button', { name: 'Abbrechen' })
+  button.focus(); fireEvent.click(button)
+  await screen.findByText('Abgebrochen, es wurde nichts geändert.')
+  await waitFor(() => expect(document.activeElement?.classList.contains('le-proposal-outcome')).toBe(true))
+  expect(document.activeElement?.textContent).toBe('Abgebrochen, es wurde nichts geändert.')
+})
+
+test('after undoing, the focus stays on the result', async () => {
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['u'], expired: [], failed: [], skipped: [] } })) as never)
+  await setupConfirmed(message('done', { done: 1, undo_action_ids: ['u'] }))
+  const undo = screen.getByRole('button', { name: 'Rückgängig' })
+  undo.focus(); fireEvent.click(undo)
+  await screen.findByText('Rückgängig gemacht.')
+  expect(document.activeElement?.classList.contains('le-proposal-outcome')).toBe(true)
+})
+
+function liveThenHistory() {
+  const done = message('done', { done: 2, undo_action_ids: ['u'] })
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)
+  const client = new QueryClient()
+  // The live card and the history row sit in different places, so React mounts a new card.
+  const view = (inHistory: boolean) => <QueryClientProvider client={client}>{inHistory ? <section key="history"><ProposalCard message={done} /></section> : <div key="live"><ProposalCard message={message()} /><input aria-label="Frage" /></div>}</QueryClientProvider>
+  return { view, ...render(view(false)) }
+}
+
+test('the focus follows a settled card when its history row replaces the live card', async () => {
+  const { view, rerender } = liveThenHistory()
+  const button = screen.getByRole('button', { name: '2 abbestellen und archivieren' })
+  button.focus(); fireEvent.click(button)
+  await screen.findByRole('button', { name: 'Rückgängig' })
+  await waitFor(() => expect(document.activeElement?.classList.contains('le-proposal-outcome')).toBe(true))
+  rerender(view(true))
+  await waitFor(() => expect(document.querySelector('section .le-proposal-outcome')).toBe(document.activeElement))
+})
+
+test('a replaced card hands the focus on only when it holds it', async () => {
+  const { view, rerender } = liveThenHistory()
+  fireEvent.click(screen.getByRole('button', { name: '2 abbestellen und archivieren' }))
+  await screen.findByRole('button', { name: 'Rückgängig' })
+  const question = screen.getByLabelText('Frage')
+  act(() => { question.focus() })
+  rerender(view(true))
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+  expect(document.activeElement).toBe(document.body)
+  cleanup()
+  render(<QueryClientProvider client={new QueryClient()}><ProposalCard message={message('done', { done: 2 })} /></QueryClientProvider>)
+  expect(document.activeElement).toBe(document.body)
+})
+
+test('a confirmation that finishes after the card is gone does not take the focus later', async () => {
+  let resolve: (value: { data: ChatMessageOut }) => void = () => {}
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((() => new Promise(done => { resolve = done })) as never)
+  const client = new QueryClient()
+  const view = render(<QueryClientProvider client={client}><ProposalCard message={message()} /></QueryClientProvider>)
+  const button = screen.getByRole('button', { name: '2 abbestellen und archivieren' })
+  button.focus(); fireEvent.click(button)
+  view.unmount()
+  await act(async () => { resolve({ data: message('done', { done: 2 }) }); await new Promise(done => setTimeout(done, 0)) })
+  render(<QueryClientProvider client={client}><ProposalCard message={message('done', { done: 2 })} /></QueryClientProvider>)
+  await screen.findByText(/2 Newsletter abbestellt/)
+  expect(document.activeElement).toBe(document.body)
+})
+
+test('a confirmation that finishes after the card shows another proposal does not take the focus later', async () => {
+  let resolve: (value: { data: ChatMessageOut }) => void = () => {}
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((() => new Promise(done => { resolve = done })) as never)
+  const client = new QueryClient()
+  const card = (row: ChatMessageOut) => <QueryClientProvider client={client}><ProposalCard message={row} /></QueryClientProvider>
+  const view = render(card(message()))
+  const button = screen.getByRole('button', { name: '2 abbestellen und archivieren' })
+  button.focus(); fireEvent.click(button)
+  view.rerender(card({ ...message(), id: 'q' }))
+  await act(async () => { resolve({ data: message('done', { done: 2 }) }); await new Promise(done => setTimeout(done, 0)) })
+  view.unmount()
+  render(card(message('done', { done: 2 })))
+  await screen.findByText(/2 Newsletter abbestellt/)
+  expect(document.activeElement).toBe(document.body)
+})
+
+test('a settled card loaded from the history does not take the focus', async () => {
+  setup(message('done', { done: 1 }))
+  await screen.findByText('1 Newsletter abbestellt.')
+  expect(document.activeElement).toBe(document.body)
 })

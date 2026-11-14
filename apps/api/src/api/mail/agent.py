@@ -55,12 +55,13 @@ def visible_messages(rows):
     return [r for r in rows if r.role != 'tool' and not (r.role == 'assistant' and r.tool_payload_json)]
 
 
-async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, context_message_id: str | None = None) -> AsyncIterator[ChatEvent]:
+async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, context_message_id: str | None = None, model: str | None = None) -> AsyncIterator[ChatEvent]:
+    """Run one turn; `model` only sets the model of a conversation this turn creates."""
     if conversation_id:
         conversation = await conversation_access.get_conversation(conversation_id)
         if conversation is None: raise LookupError('conversation not found')
     else:
-        conversation = await conversation_access.create_conversation(title=' '.join(text.split())[:60])
+        conversation = await conversation_access.create_conversation(title=' '.join(text.split())[:60], model=model or '')
     user = await message_access.add_message(conversation_id=conversation.id, role='user', content=text)
     model = conversation.model or mail_env.mail_chat_model
     all_text = ''
@@ -145,7 +146,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                         m = await mail_message.get_message(id)
                         if m:
                             insight = insight_map.get(id)
-                            refs.append(MailRefOut(id=m.id, account_id=m.account_id, color_index=colors.get(m.account_id, 0), subject=m.subject, sender_name=headers.sender_name(m.sender), internal_date=m.internal_date, deadline=insight.deadline if insight else None))
+                            refs.append(MailRefOut(id=m.id, account_id=m.account_id, color_index=colors.get(m.account_id, 0), subject=m.subject, sender_name=headers.sender_name(m.sender), internal_date=m.internal_date, deadline=insight.deadline if insight else None, is_flagged=m.is_flagged))
                     if refs: yield MailsEvent(mails=refs)
                 if proposal_id:
                     proposal = await message_access.get_message(proposal_id)

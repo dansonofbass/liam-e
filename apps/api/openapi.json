@@ -481,6 +481,18 @@
             ],
             "title": "Conversation Id"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Model for a new conversation; ignored when conversation_id is set (use PATCH on the conversation).",
+            "title": "Model"
+          },
           "text": {
             "maxLength": 8000,
             "minLength": 1,
@@ -947,6 +959,10 @@
             ],
             "title": "Internal Date"
           },
+          "is_flagged": {
+            "title": "Is Flagged",
+            "type": "boolean"
+          },
           "sender_name": {
             "title": "Sender Name",
             "type": "string"
@@ -963,7 +979,8 @@
           "subject",
           "sender_name",
           "internal_date",
-          "deadline"
+          "deadline",
+          "is_flagged"
         ],
         "title": "MailRefOut",
         "type": "object"

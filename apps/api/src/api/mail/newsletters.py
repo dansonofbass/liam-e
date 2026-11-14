@@ -107,7 +107,8 @@ async def find_newsletters(*, account_ids: list[str] | None = None) -> list[News
                 labels = json.loads(row.labels_json)
             except (ValueError, TypeError):
                 labels = []
-            if row.account_id not in connector_ids or not isinstance(labels, list) or not any(label in labels for label in ('CATEGORY_PROMOTIONS', 'CATEGORY_UPDATES')):
+            # Only the promotions category counts: CATEGORY_UPDATES also holds order and account mail.
+            if row.account_id not in connector_ids or not isinstance(labels, list) or 'CATEGORY_PROMOTIONS' not in labels:
                 continue
             method, link = 'none', None
         result.append(NewsletterSender(f'{row.account_id}|{row.sender_address}', row.account_id, row.sender_address, headers.sender_name(row.sender_display) or row.sender_address, row.total, row.unread, row.last_read_at, method, link))

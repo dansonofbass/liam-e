@@ -60,4 +60,11 @@ describe('streamChatTurn refusals', () => {
     expect(refusal.detailCode).toBe('conversation_not_found')
     expect(refusal.message).not.toContain('x')
   })
+
+  test('a refusal for an unknown model keeps its own code, other refusals stay internal', async () => {
+    respondWith(new Response(JSON.stringify({ detail: { code: 'model_unknown' } }), { status: 422 }))
+    expect(((await rejectionOf(new AbortController().signal)) as ChatStreamError).code).toBe('model_unknown')
+    respondWith(new Response(JSON.stringify({ detail: { code: 'something_else' } }), { status: 422 }))
+    expect(((await rejectionOf(new AbortController().signal)) as ChatStreamError).code).toBe('internal')
+  })
 })

@@ -1,7 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
 import { Route } from '../routes/_app/mail'
 import { inboxSearchSchema } from './filters'
@@ -23,9 +23,13 @@ function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' = 'empty', p
   const message = createRoute({ getParentRoute: () => mail, path: '$messageId', component: () => <div /> })
   const router = createRouter({ routeTree: root.addChildren([mail.addChildren([index, message])]), history: createMemoryHistory({ initialEntries: [path] }) })
   const view = render(<RouterProvider router={router} />)
-  return { router, list, view }
+  return { router, list, view, client }
 }
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia })
+// Lets queries a view starts on mount settle inside act() before the test moves on or ends.
+const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+// Waits until a removal's follow-up refetches are done, then lets their renders settle.
+const settleFetches = async (client: QueryClient) => { await waitFor(() => expect(client.isFetching()).toBe(0)); await settle() }
 
 test('coarse pointer inbox controls use the large touch target token', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
@@ -52,6 +56,7 @@ test('rows show provider tags and account filters fall back to the address', asy
   fireEvent.click(filter)
   fireEvent.click(screen.getByRole('menuitem', { name: 'ich@example.com' }))
   expect(await screen.findByRole('button', { name: 'ich@example.com' })).toBeTruthy()
+  await settle()
 })
 
 test('unread filter updates URL and query', async () => {
@@ -86,9 +91,12 @@ test('archive toast replaces a failed refresh notice', async () => {
 })
 
 test('shows six placeholder rows while loading', async () => {
-  const { view } = setup('loading')
+  const { view, client } = setup('loading')
   await screen.findByText('Mails werden geladen …')
   expect(view.container.querySelectorAll('.le-mailrow--placeholder').length).toBe(6)
+  // The list stays pending on purpose; only the summary settles.
+  await waitFor(() => expect(client.getQueryState(['summary'])?.status).toBe('success'))
+  await settle()
 })
 test('archiving an open mail selects and opens the next mail with filters', async () => {
   const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'act', message: row }, response: { status: 200 } })) as never)
@@ -183,4 +191,49 @@ test('keyboard archives the selected row but not while typing search', async () 
   fireEvent.keyDown(document.body, { key: 'j' }); fireEvent.keyDown(document.body, { key: 'e' })
   await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
   expect(action.mock.calls[0]?.[0]?.body).toEqual({ kind: 'archive' })
+})
+
+const rowOf = async (subject: string) => (await screen.findByText(subject)).closest('.le-mailrow') as HTMLElement
+const linkOf = (subject: string) => (screen.getByText(subject).closest('.le-mailrow') as HTMLElement).querySelector('.le-mailrow-link')
+const archiveFrom = (element: HTMLElement) => { const button = element.querySelector<HTMLButtonElement>('button[aria-label="Archivieren"]')!; act(() => { button.focus() }); fireEvent.click(button) }
+// Like the server: an archived mail no longer comes back from the list.
+function archivingServer(list: ReturnType<typeof setup>['list'], mode: 'row' | 'rows') {
+  const removed = new Set<string>()
+  const all = mode === 'row' ? [row] : [row, { ...row, id: 'm2', subject: 'Zweite' }, { ...row, id: 'm3', subject: 'Dritte' }]
+  list.mockImplementation((async () => ({ data: { items: all.filter(item => !removed.has(item.id)), next_cursor: null } })) as never)
+  return spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => { removed.add(options.path.message_id); return { data: { action_id: 'act', message: row }, response: { status: 200 } } }) as never)
+}
+
+test('removing a focused row moves the focus to the next row', async () => {
+  const { list, client } = setup('rows'); archivingServer(list, 'rows')
+  archiveFrom(await rowOf('Zweite'))
+  await waitFor(() => expect(screen.queryByText('Zweite')).toBeNull())
+  await waitFor(() => expect(document.activeElement).toBe(linkOf('Dritte')))
+  await settleFetches(client)
+})
+
+test('removing the focused last row moves the focus to the previous row', async () => {
+  const { list, client } = setup('rows'); archivingServer(list, 'rows')
+  archiveFrom(await rowOf('Dritte'))
+  await waitFor(() => expect(screen.queryByText('Dritte')).toBeNull())
+  await waitFor(() => expect(document.activeElement).toBe(linkOf('Zweite')))
+  await settleFetches(client)
+})
+
+test('removing the only focused row moves the focus to the list', async () => {
+  const { list, client } = setup('row'); archivingServer(list, 'row')
+  archiveFrom(await rowOf('Termin'))
+  await waitFor(() => expect(screen.queryByText('Termin')).toBeNull())
+  await waitFor(() => expect(document.activeElement?.classList.contains('le-inbox-scroll')).toBe(true))
+  await settleFetches(client)
+})
+
+test('a keyboard removal without focus in the row leaves the focus alone', async () => {
+  const { list } = setup('rows'); const action = archivingServer(list, 'rows')
+  await rowOf('Termin')
+  ;(document.activeElement as HTMLElement | null)?.blur()
+  fireEvent.keyDown(document.body, { key: 'j' }); fireEvent.keyDown(document.body, { key: 'e' })
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(screen.queryByText('Termin')).toBeNull())
+  expect(document.activeElement).toBe(document.body)
 })

@@ -255,3 +255,35 @@ def test_graph_fetch_attachments_malformed_json_returns_none():
             return await sync_graph.fetch_attachments(client, "id", {})
 
     assert asyncio.run(run()) is None
+
+
+def test_parse_rfc822_reads_reply_to():
+    raw = b"From: Ada <ada@example.org>\r\nReply-To: Support <help@example.org>, other@example.org\r\n\r\nBody"
+    parsed = sync_imap.parse_rfc822(raw, max_body_chars=100)
+    assert json.loads(parsed["reply_to_json"]) == ["help@example.org", "other@example.org"]
+    assert json.loads(sync_imap.parse_rfc822(RAW, max_body_chars=100)["reply_to_json"]) == []
+
+
+def test_gmail_parse_reads_reply_to_header():
+    message = {"id": "1", "payload": {"headers": [{"name": "From", "value": "ada@example.org"}, {"name": "Reply-To", "value": "Help <help@example.org>"}]}}
+    assert json.loads(sync_gmail.parse_message(message, max_body_chars=100)["reply_to_json"]) == ["help@example.org"]
+    assert json.loads(sync_gmail.parse_message(fixture("gmail_message.json"), max_body_chars=100)["reply_to_json"]) == []
+
+
+def test_graph_parse_reads_reply_to():
+    message = {"id": "1", "replyTo": [{"emailAddress": {"address": "help@example.org"}}, {"emailAddress": {}}]}
+    assert json.loads(sync_graph.parse_message(message, folder="INBOX", max_body_chars=100)["reply_to_json"]) == ["help@example.org"]
+    assert json.loads(sync_graph.parse_message(fixture("graph_message.json"), folder="INBOX", max_body_chars=100)["reply_to_json"]) == []
+
+
+def test_graph_parse_falls_back_to_the_reply_to_header_without_reply_to_field():
+    # An old delta cursor's projection has no replyTo, but it still selects internetMessageHeaders.
+    message = {"id": "1", "internetMessageHeaders": [{"name": "Reply-To", "value": "Help <help@example.org>, other@example.org"}]}
+    assert json.loads(sync_graph.parse_message(message, folder="INBOX", max_body_chars=100)["reply_to_json"]) == ["help@example.org", "other@example.org"]
+    selected = {**message, "replyTo": [{"emailAddress": {"address": "field@example.org"}}]}
+    assert json.loads(sync_graph.parse_message(selected, folder="INBOX", max_body_chars=100)["reply_to_json"]) == ["field@example.org"]
+
+
+def test_connector_parse_has_no_reply_to():
+    parsed = sync_connector.parse_message(fixture("connector_thread.json")["messages"][0], thread_id="1", folder="INBOX", max_body_chars=100)
+    assert "reply_to_json" not in parsed

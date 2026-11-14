@@ -36,7 +36,6 @@ class Env(BaseEnv):
     mail_worker_poll_seconds: float = 2.0
     mail_sync_stale_minutes: int = 10
     mail_sync_interval_minutes: int = 5
-    mail_sync_enabled: bool = True
     mail_sync_folders: str = "INBOX"
     mail_sync_page_size: int = 100
     mail_sync_max_body_chars: int = 200_000

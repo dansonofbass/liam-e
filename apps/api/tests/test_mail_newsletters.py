@@ -122,12 +122,21 @@ def test_done_archives_all_inbox_mails_of_sender(monkeypatch):
 
 def test_find_newsletters_includes_never_opened_and_last_read(monkeypatch):
     date = datetime(2025, 1, 1, tzinfo=UTC)
-    rows = [NewsletterRow('a', 'news@beispiel-shop.test', 'Shop <news@beispiel-shop.test>', 3, 3, None, '<https://example.test/u>', '', '[]'), NewsletterRow('b', 'other@example.test', '', 2, 1, date, '', '', '["CATEGORY_UPDATES"]')]
+    rows = [NewsletterRow('a', 'news@beispiel-shop.test', 'Shop <news@beispiel-shop.test>', 3, 3, None, '<https://example.test/u>', '', '[]'), NewsletterRow('b', 'other@example.test', '', 2, 1, date, '', '', '["CATEGORY_PROMOTIONS"]')]
     monkeypatch.setattr(mail_message, 'newsletter_senders', AsyncMock(return_value=rows))
     monkeypatch.setattr(newsletters.mail_account, 'list_accounts', AsyncMock(return_value=[SimpleNamespace(id='b', auth_type='mistral_connector')]))
     found = run(newsletters.find_newsletters())
     assert [s.last_read_at for s in found] == [None, date]
     assert [s.method for s in found] == ['link', 'none']
+
+
+def test_find_newsletters_ignores_category_updates_on_connector_accounts(monkeypatch):
+    rows = [NewsletterRow('b', 'orders@example.test', '', 2, 1, None, '', '', labels) for labels in ('["CATEGORY_UPDATES"]', '["CATEGORY_UPDATES", "INBOX"]', '["INBOX"]', 'not json', '{"CATEGORY_PROMOTIONS": 1}')]
+    monkeypatch.setattr(mail_message, 'newsletter_senders', AsyncMock(return_value=rows))
+    monkeypatch.setattr(newsletters.mail_account, 'list_accounts', AsyncMock(return_value=[SimpleNamespace(id='b', auth_type='mistral_connector')]))
+    assert run(newsletters.find_newsletters()) == []
+    rows[:] = [NewsletterRow('b', 'shop@example.test', '', 2, 1, None, '', '', '["CATEGORY_UPDATES", "CATEGORY_PROMOTIONS"]')]
+    assert [s.address for s in run(newsletters.find_newsletters())] == ['shop@example.test']
 
 
 def test_summary_counts_newsletter_senders(client, fake_store, monkeypatch):

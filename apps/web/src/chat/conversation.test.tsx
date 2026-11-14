@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import * as sdk from '../api/generated/sdk.gen'
 import type { ChatMessageOut, MailSummaryOut } from '../api/generated/types.gen'
 import { Route as StartRoute } from '../routes/_app/index'
-import { Conversation } from './Conversation'
+import { Conversation, turnOrder } from './Conversation'
 import { ChatSessionProvider } from './session'
 
 const originalFetch = globalThis.fetch
@@ -72,7 +72,7 @@ test('coarse pointer chat controls use the large touch target token', async () =
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/@media \(pointer: coarse\) \{ ([^{}]+)\{ ([^{}]+) \} \}/u)
   expect(rule).toBeTruthy()
-  for (const selector of ['.le-chat-suggestions .le-chip', '.le-chat-header .le-menu-anchor > .le-chip', '.le-chat-end .le-btn', '.le-chat-retry .le-btn', '.le-chat-reference .le-icon-btn']) expect(rule?.[1]).toContain(selector)
+  for (const selector of ['.le-chat-suggestions .le-chip', '.le-chat-header .le-menu-anchor .le-chip', '.le-chat-end .le-btn', '.le-chat-retry .le-btn', '.le-chat-reference .le-icon-btn']) expect(rule?.[1]).toContain(selector)
   expect(rule?.[2]).toContain('min-width: var(--control-height-lg)')
   expect(rule?.[2]).toContain('min-height: var(--control-height-lg)')
 })
@@ -108,6 +108,35 @@ test('account scope and composer focus survive navigation to the conversation', 
   expect(requestBody.text).toBe('Noch eine Frage')
   expect(requestBody.account_id).toBe('a')
   expect(requestBody.conversation_id).toBe('c')
+})
+
+test('a follow-up suggestion keeps the selected account', async () => {
+  setup()
+  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
+  await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
+  expect(requestBody.text).toBe('Weiter fragen')
+  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.conversation_id).toBe('c')
+})
+
+test('the pencil on a mail card asks for a reply draft to that mail in the same conversation', async () => {
+  setup('/chat/c'); await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  expect(await screen.findByText('Dringend')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
+  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
+  expect(requestBody.account_id).toBeUndefined()
+})
+
+test('a follow-up suggestion without a selected account searches all accounts', async () => {
+  setup('/chat/c'); await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
+  expect(requestBody.text).toBe('Weiter fragen')
+  expect(requestBody.account_id).toBeNull()
 })
 
 test('history user message is not duplicated while streaming after navigation', async () => {
@@ -239,8 +268,8 @@ test('a missing history mail reference is requested only once', async () => {
 
 test('history renders safe text, model, mail account and only the latest suggestions', async () => {
   const { client, router } = setup('/chat/c')
-  spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail', account_id: 'a', color_index: 0, sender_name: 'Absender', subject: '<b>Betreff</b>', internal_date: null, deadline: null } })) as never)
-  const row = (id: string, content: string, extras: ChatMessageOut['extras']): ChatMessageOut => ({ id, conversation_id: 'c', role: 'assistant', content, created_at: '', extras, proposal: null, proposal_status: '', stopped: false, tool_name: '' })
+  spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail', account_id: 'a', color_index: 0, sender_name: 'Absender', subject: '<b>Betreff</b>', internal_date: null, deadline: null, is_flagged: true } })) as never)
+  const row =(id: string, content: string, extras: ChatMessageOut['extras']): ChatMessageOut => ({ id, conversation_id: 'c', role: 'assistant', content, created_at: '', extras, proposal: null, proposal_status: '', stopped: false, tool_name: '' })
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
   await waitFor(() => expect(screen.queryByText('Unterhaltung wird geladen …')).toBeNull())
   act(() => {
@@ -250,6 +279,8 @@ test('history renders safe text, model, mail account and only the latest suggest
   })
   expect(await screen.findByText('<b>Betreff</b>')).toBeTruthy()
   expect(screen.getByText('Gmail')).toBeTruthy()
+  expect(screen.getByText('Dringend')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Antwort entwerfen' })).toBeTruthy()
   expect(screen.getAllByText('Modellname')).toHaveLength(2)
   expect(screen.queryByText('Alte Frage')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Weiter fragen' }))
@@ -257,4 +288,25 @@ test('history renders safe text, model, mail account and only the latest suggest
   expect(requestBody.conversation_id).toBe('c')
   fireEvent.click(screen.getByRole('button', { name: 'Mail öffnen' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/mail/mail'))
+})
+
+const historyRow = (id: string, role: string, extras: ChatMessageOut['extras'] = {}): ChatMessageOut => ({ id, conversation_id: 'c', role, content: role === 'assistant' ? `Antwort ${id}` : role === 'user' ? `Frage ${id}` : '', created_at: '', extras, proposal: role === 'proposal' ? { kind: 'archive', reason: 'Erledigt.', items: [{ id: 'm', kind: 'mail', title: 'Rechnung', subtitle: 'Anna' }] } : null, proposal_status: role === 'proposal' ? 'pending' : '', stopped: false, tool_name: '' })
+
+test('turn order puts a proposal after the answer of its turn', () => {
+  const rows = ['u1:user', 'p1:proposal', 'a1:assistant', 'u2:user', 'a2:assistant', 'u3:user', 'p3:proposal'].map(entry => { const [id, role] = entry.split(':') as [string, string]; return historyRow(id, role) })
+  expect(turnOrder(rows).map(row => row.id)).toEqual(['u1', 'a1', 'p1', 'u2', 'a2', 'u3', 'p3'])
+  expect(turnOrder([])).toEqual([])
+})
+
+test('history shows answer, card and follow-ups in the same order as live', async () => {
+  const { client } = setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  await waitFor(() => expect(screen.queryByText('Unterhaltung wird geladen …')).toBeNull())
+  act(() => { client.setQueryData(['history', 'c'], [historyRow('u', 'user'), historyRow('p', 'proposal'), historyRow('a', 'assistant', { suggestions: ['Weiter fragen'] })]) })
+  const answer = await screen.findByText('Antwort a')
+  const card = screen.getByText('1 Mail archivieren?')
+  const chip = screen.getByRole('button', { name: 'Weiter fragen' })
+  expect(answer.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(card.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(screen.getAllByRole('button', { name: 'Weiter fragen' })).toHaveLength(1)
 })

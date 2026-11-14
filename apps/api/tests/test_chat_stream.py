@@ -28,6 +28,50 @@ def test_stream_emits_sse_frames(monkeypatch):
     assert [json.loads(line[5:])['event'] for line in lines if line.startswith('data:')] == ['start', 'delta', 'done']
 
 
+def _model_stream_app(monkeypatch, *, known=('valid',)):
+    from api.routers.api.v1.chat import stream
+    from api.mail.chat_events import DoneEvent
+    from api.mail.models_catalog import ChatModelOut
+    seen = []
+    async def fake(**kwargs):
+        seen.append(kwargs)
+        yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
+    async def models(): return [ChatModelOut(id=name, label=name, description='', is_default=False) for name in known]
+    monkeypatch.setattr(stream, 'run_turn_events', fake)
+    monkeypatch.setattr(stream, 'list_chat_models', models)
+    return TestClient(build_app()), seen
+
+
+def test_stream_passes_a_known_model_to_a_new_conversation(monkeypatch):
+    client, seen = _model_stream_app(monkeypatch)
+    with client.stream('POST', '/api/v1/chat/stream', json={'text': 'Hallo', 'model': 'valid'}) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+    assert seen[0]['model'] == 'valid' and seen[0]['conversation_id'] is None
+    with client.stream('POST', '/api/v1/chat/stream', json={'text': 'Hallo'}) as response:
+        list(response.iter_lines())
+    assert seen[1]['model'] is None
+
+
+def test_stream_refuses_an_unknown_model_before_it_starts(monkeypatch):
+    client, seen = _model_stream_app(monkeypatch)
+    response = client.post('/api/v1/chat/stream', json={'text': 'Hallo', 'model': 'gone'})
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'model_unknown'
+    assert seen == []
+
+
+def test_stream_does_not_check_the_model_of_an_existing_conversation(monkeypatch):
+    from db.accessors import chat_conversation
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(chat_conversation, 'get_conversation', AsyncMock(return_value=object()))
+    client, seen = _model_stream_app(monkeypatch)
+    with client.stream('POST', '/api/v1/chat/stream', json={'text': 'Hallo', 'conversation_id': 'c', 'model': 'gone'}) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+    assert seen[0]['conversation_id'] == 'c'
+
+
 @pytest.mark.anyio
 async def test_stream_disconnect_marks_answer_stopped(store, monkeypatch):
     from api.routers.api.v1.chat.stream import sse_frames

@@ -25,6 +25,16 @@ test('confirmation uses selection count and edited draft', () => {
   expect((screen.getByRole('button', { name: '0 bestätigen' }) as HTMLButtonElement).disabled).toBe(true)
 })
 
+test('a send draft confirms without items, an item list without a draft needs a selection', () => {
+  const confirm = mock(() => {})
+  render(<ConfirmCard title="Mail senden?" reason="" items={[]} confirmLabel={() => 'Senden'} draft={draft} onConfirm={confirm} onCancel={() => {}} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+  expect(confirm).toHaveBeenCalledWith([], 'Alt')
+  cleanup()
+  render(<ConfirmCard title="Archivieren?" reason="" items={[]} confirmLabel={n => `${n} archivieren`} onConfirm={confirm} onCancel={() => {}} />)
+  expect((screen.getByRole('button', { name: '0 archivieren' }) as HTMLButtonElement).disabled).toBe(true)
+})
+
 test('confirm checkbox alignment and coarse mail reference targets', async () => {
   const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
   const appCss = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()

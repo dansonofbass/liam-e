@@ -11,6 +11,8 @@ import { formatBytes, formatMailTime } from '../i18n/format'
 import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
 import { toMessageFilters, type InboxSearch } from './filters'
 import { InsightBox } from './InsightBox'
+import { ActionToast } from './ActionToast'
+import { paragraphs } from './paragraphs'
 import { useMailActionsContext } from './useMailActions'
 
 export function MailView({ id }: { id: string }) {
@@ -61,11 +63,11 @@ export function MailView({ id }: { id: string }) {
     <IconButton label={de.controls.archive} icon="archive" size={iconSize} shortcut={split ? 'E' : undefined} onClick={() => remove('archive')} />
     <IconButton label={data.is_read ? de.controls.markUnread : de.controls.markRead} icon="mail-open" size={iconSize} shortcut={split ? 'U' : undefined} onClick={() => { void run(id, data.is_read ? 'mark_unread' : 'mark_read') }} />
     <IconButton label={de.controls.trash} icon="trash-2" size={iconSize} tone="danger" shortcut={split ? 'Entf' : undefined} onClick={() => remove('trash')} />
-    {data.can_unsubscribe && <Menu trigger={props => <IconButton {...props} label={de.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: de.mail.unsubscribe, icon: 'newspaper', onSelect: () => start(de.mail.unsubscribePrompt) }]} />}
+    <Menu trigger={props => <IconButton {...props} label={de.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: de.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : de.mail.unsubscribeUnavailable, onSelect: () => start(de.mail.unsubscribePrompt) }]} />
   </>
   const chatButtons = <>
-    <Tooltip content={de.mail.askTip}><Button variant="secondary" icon={split ? undefined : 'message-circle'} className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{de.mail.askInChat}</Button></Tooltip>
-    <Tooltip content={de.mail.draftTip}><Button variant="primary" icon={split ? undefined : 'pencil'} className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={() => start(de.mail.draftPrompt)}>{de.mail.draftReply}</Button></Tooltip>
+    <Tooltip content={de.mail.askTip}><Button variant="secondary" icon="message-circle" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{de.mail.askInChat}</Button></Tooltip>
+    <Tooltip content={de.mail.draftTip}><Button variant="primary" icon="pencil" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={() => start(de.mail.draftPrompt)}>{de.mail.draftReply}</Button></Tooltip>
   </>
   const account = summary.data?.accounts.find(item => item.id === data?.account_id)
   return <div className="le-mail-view">
@@ -76,10 +78,11 @@ export function MailView({ id }: { id: string }) {
       {message.isError && <div className="le-mail-error">{message.error instanceof MessageNotFoundError ? <Notice tone="danger" action={{ label: de.mail.toInbox, onClick: back }}>{de.proposalErrors.item_gone}</Notice> : <><Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void message.refetch() } }}>{de.mail.loadError}</Notice><Button variant="secondary" className="le-mail-to-inbox" onClick={back}>{de.mail.toInbox}</Button></>}</div>}
       {data && <article className="le-mail-article"><h1 className="title">{de.mail.subjectText(data.subject)}</h1><div className="le-mail-header"><Avatar name={data.sender_name || data.sender_address} address={data.sender_address} colorIndex={data.color_index} size="lg" /><div className="le-mail-sender"><div className="body-strong">{data.sender_name || data.sender_address}</div>{breakpoint !== 'mobile' && <div className="small le-muted le-mail-address">{data.to.length ? de.mail.addressTo(data.sender_address, data.to.join(', ')) : data.sender_address}</div>}</div>{account && <Tag tone="on-surface" dot={data.color_index}>{providerLabel(account)}</Tag>}{data.internal_date && <time className="small le-muted le-num" dateTime={data.internal_date}>{formatMailTime(new Date(data.internal_date), new Date())}</time>}</div>
         <InsightBox id={id} onFollowup={start} />
-        {data.body_text && <div className="le-mail-text body">{data.body_text}</div>}
+        {data.body_text && <div className="le-mail-text body">{paragraphs(data.body_text).map((text, index) => <p key={index}>{text}</p>)}</div>}
         {data.attachments.length > 0 && <div className="le-mail-attachments">{data.attachments.map((attachment, index) => <span key={index} className="le-mail-attachment"><Icon name="paperclip" size="sm" /><span className="le-mail-attachment-name">{attachment.name}</span><span className="le-mail-attachment-size">{formatBytes(attachment.size)}</span></span>)}</div>}
       </article>}
     </div>
+    {!split && <ActionToast inline />}
     {!split && data && <div className="le-mail-bottom">{chatButtons}</div>}
   </div>
 }
