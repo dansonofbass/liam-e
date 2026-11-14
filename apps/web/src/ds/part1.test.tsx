@@ -88,6 +88,25 @@ test('drawer traps focus and closes on Escape', () => {
   expect(document.activeElement).toBe(trigger)
 })
 
+test('Escape in a menu inside the drawer closes only the menu and returns to its trigger', () => {
+  const close = mock(() => {})
+  render(<Drawer open onClose={close} label="Menü"><Menu trigger={props => <button {...props}>Darstellung</button>} items={[{ label: 'Hell', onSelect: () => {} }]} /></Drawer>)
+  const trigger = screen.getByRole('button', { name: 'Darstellung' })
+  fireEvent.click(trigger)
+  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Hell' }), { key: 'Escape' })
+  expect(screen.queryByRole('menu')).toBeNull()
+  expect(close).not.toHaveBeenCalled()
+  expect(document.activeElement).toBe(trigger)
+  // The app hydrates on `document`, where React and the drawer listen side by side, so the drawer
+  // must skip an Escape that something inside already handled, wherever React's listener sits.
+  const handled = new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+  handled.preventDefault()
+  document.dispatchEvent(handled)
+  expect(close).not.toHaveBeenCalled()
+  fireEvent.keyDown(trigger, { key: 'Escape' })
+  expect(close).toHaveBeenCalledTimes(1)
+})
+
 test('avatar uses name initials or address fallback', () => {
   const { rerender } = render(<Avatar name="Hausverwaltung Kurz" colorIndex={0} />)
   expect(screen.getByText('HK')).toBeTruthy()
