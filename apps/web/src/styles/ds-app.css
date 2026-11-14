@@ -48,3 +48,24 @@
 @media (prefers-reduced-motion: reduce) { .le-page-fade { animation: none; } }
 @media (min-width: 640px) and (max-width: 1023px) { .le-side { flex: 0 0 auto; } }
 @media (max-width: 639px) { .le-app > .le-side { display: none; } }
+
+.le-app:has(.le-inbox) { height: 100dvh; overflow: hidden; }
+.le-sheet:has(.le-inbox) { min-height: 0; }
+.le-inbox { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.le-inbox-list { position: relative; display: flex; flex-direction: column; flex: 0 0 var(--list-width); min-width: 0; min-height: 0; border-right: 1px solid var(--line); }
+.le-inbox-reading { display: flex; flex: 1; min-width: 0; min-height: 0; overflow-y: auto; }
+.le-inbox-select { margin: auto; }
+.le-inbox-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-4); }
+.le-inbox-search { padding: var(--space-2) var(--space-4); }
+.le-inbox-search .le-input { width: 100%; }
+.le-inbox-mobile-status { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); }
+.le-inbox-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.le-inbox-scroll > .le-hint, .le-inbox-scroll > .le-notice { margin: var(--space-4); }
+.le-inbox-toast { position: absolute; z-index: 10; left: var(--space-4); right: var(--space-4); bottom: var(--space-4); border-radius: var(--radius-md); background: var(--surface-overlay); box-shadow: var(--shadow-overlay); }
+.le-inbox-toast .le-notice > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.le-mailrow--placeholder { min-height: var(--space-7); align-items: center; }
+.le-mailrow--placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface-soft)); }
+.le-mailrow--placeholder span:first-child { width: var(--space-7); height: var(--space-7); }
+.le-mailrow--placeholder span:last-child { width: 100%; }
+@media (max-width: 1023px) { .le-inbox-list { flex: 1 1 100%; border-right: 0; } }
+@media (max-width: 639px) { .le-inbox-filters { flex-wrap: nowrap; overflow-x: auto; } .le-inbox-filters > * { flex-shrink: 0; } }
