@@ -66,7 +66,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     {history.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void history.refetch() } }}>{de.chat.historyError}</Notice>}
     {messages.map(message => <div className="le-chat-entry" key={message.id}>{renderMessage(message)}</div>)}
     {live && <div className="le-chat-entry">{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={liveModel} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div>
-      {state.phase === 'stopped' && <Button variant="ghost" onClick={() => { void retry() }}>{de.chat.askAgain}</Button>}
+      {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{de.chat.askAgain}</Button></div>}
       {state.phase === 'error' && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
       {state.phase === 'done' && <>{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}
     </div>}
