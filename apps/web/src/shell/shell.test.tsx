@@ -1,7 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
 import { Shell, resetShellSyncForTest } from '../routes/_app'
 
@@ -54,6 +54,25 @@ test('chat navigation and the open conversation show their current state', async
   const selected = css.match(/\.le-conv\[aria-current="page"\] \{([^}]*)\}/u)?.[1]
   expect(selected).toContain('background: var(--accent-soft)')
   expect(selected).toContain('color: var(--accent)')
+})
+test.each([375, 800])('drawer close button restores focus at width %i', async (screenWidth) => {
+  width = screenWidth
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
+  setup()
+  const trigger = await screen.findByRole('button', { name: screenWidth < 640 ? 'Menü öffnen' : 'Unterhaltungen' })
+  act(() => { trigger.focus() })
+  fireEvent.click(trigger)
+  expect(screen.getByRole('dialog')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Menü schließen' }))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(document.activeElement).toBe(trigger)
+})
+test('drawer frame has inset padding, right radii and a coarse close target', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.match(/\.le-drawer \{([^}]*)\}/u)?.[1]
+  for (const property of ['width: min(308px, 100vw - 48px)', 'padding: var(--space-3)', 'border-radius: 0 var(--radius-lg) var(--radius-lg) 0', 'box-shadow: var(--shadow-overlay)']) expect(rule).toContain(property)
+  expect(css).toContain('@media (pointer: coarse) { .le-drawer-brand .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }')
 })
 test('mobile menu opens and closes on Escape', async () => {
   width = 375

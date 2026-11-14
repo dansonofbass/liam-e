@@ -10,7 +10,8 @@
 .le-menu-item--danger, .le-menu-item--danger .le-ico { color: var(--danger); }
 .le-tag--warm { background: var(--warm-soft); color: var(--warm); }
 .le-scrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); animation: le-tooltip-fade 220ms ease; }
-.le-drawer { height: 100%; width: min(100%, var(--sidebar-width)); box-sizing: border-box; background: var(--surface); box-shadow: var(--shadow-overlay); overflow: auto; animation: le-drawer-in 220ms ease; }
+.le-drawer { height: 100%; width: min(308px, 100vw - 48px); padding: var(--space-3); box-sizing: border-box; background: var(--surface); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; box-shadow: var(--shadow-overlay); overflow: auto; animation: le-drawer-in 220ms ease; }
+.le-drawer-brand { padding: 2px 0 18px 8px; }
 @keyframes le-drawer-in { from { opacity: 0; transform: translateX(-100%); } to { opacity: 1; transform: translateX(0); } }
 .le-composer-spacer { flex: 1; }
 .le-confirm-draft { padding: var(--space-3); }
@@ -21,6 +22,7 @@
 .le-mailrow-more .le-menu-anchor .le-menu { left: auto; right: 0; }
 @media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } }
 @media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor > .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
+@media (pointer: coarse) { .le-drawer-brand .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (prefers-reduced-motion: reduce) { .le-drawer { animation-name: le-tooltip-fade; } }
 .le-app:has(.le-accounts-scroll) { height: 100dvh; overflow: hidden; }
 .le-sheet:has(.le-accounts-scroll) { min-height: 0; }
