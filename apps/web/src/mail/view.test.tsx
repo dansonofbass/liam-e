@@ -68,6 +68,30 @@ test('manual unread after auto read is not marked read again', async () => {
   expect(action.mock.calls.map(([options]) => options?.body?.kind)).toEqual(['mark_read', 'mark_unread'])
 })
 
+test('manual unread waits for pending automatic read and remains unread in both caches', async () => {
+  const { action, get, client } = setup({ unread: true })
+  let serverRead = false
+  let finishRead!: (value: unknown) => void
+  get.mockImplementation((async () => ({ data: { ...mail, is_read: serverRead } })) as never)
+  action.mockImplementation(((options: { body: { kind: string } }) => {
+    if (options.body.kind === 'mark_read') return new Promise(resolve => { finishRead = resolve })
+    serverRead = false
+    return Promise.resolve({ data: { action_id: 'unread', message: { ...mail, is_read: false } }, response: { status: 200 } })
+  }) as never)
+  await waitFor(() => expect(action.mock.calls.length).toBe(1))
+  const view = document.querySelector('.le-mail-view') as HTMLElement
+  fireEvent.click(await within(view).findByRole('button', { name: 'Als ungelesen markieren' }))
+  await act(async () => { await Promise.resolve() })
+  expect(action.mock.calls.length).toBe(1)
+  await act(async () => {
+    serverRead = true
+    finishRead({ data: { action_id: 'read', message: { ...mail, is_read: true } }, response: { status: 200 } })
+  })
+  await waitFor(() => expect(action.mock.calls.map(([options]) => options?.body?.kind)).toEqual(['mark_read', 'mark_unread']))
+  await waitFor(() => expect(client.getQueryData<{ is_read: boolean }>(['message', 'm1'])?.is_read).toBe(false))
+  expect(client.getQueriesData<{ pages: { items: { id: string; is_read: boolean }[] }[] }>({ queryKey: ['messages'] }).some(([, data]) => data?.pages.some(page => page.items.some(row => row.id === 'm1' && !row.is_read)))).toBe(true)
+})
+
 test('mobile bars contain the requested actions; desktop has no back button', async () => {
   setup({ mobile: true }); await screen.findByRole('heading', { name: 'Termin' })
   for (const name of ['Zurück zum Posteingang', 'Archivieren', 'Als ungelesen markieren', 'In den Papierkorb', 'Weitere Aktionen', 'Im Chat fragen', 'Antwort entwerfen']) expect(screen.getByRole('button', { name })).toBeTruthy()

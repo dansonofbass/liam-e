@@ -20,6 +20,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
   const sequence = useRef(0)
   const undoPending = useRef(false)
   const pending = useRef(0)
+  const queues = useRef(new Map<string, Promise<unknown>>())
   const reconcile = useRef(false)
   const settle = () => {
     if (--pending.current === 0 && reconcile.current) {
@@ -64,9 +65,16 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         : page.items.map(item => item.id === id ? { ...item, is_read: kind === 'mark_read' } : item) })),
     }))
   }
-  const run = async (id: string, kind: Kind, options?: { silent?: boolean }) => {
+  const run = (id: string, kind: Kind, options?: { silent?: boolean }) => {
     const current = options?.silent ? sequence.current : ++sequence.current
     if (!options?.silent) clear()
+    const previous = queues.current.get(id)
+    const work = previous ? previous.catch(() => {}).then(() => execute(id, kind, options, current)) : execute(id, kind, options, current)
+    queues.current.set(id, work)
+    void work.then(() => { if (queues.current.get(id) === work) queues.current.delete(id) }, () => { if (queues.current.get(id) === work) queues.current.delete(id) })
+    return work
+  }
+  const execute = async (id: string, kind: Kind, options: { silent?: boolean } | undefined, current: number) => {
     ++pending.current
     const changes: Change[] = []
     const removal = kind === 'archive' || kind === 'trash'

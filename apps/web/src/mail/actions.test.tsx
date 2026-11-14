@@ -182,6 +182,26 @@ test('failed undo shows a danger notice without restoring the row', async () => 
   expect(screen.queryByText('Erste:false')).toBeNull()
 })
 
+for (const outcome of ['success', 'failure'] as const) test(`runs on the same message are ordered after ${outcome} while other messages run concurrently`, async () => {
+  const finish: Array<(value: unknown) => void> = []
+  const action = spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(resolve => { finish.push(resolve) })) as never)
+  setup()
+  fireEvent.click(screen.getByText('read 1'))
+  await waitFor(() => expect(action.mock.calls.length).toBe(1))
+  fireEvent.click(screen.getByText('archive 1'))
+  fireEvent.click(screen.getByText('archive 2'))
+  await waitFor(() => expect(action.mock.calls.length).toBe(2))
+  expect(action.mock.calls.map(([options]) => options?.path?.message_id)).toEqual(['1', '2'])
+  expect(screen.getByText('Erste:true')).toBeTruthy()
+  await act(async () => { finish[0]!(outcome === 'success' ? { data: { action_id: 'read-1', message: rows[0] }, response: { status: 200 } } : { response: { status: 502 } }) })
+  await waitFor(() => expect(action.mock.calls.length).toBe(3))
+  expect(action.mock.calls[2]?.[0]?.body).toEqual({ kind: 'archive' })
+  await act(async () => {
+    finish[1]!({ data: { action_id: 'action-2', message: rows[1] }, response: { status: 200 } })
+    finish[2]!({ data: { action_id: 'action-1', message: rows[0] }, response: { status: 200 } })
+  })
+})
+
 test('mark_read updates the row in place without a toast', async () => {
   success(); setup(); fireEvent.click(screen.getByText('read 1'))
   await waitFor(() => expect(screen.getByText('Erste:true')).toBeTruthy())
