@@ -17,7 +17,7 @@ let requestBody: Record<string, unknown>
 let summary: MailSummaryOut = { accounts: [], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
 function setup(path = '/') {
   history = []
-  summary = { accounts: [], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
+  summary = { accounts: [{ id: 'a', display_name: 'Privat', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
   window.matchMedia = (() => ({ matches: true })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; requestBody = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start(c) { stream = c } }))) }) as typeof fetch
   spyOn(sdk, 'chatHistory').mockImplementation((async () => ({ data: history })) as never)
@@ -86,6 +86,33 @@ test('composer scopes a request to the chosen account and clears the field', asy
   expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('')
 })
 
+test('does not follow new text after scrolling up; button resumes following', async () => {
+  setup('/chat/c'); await send()
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }) })
+  const container = document.querySelector('.le-chat-messages') as HTMLElement
+  Object.defineProperty(container, 'scrollHeight', { configurable: true, value: 1000 })
+  Object.defineProperty(container, 'clientHeight', { configurable: true, value: 200 })
+  Object.defineProperty(container, 'scrollTop', { configurable: true, writable: true, value: 100 })
+  fireEvent.scroll(container)
+  await act(async () => { frame({ event: 'delta', text: 'Neuer Text' }) })
+  expect(container.scrollTop).toBe(100)
+  fireEvent.click(screen.getByRole('button', { name: 'Zum Ende' }))
+  expect(container.scrollTop).toBe(1000)
+  expect(screen.queryByRole('button', { name: 'Zum Ende' })).toBeNull()
+})
+
+test('model menu updates the conversation', async () => {
+  const update = spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => ({ data: {} })) as never)
+  const { client } = setup('/chat/c')
+  const invalidate = spyOn(client, 'invalidateQueries')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', description: 'Schnell', is_default: true }, { id: 'm2', label: 'Modell Zwei', description: 'Genau', is_default: false }]) })
+  fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
+  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei · Genau/ }))
+  await waitFor(() => expect(update).toHaveBeenCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2' }, throwOnError: true }))
+  await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['history', 'c'] }))
+})
+
 test('history renders safe text, model, mail account and only the latest suggestions', async () => {
   const { client } = setup('/chat/c')
   spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail', account_id: 'a', color_index: 0, sender_name: 'Absender', subject: '<b>Betreff</b>', internal_date: null, deadline: null } })) as never)
@@ -99,7 +126,7 @@ test('history renders safe text, model, mail account and only the latest suggest
   })
   expect(await screen.findByText('<b>Betreff</b>')).toBeTruthy()
   expect(screen.getByText('Privat')).toBeTruthy()
-  expect(screen.getByText('Modellname')).toBeTruthy()
+  expect(screen.getAllByText('Modellname')).toHaveLength(2)
   expect(screen.queryByText('Alte Frage')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Weiter fragen' }))
   expect(requestBody.text).toBe('Weiter fragen')

@@ -11,6 +11,11 @@ export const de = {
     greeting: 'Hallo, was kann ich für dich tun?', greetingFirst: 'Hallo,', greetingSecond: 'was kann ich für dich tun?', placeholder: 'Frag etwas zu deinen Mails …',
     stopped: 'Angehalten – die Antwort ist unvollständig.', retry: 'Noch mal versuchen', askAgain: 'Noch mal fragen',
     loadingHistory: 'Unterhaltung wird geladen …', historyError: 'Die Unterhaltung konnte nicht geladen werden. Versuch es gleich noch mal.',
+    loadingSummary: 'Konten werden geladen …', summaryError: 'Die Konten konnten nicht geladen werden. Versuch es gleich noch mal.',
+    noAccounts: 'Verbinde ein Konto, dann kann ich deine Mails lesen.', removeReference: 'Bezug entfernen', toEnd: 'Zum Ende',
+    loadingReference: 'Mail wird geladen …', referenceError: 'Die Mail konnte nicht geladen werden. Versuch es gleich noch mal.',
+    modelError: 'Das Modell konnte nicht geändert werden. Versuch es gleich noch mal.',
+    stand: (unread: number, accounts: number, time?: string) => `${plural(unread, { one: '# ungelesene Mail', other: '# ungelesene Mails' })} in ${plural(accounts, { one: '# Konto', other: '# Konten' })}${time ? ` · Stand ${time}` : ''}`,
   },
   status: {
     thinking: 'Denke nach …',
