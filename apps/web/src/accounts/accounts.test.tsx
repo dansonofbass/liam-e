@@ -187,6 +187,7 @@ function fillImap() {
 test('gmail connector suppresses own Google login', async () => {
   setup('empty', '/accounts', account, [], { ...options, gmail_connector: true, google_oauth: true })
   fireEvent.click(await screen.findByRole('button', { name: /Gmail/ }))
+  expect(screen.getByText('liam-e liest und ordnet deine Mails von Gmail über den Connector in Mistral Studio. Die Anmeldung bei Google liegt dort, hier musst du nichts eingeben. Verändert oder gesendet wird nur, was du selbst auslöst oder bestätigst.')).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Bei Google anmelden' })).toBeNull()
   expect(screen.getByRole('button', { name: 'Gmail verbinden' })).toBeTruthy()
 })

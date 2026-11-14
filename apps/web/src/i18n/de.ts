@@ -163,7 +163,7 @@ export const de = {
     gmail: 'Gmail', outlook: 'Outlook', other: 'Anderer Anbieter',
     gmailConnectorSub: 'Über den Gmail-Connector in Mistral Studio', outlookConnectorSub: 'Über den Outlook-Connector in Mistral Studio',
     googleSub: 'Mit deinem Google-Konto anmelden', microsoftSub: 'Mit deinem Microsoft-Konto anmelden', otherSub: 'iCloud, Yahoo und andere über IMAP mit App-Passwort',
-    connectorDescription: (provider: string, company: string) => `liam-e liest und ordnet deine Mails von ${provider} über den Connector in Mistral Studio. Die Anmeldung bei ${company} liegt dort. Verändert oder gesendet wird nur, was du selbst auslöst oder bestätigst.`,
+    connectorDescription: (provider: string, company: string) => `liam-e liest und ordnet deine Mails von ${provider} über den Connector in Mistral Studio. Die Anmeldung bei ${company} liegt dort, hier musst du nichts eingeben. Verändert oder gesendet wird nur, was du selbst auslöst oder bestätigst.`,
     loginDescription: (company: string) => `Du meldest dich bei ${company} an und erlaubst liam-e, deine Mails zu lesen und zu ordnen. Verändert oder gesendet wird nur, was du selbst auslöst oder bestätigst.`,
     connectProvider: (provider: string) => `${provider} verbinden`, connectorTip: (provider: string) => `Nutzt den ${provider}-Connector aus Mistral Studio`,
     loginProvider: (company: string) => `Bei ${company} anmelden`, loginTip: (company: string) => `Öffnet die Anmeldung bei ${company}`,
