@@ -64,6 +64,25 @@ test('navigation after start preserves the stream through done', async () => {
   expect(signal.aborted).toBe(false)
 })
 
+test('account scope and composer focus survive navigation to the conversation', async () => {
+  const { router } = setup()
+  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
+  await send()
+  expect(requestBody.account_id).toBe('a')
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }) })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c'))
+  const input = await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  expect(document.activeElement).toBe(input)
+  await act(async () => { frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Senden' })).toBeTruthy())
+  fireEvent.change(input, { target: { value: 'Noch eine Frage' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+  expect(requestBody.text).toBe('Noch eine Frage')
+  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.conversation_id).toBe('c')
+})
+
 test('history user message is not duplicated while streaming after navigation', async () => {
   const { client, router } = setup(); await send()
   history = [{ id: 'u', conversation_id: 'c', role: 'user', content: 'Meine Frage', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, tool_name: '' }]

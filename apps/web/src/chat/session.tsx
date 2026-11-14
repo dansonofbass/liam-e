@@ -6,13 +6,14 @@ import { createTypewriter } from './typewriter'
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal'
 type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
-type Session = { state: State; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
+type Session = { state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
 
 export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient()
   const [state, setState] = useState<State>(initial)
+  const [scope, setScope] = useState<string | null>(null)
   const active = useRef<{ controller: AbortController; writer: ReturnType<typeof createTypewriter>; conversationId?: string } | null>(null)
   const last = useRef<ChatStreamRequest | null>(null)
   const conversation = useRef<string | undefined>(undefined)
@@ -72,7 +73,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [client, invalidate])
   const retry = useCallback(async () => { if (last.current) await send({ ...last.current, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
-  return <Context.Provider value={{ state, send, stop, retry }}>{children}</Context.Provider>
+  return <Context.Provider value={{ state, scope, setScope, send, stop, retry }}>{children}</Context.Provider>
 }
 export function useChatSession(): Session {
   const context = useContext(Context)

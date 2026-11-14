@@ -21,14 +21,13 @@ export const Route = createFileRoute('/_app/')({
   component: Greeting,
 })
 function Greeting() {
-  const { state, send, retry } = useChatSession()
+  const { state, send, retry, scope } = useChatSession()
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
   const about = typeof search.about === 'string' ? search.about : undefined
   const summary = useQuery(summaryQuery())
   const reference = useQuery({ ...messageQuery(about ?? ''), enabled: Boolean(about) })
   const [started, setStarted] = useState(false)
-  const [scope, setScope] = useState<string | null>(null)
   const busy = state.phase === 'working' || state.phase === 'streaming'
   const quickSend = (text: string) => {
     if (busy) return
@@ -52,5 +51,5 @@ function Greeting() {
       <QuickAction icon="newspaper" title={de.quickActions.newsletters.title} sub={de.quickActions.newsletters.subtitle(data.newsletter_senders)} onClick={() => quickSend(de.quickActions.newsletters.prompt)} />
       <QuickAction icon="clock" title={de.quickActions.dueToday.title} sub={de.quickActions.dueToday.subtitle} onClick={() => quickSend(de.quickActions.dueToday.prompt)} />
     </div></>)}
-  </div></div>{data && data.accounts.length > 0 && <div className="le-chat-composer">{about && <div className="le-chat-reference">{reference.isPending && <span className="le-hint">{de.chat.loadingReference}</span>}{reference.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void reference.refetch() } }}>{de.chat.referenceError}</Notice>}{reference.data && <MailReference mail={reference.data} accountLabel={data.accounts.find(account => account.id === reference.data?.account_id)?.display_name} onOpen={() => { void navigate({ href: `/mail?message=${encodeURIComponent(reference.data.id)}` }) }} />}<IconButton icon="x" label={de.chat.removeReference} onClick={() => { void navigate({ to: '/', search: { about: undefined } }) }} /></div>}<ChatComposer scope={scope} onScopeChange={setScope} contextMessageId={about} onSend={() => setStarted(true)} /></div>}</div>
+  </div></div>{data && data.accounts.length > 0 && <div className="le-chat-composer">{about && <div className="le-chat-reference">{reference.isPending && <span className="le-hint">{de.chat.loadingReference}</span>}{reference.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void reference.refetch() } }}>{de.chat.referenceError}</Notice>}{reference.data && <MailReference mail={reference.data} accountLabel={data.accounts.find(account => account.id === reference.data?.account_id)?.display_name} onOpen={() => { void navigate({ href: `/mail?message=${encodeURIComponent(reference.data.id)}` }) }} />}<IconButton icon="x" label={de.chat.removeReference} onClick={() => { void navigate({ to: '/', search: { about: undefined } }) }} /></div>}<ChatComposer contextMessageId={about} onSend={() => setStarted(true)} /></div>}</div>
 }

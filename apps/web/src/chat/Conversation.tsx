@@ -13,19 +13,17 @@ import { useChatSession } from './session'
 
 type Accounts = AccountSummaryOut[]
 
-export function ChatComposer({ conversationId, contextMessageId, onSend, scope: selectedScope, onScopeChange }: { conversationId?: string; contextMessageId?: string; onSend?: () => void; scope?: string | null; onScopeChange?: (scope: string | null) => void }) {
+export function ChatComposer({ conversationId, contextMessageId, onSend, autoFocus }: { conversationId?: string; contextMessageId?: string; onSend?: () => void; autoFocus?: boolean }) {
   const { data: summary } = useQuery(summaryQuery())
-  const { state, send, stop } = useChatSession()
+  const { state, send, stop, scope, setScope } = useChatSession()
   const [value, setValue] = useState('')
-  const [localScope, setLocalScope] = useState<string | null>(null)
-  const scope = selectedScope === undefined ? localScope : selectedScope
   const busy = state.phase === 'working' || state.phase === 'streaming'
   return <Composer value={value} onChange={setValue} onSubmit={() => {
     if (busy || !value.trim()) return
     onSend?.()
     void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId })
     setValue('')
-  }} onStop={stop} busy={busy} scope={scope} accounts={(summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name }))} onScopeChange={onScopeChange ?? setLocalScope} placeholder={de.chat.placeholder} />
+  }} onStop={stop} busy={busy} scope={scope} accounts={(summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name }))} onScopeChange={setScope} placeholder={de.chat.placeholder} autoFocus={autoFocus} />
 }
 
 function Reference({ mail, accounts }: { mail: MailRefOut; accounts: Accounts }) {
@@ -73,5 +71,5 @@ export function Conversation({ conversationId }: { conversationId: string }) {
       {state.phase === 'done' && <>{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}
     </div>}
     <div className="sr-only" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
-  </div>{showEnd && <div className="le-chat-end"><Button variant="secondary" onClick={scrollToEnd}>{de.chat.toEnd}</Button></div>}<div className="le-chat-composer"><ChatComposer conversationId={conversationId} /></div></div>
+  </div>{showEnd && <div className="le-chat-end"><Button variant="secondary" onClick={scrollToEnd}>{de.chat.toEnd}</Button></div>}<div className="le-chat-composer"><ChatComposer conversationId={conversationId} autoFocus={busy && state.conversationId === conversationId} /></div></div>
 }
