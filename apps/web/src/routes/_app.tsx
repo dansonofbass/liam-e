@@ -8,6 +8,7 @@ import { de } from '../i18n/de'
 import { Sidebar, Conversations } from '../shell/Sidebar'
 import { MobileHeader } from '../shell/MobileHeader'
 import { useBreakpoint } from '../shell/useBreakpoint'
+import { ChatSessionProvider } from '../chat/session'
 
 let started = false
 export function resetShellSyncForTest() { started = false }
@@ -23,6 +24,6 @@ export function Shell() {
   }, [client])
   const mobile = breakpoint === 'mobile', tablet = breakpoint === 'tablet'
   const title = path.startsWith('/mail') ? de.shell.inbox : path.startsWith('/accounts') ? de.shell.accounts : de.shell.chat
-  return <><AppShell sidebar={mobile ? null : <Sidebar collapsed={tablet} onConversations={() => setOpen(true)} />} header={mobile ? <MobileHeader title={title} onMenu={() => setOpen(true)} /> : undefined}><div key={path} className="le-page-fade"><Outlet /></div></AppShell><Drawer open={open} onClose={() => setOpen(false)} label={mobile ? de.shell.openMenu : de.shell.conversations}>{mobile ? <Sidebar onNavigate={() => setOpen(false)} /> : <Conversations onNavigate={() => setOpen(false)} />}</Drawer></>
+  return <ChatSessionProvider><AppShell sidebar={mobile ? null : <Sidebar collapsed={tablet} onConversations={() => setOpen(true)} />} header={mobile ? <MobileHeader title={title} onMenu={() => setOpen(true)} /> : undefined}><div key={path} className="le-page-fade"><Outlet /></div></AppShell><Drawer open={open} onClose={() => setOpen(false)} label={mobile ? de.shell.openMenu : de.shell.conversations}>{mobile ? <Sidebar onNavigate={() => setOpen(false)} /> : <Conversations onNavigate={() => setOpen(false)} />}</Drawer></ChatSessionProvider>
 }
 export const Route = createFileRoute('/_app')({ component: Shell })
