@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { MessagePageOut } from '../api/generated/types.gen'
 import { MessageNotFoundError, messageQuery, messagesInfiniteQuery, summaryQuery } from '../api/queries'
 import { useChatSession } from '../chat/session'
-import { Avatar, Button, IconButton, Menu, Notice, Tag, Tooltip } from '../ds'
+import { Avatar, Button, Icon, IconButton, Menu, Notice, Tag, Tooltip } from '../ds'
 import { providerLabel } from '../ds/providerLabel'
 import { de } from '../i18n/de'
 import { formatBytes, formatMailTime } from '../i18n/format'
@@ -77,7 +77,7 @@ export function MailView({ id }: { id: string }) {
       {data && <article className="le-mail-article"><h1 className="title">{de.mail.subjectText(data.subject)}</h1><div className="le-mail-header"><Avatar name={data.sender_name || data.sender_address} address={data.sender_address} colorIndex={data.color_index} size="lg" /><div className="le-mail-sender"><div className="body-strong">{data.sender_name || data.sender_address}</div>{breakpoint !== 'mobile' && <div className="small le-muted le-mail-address">{data.to.length ? de.mail.addressTo(data.sender_address, data.to.join(', ')) : data.sender_address}</div>}</div>{account && <Tag tone="on-surface" dot={data.color_index}>{providerLabel(account)}</Tag>}{data.internal_date && <time className="small le-muted le-num" dateTime={data.internal_date}>{formatMailTime(new Date(data.internal_date), new Date())}</time>}</div>
         <InsightBox id={id} onFollowup={start} />
         {data.body_text && <div className="le-mail-text body">{data.body_text}</div>}
-        {data.attachments.length > 0 && <div className="le-mail-attachments">{data.attachments.map((attachment, index) => <Tag key={index} icon="paperclip">{de.mail.attachment(attachment.name, formatBytes(attachment.size))}</Tag>)}</div>}
+        {data.attachments.length > 0 && <div className="le-mail-attachments">{data.attachments.map((attachment, index) => <span key={index} className="le-mail-attachment"><Icon name="paperclip" size="sm" /><span className="le-mail-attachment-name">{attachment.name}</span><span className="le-mail-attachment-size">{formatBytes(attachment.size)}</span></span>)}</div>}
       </article>}
     </div>
     {!split && data && <div className="le-mail-bottom">{chatButtons}</div>}

@@ -128,6 +128,9 @@
 .le-insight-placeholder-line:last-child { width: 60%; }
 .le-mail-text { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 64ch; }
 .le-mail-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.le-mail-attachment { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 36px; max-width: 100%; padding: var(--space-1) var(--space-3); border: 1px solid var(--control-border); border-radius: var(--radius-pill); }
+.le-mail-attachment-name { font-weight: 600; overflow-wrap: anywhere; }
+.le-mail-attachment-size { color: var(--ink-muted); white-space: nowrap; }
 .le-mail-bottom { display: flex; gap: var(--space-2); border-top: 1px solid var(--line); padding: var(--space-2) var(--space-3) max(var(--space-3), env(safe-area-inset-bottom)); }
 .le-mail-bottom > .le-tooltip-anchor { flex: 1 1 0; min-width: 0; }
 .le-mail-bottom .le-btn { width: 100%; min-height: var(--control-height-lg); }

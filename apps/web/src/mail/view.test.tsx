@@ -115,7 +115,16 @@ test('mail body is literal text and attachment is non-interactive', async () => 
   const { view } = setup(); await screen.findByRole('heading', { name: 'Termin' })
   expect(screen.getByText('<b>fett</b>')).toBeTruthy()
   expect(view.container.querySelector('b')).toBeNull()
-  expect(screen.getByText('Abrechnung_2025.pdf · 212 KB')).toBeTruthy()
+  const chip = screen.getByText('Abrechnung_2025.pdf').closest('.le-mail-attachment') as HTMLElement
+  expect(chip).toBeTruthy()
+  expect(within(chip).getByText('212 KB')).toBeTruthy()
+  expect(chip.querySelector('.lucide-paperclip')).toBeTruthy()
+  expect(chip.querySelector('button, a')).toBeNull()
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.match(/\.le-mail-attachment \{([^}]+)\}/u)?.[1]
+  for (const property of ['min-height: 36px', 'border: 1px solid var(--control-border)', 'border-radius: var(--radius-pill)']) expect(rule).toContain(property)
+  expect(css).toMatch(/\.le-mail-attachment-name \{[^}]*font-weight: 600;/u)
+  expect(css).toMatch(/\.le-mail-attachment-size \{[^}]*color: var\(--ink-muted\);/u)
 })
 
 test('not found offers return to inbox', async () => {
