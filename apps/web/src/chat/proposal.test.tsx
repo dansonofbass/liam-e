@@ -130,8 +130,8 @@ test('remounting a result does not extend the undo deadline', async () => {
 test.each([
   ['item_gone', 'Die Mail ist nicht mehr da.'],
   ['action_unsupported', 'Das geht bei diesem Konto nicht.'],
-  ['credentials_invalid', 'Die Anmeldung ist abgelaufen. Melde dich erneut beim Anbieter an.'],
-  ['host_not_allowed', 'Der Server ist nicht erreichbar. Prüfe die Serveradresse.'],
+  ['credentials_invalid', 'Die Anmeldung ist abgelaufen. Melde dich noch mal beim Anbieter an.'],
+  ['host_not_allowed', 'liam-e darf diesen Server nicht ansprechen. Prüfe die Serveradresse oder trag den Server in Mistral Studio unter MAIL_IMAP_ALLOWED_HOSTS ein.'],
   ['unknown', 'Das hat nicht geklappt. Versuch es gleich noch mal.'],
 ])('failure %s shows its mapped cause', async (code, text) => {
   setup(message('failed', { failed: [{ id: 'a', code }] }))

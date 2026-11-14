@@ -90,7 +90,7 @@ export function AccountsPage() {
       <div className="le-accounts-layout">
         {(accounts.isPending || Boolean(accounts.data?.length)) && <section className="le-accounts-list"><h2 className="heading" id="accounts-heading" ref={listHeading} tabIndex={-1}>{de.accounts.connectedAccounts}</h2>
           {accounts.isPending ? <><span className="le-sr" role="status">{de.accounts.loading}</span><div aria-hidden="true">{Array.from({ length: 3 }, (_, i) => <div className="le-account le-account--placeholder" key={i}><span /><span /></div>)}</div></> : <ul aria-labelledby="accounts-heading">{accounts.data?.map(account => <li key={account.id}><AccountCard account={account} coarse={coarse} syncPending={pending.includes(account.id)} onSync={() => { void sync(account.id) }} onReconnect={() => { void reconnect(account) }} onRename={() => {}} onSaveName={name => rename(account, name)} onRemove={() => setRemoving(account)} /></li>)}</ul>}
-          {Boolean(accounts.data?.length) && <small className="le-muted">{de.accounts.removeFootnote}</small>}
+          {Boolean(accounts.data?.length) && <small className="le-muted">{de.accounts.removeDescription}</small>}
         </section>}
         <ConnectPanel headingRef={connectHeading} reconnect={imapReconnect} onConnected={account => { setNotice({ tone: 'success', text: de.accounts.connected }); invalidate(); void sync(account.id) }} />
       </div>

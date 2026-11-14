@@ -53,15 +53,15 @@ test('card shows each state and connection', () => {
   rerender(<AccountCard account={{ ...account, state: 'auth_expired', connection: 'oauth', provider: 'microsoft' }} {...props} />)
   expect(screen.getByText('Anmeldung abgelaufen')).toBeTruthy(); expect(screen.getByText('Outlook')).toBeTruthy(); expect(screen.getByText('mit Anmeldung')).toBeTruthy()
   rerender(<AccountCard account={{ ...account, state: 'error', error_code: 'login_failed', provider: 'gmail' }} {...props} />)
-  expect(screen.getByText('Gmail')).toBeTruthy(); expect(screen.getByText('Die Anmeldung beim Mailserver hat nicht geklappt. Prüf die Serveradresse und das App-Passwort.')).toBeTruthy()
+  expect(screen.getByText('Gmail')).toBeTruthy(); expect(screen.getByText('Die Anmeldung beim Mailserver hat nicht geklappt. Prüfe die Serveradresse und das App-Passwort.')).toBeTruthy()
   rerender(<AccountCard account={{ ...account, state: 'error', error_code: 'unknown', email_address: 'a@icloud.com' }} {...props} />)
-  expect(screen.getByText('iCloud')).toBeTruthy(); expect(screen.getByText('Das Konto ist gerade nicht erreichbar. Versuch es gleich noch mal.')).toBeTruthy()
+  expect(screen.getByText('iCloud')).toBeTruthy(); expect(screen.getByText('Beim letzten Abruf ist etwas schiefgegangen. Versuch es gleich noch mal.')).toBeTruthy()
   rerender(<AccountCard account={{ ...account, state: 'ok', last_sync_at: '2026-01-01T12:00:00Z', email_address: 'a@example.com' }} {...props} />)
   expect(screen.getByText('example.com')).toBeTruthy(); expect(screen.getByText(/^Stand /)).toBeTruthy()
 })
 test('return error is shown and removed from URL', async () => {
   const { router } = setup('empty', '/accounts?error=oauth_denied')
-  expect(await screen.findByText('Die Anmeldung wurde abgebrochen. Versuch es bei Bedarf noch mal.')).toBeTruthy()
+  expect(await screen.findByText('Die Anmeldung wurde abgebrochen, es ist kein Konto verbunden. Du kannst sie jederzeit neu starten.')).toBeTruthy()
   await waitFor(() => expect(router.state.location.searchStr).toBe(''))
 })
 test('connected return syncs once and clears URL', async () => {
@@ -134,8 +134,8 @@ test('remove traps focus and Escape returns it without deleting', async () => {
   const remove = spyOn(sdk, 'mailAccountDelete')
   setup(); const trigger = await openAction('Entfernen')
   const dialog = screen.getByRole('dialog', { name: 'Privat entfernen?' })
-  expect(screen.getByText('Entfernst du ein Konto, löscht liam-e nur seine Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.')).toBeTruthy()
-  expect(within(dialog).getByText(/löscht liam-e nur seine Kopie der Mails/)).toBeTruthy()
+  expect(screen.getAllByText('liam-e löscht nur die eigene Kopie der Mails. Beim Anbieter bleibt alles, wie es ist.')).toHaveLength(2)
+  expect(within(dialog).getByText(/liam-e löscht nur die eigene Kopie der Mails/)).toBeTruthy()
   const cancel = within(dialog).getByRole('button', { name: 'Abbrechen' }), confirm = within(dialog).getByRole('button', { name: 'Konto entfernen' })
   expect(document.activeElement).toBe(cancel)
   fireEvent.keyDown(document, { key: 'Tab', shiftKey: true }); expect(document.activeElement).toBe(confirm)
@@ -147,7 +147,7 @@ test('remove confirms once, removes the card and focuses the connect heading', a
   const remove = spyOn(sdk, 'mailAccountDelete').mockImplementation((async () => ({ response: { ok: true, status: 204 } })) as never)
   setup(); await openAction('Entfernen'); fireEvent.click(screen.getByRole('button', { name: 'Konto entfernen' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull()); expect(remove).toHaveBeenCalledTimes(1)
-  expect(remove.mock.calls[0]?.[0]?.path).toEqual({ account_id: 'a1' }); expect(screen.queryByText('Privat')).toBeNull(); expect(screen.getByText('Privat ist entfernt.')).toBeTruthy()
+  expect(remove.mock.calls[0]?.[0]?.path).toEqual({ account_id: 'a1' }); expect(screen.queryByText('Privat')).toBeNull(); expect(screen.getByText('Privat entfernt.')).toBeTruthy()
   expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Konto verbinden' }))
 })
 
@@ -237,9 +237,9 @@ test('IMAP submits both servers for a domain without a preset', async () => {
   expect(connect.mock.calls[0]?.[0]?.body).toEqual({ email_address: 'x@example.org', imap_host: 'imap.example.org', smtp_host: 'smtp.example.org', password_secret: 'yahoo-app-password' })
 })
 for (const [code, text, field] of [
-  ['host_not_allowed', 'Der Server ist nicht erreichbar. Prüfe die Serveradresse.', 'IMAP-Server'],
-  ['secret_not_found', 'Das Secret wurde nicht gefunden oder ist nicht lesbar. Prüf den Namen und die Freigabe in Mistral Studio.', 'Secret mit dem App-Passwort'],
-  ['login_failed', 'Die Anmeldung beim Mailserver hat nicht geklappt. Prüf die Serveradresse und das App-Passwort.', ''],
+  ['host_not_allowed', 'liam-e darf diesen Server nicht ansprechen. Prüfe die Serveradresse oder trag den Server in Mistral Studio unter MAIL_IMAP_ALLOWED_HOSTS ein.', ''],
+  ['secret_not_found', 'Das Secret wurde nicht gefunden oder ist nicht lesbar. Prüfe den Namen und die Freigabe in Mistral Studio.', 'Secret mit dem App-Passwort'],
+  ['login_failed', 'Die Anmeldung beim Mailserver hat nicht geklappt. Prüfe die Serveradresse und das App-Passwort.', ''],
 ] as const) test(`IMAP displays ${code} refusal`, async () => {
   spyOn(sdk, 'mailAccountConnectImap').mockImplementation((async () => ({ error: { detail: { code } } })) as never)
   setup('empty'); await openImap(); fillImap(); fireEvent.click(screen.getByRole('button', { name: 'Konto verbinden' }))
@@ -284,7 +284,7 @@ test('connector refusal remains in panel and pending requests cannot be repeated
   fireEvent.click(await screen.findByRole('button', { name: /Gmail/ }))
   const button = screen.getByRole('button', { name: 'Gmail verbinden' }) as HTMLButtonElement
   fireEvent.click(button); expect(button.disabled).toBe(true); expect(button.getAttribute('aria-busy')).toBe('true'); fireEvent.click(button); expect(connect).toHaveBeenCalledTimes(1)
-  finish({ error: { detail: { code: 'connector_auth_required' } } }); expect(await screen.findByText('Authentifiziere den Connector in Mistral Studio unter Connector → Auth.')).toBeTruthy()
+  finish({ error: { detail: { code: 'connector_auth_required' } } }); expect(await screen.findByText('Der Connector ist in Mistral Studio nicht angemeldet. Melde ihn dort unter Connector → Auth an und versuch es dann noch mal.')).toBeTruthy()
 })
 test('IMAP reconnect selects provider and focuses the secret field', async () => {
   setup('row', '/accounts', { ...account, state: 'auth_expired' })
@@ -297,5 +297,5 @@ test('IMAP reconnect selects provider and focuses the secret field', async () =>
 test('loading, retry and empty states', async () => {
   const loading = setup('loading'); await screen.findByText('Konten werden geladen …'); expect(loading.view.container.querySelectorAll('.le-account--placeholder')).toHaveLength(3); cleanup(); mock.restore()
   const failed = setup('error'); await screen.findByText('Die Konten konnten nicht geladen werden. Versuch es gleich noch mal.'); fireEvent.click(screen.getByRole('button', { name: 'Noch mal versuchen' })); await waitFor(() => expect(failed.list).toHaveBeenCalledTimes(2)); cleanup(); mock.restore()
-  setup('empty'); await screen.findByText('Noch kein Konto verbunden. Wähl einen Anbieter, dann holt liam-e deine Mails.'); expect(screen.queryByRole('list', { name: 'Verbundene Konten' })).toBeNull()
+  setup('empty'); await screen.findByText('Noch kein Konto verbunden. Wähle einen Anbieter, dann holt liam-e deine Mails.'); expect(screen.queryByRole('list', { name: 'Verbundene Konten' })).toBeNull()
 })

@@ -35,8 +35,7 @@ export function ImapForm({ presets, initialAddress = '', focusSecret = false, on
     } catch (error) {
       const code = errorCode(error), text = code ? (de.errors as Record<string, unknown>)[code] : undefined
       const message = typeof text === 'string' ? text : de.accounts.actionError
-      if (code === 'host_not_allowed') setErrors({ imap: message })
-      else if (code === 'secret_not_allowed' || code === 'secret_not_found') setErrors({ secret: message })
+      if (code === 'secret_not_allowed' || code === 'secret_not_found') setErrors({ secret: message })
       else setNotice(message)
     } finally { pendingRef.current = false; setPending(false); onBusyChange(false) }
   }

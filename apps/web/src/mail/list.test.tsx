@@ -49,10 +49,10 @@ test('unread filter updates URL and query', async () => {
 })
 
 test('shows the unfiltered empty state', async () => {
-  setup(); expect(await screen.findByText('Keine Mails in diesem Konto. Neue erscheinen nach dem nächsten Abruf.')).toBeTruthy()
+  setup(); expect(await screen.findByText('Keine Mails im Posteingang. Neue erscheinen nach dem nächsten Abruf.')).toBeTruthy()
 })
 test('shows the filtered empty state', async () => {
-  setup('empty', '/mail?unread=true'); expect(await screen.findByText('Keine Mails für diese Filter.')).toBeTruthy()
+  setup('empty', '/mail?unread=true'); expect(await screen.findByText('Keine Mails passen zu diesen Filtern. Nimm einen Filter heraus, um mehr zu sehen.')).toBeTruthy()
 })
 test('error notice retries the query', async () => {
   const { list } = setup('error')

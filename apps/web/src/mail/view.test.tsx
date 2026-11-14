@@ -185,7 +185,7 @@ test('insight shows loading then up to three literal points and a deadline', asy
   const { view } = setup({ insight: () => new Promise(resolve => { finish = resolve }) })
   const section = await screen.findByRole('region', { name: 'Zusammenfassung von liam-e' })
   expect(section.getAttribute('aria-busy')).toBe('true')
-  expect(within(section).getByText('Kurz gefasst wird geladen …')).toBeTruthy()
+  expect(within(section).getByText('Zusammenfassung wird erstellt …')).toBeTruthy()
   expect(section.querySelectorAll('[aria-hidden="true"] .le-insight-placeholder-line')).toHaveLength(3)
   await act(async () => { finish({ data: insightData }) })
   expect(await within(section).findByText('Erster Punkt')).toBeTruthy()
@@ -200,7 +200,7 @@ test('insight shows loading then up to three literal points and a deadline', asy
 
 test('insight error shows quiet fallback without retry', async () => {
   const { getInsight } = setup({ insight: async () => { throw { detail: { code: 'insight_unavailable' }, status: 503 } } })
-  expect(await screen.findByText('Kurz gefasst ist gerade nicht verfügbar.')).toBeTruthy()
+  expect(await screen.findByText('Das Modell antwortet gerade nicht, deshalb fehlt die Zusammenfassung. Öffne die Mail gleich noch mal.')).toBeTruthy()
   expect(getInsight.mock.calls.length).toBe(1)
 })
 

@@ -36,6 +36,12 @@ test('unread coarse mail exposes its actions and markers', () => {
   expect(document.querySelector('.lucide-paperclip')).toBeTruthy()
 })
 
+test('mail row shows a missing subject', () => {
+  render(<MailRow mail={{ ...mail, subject: '' }} selected={false} coarse onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  expect(screen.getByRole('button', { name: 'Ohne Betreff' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Weitere Aktionen zu Ohne Betreff' })).toBeTruthy()
+})
+
 test('composer submits on Enter and stops while busy', () => {
   const submit = mock(() => {}), stop = mock(() => {})
   const props = { value: 'Hallo', onChange: () => {}, onSubmit: submit, onStop: stop, scope: null, accounts: [{ id: '1', label: 'Privat' }], onScopeChange: () => {}, placeholder: 'Frage' }
@@ -63,7 +69,7 @@ test('account status reflects syncing and login errors', () => {
   expect(screen.getByText('Wird abgerufen …')).toBeTruthy()
   expect((screen.getByRole('button', { name: 'Wird gerade abgerufen' }) as HTMLButtonElement).disabled).toBe(true)
   rerender(<AccountCard account={{ ...account, state: 'error', error_code: 'auth_expired' }} {...props} />)
-  expect(screen.getByText('Die Anmeldung ist abgelaufen. Melde dich erneut beim Anbieter an.')).toBeTruthy()
+  expect(screen.getByText('Die Anmeldung ist abgelaufen. Melde dich noch mal beim Anbieter an.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Erneut anmelden' }))
   expect(reconnect).toHaveBeenCalledTimes(1)
 })

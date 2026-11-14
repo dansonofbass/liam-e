@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { de } from './de'
 import { plural, formatTime, formatMailTime, formatDayShort, formatRelativeDay, formatListDate, formatDeadline, formatBytes, formatStand } from './format'
 
 test('formats list dates for today and yesterday in the requested time zone', () => {
@@ -8,17 +9,31 @@ test('formats list dates for today and yesterday in the requested time zone', ()
 })
 
 test('formats date-only deadlines without a time zone shift', () => {
-  expect(formatDeadline('2026-11-21')).toBe('Sa., 21.11.')
+  expect(formatDeadline('2026-11-21', new Date('2026-01-01'))).toBe('Sa., 21.11.')
+  expect(formatDeadline('2027-01-08', new Date('2026-01-01'))).toBe('Fr., 8.1.2027')
 })
 
 test('formats German dates, numbers and plurals', () => {
   const tz = 'Europe/Berlin' // i18n-exempt
   expect(formatDayShort(new Date('2026-11-20T10:00:00+01:00'), tz)).toBe('Fr., 20.11.')
   expect(formatTime(new Date('2026-11-13T08:57:00+01:00'), tz)).toBe('08:57')
-  expect(plural(1, { one: '# Konto', other: '# Konten' })).toBe('1 Konto')
+  const forms = { zero: 'keine Konten', one: '# Konto', other: '# Konten' }
+  expect(plural(0, forms)).toBe('keine Konten')
+  expect(plural(1, forms)).toBe('1 Konto')
+  expect(plural(2, forms)).toBe('2 Konten')
+  expect(plural(2314, forms)).toBe('2.314 Konten')
   expect(plural(4, { one: '# Konto', other: '# Konten' })).toBe('4 Konten')
   expect(formatBytes(217088)).toBe('212 KB')
   expect(formatStand(4, new Date('2026-11-13T08:57:00+01:00'), tz)).toBe('4 Konten · Stand 08:57')
+})
+
+test('formats zero, singular and plural catalog strings and subjects', () => {
+  expect([0, 1, 2].map(de.shell.accountCount)).toEqual(['kein Konto', '1 Konto', '2 Konten'])
+  expect([0, 1, 2].map(de.accountCard.messages)).toEqual(['keine Mails', '1 Mail', '2 Mails'])
+  expect(de.chat.stand(0, 4, '08:57')).toBe('Keine ungelesenen Mails in 4 Konten · Stand 08:57')
+  expect(de.inbox.unreadStand(2314)).toBe('2.314 ungelesen')
+  expect(de.inbox.done.archive('')).toBe('„Ohne Betreff“ archiviert.')
+  expect(de.inbox.done.trash('x'.repeat(80))).toBe(`„${'x'.repeat(59)}…“ in den Papierkorb gelegt.`)
 })
 
 test('formats weekdays and older dates in the requested time zone', () => {

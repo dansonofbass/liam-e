@@ -1,7 +1,7 @@
 const locale = 'de-DE' // i18n-exempt
 
-export function plural(n: number, forms: { one: string; other: string }): string {
-  const form = new Intl.PluralRules(locale).select(n) === 'one' ? forms.one : forms.other
+export function plural(n: number, forms: { zero?: string; one: string; other: string }): string {
+  const form = n === 0 && forms.zero !== undefined ? forms.zero : new Intl.PluralRules(locale).select(n) === 'one' ? forms.one : forms.other
   return form.replaceAll('#', new Intl.NumberFormat(locale).format(n))
 }
 
@@ -13,9 +13,9 @@ export function formatDayShort(d: Date, timeZone?: string): string {
   return new Intl.DateTimeFormat(locale, { timeZone, weekday: 'short', day: 'numeric', month: 'numeric' }).format(d)
 }
 
-export function formatDeadline(value: string): string {
+export function formatDeadline(value: string, now = new Date()): string {
   const [year, month, day] = value.split('-').map(Number) as [number, number, number]
-  return formatDayShort(new Date(Date.UTC(year, month - 1, day)), 'UTC')
+  return new Intl.DateTimeFormat(locale, { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'numeric', year: year === now.getFullYear() ? undefined : 'numeric' }).format(new Date(Date.UTC(year, month - 1, day)))
 }
 
 function calendarDay(d: Date, timeZone?: string): number {
