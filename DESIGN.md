@@ -239,7 +239,11 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
   tabular-nums`, Klasse `le-num`).
 - Ungelesene Mails: Absender und Betreff in 700, sonst 500 und 400. Kein Kursiv, keine
   Versalien.
-- Keine freien px-Schriftgrößen außerhalb der Tokens.
+- Keine freien px-Schriftgrößen: Die Größen stehen als `--font-size-display` bis
+  `--font-size-caption` in `tokens.css`, und Bausteine nutzen nur diese sechs. Buttons und
+  Eingaben haben `body`, kleine Buttons, Chips, Hinweise, Fehler und Untertitel `small`,
+  Tags, Badges, Uhrzeiten in Listen und Tooltips `caption`, Titel der Bestätigungskarte
+  und Überschriften in Antworten `heading`.
 
 ## 5. Raum, Form, Schatten, Bewegung
 

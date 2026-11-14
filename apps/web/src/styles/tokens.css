@@ -1,4 +1,4 @@
-/* liam-e — generated from tokens.json */
+/* liam-e design tokens. This file is the source of the values; DESIGN.md says how to use them, and the design system in Claude Design follows it. */
 :root, [data-theme="light"] {
   --scrim: rgba(13, 19, 17, .45);
   --surface-ground: #e8eeec;
@@ -119,11 +119,17 @@
   --control-height: 38px;
   --control-height-lg: 44px;
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-size-display: 36px;
+  --font-size-title: 24px;
+  --font-size-heading: 17px;
+  --font-size-body: 14.5px;
+  --font-size-small: 13px;
+  --font-size-caption: 12px;
 }
-.display { font-family: var(--font-sans); font-size: 36px; line-height: 1.12; font-weight: 700; letter-spacing: -0.025em; }
-.title { font-family: var(--font-sans); font-size: 24px; line-height: 1.25; font-weight: 700; letter-spacing: -0.015em; }
-.heading { font-family: var(--font-sans); font-size: 17px; line-height: 1.35; font-weight: 700; }
-.body { font-family: var(--font-sans); font-size: 14.5px; line-height: 1.55; font-weight: 400; }
-.body-strong { font-family: var(--font-sans); font-size: 14.5px; line-height: 1.55; font-weight: 600; }
-.small { font-family: var(--font-sans); font-size: 13px; line-height: 1.45; font-weight: 500; }
-.caption { font-family: var(--font-sans); font-size: 12px; line-height: 1.35; font-weight: 600; letter-spacing: 0.01em; }
+.display { font-family: var(--font-sans); font-size: var(--font-size-display); line-height: 1.12; font-weight: 700; letter-spacing: -0.025em; }
+.title { font-family: var(--font-sans); font-size: var(--font-size-title); line-height: 1.25; font-weight: 700; letter-spacing: -0.015em; }
+.heading { font-family: var(--font-sans); font-size: var(--font-size-heading); line-height: 1.35; font-weight: 700; }
+.body { font-family: var(--font-sans); font-size: var(--font-size-body); line-height: 1.55; font-weight: 400; }
+.body-strong { font-family: var(--font-sans); font-size: var(--font-size-body); line-height: 1.55; font-weight: 600; }
+.small { font-family: var(--font-sans); font-size: var(--font-size-small); line-height: 1.45; font-weight: 500; }
+.caption { font-family: var(--font-sans); font-size: var(--font-size-caption); line-height: 1.35; font-weight: 600; letter-spacing: 0.01em; }

@@ -1,5 +1,5 @@
 .le-tooltip-anchor, .le-menu-anchor { position: relative; display: inline-flex; }
-.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: 7px 10px; border-radius: 10px; background: var(--tip-bg); color: var(--tip-ink); font-size: 12px; pointer-events: none; animation: le-tooltip-fade 160ms ease; }
+.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: 7px 10px; border-radius: 10px; background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-tooltip-fade 160ms ease; }
 .le-tooltip--top { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
 .le-tooltip--right { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
 .le-tooltip--bottom { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
@@ -24,7 +24,7 @@
 .le-confirm-draft { padding: var(--space-3); }
 .le-confirm-draft .le-input { width: 100%; }
 .le-confirm-quote { margin: var(--space-3) 0 0; }
-.le-confirm-quote blockquote { margin: 4px 0 0; max-height: 12rem; overflow: auto; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.le-confirm-quote blockquote { margin: 4px 0 0; max-height: 12rem; overflow: auto; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: var(--font-size-small); white-space: pre-wrap; overflow-wrap: anywhere; }
 .le-mailrow-link { border: 0; padding: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .le-mailrow-side { grid-column: 3; }
 .le-mailrow-marks { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-muted); }
