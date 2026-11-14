@@ -66,8 +66,10 @@ test('all twelve conversations appear as links in the sidebar', async () => {
   setup('/', client)
   const entries = Array.from({ length: 12 }, (_, index) => ({ id: `conversation-${index}`, title: `Unterhaltung ${index + 1}`, updated_at: new Date().toISOString() }))
   act(() => { client.setQueryData(['conversations'], entries) })
-  const last = await screen.findByRole('link', { name: /Unterhaltung 12/ })
-  const list = last.closest('.le-shell-conversations')
+  // Found by its title alone: the link's name also holds the time, and from 20:00 "Unterhaltung 1" plus "20:02" reads like "Unterhaltung 12".
+  const last = (await screen.findByText('Unterhaltung 12')).closest('a')
+  expect(last?.getAttribute('href')).toBe('/chat/conversation-11')
+  const list = last?.closest('.le-shell-conversations')
   expect(list?.querySelectorAll('a')).toHaveLength(12)
   for (const entry of entries) expect(list?.querySelector(`a[href="/chat/${entry.id}"]`)).toBeTruthy()
 })
