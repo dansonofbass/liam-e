@@ -11,6 +11,12 @@ from db.models.mail_insight import MailInsight
 from db.models.mail_message import MailMessage
 
 
+def seed_row(*, id: str, message_id: str, points: list[str], deadline: date, followups: list[str]) -> MailInsight:
+    """Construct an insight with a stable ID for the local seed transaction."""
+    return MailInsight(id=id, message_id=message_id, points_json=json.dumps(points), deadline=deadline,
+                       needs_reply=True, followups_json=json.dumps(followups), model="mistral-small-latest")
+
+
 async def get(message_id: str) -> MailInsight | None:
     async with get_session_maker()() as session:
         return (await session.execute(select(MailInsight).where(MailInsight.message_id == message_id))).scalar_one_or_none()
