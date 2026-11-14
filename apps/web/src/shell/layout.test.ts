@@ -57,6 +57,12 @@ test('only the sidebar conversation list scrolls, with room for focus rings', as
   expect(rule('.le-drawer .le-shell-sidebar')).toContain('flex: 1 0 auto')
 })
 
+test('the conversations heading stays put while the list scrolls', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.split('.le-shell-conversations > .le-side-label {')[1]?.split('}')[0] ?? ''
+  for (const property of ['position: sticky', 'top: 0', 'background: var(--surface)']) expect(rule).toContain(property)
+})
+
 test('the model chip in the chat header gets a 44 px target on touch', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const coarse = css.split('@media (pointer: coarse) {').map(block => block.split('}')[0] ?? '')
