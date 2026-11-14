@@ -37,7 +37,7 @@ test('coarse pointer account actions and notice links use large touch targets', 
 
 test('accounts scroll area is bounded by the viewport', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
-  const app = css.match(/\.le-app:has\(\.le-accounts-scroll\) \{([^}]*)\}/u)?.[1]
+  const app = css.match(/\.le-app:has\(\.le-accounts-scroll\)[^{]*\{([^}]*)\}/u)?.[1]
   const sheet = css.match(/\.le-sheet:has\(\.le-accounts-scroll\) \{([^}]*)\}/u)?.[1]
   const scroll = css.match(/\.le-accounts-scroll \{([^}]*)\}/u)?.[1]
   for (const property of ['height: 100dvh', 'overflow: hidden']) expect(app).toContain(property)

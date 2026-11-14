@@ -68,3 +68,11 @@ test('the model chip in the chat header gets a 44 px target on touch', async () 
   const coarse = css.split('@media (pointer: coarse) {').map(block => block.split('}')[0] ?? '')
   expect(coarse.some(block => block.includes('.le-chat-topbar .le-menu-anchor > .le-chip') && block.includes('min-height: var(--control-height-lg)'))).toBe(true)
 })
+
+test('views with their own scroll area share one viewport-height rule', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rules = css.match(/^[^{}\n]*\.le-app:has\([^{]*\{[^}]*\}/gmu) ?? []
+  expect(rules).toHaveLength(1)
+  for (const view of ['.le-accounts-scroll', '.le-chat-view', '.le-inbox']) expect(rules[0]).toContain(`.le-app:has(${view})`)
+  for (const property of ['height: 100dvh', 'overflow: hidden']) expect(rules[0]).toContain(property)
+})
