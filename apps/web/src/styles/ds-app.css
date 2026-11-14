@@ -26,6 +26,7 @@
 @media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor > .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-drawer-brand .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-topbar .le-icon-btn, .le-side .le-icon-btn, .le-side .le-nav-item, .le-drawer .le-nav-item, .le-drawer .le-conv { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } .le-composer textarea { min-height: var(--control-height-lg); } }
+@media (pointer: coarse) { .le-mailref-actions .le-icon-btn, .le-confirm-item label { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (prefers-reduced-motion: reduce) { .le-drawer { animation-name: le-tooltip-fade; } }
 .le-app:has(.le-accounts-scroll) { height: 100dvh; overflow: hidden; }
 .le-sheet:has(.le-accounts-scroll) { min-height: 0; }

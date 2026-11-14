@@ -203,6 +203,7 @@ body { margin: 0; font-family: var(--font-sans); font-size: 14.5px; line-height:
 .le-confirm-item { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: var(--radius-sm); transition: background-color var(--le-dur-fast) ease; }
 .le-confirm-item:hover { background: var(--surface-soft); }
 .le-confirm-item label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; flex: 1 1 auto; min-height: 28px; align-items: center; cursor: pointer; }
+.le-confirm-item-name { display: inline-flex; align-items: center; gap: 12px; min-width: 0; }
 .le-check { width: 19px; height: 19px; margin: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
 .le-confirm-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 8px 6px 14px; }
 

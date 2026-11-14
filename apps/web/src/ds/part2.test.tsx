@@ -25,6 +25,19 @@ test('confirmation uses selection count and edited draft', () => {
   expect((screen.getByRole('button', { name: '0 bestätigen' }) as HTMLButtonElement).disabled).toBe(true)
 })
 
+test('confirm checkbox alignment and coarse mail reference targets', async () => {
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  const appCss = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const nameRule = css.match(/\.le-confirm-item-name \{([^}]+)\}/u)?.[1]
+  for (const property of ['display: inline-flex', 'align-items: center', 'gap: 12px']) expect(nameRule).toContain(property)
+  const touchRule = appCss.match(/@media \(pointer: coarse\) \{ \.le-mailref-actions \.le-icon-btn, \.le-confirm-item label \{([^}]+)\} \}/u)?.[1]
+  expect(touchRule).toContain('min-width: var(--control-height-lg)')
+  expect(touchRule).toContain('min-height: var(--control-height-lg)')
+  render(<ConfirmCard title="Bestätigen?" reason="Grund" items={items} confirmLabel={n => `${n} bestätigen`} onConfirm={() => {}} onCancel={() => {}} />)
+  const name = screen.getByLabelText('a').closest('.le-confirm-item-name')
+  expect(name?.querySelector('strong')?.textContent).toBe('a')
+})
+
 test('unread coarse mail exposes its actions and markers', () => {
   render(<MailRow mail={mail} selected={false} coarse onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
   expect(document.querySelector('.le-mailrow.is-unread')).toBeTruthy()
