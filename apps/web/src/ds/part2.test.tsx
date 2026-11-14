@@ -36,6 +36,17 @@ test('unread coarse mail exposes its actions and markers', () => {
   expect(document.querySelector('.lucide-paperclip')).toBeTruthy()
 })
 
+test('mail row menu stays in the right-hand time column', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-mailrow-side \{[^}]*grid-column: 3;/u)
+  expect(css).toMatch(/\.le-mailrow-more \{[^}]*align-self: flex-end;/u)
+  expect(css).toMatch(/@media \(max-width: 639px\), \(pointer: coarse\) \{[^\n]*\.le-mailrow-more \{ display: block; \}/u)
+  render(<MailRow mail={{ ...mail, internal_date: '2026-11-13T08:00:00Z' }} selected={false} coarse onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  const side = document.querySelector('.le-mailrow-side')!
+  expect(side.querySelector('time')).toBeTruthy()
+  expect(side.querySelector('.le-mailrow-more')?.contains(screen.getByRole('button', { name: 'Weitere Aktionen zu Nebenkostenabrechnung 2025' }))).toBe(true)
+})
+
 test('mail row shows a missing subject', () => {
   render(<MailRow mail={{ ...mail, subject: '' }} selected={false} coarse onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
   expect(screen.getByRole('button', { name: 'Ohne Betreff' })).toBeTruthy()
