@@ -1,9 +1,9 @@
 """One message in a chat conversation.
 
-``role`` is ``user``, ``assistant``, ``tool``, ``draft`` or ``proposal``. Assistant messages that called tools
-carry their tool calls in ``tool_payload_json``; ``draft`` messages carry the pending send in
-``draft_json`` (``{"status": "pending" | "sent" | "cancelled", ...}``) — a draft is only sent after
-the explicit confirm endpoint runs.
+``role`` is ``user``, ``assistant``, ``tool`` or ``proposal``; legacy rows may use
+``draft`` and ``draft_json``. Assistant messages that called tools carry their calls in
+``tool_payload_json``. Proposals are stored in ``proposal_json`` with ``proposal_status``;
+their actions are executed only after ``POST /api/v1/chat/proposals/{proposal_id}/confirm``.
 """
 
 from datetime import datetime
