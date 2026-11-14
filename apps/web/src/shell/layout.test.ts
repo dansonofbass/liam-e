@@ -13,6 +13,16 @@ test('conversation and composer share the same centred column', async () => {
   expect(tokens).toContain('--space-5: 24px')
 })
 
+test('start content is centred and quick actions use four columns or two on mobile', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const route = await Bun.file(new URL('../routes/_app/index.tsx', import.meta.url)).text()
+  expect(route).toContain('le-chat-messages le-chat-thread le-chat-start-scroll')
+  expect(css).toContain('.le-chat-start-scroll { display: flex; flex-direction: column; }')
+  expect(css).toMatch(/\.le-chat-start \{[^}]*width: 100%; margin: auto 0;/u)
+  expect(css).toMatch(/\.le-chat-quick-actions \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/u)
+  expect(css).toContain('@media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }')
+})
+
 test('the viewport bounds the shell and its independently scrolling content', async () => {
   const base = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
   const app = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()

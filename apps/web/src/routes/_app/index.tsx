@@ -42,7 +42,7 @@ function Greeting() {
     }
   }, [started, state.conversationId, navigate])
   const data = summary.data
-  return <div className="le-chat-view"><ChatHeader><ModelMenu /></ChatHeader><div className="le-chat-messages"><div className="le-chat-start"><h1 className="display le-greeting">{de.chat.greetingFirst}<br /><span>{de.chat.greetingSecond}</span></h1>
+  return <div className="le-chat-view"><ChatHeader><ModelMenu /></ChatHeader><div className="le-chat-messages le-chat-thread le-chat-start-scroll"><div className="le-chat-start"><h1 className="display le-greeting">{de.chat.greetingFirst}<br /><span>{de.chat.greetingSecond}</span></h1>
     {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
     {summary.isPending && <p className="le-hint">{de.chat.loadingSummary}</p>}
     {summary.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void summary.refetch() } }}>{de.chat.summaryError}</Notice>}
