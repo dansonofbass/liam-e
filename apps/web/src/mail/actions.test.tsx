@@ -23,7 +23,7 @@ function setup(mobile = false) {
     const { data } = useQuery<InfiniteData<MessagePageOut>>({ queryKey: key, queryFn: async () => client.getQueryData<InfiniteData<MessagePageOut>>(key)!, enabled: false })
     const { run, undo, toast } = useMailActions({ clock: time.clock })
     return <><div>{data?.pages.flatMap(page => page.items).map(row => <div key={row.id}>{row.subject}:{String(row.is_read)}</div>)}</div>
-      <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button>
+      <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'archive') }}>archive 2</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button>
       {toast && <div role="status" data-tone={toast.tone}>{toast.text}{toast.undoable && <button onClick={() => { void undo() }}>Rückgängig</button>}</div>}</>
   }
   render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
@@ -67,6 +67,25 @@ for (const [status, text, removed] of [[502, 'Das hat beim Anbieter nicht geklap
     expect((await screen.findByRole('status')).getAttribute('data-tone')).toBe('danger')
     expect(screen.getByText(text)).toBeTruthy()
     expect(Boolean(screen.queryByText('Erste:false'))).toBe(!removed)
+  })
+}
+
+for (const first of ['archive 1', 'read 1']) {
+  test(`failed ${first} rolls back without reverting a later archive`, async () => {
+    let failFirst!: (value: unknown) => void
+    spyOn(sdk, 'mailMessageAction').mockImplementation(((options: { path: { message_id: string } }) => options.path.message_id === '1'
+      ? new Promise(resolve => { failFirst = resolve })
+      : Promise.resolve({ data: { action_id: 'action-2', message: rows[1] }, response: { status: 200 } })) as never)
+    const { client } = setup()
+    fireEvent.click(screen.getByText(first))
+    await waitFor(() => expect(failFirst).toBeDefined())
+    fireEvent.click(screen.getByText('archive 2'))
+    await screen.findByText('„Zweite“ archiviert.')
+    await act(async () => { failFirst({ response: { status: 502 } }) })
+    await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
+    expect(screen.queryByText('Zweite:false')).toBeNull()
+    expect(screen.getByText('„Zweite“ archiviert.')).toBeTruthy()
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true)
   })
 }
 

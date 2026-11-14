@@ -1,7 +1,7 @@
 import { useQueryClient, type InfiniteData, type QueryKey } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { mailActionsUndo, mailMessageAction } from '../api/generated/sdk.gen'
-import type { MessagePageOut } from '../api/generated/types.gen'
+import type { MessageListItemOut, MessagePageOut } from '../api/generated/types.gen'
 import { de } from '../i18n/de'
 import { useBreakpoint } from '../shell/useBreakpoint'
 
@@ -9,14 +9,14 @@ export type Clock = { now(): number; setTimeout(fn: () => void, ms: number): Ret
 const systemClock: Clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id) }
 type Kind = 'archive' | 'trash' | 'mark_read' | 'mark_unread'
 type Toast = { tone: 'success' | 'danger'; text: string; undoable: boolean }
-type Snapshot = [QueryKey, InfiniteData<MessagePageOut> | undefined][]
+type Change = { key: QueryKey; page: number; index: number; row: MessageListItemOut }
 
 export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) {
   const client = useQueryClient()
   const breakpoint = useBreakpoint()
   const [toast, setToast] = useState<Toast | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const target = useRef<{ actionId: string; snapshot: Snapshot; deadline: number } | null>(null)
+  const target = useRef<{ actionId: string; changes: Change[]; deadline: number } | null>(null)
   const sequence = useRef(0)
   const undoPending = useRef(false)
 
@@ -26,14 +26,29 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     target.current = null
     setToast(null)
   }
-  const show = (value: Toast, undoTarget?: { actionId: string; snapshot: Snapshot }) => {
+  const show = (value: Toast, undoTarget?: { actionId: string; changes: Change[] }) => {
     clear()
     if (undoTarget) target.current = { ...undoTarget, deadline: clock.now() + 10_000 }
     setToast(value)
     timer.current = clock.setTimeout(() => { timer.current = undefined; target.current = null; setToast(null) }, 10_000)
   }
   useEffect(() => () => { if (timer.current !== undefined) clock.clearTimeout(timer.current) }, [clock])
-  const restore = (snapshot: Snapshot) => { for (const [key, data] of snapshot) client.setQueryData(key, data) }
+  const restore = (changes: Change[], removal: boolean) => {
+    for (const { key, page, index, row } of changes) {
+      client.setQueryData<InfiniteData<MessagePageOut>>(key, data => {
+        if (!data) return data
+        if (removal && data.pages.some(p => p.items.some(item => item.id === row.id))) return data
+        return { ...data, pages: data.pages.map((p, i) => {
+          if (removal && i === page) {
+            const items = [...p.items]
+            items.splice(Math.min(index, items.length), 0, row)
+            return { ...p, items }
+          }
+          return removal ? p : { ...p, items: p.items.map(item => item.id === row.id ? { ...item, is_read: row.is_read } : item) }
+        }) }
+      })
+    }
+  }
   const update = (id: string, kind: Kind | 'remove') => {
     client.setQueriesData<InfiniteData<MessagePageOut>>({ queryKey: ['messages'] }, data => data && ({
       ...data, pages: data.pages.map(page => ({ ...page, items: kind === 'archive' || kind === 'trash' || kind === 'remove'
@@ -45,7 +60,14 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     const current = ++sequence.current
     clear()
     await client.cancelQueries({ queryKey: ['messages'] })
-    const snapshot = client.getQueriesData<InfiniteData<MessagePageOut>>({ queryKey: ['messages'] })
+    const changes: Change[] = []
+    for (const [key, data] of client.getQueriesData<InfiniteData<MessagePageOut>>({ queryKey: ['messages'] })) {
+      data?.pages.forEach((page, pageIndex) => page.items.forEach((row, index) => {
+        if (row.id === id) changes.push({ key, page: pageIndex, index, row })
+      }))
+    }
+    const removal = kind === 'archive' || kind === 'trash'
+    const rollback = () => { restore(changes, removal); void client.invalidateQueries({ queryKey: ['messages'] }) }
     update(id, kind)
     try {
       const result = await mailMessageAction({ path: { message_id: id }, body: { kind } })
@@ -53,21 +75,21 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         update(id, 'remove')
         if (current === sequence.current) show({ tone: 'danger', text: de.proposalErrors.item_gone, undoable: false })
       } else if (result.response?.status === 409) {
-        restore(snapshot)
+        rollback()
         if (current === sequence.current) show({ tone: 'danger', text: de.proposalErrors.action_unsupported, undoable: false })
       } else if (!result.data || result.response?.status !== 200) {
-        restore(snapshot)
+        rollback()
         if (current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
       } else {
         if ((kind === 'archive' || kind === 'trash') && current === sequence.current) {
           const text = breakpoint === 'mobile' ? de.inbox.doneShort[kind] : de.inbox.done[kind](result.data.message.subject)
-          show({ tone: 'success', text, undoable: true }, { actionId: result.data.action_id, snapshot })
+          show({ tone: 'success', text, undoable: true }, { actionId: result.data.action_id, changes })
         }
         void client.invalidateQueries({ queryKey: ['summary'] })
         void client.invalidateQueries({ queryKey: ['message', id] })
       }
     } catch {
-      restore(snapshot)
+      rollback()
       if (current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
     }
   }
@@ -80,7 +102,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       const result = await mailActionsUndo({ body: { action_ids: [selected.actionId] } })
       if (target.current !== selected) return
       if (result.data?.restored.includes(selected.actionId)) {
-        restore(selected.snapshot)
+        restore(selected.changes, true)
         clear()
         void client.invalidateQueries({ queryKey: ['messages'] })
         void client.invalidateQueries({ queryKey: ['summary'] })
