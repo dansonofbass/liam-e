@@ -447,3 +447,30 @@ DESIGN.md folgt dem Aufbau und den Regeln von smartpaper-ng. Bewusst anders:
     Posteingang und Mail. Darin entschieden: „Kurz gefasst“ über jeder Mail, kein direktes
     Antworten (§9.4), Einzelaktionen sofort mit „Rückgängig“ (§9.2), Aktionsleisten am
     Handy (§7.4).
+
+## Entschieden (2026-11-14, Owner)
+
+1. **Handy randlos:** Unter 640 px füllt die Hauptfläche den Bildschirm, ohne Rahmen,
+   Rundung und Schatten. Ab 640 px schwebt sie wie bisher (§7.3).
+2. **Vier Details aus den Screens übernommen:** Dringlichkeitspunkt in `warm` in der
+   Mailzeile mit Tooltip; Symbole in Buttons mit Text 16 px, in Symbol-Buttons 19 px;
+   eine Zeile Vorschautext auf der Mailkarte im Chat; 20 px Innenabstand im Panel
+   „Konto verbinden“.
+3. **Ungelesen-Zähler** am Posteingang auch in der schmalen Symbolleiste am Tablet.
+4. **Weitere Einträge im Menü „Weitere Aktionen“** der geöffneten Mail sind geplant:
+   „Weiterleiten“ (als Vorschlag über den Chat), „Als Spam markieren“ (Einzelaktion mit
+   „Rückgängig“) und „Original anzeigen“ (Kopfzeilen und Quelltext, nur lesend). Jeder
+   Eintrag ist eine eigene Aufgabe mit eigenem Endpunkt.
+5. **Outlook:** Der Connector wird erneut geprobt, nur lesend, sobald die App in Studio
+   ihren `MISTRAL_API_KEY` hat. Eigenes Microsoft-Login wird erst geplant, wenn er weiter
+   scheitert.
+6. **Gmail-Probe** (Antworten über den Connector, To und Cc) macht der Owner selbst.
+7. **CI:** Ein GitHub-Workflow führt die bisher nur lokalen Prüfungen aus.
+8. **Design-System „liam-e“** in Claude Design wird nach DESIGN.md und Code nachgeführt
+   (§10).
+9. **Theme-Schalter** Hell, Dunkel, System, im Browser gespeichert, unten in der
+   Seitenleiste neben der Statuszeile (§3).
+10. **Fokus:** Eingabefeld und Composer zeigen den Fokusring aus §8 wie alle anderen
+    Bedienelemente.
+11. **Freie Werte aufgeräumt:** Schriftgrößen nur über Tokens, Abstände auf dem
+    4-px-Raster (§4, §5).
