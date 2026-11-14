@@ -111,7 +111,7 @@ test.each([375, 800])('drawer close button restores focus at width %i', async (s
   const trigger = await screen.findByRole('button', { name: screenWidth < 640 ? 'Menü öffnen' : 'Unterhaltungen' })
   act(() => { trigger.focus() })
   fireEvent.click(trigger)
-  expect(screen.getByRole('dialog')).toBeTruthy()
+  expect(screen.getByRole('dialog', { name: screenWidth < 640 ? 'Menü' : 'Unterhaltungen' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Menü schließen' }))
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(document.activeElement).toBe(trigger)
