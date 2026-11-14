@@ -33,7 +33,35 @@ describe('IconButton', () => {
   })
 })
 
+test('menu closes only on outside pointerdown without stealing focus', () => {
+  render(<><Menu trigger={(props) => <button {...props}>Menü</button>} items={[{ label: 'Eins', onSelect: () => {} }]} /><button>Außen</button></>)
+  const trigger = screen.getByRole('button', { name: 'Menü' })
+  fireEvent.click(trigger)
+  fireEvent.pointerDown(trigger)
+  fireEvent.pointerDown(screen.getByRole('menuitem'))
+  expect(screen.getByRole('menu')).toBeTruthy()
+  const outside = screen.getByRole('button', { name: 'Außen' })
+  outside.focus()
+  fireEvent.pointerDown(outside)
+  expect(screen.queryByRole('menu')).toBeNull()
+  expect(document.activeElement).toBe(outside)
+})
+
+test('opening another menu closes the first even without a pointer', () => {
+  render(<><Menu trigger={(props) => <button {...props}>Erstes Menü</button>} items={[{ label: 'Eins', onSelect: () => {} }]} /><Menu trigger={(props) => <button {...props}>Zweites Menü</button>} items={[{ label: 'Zwei', onSelect: () => {} }]} /></>)
+  fireEvent.keyDown(document.body, { key: 'Tab' })
+  const first = screen.getByRole('button', { name: 'Erstes Menü' })
+  const second = screen.getByRole('button', { name: 'Zweites Menü' })
+  fireEvent.click(first)
+  fireEvent.click(second)
+  expect(first.getAttribute('aria-expanded')).toBe('false')
+  expect(second.getAttribute('aria-expanded')).toBe('true')
+  expect(screen.getAllByRole('menu')).toHaveLength(1)
+  expect(document.activeElement?.textContent).toBe('Zwei')
+})
+
 test('menu navigates and returns focus on Escape', () => {
+  fireEvent.keyDown(document.body, { key: 'Tab' })
   render(<Menu trigger={(props) => <button {...props}>Menü</button>} items={[{ label: 'Eins', onSelect: () => {} }, { label: 'Zwei', onSelect: () => {} }]} />)
   const trigger = screen.getByRole('button')
   fireEvent.click(trigger)

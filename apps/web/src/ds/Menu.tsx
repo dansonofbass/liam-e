@@ -5,9 +5,23 @@ export function Menu({ trigger, items }: { trigger: (props: TriggerProps) => Rea
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { if (open) menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus() }, [open])
+  useEffect(() => {
+    if (!open) return
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!menuRef.current?.contains(target) && !triggerRef.current?.contains(target)) setOpen(false)
+    }
+    const onOtherMenuOpen = () => setOpen(false)
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('liam-menu-open', onOtherMenuOpen)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('liam-menu-open', onOtherMenuOpen)
+    }
+  }, [open])
   const close = () => { setOpen(false); triggerRef.current?.focus() }
-  return <span className="le-menu-anchor">{trigger({ ref: triggerRef, 'aria-haspopup': 'menu', 'aria-expanded': open, onClick: () => setOpen(!open) })}{open && <div ref={menuRef} role="menu" className="le-menu le-rise" onKeyDown={(event) => {
+  return <span className="le-menu-anchor">{trigger({ ref: triggerRef, 'aria-haspopup': 'menu', 'aria-expanded': open, onClick: () => { if (!open) document.dispatchEvent(new Event('liam-menu-open')); setOpen(!open) } })}{open && <div ref={menuRef} role="menu" className="le-menu le-rise" onKeyDown={(event) => {
     if (event.key === 'Escape') { event.preventDefault(); close() }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
