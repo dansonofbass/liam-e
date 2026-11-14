@@ -198,6 +198,18 @@ async def test_graph_follows_next_link_until_delta(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_graph_first_sync_selects_reply_to(monkeypatch):
+    await token_setup(monkeypatch, sync_graph)
+    requests = []
+    def graph(request):
+        requests.append(request)
+        return httpx.Response(200, json={"value": [], "@odata.deltaLink": "https://graph.microsoft.com/v1.0/delta"})
+    mock_client(monkeypatch, sync_graph, graph)
+    await sync_graph.fetch_changes(account("microsoft", "oauth2"), cursor="", folders=["INBOX"], limit=5, max_body_chars=100)
+    assert "replyTo" in requests[0].url.params["$select"].split(",")
+
+
+@pytest.mark.anyio
 async def test_connector_backlog_and_boundary_progress(monkeypatch):
     from datetime import UTC, datetime
     import re

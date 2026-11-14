@@ -32,6 +32,7 @@ async def upsert_message(
     rfc_message_id: str = "",
     references: str = "",
     cc_json: str = "[]",
+    reply_to_json: str = "[]",
     attachments_json: str = "[]",
     is_flagged: bool = False,
 ) -> MailMessage:
@@ -58,6 +59,7 @@ async def upsert_message(
         message.rfc_message_id = rfc_message_id
         message.references = references
         message.cc_json = cc_json
+        message.reply_to_json = reply_to_json
         message.attachments_json = attachments_json
         message.is_flagged = is_flagged
         message.recipients_json = recipients_json

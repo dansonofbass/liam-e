@@ -97,7 +97,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
     if name == 'get_message':
         m = await mail_message.get_message(arguments.get('message_id', ''))
         if not m: return result({'error':'message_not_found'})
-        return result({'untrusted_mail': {'id':m.id, 'account_id':m.account_id, 'folder':m.folder, 'subject':m.subject, 'sender':m.sender, 'to':json.loads(m.recipients_json), 'cc':json.loads(m.cc_json), 'date':m.internal_date, 'body_text':m.body_text[:8000], 'has_attachments':m.has_attachments, 'is_read':m.is_read}})
+        return result({'untrusted_mail': {'id':m.id, 'account_id':m.account_id, 'folder':m.folder, 'subject':m.subject, 'sender':m.sender, 'to':json.loads(m.recipients_json), 'cc':json.loads(m.cc_json), 'reply_to':json.loads(m.reply_to_json), 'date':m.internal_date, 'body_text':m.body_text[:8000], 'has_attachments':m.has_attachments, 'is_read':m.is_read}})
     if name == 'get_insights':
         items = []
         for id in arguments.get('message_ids', [])[:20]:

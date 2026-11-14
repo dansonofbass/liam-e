@@ -20,6 +20,7 @@ from db.models.mail_account import MailAccount
 from db.models.mail_message import MailMessage
 
 from api.mail import connectors, providers, service, transport
+from api.mail.headers import plain_address
 from api.mail.seed_ids import is_seed_account
 
 
@@ -28,12 +29,25 @@ class SeedAccountError(RuntimeError):
 
 
 def reply_recipients(original: MailMessage, account: MailAccount, *, reply_all: bool) -> tuple[list[str], list[str]]:
-    to = [original.sender_address]
-    cc = []
-    seen = {account.email_address.casefold(), original.sender_address.casefold()}
+    """Return (to, cc) for a reply; the confirmation card shows exactly these addresses.
+
+    ``to`` is the Reply-To address list when it holds a valid address, else the sender. A reply to
+    all moves the sender (when not in Reply-To) and the original To/Cc into ``cc``, without the
+    account's own address and without anyone already in ``to``.
+    """
+    to: list[str] = []
+    for address in json.loads(original.reply_to_json or "[]"):
+        valid = plain_address(address) if isinstance(address, str) else ""
+        if valid and valid not in to:
+            to.append(valid)
+    if not to and original.sender_address:
+        to.append(original.sender_address)
+    own = account.email_address.casefold()
+    cc: list[str] = []
+    seen = {own, *(address.casefold() for address in to)}
     if reply_all:
-        for address in json.loads(original.recipients_json or "[]") + json.loads(original.cc_json or "[]"):
-            if address.casefold() not in seen:
+        for address in [original.sender_address, *json.loads(original.recipients_json or "[]"), *json.loads(original.cc_json or "[]")]:
+            if address and address.casefold() not in seen:
                 cc.append(address)
                 seen.add(address.casefold())
     return to, cc
@@ -97,6 +111,8 @@ async def _send_graph(account: MailAccount, token: str, *, to: list[str], cc: Se
         "subject": subject, "body": {"contentType": "Text", "content": body},
         "toRecipients": [{"emailAddress": {"address": address}} for address in to],
         "ccRecipients": [{"emailAddress": {"address": address}} for address in cc],
+        # Graph reply drafts copy the original's recipients; only the confirmed ones may remain.
+        "bccRecipients": [],
     }
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient(timeout=30, base_url=providers.GRAPH_API) as client:

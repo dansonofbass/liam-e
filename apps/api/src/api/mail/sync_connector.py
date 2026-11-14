@@ -1,5 +1,8 @@
 """Sync Studio inboxes and parse full-content messages without headers.
 
+The Gmail connector returns no Reply-To field, so ``reply_to_json`` stays empty and replies go to
+the sender.
+
 Cursors are Unix seconds: newest, optionally followed by :gap_after:gap_before
 for an unfinished window. Window boundaries overlap by one second.
 """

@@ -141,10 +141,12 @@ def parse_rfc822(raw: bytes, *, max_body_chars: int) -> dict[str, Any]:
     sender_fields["sender_address"] = sender_address(raw_from)
     to_addresses = mailbox_addresses("to")
     cc_addresses = mailbox_addresses("cc")
+    reply_to_addresses = mailbox_addresses("reply-to")
     return {**sender_fields, "thread_id": hdr.get("message-id", ""),
             "subject": header("subject"), "sender": sender,
             "recipients_json": json.dumps(to_addresses) if to_addresses is not None else addresses(header("to")),
             "cc_json": json.dumps(cc_addresses) if cc_addresses is not None else addresses(header("cc")),
+            "reply_to_json": json.dumps(reply_to_addresses) if reply_to_addresses is not None else addresses(header("reply-to")),
             'snippet': ' '.join(body.split())[:500], 'body_text': body,
             'internal_date': date, 'has_attachments': bool(files),
             'attachments_json': json.dumps(files), 'is_read': False,

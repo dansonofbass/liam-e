@@ -25,6 +25,23 @@ def test_account_lookup_ignores_case_and_selects_first_deterministically(pg_db):
     asyncio.run(run())
 
 
+def test_reply_to_json_round_trips_and_old_inserts_get_the_server_default(pg_db):
+    async def run():
+        from db.accessors import mail_message as m
+        from db.engine import get_session_maker
+        from sqlalchemy import text
+
+        row = await m.upsert_message(account_id="a", folder="INBOX", provider_uid="1", reply_to_json='["help@example.org"]')
+        assert (await m.get_message(row.id)).reply_to_json == '["help@example.org"]'
+        row = await m.upsert_message(account_id="a", folder="INBOX", provider_uid="1")
+        assert (await m.get_message(row.id)).reply_to_json == "[]"
+        async with get_session_maker()() as session:
+            await session.execute(text("INSERT INTO mail_message (id, account_id, folder, provider_uid, thread_id, subject, sender, sender_address, list_unsubscribe, list_unsubscribe_post, rfc_message_id, \"references\", cc_json, attachments_json, is_flagged, recipients_json, snippet, body_text, has_attachments, is_read, labels_json, created_at) VALUES ('legacy', 'a', 'INBOX', '2', '', '', '', '', '', '', '', '', '[]', '[]', false, '[]', '', '', false, false, '[]', now())"))
+            await session.commit()
+        assert (await m.get_message("legacy")).reply_to_json == "[]"
+    asyncio.run(run())
+
+
 def test_delete_duplicate_only_merges_same_identified_mail(pg_db):
     async def run():
         from db.accessors import mail_message as m
