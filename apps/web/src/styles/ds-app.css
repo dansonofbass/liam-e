@@ -103,6 +103,8 @@
 @media (prefers-reduced-motion: reduce) { .le-page-fade { animation: none; } }
 @media (min-width: 640px) and (max-width: 1023px) { .le-side { flex: 0 0 auto; } }
 @media (max-width: 639px) { .le-app > .le-side { display: none; } }
+/* On a phone the main sheet fills the screen: no frame around it, no rounding, no shadow. */
+@media (max-width: 639px) { .le-app { padding: 0; gap: 0; } .le-sheet { border-radius: 0; box-shadow: none; } }
 
 .le-sheet:has(.le-inbox) { min-height: 0; }
 .le-inbox { display: flex; flex: 1; min-height: 0; min-width: 0; }

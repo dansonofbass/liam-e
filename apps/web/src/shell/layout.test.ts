@@ -83,3 +83,11 @@ test('the model menu in the chat header opens to the left of its right-aligned c
   for (const property of ['left: auto', 'right: 0', 'max-width: calc(100vw - 2 * var(--space-4))', 'max-height: 60dvh', 'overflow-y: auto']) expect(rule).toContain(property)
   expect(css.indexOf('.le-chat-header .le-menu-anchor .le-menu')).toBeGreaterThan(css.indexOf('.le-menu-anchor .le-menu {'))
 })
+
+test('on a phone the main sheet fills the screen without frame, rounding or shadow', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const rule = css.match(/@media \(max-width: 639px\) \{ \.le-app \{ ([^}]+) \} \.le-sheet \{ ([^}]+) \} \}/u)
+  expect(rule).toBeTruthy()
+  for (const property of ['padding: 0', 'gap: 0']) expect(rule?.[1]).toContain(property)
+  for (const property of ['border-radius: 0', 'box-shadow: none']) expect(rule?.[2]).toContain(property)
+})

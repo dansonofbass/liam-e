@@ -235,8 +235,8 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
 ## 5. Raum, Form, Schatten, Bewegung
 
 - **4-px-Raster**, Schritte `space-1` bis `space-8` (4 bis 64 px). App-Rahmen und Abstand
-  der schwebenden Flächen `space-3`, Innenabstand der Hauptfläche `space-5`, Kacheln und
-  Karten `space-4`.
+  der schwebenden Flächen `space-3` (ab `tablet`; auf `mobile` gibt es keinen Rahmen, §7.3),
+  Innenabstand der Hauptfläche `space-5`, Kacheln und Karten `space-4`.
 - **Radien:** `radius-pill` für alles, was man drückt (Buttons, Chips, Navigationspunkte,
   Tags, Symbol-Buttons); `radius-sm` (12 px) für Zeilen und Felder; `radius-md` (18 px)
   für Kacheln, Karten und Menüs; `radius-lg` (24 px) für schwebende Flächen, Composer und
@@ -303,7 +303,8 @@ Anfang an mit.
 - `desktop`: Seitenleiste (`sidebar-width`) und Hauptfläche schweben nebeneinander.
 - `tablet`: Seitenleiste als schmale Symbolleiste mit Tooltips; „Unterhaltungen“ öffnet
   eine Schublade über dem Inhalt.
-- `mobile`: Kopfzeile mit Menü-Button links, Titel und „Neue Unterhaltung“ rechts. Das
+- `mobile`: Die Hauptfläche füllt den Bildschirm, ohne Rahmen, Rundung und Schatten.
+  Kopfzeile mit Menü-Button links, Titel und „Neue Unterhaltung“ rechts. Das
   Menü öffnet eine Schublade mit Navigation und Unterhaltungen, mit abgedunkeltem
   Hintergrund. Keine untere Navigationsleiste: Der Composer gehört an den unteren Rand.
 - Die Schublade ist 308 px breit, höchstens `100vw - 48px`, mit 12 px Innenabstand,
