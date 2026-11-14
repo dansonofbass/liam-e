@@ -70,3 +70,28 @@
 .le-mailrow--placeholder span:last-child { width: 100%; }
 @media (max-width: 1023px) { .le-inbox-list { flex: 1 1 100%; border-right: 0; } }
 @media (max-width: 639px) { .le-inbox-filters { flex-wrap: nowrap; overflow-x: auto; } .le-inbox-filters > * { flex-shrink: 0; } }
+
+.le-mail-view { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.le-mail-topbar { flex-shrink: 0; }
+.le-mail-topbar .le-menu-anchor .le-menu { left: auto; right: 0; }
+.le-mail-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
+.le-mail-article { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-4); }
+.le-mail-header { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.le-mail-sender { flex: 1; min-width: 0; }
+.le-mail-sender > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.le-mail-header time { flex-shrink: 0; }
+.le-mail-text { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 64ch; }
+.le-mail-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.le-mail-bottom { display: flex; gap: var(--space-2); border-top: 1px solid var(--line); padding: var(--space-2) var(--space-3) max(var(--space-3), env(safe-area-inset-bottom)); }
+.le-mail-bottom > .le-tooltip-anchor { flex: 1 1 0; min-width: 0; }
+.le-mail-bottom .le-btn { width: 100%; min-height: var(--control-height-lg); }
+.le-mail-error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.le-mail-placeholder { max-width: 720px; margin: auto; display: flex; flex-direction: column; gap: var(--space-3); }
+.le-mail-placeholder span { display: block; height: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken, var(--surface-soft)); }
+.le-mail-placeholder > span:nth-last-child(1) { width: 60%; }
+.le-mail-placeholder-head { display: flex; gap: var(--space-3); margin-bottom: var(--space-4); }
+.le-mail-placeholder-head > span { width: var(--space-7); height: var(--space-7); border-radius: var(--radius-pill); }
+.le-mail-placeholder-head > div { flex: 1; display: flex; flex-direction: column; gap: var(--space-2); }
+.le-mail-placeholder-head > div span:last-child { width: 60%; }
+@media (pointer: coarse) { .le-mail-topbar .le-icon-btn, .le-mail-topbar .le-btn, .le-mail-bottom .le-btn, .le-insight .le-chip, .le-mail-to-inbox, .le-mail-error .le-link { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
+@media (max-width: 639px) { .le-mail-scroll { padding: var(--space-4); } .le-mail-header { flex-wrap: wrap; } }

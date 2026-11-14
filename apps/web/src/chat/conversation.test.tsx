@@ -27,7 +27,8 @@ function setup(path = '/') {
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
   const start = createRoute({ getParentRoute: () => root, path: '/', component: StartRoute.options.component })
   const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: () => <Conversation conversationId="c" /> })
-  const router = createRouter({ routeTree: root.addChildren([start, chat]), history: createMemoryHistory({ initialEntries: [path] }) })
+  const mail = createRoute({ getParentRoute: () => root, path: '/mail/$messageId', component: () => <p>Mail</p> })
+  const router = createRouter({ routeTree: root.addChildren([start, chat, mail]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
   return { client, router }
 }
@@ -175,7 +176,7 @@ test('model menu updates the conversation', async () => {
 })
 
 test('history renders safe text, model, mail account and only the latest suggestions', async () => {
-  const { client } = setup('/chat/c')
+  const { client, router } = setup('/chat/c')
   spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail', account_id: 'a', color_index: 0, sender_name: 'Absender', subject: '<b>Betreff</b>', internal_date: null, deadline: null } })) as never)
   const row = (id: string, content: string, extras: ChatMessageOut['extras']): ChatMessageOut => ({ id, conversation_id: 'c', role: 'assistant', content, created_at: '', extras, proposal: null, proposal_status: '', stopped: false, tool_name: '' })
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
@@ -192,4 +193,6 @@ test('history renders safe text, model, mail account and only the latest suggest
   fireEvent.click(screen.getByRole('button', { name: 'Weiter fragen' }))
   expect(requestBody.text).toBe('Weiter fragen')
   expect(requestBody.conversation_id).toBe('c')
+  fireEvent.click(screen.getByRole('button', { name: 'Mail öffnen' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail/mail'))
 })

@@ -28,7 +28,7 @@ export function ChatComposer({ conversationId, contextMessageId, onSend, autoFoc
 
 function Reference({ mail, accounts }: { mail: MailRefOut; accounts: Accounts }) {
   const navigate = useNavigate()
-  return <MailReference mail={mail} accountLabel={accounts.find(account => account.id === mail.account_id)?.display_name} onOpen={() => { void navigate({ href: `/mail?message=${encodeURIComponent(mail.id)}` }) }} />
+  return <MailReference mail={mail} accountLabel={accounts.find(account => account.id === mail.account_id)?.display_name} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} />
 }
 function HistoryReference({ id, accounts }: { id: string; accounts: Accounts }) {
   const { data } = useQuery(messageQuery(id))

@@ -20,7 +20,8 @@ function setup(accounts = true, path = '/', unread = 3, lastSync: string | null 
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
   const index = createRoute({ getParentRoute: () => root, path: '/', validateSearch: (search: Record<string, unknown>) => ({ about: typeof search.about === 'string' ? search.about : undefined }), component: Route.options.component })
   const accountsRoute = createRoute({ getParentRoute: () => root, path: '/accounts', component: () => <p>Konten</p> })
-  const router = createRouter({ routeTree: root.addChildren([index, accountsRoute]), history: createMemoryHistory({ initialEntries: [path] }) })
+  const mailRoute = createRoute({ getParentRoute: () => root, path: '/mail/$messageId', component: () => <p>Mail</p> })
+  const router = createRouter({ routeTree: root.addChildren([index, accountsRoute, mailRoute]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
   return router
 }
@@ -85,4 +86,12 @@ test('about displays a mail and sends its context, which can be removed', async 
   expect(request.context_message_id).toBe('mail1')
   fireEvent.click(screen.getByRole('button', { name: 'Bezug entfernen' }))
   await waitFor(() => expect(router.state.location.searchStr).toBe(''))
+})
+
+
+test('mail reference opens its detail route', async () => {
+  const router = setup(true, '/?about=mail1')
+  await screen.findByText('Termin')
+  fireEvent.click(screen.getByRole('button', { name: 'Mail öffnen' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/mail/mail1'))
 })

@@ -100,7 +100,15 @@ export const de = {
     empty: 'Keine Mails in diesem Konto. Neue erscheinen nach dem nächsten Abruf.', emptyFiltered: 'Keine Mails für diese Filter.',
     loadError: 'Die Mails konnten nicht geladen werden. Versuch es gleich noch mal.',
   },
-  mail: { summary: 'Kurz gefasst', draftReply: 'Antwort entwerfen', askInChat: 'Im Chat fragen' },
+  mail: {
+    summary: 'Kurz gefasst', draftReply: 'Antwort entwerfen', askInChat: 'Im Chat fragen',
+    back: 'Zurück zum Posteingang', toInbox: 'Zum Posteingang', more: 'Weitere Aktionen',
+    loading: 'Mail wird geladen …', loadError: 'Die Mail konnte nicht geladen werden. Versuch es gleich noch mal.',
+    askTip: 'Öffnet den Chat mit dieser Mail als Bezug', draftTip: 'Schreibt einen Entwurf im Chat. Gesendet wird erst, wenn du zustimmst.',
+    draftPrompt: 'Entwirf eine Antwort auf diese Mail.', unsubscribe: 'Newsletter abbestellen', unsubscribePrompt: 'Bestelle diesen Newsletter ab.',
+    addressTo: (address: string, to: string) => `${address} an ${to}`,
+    attachment: (name: string, size: string) => `${name} · ${size}`,
+  },
   accounts: { title: 'Konten', connect: 'Konto verbinden' },
   quickActions: {
     unread: { title: 'Ungelesenes zusammenfassen', subtitle: (n: number) => plural(n, { one: '# Mail', other: '# Mails' }), prompt: 'Fasse meine ungelesenen Mails zusammen.' },
