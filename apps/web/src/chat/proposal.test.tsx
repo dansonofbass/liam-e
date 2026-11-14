@@ -285,6 +285,27 @@ test('a send draft is editable and the edited body is confirmed', async () => {
   expect(await screen.findByText('Mail gesendet.')).toBeTruthy()
 })
 
+test('a reply-all draft shows every recipient and the quoted mail before sending', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'send', reason: 'Antwort an alle: anna@example.org.', irreversible: true, items: [], draft: { account_id: 'a', body: 'Danke', cc: ['ben@example.org', 'cara@example.org'], mode: 'reply_all', quote: 'Am 3.11. um 09:00 schrieb Anna:\n> Termin am Montag?', reply_to_message_id: 'm', subject: 'Re: Termin', to: ['anna@example.org'] } }
+  setup(initial)
+  expect(await screen.findByText('An: anna@example.org')).toBeTruthy()
+  expect(screen.getByText('Kopie: ben@example.org, cara@example.org')).toBeTruthy()
+  const quote = screen.getByRole('blockquote', { name: 'Zitierte Mail – wird mitgesendet' })
+  expect(quote.textContent).toBe('Am 3.11. um 09:00 schrieb Anna:\n> Termin am Montag?')
+  expect((screen.getByRole('button', { name: 'Senden' }) as HTMLButtonElement).disabled).toBe(false)
+})
+
+test('a new draft without copy or quote shows neither', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'send', reason: 'Neue Mail an anna@example.org.', irreversible: true, items: [], draft: { account_id: 'a', body: 'Hallo', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
+  setup(initial)
+  expect(await screen.findByText('An: anna@example.org')).toBeTruthy()
+  expect(screen.queryByText(/^Kopie:/u)).toBeNull()
+  expect(screen.queryByRole('blockquote')).toBeNull()
+  expect(screen.queryByRole('list')).toBeNull()
+})
+
 test.each([1, 2])('partial result uses the correct form for %i failures', async (count) => {
   setup(message('partial', { done: 1, failed: Array.from({ length: count }, (_, i) => ({ id: String(i), code: 'action_failed' })) }))
   const ending = count === 1 ? '1 ließ sich nicht abbestellen.' : '2 ließen sich nicht abbestellen.'

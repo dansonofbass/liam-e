@@ -73,7 +73,8 @@ export const de = {
     trash: 'In den Papierkorb', moreMail: (subject: string) => `Weitere Aktionen zu ${subjectText(subject)}`,
     moreAccount: (name: string) => `Weitere Aktionen zu ${name}`, openMail: 'Mail öffnen',
     deadline: (date: string) => `Frist ${date}`, attachment: 'Anhang',
-    recipient: 'An', subject: 'Betreff', draftBody: 'Entwurf',
+    recipient: 'An', copy: 'Kopie', subject: 'Betreff', draftBody: 'Entwurf',
+    quoted: 'Zitierte Mail – wird mitgesendet', forwarded: 'Weitergeleitete Mail – wird mitgesendet',
   },
   accountCard: {
     sync: (address: string) => `${address} jetzt abrufen`, reconnect: 'Erneut anmelden', rename: 'Umbenennen', remove: 'Entfernen',
