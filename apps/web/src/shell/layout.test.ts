@@ -1,5 +1,18 @@
 import { expect, test } from 'bun:test'
 
+test('conversation and composer share the same centred column', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  const tokens = await Bun.file(new URL('../styles/tokens.css', import.meta.url)).text()
+  const rule = (selector: string) => css.split(`${selector} {`)[1]?.split('}')[0] ?? ''
+  for (const selector of ['.le-chat-thread', '.le-chat-composer']) {
+    for (const property of ['width: 100%', 'max-width: var(--chat-width)', 'align-self: center', 'box-sizing: border-box']) expect(rule(selector)).toContain(property)
+  }
+  expect(rule('.le-chat-messages')).toContain('padding: var(--space-5)')
+  expect(rule('.le-chat-composer')).toContain('var(--space-5)')
+  expect(tokens).toContain('--chat-width: 780px')
+  expect(tokens).toContain('--space-5: 24px')
+})
+
 test('the viewport bounds the shell and its independently scrolling content', async () => {
   const base = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
   const app = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()

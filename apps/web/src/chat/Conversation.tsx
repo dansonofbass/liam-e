@@ -62,7 +62,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   }
   const status = state.status?.code === 'searching' ? de.status.searching(state.status.count ?? 0) : state.status ? de.status[state.status.code] : null
   const liveModel = modelLabel(selectedModel?.conversationId === conversationId ? selectedModel.id : lastAssistant?.extras.model) ?? models.find(model => model.is_default)?.label
-  return <div className="le-chat-view"><ChatHeader conversationId={conversationId}><ModelMenu key={conversationId} conversationId={conversationId} model={lastAssistant?.extras.model} onChange={id => setSelectedModel({ conversationId, id })} /></ChatHeader><div className="le-chat-messages" ref={scrollRef}>
+  return <div className="le-chat-view"><ChatHeader conversationId={conversationId}><ModelMenu key={conversationId} conversationId={conversationId} model={lastAssistant?.extras.model} onChange={id => setSelectedModel({ conversationId, id })} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
     {history.isPending && <p className="le-hint">{de.chat.loadingHistory}</p>}
     {history.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void history.refetch() } }}>{de.chat.historyError}</Notice>}
     {messages.map(message => <div className="le-chat-entry" key={message.id}>{renderMessage(message)}</div>)}
