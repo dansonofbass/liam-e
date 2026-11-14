@@ -139,6 +139,22 @@ test('mobile menu opens and closes on Escape', async () => {
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('dialog')).toBeNull()
 })
+test('the tablet bar lists the conversations as a navigation entry with its own icon and a tooltip', async () => {
+  width = 800
+  spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
+  setup()
+  const button = await screen.findByRole('button', { name: 'Unterhaltungen' })
+  expect(button.classList.contains('le-nav-item')).toBe(true)
+  expect(button.classList.contains('le-icon-btn')).toBe(false)
+  expect(button.querySelector('.lucide-messages-square')).toBeTruthy()
+  expect(button.querySelector('.lucide-message-circle')).toBeNull()
+  expect(screen.getByRole('link', { name: 'Chat' }).querySelector('.lucide-message-circle')).toBeTruthy()
+  expect(button.closest('.le-shell-sidebar')?.querySelectorAll('.le-nav-item')).toHaveLength(4)
+  fireEvent.mouseEnter(button)
+  expect((await screen.findByRole('tooltip', {}, { timeout: 2000 })).textContent).toBe('Öffnet die Liste deiner Unterhaltungen')
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+})
 test('the mobile header centres its title between the menu and the new-conversation button', async () => {
   width = 375
   spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)

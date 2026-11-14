@@ -258,7 +258,7 @@ Wer einen Farbwert ändert, misst diese Tabelle neu; mit dem Redesign prüft ein
 - **Symbole: Lucide** (`lucide-react`, exakt gepinnt), 24er-Raster, Strich 1,8, runde
   Enden, `currentColor`. Größen 19 px (Standard) und 16 px (klein). Keine Emojis, keine
   Logos der Anbieter.
-- **Lexikon:** `message-circle` Chat · `inbox` Posteingang · `at-sign` Konten · `archive`
+- **Lexikon:** `message-circle` Chat · `messages-square` Unterhaltungen (Symbolleiste am Tablet) · `inbox` Posteingang · `at-sign` Konten · `archive`
   Archivieren · `trash-2` In den Papierkorb · `reply` Antworten · `pencil` Antwort
   entwerfen · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`
   Weitere Aktionen · `external-link` Mail öffnen · `arrow-up` Senden · `square` (gefüllt)
