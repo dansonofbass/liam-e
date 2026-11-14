@@ -79,7 +79,7 @@ export const de = {
       mark_read: (n: number) => `${plural(n, { one: '# Mail', other: '# Mails' })} als gelesen markiert.`,
       send: () => 'Mail gesendet.',
     },
-    partial: (n: number) => ` ${plural(n, { one: '# ließen sich nicht ändern.', other: '# ließen sich nicht ändern.' })}`,
+    partial: (n: number) => ` ${plural(n, { one: '# ließ sich nicht ändern.', other: '# ließen sich nicht ändern.' })}`,
     undo: 'Rückgängig', undone: 'Rückgängig gemacht.', cancelled: 'Abgebrochen, es wurde nichts geändert.',
     requestError: 'Das hat nicht geklappt. Versuch es gleich noch mal.',
   },

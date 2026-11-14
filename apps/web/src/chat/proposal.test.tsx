@@ -121,6 +121,12 @@ test('a send draft is editable and the edited body is confirmed', async () => {
   expect(await screen.findByText('Mail gesendet.')).toBeTruthy()
 })
 
+test.each([1, 2])('partial result uses the correct form for %i failures', async (count) => {
+  setup(message('partial', { done: 1, failed: Array.from({ length: count }, (_, i) => ({ id: String(i), code: 'item_gone' })) }))
+  const ending = count === 1 ? '1 ließ sich nicht ändern.' : '2 ließen sich nicht ändern.'
+  expect(await screen.findByText(`1 Newsletter abbestellt. ${ending}`)).toBeTruthy()
+})
+
 test('unsubscribe without archived mail and unsafe manual link', async () => {
   setup(message('partial', { done: 1, failed: [], manual: [{ id: 'a', link: 'javascript:alert(1)' }, { id: 'b', link: 'https://example.org/unsubscribe' }], undo_action_ids: [] }))
   expect(await screen.findByText('1 Newsletter abbestellt. 0 ließen sich nicht ändern.')).toBeTruthy()
