@@ -293,3 +293,35 @@ def test_malformed_gmail_response_returns_502(client, monkeypatch, http_transpor
     http_transport(lambda request: httpx.Response(200, json=minimal if request.url.params['format'] == 'minimal' else raw))
     response = client.get('/api/v1/mail/messages/m/original')
     assert response.status_code == 502 and response.json()['detail']['code'] == 'provider_failed'
+
+
+@pytest.mark.parametrize('message_id', ['<a@example.test>\r\nA1 UID STORE 1:* +FLAGS (\\Deleted)', '<a@example.test>\n', '<a\x00@example.test>'])
+def test_imap_message_id_with_control_characters_is_never_sent(client, monkeypatch, imap_connection, message_id):
+    row = message(folder='ARCHIVE')
+    row.rfc_message_id = message_id
+    mock_route(monkeypatch, row, account())
+    response = client.get('/api/v1/mail/messages/m/original')
+    assert response.status_code == 409 and response.json()['detail']['code'] == 'original_unavailable'
+    imap_connection.uid.assert_not_called()
+    imap_connection.logout.assert_called_once()
+
+
+def test_imap_host_outside_the_allowlist_is_never_opened(client, monkeypatch, imap_connection):
+    mock_route(monkeypatch, message(), account())
+    monkeypatch.setattr(transport, 'check_mail_host', AsyncMock(side_effect=transport.MailHostNotAllowedError('Mail host is not allowed')))
+    response = client.get('/api/v1/mail/messages/m/original')
+    assert response.status_code == 502 and response.json()['detail']['code'] == 'provider_failed'
+    transport.open_imap.assert_not_called()
+    service.imap_password.assert_not_awaited()
+
+
+@pytest.mark.parametrize('uid', ['id/with space', '12 (FLAGS)', '1:*', ''])
+def test_imap_inbox_uid_that_is_not_a_number_is_never_fetched(client, monkeypatch, imap_connection, uid):
+    row = message(folder='INBOX')
+    row.provider_uid = uid
+    mock_route(monkeypatch, row, account())
+    response = client.get('/api/v1/mail/messages/m/original')
+    assert response.status_code == 409 and response.json()['detail']['code'] == 'original_unavailable'
+    imap_connection.select.assert_called_once_with('"INBOX"', readonly=True)
+    imap_connection.uid.assert_not_called()
+    imap_connection.logout.assert_called_once()
