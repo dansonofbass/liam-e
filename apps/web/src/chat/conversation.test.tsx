@@ -187,6 +187,8 @@ test('selection survives the live proposal being replaced by history', async () 
   expect((beta as HTMLInputElement).checked).toBe(false)
   fireEvent.click(screen.getByRole('button', { name: '1 abbestellen und archivieren' }))
   await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: undefined }, throwOnError: true }))
+  // The confirmed card replaces its button with the result; without waiting for that the update lands after the test.
+  await waitFor(() => expect(screen.queryByRole('button', { name: '1 abbestellen und archivieren' })).toBeNull())
 })
 
 test('composer account menu falls back to the address', async () => {
