@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from 'bun:test'
+import { afterEach, expect, mock, spyOn, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -37,7 +37,7 @@ async function send() {
   fireEvent.change(input, { target: { value: 'Meine Frage' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
 }
-afterEach(() => { cleanup(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
+afterEach(() => { cleanup(); mock.restore(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
 
 test('shows status, streams text and stops the answer', async () => {
   setup('/chat/c'); await send()
@@ -62,6 +62,16 @@ test('navigation after start preserves the stream through done', async () => {
   expect(document.querySelector('.sr-only[aria-live="polite"]')?.textContent).toBe('Kommt noch')
   await waitFor(() => expect(screen.getByRole('button', { name: 'Senden' })).toBeTruthy())
   expect(signal.aborted).toBe(false)
+})
+
+test('history user message is not duplicated while streaming after navigation', async () => {
+  const { client, router } = setup(); await send()
+  history = [{ id: 'u', conversation_id: 'c', role: 'user', content: 'Meine Frage', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, tool_name: '' }]
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'delta', text: 'Antwort' }) })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c'))
+  expect(await screen.findByText('Antwort')).toBeTruthy()
+  await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual(history))
+  expect(screen.getAllByText('Meine Frage')).toHaveLength(1)
 })
 
 test('history replaces the live turn when the answer is persisted', async () => {

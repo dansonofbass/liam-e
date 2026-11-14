@@ -5,7 +5,7 @@ import { ChatStreamError, streamChatTurn } from './transport'
 import { createTypewriter } from './typewriter'
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal'
-type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; request?: ChatStreamRequest }
+type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
 type Session = { state: State; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
@@ -45,7 +45,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
         switch (event.event) {
           case 'start':
             turn.conversationId = conversation.current = event.conversation_id
-            setState(s => ({ ...s, conversationId: event.conversation_id }))
+            setState(s => ({ ...s, conversationId: event.conversation_id, userMessageId: event.user_message_id }))
             void client.invalidateQueries({ queryKey: ['conversations'] }); break
           case 'status': setState(s => ({ ...s, status: event })); break
           case 'delta': writer.push(event.text); break
