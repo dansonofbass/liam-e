@@ -1,7 +1,7 @@
 import { useQueryClient, type InfiniteData, type QueryKey } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, createElement, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { mailActionsUndo, mailMessageAction } from '../api/generated/sdk.gen'
-import type { MessageListItemOut, MessagePageOut } from '../api/generated/types.gen'
+import type { MessageDetailOut, MessageListItemOut, MessagePageOut } from '../api/generated/types.gen'
 import { de } from '../i18n/de'
 import { useBreakpoint } from '../shell/useBreakpoint'
 
@@ -64,15 +64,25 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         : page.items.map(item => item.id === id ? { ...item, is_read: kind === 'mark_read' } : item) })),
     }))
   }
-  const run = async (id: string, kind: Kind) => {
-    const current = ++sequence.current
-    clear()
+  const run = async (id: string, kind: Kind, options?: { silent?: boolean }) => {
+    const current = options?.silent ? sequence.current : ++sequence.current
+    if (!options?.silent) clear()
     ++pending.current
     const changes: Change[] = []
     const removal = kind === 'archive' || kind === 'trash'
-    const rollback = () => { restore(changes, removal); reconcile.current = true }
+    let previousRead: boolean | undefined
+    const rollback = () => {
+      restore(changes, removal)
+      if (previousRead !== undefined) client.setQueryData<MessageDetailOut>(['message', id], data => data && { ...data, is_read: previousRead! })
+      reconcile.current = true
+    }
     try {
       await client.cancelQueries({ queryKey: ['messages'] })
+      if (!removal) {
+        await client.cancelQueries({ queryKey: ['message', id], exact: true })
+        previousRead = client.getQueryData<MessageDetailOut>(['message', id])?.is_read
+        client.setQueryData<MessageDetailOut>(['message', id], data => data && { ...data, is_read: kind === 'mark_read' })
+      }
       for (const [key, data] of client.getQueriesData<InfiniteData<MessagePageOut>>({ queryKey: ['messages'] })) {
         data?.pages.forEach((page, pageIndex) => page.items.forEach((row, index) => {
           if (row.id === id) changes.push({ key, page: pageIndex, index, row })
@@ -82,18 +92,18 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       const result = await mailMessageAction({ path: { message_id: id }, body: { kind } })
       if (result.response?.status === 404) {
         update(id, 'remove')
-        if (current === sequence.current) show({ tone: 'danger', text: de.proposalErrors.item_gone, undoable: false })
+        if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.proposalErrors.item_gone, undoable: false })
       } else if (result.response?.status === 409) {
         rollback()
-        if (current === sequence.current) show({ tone: 'danger', text: de.proposalErrors.action_unsupported, undoable: false })
+        if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.proposalErrors.action_unsupported, undoable: false })
         return changes.length > 0
       } else if (!result.data || result.response?.status !== 200) {
         rollback()
-        if (current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
+        if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
         return changes.length > 0
       } else {
         if (removal) reconcile.current = true
-        if ((kind === 'archive' || kind === 'trash') && current === sequence.current) {
+        if (!options?.silent && (kind === 'archive' || kind === 'trash') && current === sequence.current) {
           const text = breakpoint === 'mobile' ? de.inbox.doneShort[kind] : de.inbox.done[kind](result.data.message.subject)
           show({ tone: 'success', text, undoable: true }, { actionId: result.data.action_id, changes })
         }
@@ -102,7 +112,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       }
     } catch {
       rollback()
-      if (current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
+      if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.errors.provider_failed, undoable: false })
       return changes.length > 0
     } finally { settle() }
   }
@@ -129,4 +139,17 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     show({ tone: 'danger', text, undoable: false })
   }
   return { run, undo, notify, toast }
+}
+
+const MailActionsContext = createContext<ReturnType<typeof useMailActions> | null>(null)
+
+export function MailActionsProvider({ children, clock }: { children: ReactNode; clock?: Clock }) {
+  const actions = useMailActions({ clock })
+  return createElement(MailActionsContext.Provider, { value: actions }, children)
+}
+
+export function useMailActionsContext() {
+  const actions = useContext(MailActionsContext)
+  if (!actions) throw new Error('useMailActionsContext must be used within MailActionsProvider')
+  return actions
 }

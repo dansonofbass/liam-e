@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { plural, formatTime, formatDayShort, formatRelativeDay, formatListDate, formatDeadline, formatBytes, formatStand } from './format'
+import { plural, formatTime, formatMailTime, formatDayShort, formatRelativeDay, formatListDate, formatDeadline, formatBytes, formatStand } from './format'
 
 test('formats list dates for today and yesterday in the requested time zone', () => {
   const now = new Date('2026-11-13T10:00:00+01:00')
@@ -42,4 +42,14 @@ test('uses calendar days in the requested time zone', () => {
   const now = new Date('2026-11-13T00:10:00+01:00')
   expect(formatRelativeDay(new Date('2026-11-12T23:50:00+01:00'), now, 'Europe/Berlin')).toBe('Gestern')
   expect(formatRelativeDay(new Date('2026-11-13T00:05:00+01:00'), now, 'Europe/Berlin')).toBe('Heute')
+})
+
+
+test('formats mail time for today, yesterday, this week and an older date', () => {
+  const now = new Date('2026-11-13T10:00:00+01:00')
+  const tz = 'Europe/Berlin'
+  expect(formatMailTime(new Date('2026-11-13T08:57:00+01:00'), now, tz)).toBe('Heute, 08:57')
+  expect(formatMailTime(new Date('2026-11-12T14:03:00+01:00'), now, tz)).toBe('Gestern, 14:03')
+  expect(formatMailTime(new Date('2026-11-09T08:57:00+01:00'), now, tz)).toBe('Mo., 08:57')
+  expect(formatMailTime(new Date('2026-11-07T08:57:00+01:00'), now, tz)).toBe('7.11., 08:57')
 })

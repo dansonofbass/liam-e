@@ -37,6 +37,10 @@ export function formatRelativeDay(d: Date, now: Date, timeZone?: string): string
   return new Intl.DateTimeFormat(locale, { timeZone, day: 'numeric', month: 'numeric', year }).format(d)
 }
 
+export function formatMailTime(d: Date, now: Date, timeZone?: string): string {
+  return `${formatRelativeDay(d, now, timeZone)}, ${formatTime(d, timeZone)}`
+}
+
 export function formatListDate(d: Date, now: Date, timeZone?: string): string {
   return calendarDay(d, timeZone) === calendarDay(now, timeZone) ? formatTime(d, timeZone) : formatRelativeDay(d, now, timeZone)
 }

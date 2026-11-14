@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider, useQuery, type InfiniteData } from '@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
 import type { MessageListItemOut, MessagePageOut } from '../api/generated/types.gen'
-import { useMailActions, type Clock } from './useMailActions'
+import { MailActionsProvider, useMailActions, useMailActionsContext, type Clock } from './useMailActions'
 
 const originalMatchMedia = window.matchMedia
 const rows = ['Erste', 'Zweite'].map((subject, i) => ({ id: String(i + 1), subject, is_read: false }) as MessageListItemOut)
@@ -24,7 +24,7 @@ function setup(mobile = false) {
     const { run, undo, notify, toast } = useMailActions({ clock: time.clock })
     return <><div>{data?.pages.flatMap(page => page.items).map(row => <div key={row.id}>{row.subject}:{String(row.is_read)}</div>)}</div>
       <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'archive') }}>archive 2</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button>
-      <button onClick={() => notify('refresh failed')}>notify</button><button onClick={() => { void undo() }}>force undo</button>
+      <button onClick={() => { void run('2', 'mark_read', { silent: true }) }}>silent read 2</button><button onClick={() => { void run('1', 'mark_read', { silent: true }) }}>silent read 1</button><button onClick={() => notify('refresh failed')}>notify</button><button onClick={() => { void undo() }}>force undo</button>
       {toast && <div role="status" data-tone={toast.tone}>{toast.text}{toast.undoable && <button onClick={() => { void undo() }}>Rückgängig</button>}</div>}</>
   }
   render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
@@ -186,4 +186,46 @@ test('mark_read updates the row in place without a toast', async () => {
   success(); setup(); fireEvent.click(screen.getByText('read 1'))
   await waitFor(() => expect(screen.getByText('Erste:true')).toBeTruthy())
   expect(screen.queryByRole('status')).toBeNull()
+})
+
+
+test('silent run keeps an existing undo toast and target', async () => {
+  success()
+  const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['action-1'] }, response: { status: 200 } })) as never)
+  setup(); fireEvent.click(screen.getByText('archive 1')); await screen.findByText('Rückgängig')
+  fireEvent.click(screen.getByText('silent read 2'))
+  await waitFor(() => expect(screen.getByText('Zweite:true')).toBeTruthy())
+  fireEvent.click(screen.getByText('Rückgängig'))
+  await waitFor(() => expect(undo).toHaveBeenCalled())
+})
+
+test('failed silent run rolls back without a toast', async () => {
+  let finish!: (value: unknown) => void
+  spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(resolve => { finish = resolve })) as never)
+  setup(); fireEvent.click(screen.getByText('silent read 1'))
+  await waitFor(() => expect(screen.getByText('Erste:true')).toBeTruthy())
+  await act(async () => { finish({ response: { status: 502 } }) })
+  await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
+  expect(screen.queryByRole('status')).toBeNull()
+})
+
+test('read flip updates detail cache and rolls it back on failure', async () => {
+  let finish!: (value: unknown) => void
+  spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(resolve => { finish = resolve })) as never)
+  const { client } = setup(); client.setQueryData(['message', '1'], { id: '1', is_read: false })
+  fireEvent.click(screen.getByText('read 1'))
+  await waitFor(() => expect(client.getQueryData(['message', '1'])).toEqual({ id: '1', is_read: true }))
+  await act(async () => { finish({ response: { status: 502 } }) })
+  expect(client.getQueryData(['message', '1'])).toEqual({ id: '1', is_read: false })
+})
+
+test('two provider consumers share a single toast', async () => {
+  window.matchMedia = ((query: string) => ({ matches: query.includes('1024px'), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+  success()
+  const client = new QueryClient()
+  function Trigger() { const { run } = useMailActionsContext(); return <button onClick={() => { void run('1', 'archive') }}>shared archive</button> }
+  function Display() { const { toast } = useMailActionsContext(); return <div>{toast?.text}</div> }
+  render(<QueryClientProvider client={client}><MailActionsProvider><Trigger /><Display /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('shared archive'))
+  expect(await screen.findByText('„Erste“ archiviert.')).toBeTruthy()
 })

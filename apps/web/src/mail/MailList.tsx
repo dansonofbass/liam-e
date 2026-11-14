@@ -11,7 +11,7 @@ import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
 import { hasActiveFilters, toMessageFilters, type InboxSearch } from './filters'
 import { groupByDay } from './groups'
 import { useInboxKeys } from './useInboxKeys'
-import { useMailActions } from './useMailActions'
+import { useMailActionsContext } from './useMailActions'
 
 export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const search = useSearch({ strict: false }) as InboxSearch
@@ -23,7 +23,7 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const breakpoint = useBreakpoint(), coarse = useCoarsePointer()
   const summary = useQuery(summaryQuery())
   const messages = useInfiniteQuery(messagesInfiniteQuery(toMessageFilters(search)))
-  const { run, undo, notify, toast } = useMailActions()
+  const { run, undo, notify, toast } = useMailActionsContext()
   const [localSelected, setLocalSelected] = useState<string | undefined>()
   const [searchOpen, setSearchOpen] = useState(Boolean(search.q))
   const [value, setValue] = useState(search.q ?? '')
