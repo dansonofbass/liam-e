@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.mail import connectors, service
+from api.mail import connectors, crypto, service
 from api.routers.api.v1.mail import accounts
 from api.routers.api.v1.mail import connectors as routes
 
@@ -124,6 +124,8 @@ async def test_imap_connect_refuses_address_of_connector_account(account_client,
     before = account.model_dump()
     monkeypatch.setattr(accounts.transport, "check_mail_host", AsyncMock())
     monkeypatch.setattr(accounts, "check_imap_login", AsyncMock())
+    # A working deployment: without a key the connect stops at 503 before the conflict check.
+    monkeypatch.setattr(crypto.mail_env, "mail_token_encryption_key", crypto.new_key())
     response = account_client.post("/accounts/imap", json={
         "email_address": account.email_address,
         "password": "test-only",

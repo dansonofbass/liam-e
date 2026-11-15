@@ -2,12 +2,14 @@
 
 from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.mail import crypto, secrets, sync, transport
 from api.routers.api.v1.mail import accounts
+from utils.mistral import MistralNotConfiguredError
 
 
 @pytest.fixture
@@ -75,3 +77,29 @@ def test_connect_errors_are_safe(setup, failure, status, code):
     assert response.status_code == status
     assert response.json()["detail"]["code"] == code
     assert "private data" not in response.text
+
+
+@pytest.mark.parametrize("failure,status,code", [
+    (MistralNotConfiguredError("private data"), 503, "mistral_not_configured"),
+    (secrets.WorkspaceSecretAccessDeniedError("private data"), 503, "secret_access_denied"),
+    (httpx.ConnectError("private data"), 502, "secret_unavailable"),
+])
+def test_connect_explains_why_the_secret_is_unreadable(setup, fake_store, failure, status, code):
+    client, login, resolve = setup
+    resolve.side_effect = failure
+    response = client.post("/accounts/imap", json={"email_address": "me@yahoo.com", "password_secret": "yahoo-app-password"})
+    assert response.status_code == status
+    assert response.json()["detail"]["code"] == code
+    assert "private data" not in response.text
+    login.assert_not_called()
+    assert not fake_store.accounts
+
+
+def test_connect_without_encryption_key_creates_no_account(setup, fake_store, monkeypatch):
+    client, _, _ = setup
+    monkeypatch.setattr(crypto.mail_env, "mail_token_encryption_key", None)
+    response = client.post("/accounts/imap", json={"email_address": "me@yahoo.com", "password_secret": "yahoo-app-password"})
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "encryption_not_configured"
+    assert not fake_store.accounts
+    assert not fake_store.credentials

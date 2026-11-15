@@ -1,6 +1,8 @@
+import pytest
 from db.models.mail_account import MailAccount
 from db.accessors import mail_insight, mail_message, mail_action, mail_job, mail_credential, mail_sync_state
 from api.mail import providers, connectors, transport
+from utils.mistral import MistralNotConfiguredError
 
 BASE = '/api/v1/mail/accounts'
 
@@ -116,3 +118,15 @@ def test_account_rows_include_summary_and_counts(client, fake_store):
     assert result['connection'] == 'oauth'
     assert result['unread'] == 3 and result['message_count'] == 0
     assert result['state'] == 'never' and result['color_index'] == 0
+
+
+@pytest.mark.parametrize('method,path', [('get', ''), ('get', '/gmail/tools'), ('post', '/gmail/connect')])
+def test_connector_routes_explain_missing_app_credential(client, fake_store, monkeypatch, method, path):
+    def missing():
+        raise MistralNotConfiguredError('private data')
+    monkeypatch.setattr(connectors, 'mistral_app_token', missing)
+    r = getattr(client, method)('/api/v1/mail/connectors' + path)
+    assert r.status_code == 503
+    assert r.json()['detail']['code'] == 'mistral_not_configured'
+    assert 'private data' not in r.text
+    assert not fake_store.accounts

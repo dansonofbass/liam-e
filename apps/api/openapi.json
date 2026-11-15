@@ -2304,7 +2304,7 @@
     },
     "/api/v1/mail/accounts/imap": {
       "post": {
-        "description": "Connect an IMAP/SMTP account with an app password and store its credentials encrypted.\n\nExactly one of ``password`` or ``password_secret`` is required; ``password_secret`` names a\nworkspace secret (for example ``yahoo-app-password``) whose value is resolved now and re-read\nat runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP\nlogin is checked before the account is created; answers 201 with the new account.\nAn address already using another connection type answers 409 without changing credentials.",
+        "description": "Connect an IMAP/SMTP account with an app password and store its credentials encrypted.\n\nExactly one of ``password`` or ``password_secret`` is required; ``password_secret`` names a\nworkspace secret (for example ``yahoo-app-password``) whose value is resolved now and re-read\nat runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP\nlogin is checked before the account is created; answers 201 with the new account.\nAn address already using another connection type answers 409 without changing credentials.\nAnswers 503 when the app itself lacks what it needs (a Mistral credential that may read\nsecrets, or the credential encryption key); no account is created then.",
         "operationId": "mail_account_connect_imap",
         "requestBody": {
           "content": {
@@ -2667,7 +2667,7 @@
     },
     "/api/v1/mail/connectors": {
       "get": {
-        "description": "List the Mistral Studio connectors of this workspace as ``name``/``id`` pairs.\n\nThese are the connectors that can be registered as a mail account.",
+        "description": "List the Mistral Studio connectors of this workspace as ``name``/``id`` pairs.\n\nThese are the connectors that can be registered as a mail account. Answers 503 when the app\nhas no Mistral credential of its own.",
         "operationId": "mail_connectors_list",
         "responses": {
           "200": {
@@ -2690,7 +2690,7 @@
     },
     "/api/v1/mail/connectors/{name}/connect": {
       "post": {
-        "description": "Register a Studio connector such as ``gmail`` as a mail account and return it.\n\nThe connector keeps the OAuth credentials inside Mistral, so the app stores no secret; the\naccount's e-mail address is derived from a one-message ``search_threads`` call when the\nconnector offers that tool and otherwise stays a placeholder. Answers 201.",
+        "description": "Register a Studio connector such as ``gmail`` as a mail account and return it.\n\nThe connector keeps the OAuth credentials inside Mistral, so the app stores no secret; the\naccount's e-mail address is derived from a one-message ``search_threads`` call when the\nconnector offers that tool and otherwise stays a placeholder. Answers 201, or 503 without an\naccount when the app has no Mistral credential of its own.",
         "operationId": "mail_account_connect_connector",
         "parameters": [
           {
@@ -2730,7 +2730,7 @@
     },
     "/api/v1/mail/connectors/{name}/tools": {
       "get": {
-        "description": "List the tools of one Studio connector with name, description and input schema.\n\n``name`` is the connector name; an unknown connector answers 404.",
+        "description": "List the tools of one Studio connector with name, description and input schema.\n\n``name`` is the connector name; an unknown connector answers 404, a missing app credential 503.",
         "operationId": "mail_connector_tools_list",
         "parameters": [
           {

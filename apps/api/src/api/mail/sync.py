@@ -8,6 +8,7 @@ from db.accessors import mail_account as account_access
 from db.accessors import mail_message as message_access
 from db.accessors import mail_sync_state as sync_state_access
 from env.mail import env as mail_env
+from utils.mistral import MistralNotConfiguredError
 
 from api.mail import connectors, netguard, providers, secrets, service, sync_connector, sync_gmail, sync_graph, sync_imap, transport
 from api.mail.seed_ids import is_seed_account
@@ -19,6 +20,11 @@ logger = logging.getLogger(__name__)
 def _error_code(error: Exception) -> str:
     if isinstance(error, secrets.WorkspaceSecretNotFoundError):
         return "secret_not_found"
+    # The app's own Mistral access is missing or refused: no new provider login would help.
+    if isinstance(error, MistralNotConfiguredError):
+        return "mistral_not_configured"
+    if isinstance(error, secrets.WorkspaceSecretAccessDeniedError):
+        return "secret_access_denied"
     if isinstance(error, service.CredentialError):
         return "auth_expired"
     if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (401, 403):

@@ -131,6 +131,8 @@ export const mailAccountsList = <ThrowOnError extends boolean = false>(options?:
  * at runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP
  * login is checked before the account is created; answers 201 with the new account.
  * An address already using another connection type answers 409 without changing credentials.
+ * Answers 503 when the app itself lacks what it needs (a Mistral credential that may read
+ * secrets, or the credential encryption key); no account is created then.
  */
 export const mailAccountConnectImap = <ThrowOnError extends boolean = false>(options: Options<MailAccountConnectImapData, ThrowOnError>): RequestResult<MailAccountConnectImapResponses, MailAccountConnectImapErrors, ThrowOnError> => (options.client ?? client).post<MailAccountConnectImapResponses, MailAccountConnectImapErrors, ThrowOnError>({
     url: '/api/v1/mail/accounts/imap',
@@ -216,7 +218,8 @@ export const mailActionsUndo = <ThrowOnError extends boolean = false>(options: O
  *
  * List the Mistral Studio connectors of this workspace as ``name``/``id`` pairs.
  *
- * These are the connectors that can be registered as a mail account.
+ * These are the connectors that can be registered as a mail account. Answers 503 when the app
+ * has no Mistral credential of its own.
  */
 export const mailConnectorsList = <ThrowOnError extends boolean = false>(options?: Options<MailConnectorsListData, ThrowOnError>): RequestResult<MailConnectorsListResponses, unknown, ThrowOnError> => (options?.client ?? client).get<MailConnectorsListResponses, unknown, ThrowOnError>({ url: '/api/v1/mail/connectors', ...options });
 
@@ -227,7 +230,8 @@ export const mailConnectorsList = <ThrowOnError extends boolean = false>(options
  *
  * The connector keeps the OAuth credentials inside Mistral, so the app stores no secret; the
  * account's e-mail address is derived from a one-message ``search_threads`` call when the
- * connector offers that tool and otherwise stays a placeholder. Answers 201.
+ * connector offers that tool and otherwise stays a placeholder. Answers 201, or 503 without an
+ * account when the app has no Mistral credential of its own.
  */
 export const mailAccountConnectConnector = <ThrowOnError extends boolean = false>(options: Options<MailAccountConnectConnectorData, ThrowOnError>): RequestResult<MailAccountConnectConnectorResponses, MailAccountConnectConnectorErrors, ThrowOnError> => (options.client ?? client).post<MailAccountConnectConnectorResponses, MailAccountConnectConnectorErrors, ThrowOnError>({ url: '/api/v1/mail/connectors/{name}/connect', ...options });
 
@@ -236,7 +240,7 @@ export const mailAccountConnectConnector = <ThrowOnError extends boolean = false
  *
  * List the tools of one Studio connector with name, description and input schema.
  *
- * ``name`` is the connector name; an unknown connector answers 404.
+ * ``name`` is the connector name; an unknown connector answers 404, a missing app credential 503.
  */
 export const mailConnectorToolsList = <ThrowOnError extends boolean = false>(options: Options<MailConnectorToolsListData, ThrowOnError>): RequestResult<MailConnectorToolsListResponses, MailConnectorToolsListErrors, ThrowOnError> => (options.client ?? client).get<MailConnectorToolsListResponses, MailConnectorToolsListErrors, ThrowOnError>({ url: '/api/v1/mail/connectors/{name}/tools', ...options });
 
