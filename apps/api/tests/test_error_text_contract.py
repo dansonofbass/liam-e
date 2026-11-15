@@ -2,10 +2,12 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from fastapi import HTTPException
+from utils.mistral import MistralNotConfiguredError
 
-from api.mail import actions, insights, secrets, transport
+from api.mail import actions, crypto, insights, secrets, transport
 from api.routers.api.v1.chat import conversations, history, proposals, route
 from api.routers.api.v1.mail import accounts, connectors, messages
 
@@ -55,6 +57,29 @@ async def test_imap_refusals(monkeypatch, failure, code, text):
     with pytest.raises(HTTPException) as error:
         await accounts.connect_imap(accounts.ImapConnectRequest(email_address="a@yahoo.com", password_secret=name))
     assert_detail(error, code, text)
+
+
+@pytest.mark.parametrize("failure,code,text", [
+    (MistralNotConfiguredError("missing"), "mistral_not_configured", "liam-e hat keinen Zugang zu Mistral Studio. Hinterleg für die App einen MISTRAL_API_KEY aus diesem Workspace, starte sie neu und versuch es dann noch mal."),
+    (secrets.WorkspaceSecretAccessDeniedError("refused"), "secret_access_denied", "Mistral Studio lässt liam-e die Secrets nicht lesen. Prüfe, ob der MISTRAL_API_KEY der App zu diesem Workspace gehört und noch gültig ist."),
+    (httpx.ConnectError("down"), "secret_unavailable", "Mistral Studio antwortet gerade nicht, das Secret ließ sich nicht lesen. Versuch es gleich noch mal."),
+])
+async def test_imap_app_access_refusals(monkeypatch, failure, code, text):
+    monkeypatch.setattr(transport, "check_mail_host", AsyncMock())
+    monkeypatch.setattr(secrets, "resolve_workspace_secret", AsyncMock(side_effect=failure))
+    with pytest.raises(HTTPException) as error:
+        await accounts.connect_imap(accounts.ImapConnectRequest(email_address="a@yahoo.com", password_secret="yahoo-app-password"))
+    assert_detail(error, code, text)
+
+
+async def test_imap_encryption_refusal(monkeypatch):
+    monkeypatch.setattr(transport, "check_mail_host", AsyncMock())
+    monkeypatch.setattr(secrets, "resolve_workspace_secret", AsyncMock(return_value="password"))
+    monkeypatch.setattr(accounts, "check_imap_login", AsyncMock())
+    monkeypatch.setattr(crypto.mail_env, "mail_token_encryption_key", None)
+    with pytest.raises(HTTPException) as error:
+        await accounts.connect_imap(accounts.ImapConnectRequest(email_address="a@yahoo.com", password_secret="yahoo-app-password"))
+    assert_detail(error, "encryption_not_configured", "liam-e kann das Konto nicht verschlüsselt speichern, weil der Schlüssel fehlt. Leg in Mistral Studio das Secret „mail_token_encryption_key“ an, falls es fehlt, starte die App neu und verbinde das Konto dann noch einmal.")
 
 
 async def test_original_refusals(monkeypatch):

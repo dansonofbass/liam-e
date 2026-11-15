@@ -5,8 +5,9 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from api.mail import sync, sync_connector, sync_gmail, sync_graph, sync_imap, sync_types
+from api.mail import secrets, sync, sync_connector, sync_gmail, sync_graph, sync_imap, sync_types
 from support.fake_imap import FakeIMAP
+from utils.mistral import MistralNotConfiguredError
 
 
 def account(provider="imap", auth_type="imap_password"):
@@ -534,3 +535,11 @@ async def test_connector_falls_back_to_thread_state_without_messages(monkeypatch
     result, queries = await connector_reconciliation(monkeypatch, [{"id": "t"}], [{"id": "t"}])
     assert result.read_updates == {"a": False, "b": False}
     assert "is:unread in:inbox newer_than:14d" in queries
+
+
+@pytest.mark.parametrize(("failure", "code"), [
+    (MistralNotConfiguredError("private data"), "mistral_not_configured"),
+    (secrets.WorkspaceSecretAccessDeniedError("private data"), "secret_access_denied"),
+])
+def test_missing_mistral_access_is_not_an_expired_login(failure, code):
+    assert sync._error_code(failure) == code

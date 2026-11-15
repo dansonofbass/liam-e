@@ -286,6 +286,10 @@ for (const [code, text, field] of [
   ['host_not_allowed', 'liam-e darf diesen Server nicht ansprechen. Prüfe die Serveradresse oder trag den Server in Mistral Studio unter MAIL_IMAP_ALLOWED_HOSTS ein.', ''],
   ['secret_not_found', 'Das Secret wurde nicht gefunden oder ist nicht lesbar. Prüfe den Namen und die Freigabe in Mistral Studio.', 'Secret mit dem App-Passwort'],
   ['login_failed', 'Die Anmeldung beim Mailserver hat nicht geklappt. Prüfe die Serveradresse und das App-Passwort.', ''],
+  ['mistral_not_configured', 'liam-e hat keinen Zugang zu Mistral Studio. Hinterleg für die App einen MISTRAL_API_KEY aus diesem Workspace, starte sie neu und versuch es dann noch mal.', ''],
+  ['secret_access_denied', 'Mistral Studio lässt liam-e die Secrets nicht lesen. Prüfe, ob der MISTRAL_API_KEY der App zu diesem Workspace gehört und noch gültig ist.', ''],
+  ['secret_unavailable', 'Mistral Studio antwortet gerade nicht, das Secret ließ sich nicht lesen. Versuch es gleich noch mal.', ''],
+  ['encryption_not_configured', 'liam-e kann das Konto nicht verschlüsselt speichern, weil der Schlüssel fehlt. Leg in Mistral Studio das Secret „mail_token_encryption_key“ an, falls es fehlt, starte die App neu und verbinde das Konto dann noch einmal.', ''],
 ] as const) test(`IMAP displays ${code} refusal`, async () => {
   spyOn(sdk, 'mailAccountConnectImap').mockImplementation((async () => ({ error: { detail: { code } } })) as never)
   setup('empty'); await openImap(); fillImap(); fireEvent.click(screen.getByRole('button', { name: 'Konto verbinden' }))

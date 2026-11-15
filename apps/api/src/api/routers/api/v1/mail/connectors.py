@@ -14,12 +14,13 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from utils.mistral import MistralNotConfiguredError
 
 from api.mail import connectors as connector_service
 from api.mail.connectors import CONNECTOR
 from api.errors import refuse
 from api.mail.service import AccountConflictError, upsert_account
-from api.routers.api.v1.mail.accounts import AccountOut, current_account_out
+from api.routers.api.v1.mail.accounts import AccountOut, current_account_out, mistral_not_configured
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +60,13 @@ def _http_error(error: Exception) -> HTTPException:
 async def list_connectors() -> list[ConnectorOut]:
     """List the Mistral Studio connectors of this workspace as ``name``/``id`` pairs.
 
-    These are the connectors that can be registered as a mail account.
+    These are the connectors that can be registered as a mail account. Answers 503 when the app
+    has no Mistral credential of its own.
     """
     try:
         connectors = await connector_service.list_connectors()
+    except MistralNotConfiguredError as error:
+        raise mistral_not_configured() from error
     except httpx.HTTPStatusError as error:
         raise _http_error(error) from error
     return [ConnectorOut(**c) for c in connectors]
@@ -76,10 +80,12 @@ async def list_connectors() -> list[ConnectorOut]:
 async def list_tools(name: str) -> list[ConnectorToolOut]:
     """List the tools of one Studio connector with name, description and input schema.
 
-    ``name`` is the connector name; an unknown connector answers 404.
+    ``name`` is the connector name; an unknown connector answers 404, a missing app credential 503.
     """
     try:
         tools = await connector_service.list_tools(name)
+    except MistralNotConfiguredError as error:
+        raise mistral_not_configured() from error
     except httpx.HTTPStatusError as error:
         raise _http_error(error) from error
     return [ConnectorToolOut(**t) for t in tools]
@@ -96,10 +102,13 @@ async def connect_connector(name: str) -> AccountOut:
 
     The connector keeps the OAuth credentials inside Mistral, so the app stores no secret; the
     account's e-mail address is derived from a one-message ``search_threads`` call when the
-    connector offers that tool and otherwise stays a placeholder. Answers 201.
+    connector offers that tool and otherwise stays a placeholder. Answers 201, or 503 without an
+    account when the app has no Mistral credential of its own.
     """
     try:
         tools = await connector_service.list_tools(name)
+    except MistralNotConfiguredError as error:
+        raise mistral_not_configured() from error
     except httpx.HTTPStatusError as error:
         raise _http_error(error) from error
     # Only sent mail identifies the connected sender; inbox recipients are not identity.

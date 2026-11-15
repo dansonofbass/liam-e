@@ -24,7 +24,11 @@ _REFERENCE_PREFIX = "secret:workspace:"
 
 
 class WorkspaceSecretNotFoundError(RuntimeError):
-    """Raised when the named workspace secret does not exist (or cannot be read)."""
+    """Raised when the named workspace secret does not exist (or is not in the answer)."""
+
+
+class WorkspaceSecretAccessDeniedError(RuntimeError):
+    """Raised when Mistral refuses the app's credential for reading secret values (401/403)."""
 
 
 class SecretNameNotAllowedError(ValueError):
@@ -64,6 +68,11 @@ async def resolve_workspace_secret(name: str) -> str:
     if response.status_code == 404:
         raise WorkspaceSecretNotFoundError(
             f"Workspace-Secret {key!r} nicht gefunden — in Mistral Studio anlegen (lowercase)."
+        )
+    if response.status_code in (401, 403):
+        # The app's key is invalid or may not read secret values; the secret itself may exist.
+        raise WorkspaceSecretAccessDeniedError(
+            f"Mistral refused reading workspace secrets (HTTP {response.status_code})."
         )
     response.raise_for_status()
     for item in response.json():

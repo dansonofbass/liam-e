@@ -19,9 +19,10 @@ from db.accessors import mail_job as job_access
 from db.accessors import mail_sync_state as sync_state_access
 from db.models.mail_account import MailAccount
 from env.mail import env as mail_env
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, model_validator, field_validator
+from utils.mistral import MistralNotConfiguredError
 
 from api.errors import refuse
 from api.mail import connectors, crypto, providers, secrets, transport
@@ -110,6 +111,14 @@ class OAuthAuthorizeOut(BaseModel):
     state: str
 
 
+def mistral_not_configured() -> HTTPException:
+    """The refusal for a deployment that has no Mistral credential of its own."""
+    return refuse(
+        503, "mistral_not_configured",
+        "liam-e hat keinen Zugang zu Mistral Studio. Hinterleg für die App einen MISTRAL_API_KEY aus diesem Workspace, starte sie neu und versuch es dann noch mal.",
+    )
+
+
 def _redirect_base(request: Request) -> str:
     return (
         mail_env.mail_oauth_redirect_base_url or str(request.base_url).rstrip("/")
@@ -143,6 +152,8 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
     at runtime, so only the reference is stored. Server hosts must be allow-listed and the IMAP
     login is checked before the account is created; answers 201 with the new account.
     An address already using another connection type answers 409 without changing credentials.
+    Answers 503 when the app itself lacks what it needs (a Mistral credential that may read
+    secrets, or the credential encryption key); no account is created then.
     """
     preset = providers.guess_imap_settings(body.email_address)
     imap_host = body.imap_host or (preset[0] if preset else "")
@@ -175,10 +186,22 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
                 422, "secret_not_allowed",
                 "Der Name muss auf „-app-password“ enden, etwa „yahoo-app-password“, und darf nur Kleinbuchstaben, Ziffern und Bindestriche enthalten. Leg das Secret in Mistral Studio unter so einem Namen an.",
             ) from error
-        except (secrets.WorkspaceSecretNotFoundError, httpx.HTTPError) as error:
+        except secrets.WorkspaceSecretNotFoundError as error:
             raise refuse(
                 404, "secret_not_found",
                 "Das Secret wurde nicht gefunden oder ist nicht lesbar. Prüfe den Namen und die Freigabe in Mistral Studio.",
+            ) from error
+        except MistralNotConfiguredError as error:
+            raise mistral_not_configured() from error
+        except secrets.WorkspaceSecretAccessDeniedError as error:
+            raise refuse(
+                503, "secret_access_denied",
+                "Mistral Studio lässt liam-e die Secrets nicht lesen. Prüfe, ob der MISTRAL_API_KEY der App zu diesem Workspace gehört und noch gültig ist.",
+            ) from error
+        except httpx.HTTPError as error:
+            raise refuse(
+                502, "secret_unavailable",
+                "Mistral Studio antwortet gerade nicht, das Secret ließ sich nicht lesen. Versuch es gleich noch mal.",
             ) from error
     try:
         await check_imap_login(
@@ -192,17 +215,6 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
             502, "login_failed",
             "Die Anmeldung beim Mailserver hat nicht geklappt. Prüfe die Serveradresse und das App-Passwort.",
         ) from error
-    try:
-        account = await upsert_account(
-            provider=providers.IMAP,
-            auth_type="imap_password",
-            email_address=body.email_address,
-        )
-    except AccountConflictError as error:
-        raise refuse(
-            409, "account_exists",
-            "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.",
-        ) from error
     payload: dict[str, Any] = {
         "imap_host": imap_host,
         "imap_port": imap_port,
@@ -214,10 +226,29 @@ async def connect_imap(body: ImapConnectRequest) -> AccountOut:
         payload["password_secret"] = secret_name
     else:
         payload["password"] = body.password
+    # Encrypt before creating the account, so a missing key leaves no account without credentials.
+    try:
+        encrypted_payload = crypto.encrypt_payload(payload)
+    except crypto.TokenEncryptionNotConfiguredError as error:
+        raise refuse(
+            503, "encryption_not_configured",
+            "liam-e kann das Konto nicht verschlüsselt speichern, weil der Schlüssel fehlt. Leg in Mistral Studio das Secret „mail_token_encryption_key“ an, falls es fehlt, starte die App neu und verbinde das Konto dann noch einmal.",
+        ) from error
+    try:
+        account = await upsert_account(
+            provider=providers.IMAP,
+            auth_type="imap_password",
+            email_address=body.email_address,
+        )
+    except AccountConflictError as error:
+        raise refuse(
+            409, "account_exists",
+            "Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.",
+        ) from error
     await credential_access.store_credential(
         account_id=account.id,
         kind="imap_password",
-        encrypted_payload=crypto.encrypt_payload(payload),
+        encrypted_payload=encrypted_payload,
     )
     return await current_account_out(account)
 
