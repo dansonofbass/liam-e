@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, exists, func, or_, select, tuple_
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.models.mail_insight import MailInsight
 
@@ -103,7 +104,9 @@ async def search_messages(
         return list(result.scalars().all())
 
 
-async def get_message(message_id: str) -> MailMessage | None:
+async def get_message(message_id: str, session: AsyncSession | None = None) -> MailMessage | None:
+    if session is not None:
+        return await session.get(MailMessage, message_id)
     async with get_session_maker()() as session:
         return await session.get(MailMessage, message_id)
 

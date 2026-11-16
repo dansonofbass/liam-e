@@ -19,7 +19,9 @@ async def list_accounts(session: AsyncSession | None = None) -> list[MailAccount
         return await run(s)
 
 
-async def get_account(account_id: str) -> MailAccount | None:
+async def get_account(account_id: str, session: AsyncSession | None = None) -> MailAccount | None:
+    if session is not None:
+        return await session.get(MailAccount, account_id)
     async with get_session_maker()() as session:
         return await session.get(MailAccount, account_id)
 

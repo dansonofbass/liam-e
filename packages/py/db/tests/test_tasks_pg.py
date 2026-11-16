@@ -55,6 +55,32 @@ def test_creation_payload_conflict(pg_db):
     asyncio.run(run())
 
 
+def test_creation_validates_source_account_and_message(pg_db):
+    async def run():
+        from datetime import date
+        from api.tasks.create import create
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+        from db.models.mail_message import MailMessage
+
+        account = MailAccount(provider='imap', auth_type='imap_password', email_address='person@example.org')
+        message = MailMessage(account_id=account.id, provider_uid='synthetic')
+        async with get_session_maker()() as session:
+            session.add(account)
+            session.add(message)
+            await session.commit()
+        async with get_session_maker()() as session:
+            row, created = await create(session, creation_key='source', title='Example', start=date(2024, 1, 1),
+                                        source_account_id=account.id, source_message_id=message.id)
+            assert created and row.source_message_id == message.id
+            with pytest.raises(ValueError):
+                await create(session, creation_key='invalid', title='Example', start=date(2024, 1, 1),
+                             source_account_id=account.id, source_message_id='missing')
+            await session.commit()
+
+    asyncio.run(run())
+
+
 def test_parallel_reconcile_materializes_each_occurrence_once(pg_db):
     async def run():
         from sqlalchemy import select
@@ -95,6 +121,31 @@ def test_parallel_reconcile_materializes_each_occurrence_once(pg_db):
             assert len({row.occurrence_key for row in rows}) == 71
             assert min(row.occurrence_key for row in rows) == '2024-01-01'
             assert max(row.occurrence_key for row in rows) == '2024-03-11'
+
+    asyncio.run(run())
+
+
+def test_domain_state_transitions_and_conflicts(pg_db):
+    async def run():
+        from api.tasks.state import StateConflict, transition
+        from db.accessors import task_occurrence, task_series
+        from db.engine import get_session_maker
+        from db.models.task_occurrence import TaskOccurrence
+        from db.models.task_series import TaskSeries
+
+        series = TaskSeries(scope='app', creation_key='state', creation_hash='hash', title='Example')
+        row = TaskOccurrence(series_id=series.id, revision_id='revision', occurrence_key='2024-01-01', due_local='2024-01-01')
+        async with get_session_maker()() as session:
+            await task_series.create_once(session, series)
+            await task_occurrence.insert_once(session, row)
+            await session.commit()
+        async with get_session_maker()() as session:
+            assert (await transition(session, row.id, version=1, action='complete')).version == 2
+            assert (await transition(session, row.id, version=1, action='complete')).status == 'completed'
+            with pytest.raises(StateConflict):
+                await transition(session, row.id, version=1, action='reopen')
+            assert (await transition(session, row.id, version=2, action='reopen')).status == 'open'
+            await session.commit()
 
     asyncio.run(run())
 
