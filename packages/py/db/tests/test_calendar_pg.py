@@ -30,6 +30,38 @@ def test_occurrence_identity_and_overlap(pg_db):
     asyncio.run(run())
 
 
+def test_adapter_to_index_end_to_end(pg_db):
+    async def run():
+        from api.calendar import sync
+        from api.calendar.adapters import Event, Occurrence, Snapshot
+        from db.accessors import mail_job
+        from db.accessors.calendar_occurrence import overlapping
+        from db.engine import get_session_maker
+        from db.models.calendar_source import CalendarSource
+
+        class SyntheticAdapter:
+            async def snapshot(self, source_id, start, end):
+                return Snapshot([Event("master", recurrence={"rrule": "FREQ=DAILY"})],
+                                [Occurrence("instance", "master", start_date=date(2026, 1, 1),
+                                            end_date=date(2026, 1, 4))], True)
+
+        source = CalendarSource(provider="synthetic_test", connection_ref="local", external_id="example", name="Example", timezone="UTC")
+        async with get_session_maker()() as session:
+            session.add(source)
+            await session.commit()
+        sync.register_adapter("synthetic_test", SyntheticAdapter())
+        start, end = datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 5, tzinfo=UTC)
+        assert await sync.enqueue(source.id, start, end)
+        claim = await mail_job.claim_next(datetime.now(UTC) + timedelta(seconds=1), stale_after=timedelta(minutes=5))
+        await sync.run_sync({"source_id": source.id, "start": start.isoformat(), "end": end.isoformat()}, claim.id, claim.attempts)
+        rows = await overlapping([source.id], start=datetime(2026, 1, 2, tzinfo=UTC), end=datetime(2026, 1, 3, tzinfo=UTC),
+                                 start_date=date(2026, 1, 2), end_date=date(2026, 1, 3))
+        assert len(rows) == 1 and rows[0].external_id == "instance"
+        assert await mail_job.finish(claim.id, claim.attempts)
+
+    asyncio.run(run())
+
+
 def test_snapshot_rollback_and_parallel_replacement(pg_db):
     async def run():
         from db.accessors import mail_job
