@@ -80,7 +80,7 @@ def test_source_scope_and_delete(pg_db):
         assert (await calendar_occurrence.get_visible(occurrence.id)).id == occurrence.id
         await calendar_source.set_active(source.id, False)
         assert await calendar_occurrence.get_visible(occurrence.id) is None
-        rows = await calendar_occurrence.page_visible(start=datetime(2026, 1, 1, tzinfo=UTC), end=datetime(2026, 1, 2, tzinfo=UTC), start_date=date(2026, 1, 1), end_date=date(2026, 1, 2), source_id=None, after=None, limit=10)
+        rows = await calendar_occurrence.page_visible(start=datetime(2026, 1, 1, tzinfo=UTC), end=datetime(2026, 1, 2, tzinfo=UTC), start_date=date(2026, 1, 1), end_date=date(2026, 1, 2), source_ids=None, after=None, limit=10)
         assert rows == []
         assert await calendar_source.remove(source.id)
         async with get_session_maker()() as session:
@@ -128,5 +128,40 @@ def test_snapshot_rollback_and_parallel_replacement(pg_db):
         assert await get_ids() in ({"one"}, {"two"})
         await replace_window(**common, attempt=second.attempts, occurrences=[])
         assert await get_ids() == set()
+
+    asyncio.run(run())
+
+
+def test_pages_are_chronological_and_filter_several_sources(pg_db):
+    async def run():
+        from db.accessors import calendar_occurrence
+        from db.engine import get_session_maker
+        from db.models.calendar_occurrence import CalendarOccurrence
+        from db.models.calendar_source import CalendarSource
+
+        a, b, c = (CalendarSource(provider="synthetic", connection_ref="local", external_id=name, name=name,
+                                  timezone="UTC") for name in ("a", "b", "c"))
+        def timed(source, uid, hour):
+            return CalendarOccurrence(source_id=source.id, event_id="event", external_id=uid, timezone="UTC",
+                                      start_at=datetime(2026, 1, 2, hour, tzinfo=UTC),
+                                      end_at=datetime(2026, 1, 2, hour + 1, tzinfo=UTC))
+        rows = [timed(a, "late", 15), timed(b, "early", 8), timed(c, "hidden", 9),
+                CalendarOccurrence(source_id=a.id, event_id="event", external_id="all-day",
+                                   start_date=date(2026, 1, 2), end_date=date(2026, 1, 3)),
+                timed(b, "noon", 12)]
+        async with get_session_maker()() as session:
+            session.add_all([a, b, c, *rows])
+            await session.commit()
+        window = dict(start=datetime(2026, 1, 1, tzinfo=UTC), end=datetime(2026, 1, 4, tzinfo=UTC),
+                      start_date=date(2026, 1, 1), end_date=date(2026, 1, 4), source_ids=[a.id, b.id])
+        seen, after = [], None
+        while True:
+            page = await calendar_occurrence.page_visible(**window, after=after, limit=2)
+            seen += [row.external_id for row in page]
+            if len(page) < 2:
+                break
+            after = (calendar_occurrence.sort_key(page[-1]), page[-1].id)
+        # The all-day instance sorts at midnight UTC of its first day; source c is filtered out.
+        assert seen == ["all-day", "early", "noon", "late"]
 
     asyncio.run(run())

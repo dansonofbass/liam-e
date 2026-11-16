@@ -131,9 +131,13 @@ Archivieren und Löschen sind noch offen.
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
 Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen
 vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich auf den Index zu.
+`GET /api/v1/calendar/occurrences` nimmt ein Fenster von höchstens 90 Tagen und beliebig viele
+`source_ids` (höchstens 50) und liefert die Instanzen zeitlich geordnet; Ganztägiges zählt ab
+Mitternacht UTC seines ersten Tages. Der Cursor trägt Startzeit und ID der letzten Instanz.
 
 ## Domänenmodell (Tabellen in Postgres)
 
+- `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — Kalenderquelle mit Verbindungsreferenz und Freigabe (`is_active`), Serienstamm je Quelle, Instanz als halboffenes Intervall (ganztägig als Datum, sonst UTC mit Zeitzone; eindeutig je Quelle und `external_id`) sowie Abdeckung, letzter Erfolg und Unvollständigkeit je Quelle.
 - `task_series`, `task_schedule_revision`, `task_occurrence` — Aufgabenserie, Zeitplanrevision und materialisierte Fälligkeit; Erstellungskennung und Instanzschlüssel sind eindeutig.
 - `mail_account` — verbundenes Konto: `provider` z.B. `google`, `microsoft`, `imap` oder Connector-Name wie `gmail`; `auth_type` ist `oauth2`, `imap_password` oder `mistral_connector`.
 - `mail_credential` — verschlüsseltes Payload pro Konto+Art (`oauth2_tokens` | `imap_password`), unique (`account_id`, `kind`).

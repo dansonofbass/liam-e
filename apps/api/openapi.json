@@ -2443,18 +2443,22 @@
           },
           {
             "in": "query",
-            "name": "source_id",
+            "name": "source_ids",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Source Id"
+              "title": "Source Ids"
             }
           },
           {

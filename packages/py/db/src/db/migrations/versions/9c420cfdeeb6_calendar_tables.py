@@ -1,8 +1,8 @@
 """calendar tables
 
-Revision ID: 76f832d6f1f2
+Revision ID: 9c420cfdeeb6
 Revises: 
-Create Date: 2026-11-16 23:25:34.661446
+Create Date: 2026-11-17 00:46:35.277191
 
 """
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 from alembic import op
 
 
-revision: str = '76f832d6f1f2'
+revision: str = '9c420cfdeeb6'
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = ('calendar',)
 depends_on: str | Sequence[str] | None = None
@@ -46,6 +46,8 @@ def upgrade() -> None:
     sa.UniqueConstraint('source_id', 'external_id', name='uq_calendar_occurrence_external')
     )
     op.create_index('ix_calendar_occurrence_dates', 'calendar_occurrence', ['source_id', 'start_date', 'end_date'], unique=False)
+    op.create_index('ix_calendar_occurrence_end_at', 'calendar_occurrence', ['end_at'], unique=False)
+    op.create_index('ix_calendar_occurrence_end_date', 'calendar_occurrence', ['end_date'], unique=False)
     op.create_index('ix_calendar_occurrence_times', 'calendar_occurrence', ['source_id', 'start_at', 'end_at'], unique=False)
     op.create_table('calendar_source',
     sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -77,6 +79,8 @@ def downgrade() -> None:
     op.drop_index('ix_calendar_source_active', table_name='calendar_source')
     op.drop_table('calendar_source')
     op.drop_index('ix_calendar_occurrence_times', table_name='calendar_occurrence')
+    op.drop_index('ix_calendar_occurrence_end_date', table_name='calendar_occurrence')
+    op.drop_index('ix_calendar_occurrence_end_at', table_name='calendar_occurrence')
     op.drop_index('ix_calendar_occurrence_dates', table_name='calendar_occurrence')
     op.drop_table('calendar_occurrence')
     op.drop_index('ix_calendar_event_source', table_name='calendar_event')

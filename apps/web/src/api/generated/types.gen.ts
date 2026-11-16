@@ -1478,9 +1478,9 @@ export type CalendarOccurrencesListData = {
          */
         to: string;
         /**
-         * Source Id
+         * Source Ids
          */
-        source_id?: string | null;
+        source_ids?: Array<string> | null;
         /**
          * Cursor
          */
