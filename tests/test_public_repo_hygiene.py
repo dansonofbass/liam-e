@@ -1,0 +1,133 @@
+"""Tracked files stay publishable: no private identifiers of the owner or of the environment.
+
+liam-e is meant to become public (AGENTS.md, section "Veröffentlichung und private Daten"). These
+checks cover what a secret scanner does not look for: the Mistral tenant IDs outside the
+`mistral.json` that deploys need, links to private claude.ai resources, absolute home paths, and
+mail addresses that could belong to a real person. Credentials are the job of gitleaks
+(`.gitleaks.toml`, CI job `secrets`).
+
+The checks read `git ls-files`, so they see exactly what a clone would publish. Lock files,
+the generated API client and vendored agent skills are skipped: nobody writes them by hand.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+from functools import cache
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+SKIPPED_PREFIXES = (".agents/", ".mistral/", "apps/web/src/api/generated/")
+SKIPPED_NAMES = {"bun.lock", "uv.lock", "package-lock.json"}
+
+# Domains that can never reach a real mailbox (RFC 2606, RFC 6761), plus the pseudo-domain that
+# api/mail connector accounts get when the connector names no sender address.
+RESERVED_DOMAINS = ("example.com", "example.net", "example.org", "connector.mistral")
+RESERVED_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
+# Local parts that name nobody. Provider presets (gmail.com, icloud.com, ...) are configuration,
+# and tests that exercise them use one of these.
+SYNTHETIC_LOCAL_PART = re.compile(r"^(?:[a-z]|me|test|user|noreply|no-reply)$")
+
+ADDRESS = re.compile(r"(?<![\w.%+-])([A-Za-z0-9._%+-]+)@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?![\w.-]*\w)")
+HOME_PATH = re.compile(r"(?<![\w.~-])/(?:home|Users)/[A-Za-z][\w.-]*/")
+PRIVATE_LINK = re.compile(r"claude\.ai/(?:artifact|code)/[A-Za-z0-9_-]+")
+
+
+@cache
+def tracked_texts() -> dict[str, str]:
+    try:
+        listing = subprocess.run(
+            ["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        listing = b""
+    if not listing:
+        pytest.skip("not a git checkout")
+    texts: dict[str, str] = {}
+    for raw in listing.split(b"\0"):
+        path = raw.decode()
+        if not path or path.startswith(SKIPPED_PREFIXES) or Path(path).name in SKIPPED_NAMES:
+            continue
+        file = ROOT / path
+        if not file.is_file():
+            continue
+        try:
+            texts[path] = file.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+    return texts
+
+
+def hits(pattern: re.Pattern[str], *, keep=lambda _match: True) -> list[str]:
+    found = []
+    for path, text in tracked_texts().items():
+        for number, line in enumerate(text.splitlines(), start=1):
+            for match in pattern.finditer(line):
+                if keep(match):
+                    found.append(f"{path}:{number}: {match.group(0)}")
+    return found
+
+
+def test_tenant_ids_appear_only_in_mistral_json() -> None:
+    deployment = json.loads((ROOT / "mistral.json").read_text(encoding="utf-8")).get("deployment", {})
+    leaks = [
+        f"{path}: {key}"
+        for path, text in tracked_texts().items()
+        if path != "mistral.json"
+        for key, value in deployment.items()
+        if isinstance(value, str) and value and value in text
+    ]
+    assert leaks == [], "Mistral tenant IDs belong in mistral.json only; write <organization-id> etc."
+
+
+def test_no_links_to_private_claude_resources() -> None:
+    assert hits(PRIVATE_LINK) == [], "name the artifact or session instead of linking it"
+
+
+def test_no_absolute_home_paths() -> None:
+    assert hits(HOME_PATH) == [], "use repository-relative paths or a placeholder"
+
+
+def is_personal_address(match: re.Match[str]) -> bool:
+    local, domain = match.group(1).lower(), match.group(2).lower()
+    if domain in RESERVED_DOMAINS or domain.endswith(RESERVED_SUFFIXES):
+        return False
+    if any(domain.endswith("." + reserved) for reserved in RESERVED_DOMAINS):
+        return False
+    return not SYNTHETIC_LOCAL_PART.match(local)
+
+
+def test_mail_addresses_are_synthetic() -> None:
+    assert hits(ADDRESS, keep=is_personal_address) == [], (
+        "use an address under example.org/.com/.net or *.test, or a local part like me@ or x@"
+    )
+
+
+@pytest.mark.parametrize(
+    ("address", "personal"),
+    [
+        ("mira.beispiel@example.org", False),
+        ("news@shop.example", False),
+        ("x@yahoo.com", False),
+        ("gmail@connector.mistral", False),
+        ("anna.schmidt@gmail.com", True),
+        ("info@some-company.de", True),
+    ],
+)
+def test_address_rule(address: str, personal: bool) -> None:
+    match = ADDRESS.search(address)
+    assert match is not None
+    assert is_personal_address(match) is personal
+
+
+@pytest.mark.parametrize(
+    ("text", "flagged"),
+    [("/home/someone/project", True), ("/Users/someone/x", True), ("~/project", False), ("/home/", False)],
+)
+def test_home_path_rule(text: str, flagged: bool) -> None:
+    assert bool(HOME_PATH.search(text)) is flagged
