@@ -11,6 +11,12 @@ from support.fake_mistral import FakeMistral
 from api.mail import agent
 
 
+@pytest.fixture(autouse=True)
+def mock_context_resolution(monkeypatch):
+    from api.routers.api.v1.chat import stream
+    monkeypatch.setattr(stream, 'resolve_context', AsyncMock(return_value=None))
+
+
 def test_stream_emits_sse_frames(monkeypatch):
     from api.routers.api.v1.chat import stream
     from api.mail.chat_events import StartEvent, DeltaEvent, DoneEvent

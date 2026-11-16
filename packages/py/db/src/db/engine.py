@@ -26,6 +26,8 @@ def get_engine() -> AsyncEngine:
         _engine = create_async_engine(
             env.async_database_url,
             echo=env.db_echo,
+            # User-authored prompts and mail content must not enter SQL logs/errors.
+            hide_parameters=True,
             pool_size=env.db_pool_size,
             max_overflow=env.db_max_overflow,
             pool_pre_ping=env.db_pool_pre_ping,

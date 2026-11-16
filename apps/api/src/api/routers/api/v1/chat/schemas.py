@@ -11,6 +11,9 @@ class ConversationOut(BaseModel):
     id: str
     title: str
     model: str
+    prompt_revision_id: str | None
+    version: int
+    account_scope_json: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -20,6 +23,9 @@ class ConversationOut(BaseModel):
             id=conversation.id,
             title=conversation.title,
             model=conversation.model,
+            prompt_revision_id=conversation.prompt_revision_id,
+            version=conversation.version,
+            account_scope_json=conversation.account_scope_json,
             created_at=conversation.created_at,
             updated_at=conversation.updated_at,
         )

@@ -1,6 +1,6 @@
 """Accessor for ``chat_conversation`` rows."""
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from db.engine import get_session_maker
 from db.models._common import utcnow
@@ -47,10 +47,11 @@ async def list_conversations() -> list[ChatConversation]:
 async def touch_conversation(
     conversation: ChatConversation, *, title: str | None = None
 ) -> ChatConversation:
-    if title is not None and title:
-        conversation.title = title
-    conversation.updated_at = utcnow()
+    values = {"updated_at": utcnow()}
+    if title:
+        values["title"] = title
     async with get_session_maker()() as session:
-        session.add(conversation)
+        row = (await session.execute(update(ChatConversation).where(
+            ChatConversation.id == conversation.id).values(**values).returning(ChatConversation))).scalar_one()
         await session.commit()
-        return conversation
+        return row

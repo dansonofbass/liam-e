@@ -260,6 +260,11 @@
       },
       "ChatConversationUpdateIn": {
         "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
           "model": {
             "anyOf": [
               {
@@ -270,6 +275,17 @@
               }
             ],
             "title": "Model"
+          },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
           },
           "title": {
             "anyOf": [
@@ -283,6 +299,9 @@
             "title": "Title"
           }
         },
+        "required": [
+          "expected_version"
+        ],
         "title": "ChatConversationUpdateIn",
         "type": "object"
       },
@@ -359,6 +378,16 @@
           "content": {
             "title": "Content",
             "type": "string"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContextOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "conversation_id": {
             "title": "Conversation Id",
@@ -493,6 +522,17 @@
             "description": "Model for a new conversation; ignored when conversation_id is set (use PATCH on the conversation).",
             "title": "Model"
           },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
+          },
           "text": {
             "maxLength": 8000,
             "minLength": 1,
@@ -508,6 +548,28 @@
       },
       "ChatTurnRequest": {
         "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "context_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Message Id"
+          },
           "conversation_id": {
             "default": "",
             "description": "Leer lassen f\u00fcr eine neue Unterhaltung",
@@ -519,6 +581,28 @@
             "minLength": 1,
             "title": "Message",
             "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
           }
         },
         "required": [
@@ -590,8 +674,83 @@
         "title": "ConnectorToolOut",
         "type": "object"
       },
+      "ContextOut": {
+        "properties": {
+          "account_scope_json": {
+            "title": "Account Scope Json",
+            "type": "string"
+          },
+          "app_prompt_version": {
+            "title": "App Prompt Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "preference_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preference Revision Id"
+          },
+          "prompt_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Hash"
+          },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
+          },
+          "revoked": {
+            "title": "Revoked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "prompt_revision_id",
+          "prompt_hash",
+          "app_prompt_version",
+          "account_scope_json",
+          "preference_revision_id",
+          "revoked"
+        ],
+        "title": "ContextOut",
+        "type": "object"
+      },
       "ConversationOut": {
         "properties": {
+          "account_scope_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Scope Json"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -605,6 +764,17 @@
             "title": "Model",
             "type": "string"
           },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -613,12 +783,19 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
           "id",
           "title",
           "model",
+          "prompt_revision_id",
+          "version",
+          "account_scope_json",
           "created_at",
           "updated_at"
         ],
@@ -709,7 +886,8 @@
             "enum": [
               "model_unavailable",
               "aborted",
-              "internal"
+              "internal",
+              "context_revoked"
             ],
             "title": "Code",
             "type": "string"
@@ -1425,6 +1603,106 @@
           "state"
         ],
         "title": "OAuthAuthorizeOut",
+        "type": "object"
+      },
+      "PromptCreate": {
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "text"
+        ],
+        "title": "PromptCreate",
+        "type": "object"
+      },
+      "PromptOut": {
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "revision_id",
+          "text",
+          "content_hash"
+        ],
+        "title": "PromptOut",
+        "type": "object"
+      },
+      "PromptUpdate": {
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "PromptUpdate",
         "type": "object"
       },
       "Proposal": {
@@ -3836,6 +4114,195 @@
           }
         },
         "summary": "Mail Sync All"
+      }
+    },
+    "/api/v1/prompts": {
+      "get": {
+        "operationId": "prompts_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PromptOut"
+                  },
+                  "title": "Response Prompts List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "List Prompts"
+      },
+      "post": {
+        "operationId": "prompt_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Create Prompt"
+      }
+    },
+    "/api/v1/prompts/{id}": {
+      "delete": {
+        "operationId": "prompt_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Delete Prompt"
+      },
+      "get": {
+        "operationId": "prompt_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Get Prompt"
+      },
+      "patch": {
+        "operationId": "prompt_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Update Prompt"
       }
     },
     "/api/v1/tasks": {

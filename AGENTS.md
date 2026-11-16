@@ -86,6 +86,11 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Kalender | POST | `/api/v1/calendar/sources/{source_id}/sync` | `calendar_source_sync` |
 | Kalender | GET | `/api/v1/calendar/occurrences` | `calendar_occurrences_list` |
 | Kalender | GET | `/api/v1/calendar/occurrences/{occurrence_id}` | `calendar_occurrence_get` |
+| Vorlagen | GET | `/api/v1/prompts` | `prompts_list` |
+| Vorlagen | POST | `/api/v1/prompts` | `prompt_create` |
+| Vorlagen | GET | `/api/v1/prompts/{id}` | `prompt_get` |
+| Vorlagen | PATCH | `/api/v1/prompts/{id}` | `prompt_update` |
+| Vorlagen | DELETE | `/api/v1/prompts/{id}` | `prompt_delete` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
 | Chat | POST | `/api/v1/chat/stream` | `chat_stream` |
 | Chat | GET | `/api/v1/chat/conversations` | `chat_conversations_list` |
@@ -147,6 +152,21 @@ Mitternacht UTC seines ersten Tages. Der Cursor trägt Startzeit und ID der letz
 - `mail_insight` — Kurzfassung (`points_json`), Frist, Antwortbedarf, Folgevorschläge und Modell je Mail.
 - `mail_job` — dauerhafte Sync-/Insight-Warteschlange mit Status, Deduplizierung, Versuchen und Sperrzeit.
 - `chat_conversation`, `chat_message` — Verlauf; Vorschläge in `proposal_json` mit `proposal_status`, Mailreferenzen/Vorschläge/Modell in `extras_json`; ältere Entwürfe tragen `draft_json`.
+
+## Vorlagen und Turn-Kontext
+
+Vorlagen gehören dem festen serverseitigen Scope `installation`; der Zugriff auf die
+Single-Owner-App wird vom Deployment beschränkt, nicht durch eine neue App-Identität.
+`prompt_template` hält Name, Version und aktuelle Revision; Bearbeiten erzeugt eine neue
+`prompt_revision`. Auswahlen in `chat_conversation.prompt_revision_id` bleiben angeheftet.
+Conversation-PATCH benötigt `expected_version`; `null` als Revision wählt den Standard.
+Neue Turns speichern Revisionsreferenz/Hash, App-Prompt-Version und den aufgelösten
+Kontoumfang in `chat_context`; `chat_message.context_id` verbindet den Verlauf damit.
+`preference_revision_id` bleibt als Erweiterungspunkt leer. Text wird nur als
+Nutzerinhalt an das Modell gegeben, nie als App-Regel oder Chat-Extra gespeichert.
+Löschen entfernt Vorlageninhalt und Revisionsinhalt, hinterlässt `removed`-Markierungen,
+widerruft Kontexte und setzt aktive Auswahlen zurück. Bereits gesendete Modellanfragen
+lassen sich nicht zurückholen. Kontowechsel mit Verlauf benötigen eine neue Unterhaltung.
 
 ## Worker und periodischer Abruf
 
@@ -221,7 +241,7 @@ in der Probe HTTP 401.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
 - Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus. `.../cancel` verwirft sie.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
-- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `tasks_occurrences_list`
+- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `tasks_occurrences_list`
   `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
   `mail_message_original` ruft die Mail beim Anbieter ab (lesend, ohne sie als gelesen zu markieren) und speichert nichts.
   Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.

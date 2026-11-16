@@ -12,6 +12,10 @@ router = APIRouter()
 class ChatTurnRequest(BaseModel):
     conversation_id: str = Field(default='', description='Leer lassen für eine neue Unterhaltung')
     message: str = Field(min_length=1, max_length=8000)
+    account_id: str | None = None
+    prompt_revision_id: str | None = None
+    model: str | None = None
+    context_message_id: str | None = None
 
 
 @router.post('', operation_id='chat_turn', summary='Send a message to the mail agent')
@@ -20,10 +24,12 @@ async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
     conversation_id = ''
     user_id = ''
     try:
-        async for event in agent.run_turn_events(conversation_id=body.conversation_id or None, text=body.message):
+        async for event in agent.run_turn_events(conversation_id=body.conversation_id or None, text=body.message, account_id=body.account_id, prompt_revision_id=body.prompt_revision_id, model=body.model, context_message_id=body.context_message_id):
             if event.event == 'start':
                 conversation_id, user_id = event.conversation_id, event.user_message_id
             elif event.event == 'error':
+                if event.code == 'context_revoked':
+                    raise refuse(409, 'context_revoked', 'Die Vorlage wurde gelöscht. Starte die Antwort erneut.')
                 if event.code == 'model_unavailable':
                     raise refuse(503, 'model_unavailable', 'Das Modell antwortet gerade nicht. Versuch es gleich noch mal.')
                 raise refuse(500, 'internal', 'Die Antwort konnte nicht erstellt werden. Versuch es gleich noch mal.')

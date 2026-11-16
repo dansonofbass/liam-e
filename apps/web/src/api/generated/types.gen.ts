@@ -175,9 +175,17 @@ export type AttachmentOut = {
  */
 export type ChatConversationUpdateIn = {
     /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
      * Model
      */
     model?: string | null;
+    /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id?: string | null;
     /**
      * Title
      */
@@ -233,6 +241,7 @@ export type ChatMessageOut = {
      * Content
      */
     content: string;
+    context?: ContextOut | null;
     /**
      * Conversation Id
      */
@@ -310,6 +319,10 @@ export type ChatStreamRequest = {
      */
     model?: string | null;
     /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id?: string | null;
+    /**
      * Text
      */
     text: string;
@@ -320,6 +333,14 @@ export type ChatStreamRequest = {
  */
 export type ChatTurnRequest = {
     /**
+     * Account Id
+     */
+    account_id?: string | null;
+    /**
+     * Context Message Id
+     */
+    context_message_id?: string | null;
+    /**
      * Conversation Id
      *
      * Leer lassen für eine neue Unterhaltung
@@ -329,6 +350,14 @@ export type ChatTurnRequest = {
      * Message
      */
     message: string;
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id?: string | null;
 };
 
 /**
@@ -380,9 +409,47 @@ export type ConnectorToolOut = {
 };
 
 /**
+ * ContextOut
+ */
+export type ContextOut = {
+    /**
+     * Account Scope Json
+     */
+    account_scope_json: string;
+    /**
+     * App Prompt Version
+     */
+    app_prompt_version: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Preference Revision Id
+     */
+    preference_revision_id: string | null;
+    /**
+     * Prompt Hash
+     */
+    prompt_hash: string | null;
+    /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id: string | null;
+    /**
+     * Revoked
+     */
+    revoked: boolean;
+};
+
+/**
  * ConversationOut
  */
 export type ConversationOut = {
+    /**
+     * Account Scope Json
+     */
+    account_scope_json: string | null;
     /**
      * Created At
      */
@@ -396,6 +463,10 @@ export type ConversationOut = {
      */
     model: string;
     /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id: string | null;
+    /**
      * Title
      */
     title: string;
@@ -403,6 +474,10 @@ export type ConversationOut = {
      * Updated At
      */
     updated_at: string;
+    /**
+     * Version
+     */
+    version: number;
 };
 
 /**
@@ -462,7 +537,7 @@ export type ErrorEvent = {
     /**
      * Code
      */
-    code: 'model_unavailable' | 'aborted' | 'internal';
+    code: 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked';
     /**
      * Event
      */
@@ -918,6 +993,68 @@ export type OAuthAuthorizeOut = {
      * State
      */
     state: string;
+};
+
+/**
+ * PromptCreate
+ */
+export type PromptCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * PromptOut
+ */
+export type PromptOut = {
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * PromptUpdate
+ */
+export type PromptUpdate = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Text
+     */
+    text?: string | null;
 };
 
 /**
@@ -2398,6 +2535,183 @@ export type MailSyncAllResponses = {
 };
 
 export type MailSyncAllResponse = MailSyncAllResponses[keyof MailSyncAllResponses];
+
+export type PromptsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/prompts';
+};
+
+export type PromptsListErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptsListResponses = {
+    /**
+     * Response Prompts List
+     *
+     * Successful Response
+     */
+    200: Array<PromptOut>;
+};
+
+export type PromptsListResponse = PromptsListResponses[keyof PromptsListResponses];
+
+export type PromptCreateData = {
+    body: PromptCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/prompts';
+};
+
+export type PromptCreateErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: PromptOut;
+};
+
+export type PromptCreateResponse = PromptCreateResponses[keyof PromptCreateResponses];
+
+export type PromptDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query: {
+        /**
+         * Expected Version
+         */
+        expected_version: number;
+    };
+    url: '/api/v1/prompts/{id}';
+};
+
+export type PromptDeleteErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type PromptDeleteResponse = PromptDeleteResponses[keyof PromptDeleteResponses];
+
+export type PromptGetData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/prompts/{id}';
+};
+
+export type PromptGetErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PromptOut;
+};
+
+export type PromptGetResponse = PromptGetResponses[keyof PromptGetResponses];
+
+export type PromptUpdateData = {
+    body: PromptUpdate;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/prompts/{id}';
+};
+
+export type PromptUpdateErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: PromptOut;
+};
+
+export type PromptUpdateResponse = PromptUpdateResponses[keyof PromptUpdateResponses];
 
 export type TasksCreateData = {
     body: TaskCreate;

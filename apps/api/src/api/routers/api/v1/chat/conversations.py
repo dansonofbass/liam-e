@@ -2,7 +2,9 @@
 
 from db.accessors import chat_conversation as conversation_access
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from db.accessors import chat_context
+from db.accessors.prompt_template import StaleVersion
 from api.errors import refuse
 from api.mail.models_catalog import list_chat_models
 
@@ -23,6 +25,8 @@ async def list_conversations() -> list[schemas.ConversationOut]:
 
 
 class ChatConversationUpdateIn(BaseModel):
+    expected_version: int = Field(ge=1)
+    prompt_revision_id: str | None = None
     model: str | None = None
     title: str | None = None
 
@@ -42,7 +46,14 @@ async def update_conversation(conversation_id: str, body: ChatConversationUpdate
         title = body.title.strip()[:120]
         if not title:
             raise refuse(422, 'title_empty', 'Gib einen Titel für die Unterhaltung ein.')
-    conversation = await conversation_access.update_conversation(conversation_id, model=model, title=title)
+    try:
+        conversation = await chat_context.configure(conversation_id, body.expected_version,
+            model=model, title=title, revision_id=body.prompt_revision_id,
+            change_revision='prompt_revision_id' in body.model_fields_set)
+    except StaleVersion:
+        raise refuse(409, 'version_conflict', 'Die Unterhaltung wurde inzwischen geändert. Lade sie neu.') from None
+    except chat_context.ContextUnavailable:
+        raise refuse(404, 'context_unavailable', 'Die Unterhaltung oder Vorlage ist nicht verfügbar. Lade die Übersicht neu.') from None
     if conversation is None:
         raise refuse(404, 'conversation_not_found', 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.')
     return schemas.ConversationOut.from_model(conversation)
