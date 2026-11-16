@@ -115,8 +115,9 @@ def test_mail_addresses_are_synthetic() -> None:
         ("news@shop.example", False),
         ("x@yahoo.com", False),
         ("gmail@connector.mistral", False),
-        ("anna.schmidt@gmail.com", True),
-        ("info@some-company.de", True),
+        # Split so that this file, which the scan reads too, holds no personal-looking address.
+        ("anna.schmidt" + "@gmail.com", True),
+        ("info" + "@some-company.de", True),
     ],
 )
 def test_address_rule(address: str, personal: bool) -> None:
@@ -127,7 +128,8 @@ def test_address_rule(address: str, personal: bool) -> None:
 
 @pytest.mark.parametrize(
     ("text", "flagged"),
-    [("/home/someone/project", True), ("/Users/someone/x", True), ("~/project", False), ("/home/", False)],
+    # Split like the addresses above.
+    [("/home" + "/someone/project", True), ("/Users" + "/someone/x", True), ("~/project", False), ("/home/", False)],
 )
 def test_home_path_rule(text: str, flagged: bool) -> None:
     assert bool(HOME_PATH.search(text)) is flagged
