@@ -143,17 +143,24 @@ class FakeStore:
         job.status, job.locked_at, job.attempts = "running", now, job.attempts + 1
         return job
 
-    async def job_finish(self, job_id):
-        self.jobs[job_id].status = "done"
-        self.jobs[job_id].locked_at = None
-
-    async def job_fail(self, job_id, error_code, *, retry_at):
+    async def job_finish(self, job_id, attempt):
         job = self.jobs[job_id]
+        if job.status != "running" or job.attempts != attempt:
+            return False
+        job.status = "done"
+        job.locked_at = None
+        return True
+
+    async def job_fail(self, job_id, attempt, error_code, *, retry_at):
+        job = self.jobs[job_id]
+        if job.status != "running" or job.attempts != attempt:
+            return False
         job.status = "queued" if retry_at else "failed"
         job.last_error = error_code
         job.locked_at = None
         if retry_at:
             job.run_after = retry_at
+        return True
 
     async def job_latest_for_account(self, account_id, *, kind=None, open_only=False):
         rows = [j for j in self.jobs.values() if json.loads(j.payload_json).get("account_id") == account_id and (kind is None or j.kind == kind) and (not open_only or j.status in ("queued", "running"))]

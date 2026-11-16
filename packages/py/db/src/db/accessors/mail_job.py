@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, cast, delete, or_, select
+from sqlalchemy import and_, cast, delete, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB, insert
 
 from db.engine import get_session_maker
@@ -33,27 +33,26 @@ async def claim_next(now: datetime, *, stale_after: timedelta) -> MailJob | None
         return row
 
 
-async def finish(job_id: str) -> None:
+async def finish(job_id: str, attempt: int) -> bool:
+    stmt = (update(MailJob).where(MailJob.id == job_id, MailJob.status == "running", MailJob.attempts == attempt)
+            .values(status="done", locked_at=None, updated_at=utcnow()).returning(MailJob.id))
     async with get_session_maker()() as session:
-        row = await session.get(MailJob, job_id)
-        if row is not None:
-            row.status = "done"
-            row.locked_at = None
-            row.updated_at = utcnow()
-            await session.commit()
+        applied = (await session.execute(stmt)).scalar_one_or_none() is not None
+        await session.commit()
+        return applied
 
 
-async def fail(job_id: str, error_code: str, *, retry_at: datetime | None) -> None:
+async def fail(job_id: str, attempt: int, error_code: str, *, retry_at: datetime | None) -> bool:
+    values = dict(status="queued" if retry_at is not None else "failed", locked_at=None,
+                  last_error=error_code, updated_at=utcnow())
+    if retry_at is not None:
+        values["run_after"] = retry_at
+    stmt = (update(MailJob).where(MailJob.id == job_id, MailJob.status == "running", MailJob.attempts == attempt)
+            .values(**values).returning(MailJob.id))
     async with get_session_maker()() as session:
-        row = await session.get(MailJob, job_id)
-        if row is not None:
-            row.status = "queued" if retry_at is not None else "failed"
-            if retry_at is not None:
-                row.run_after = retry_at
-            row.locked_at = None
-            row.last_error = error_code
-            row.updated_at = utcnow()
-            await session.commit()
+        applied = (await session.execute(stmt)).scalar_one_or_none() is not None
+        await session.commit()
+        return applied
 
 
 def _account(account_id: str):
