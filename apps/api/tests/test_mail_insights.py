@@ -13,6 +13,7 @@ from api.mail.seed_ids import SEED_ACCOUNT_IDS, seed_id
 
 
 def message(**kwargs):
+    kwargs.setdefault("body_text", "Bitte bis Dienstag antworten.")
     return MailMessage(id="m1", account_id="a1", provider_uid="1", **kwargs)
 
 
@@ -37,6 +38,15 @@ async def test_compute_insight_parses_model_json(setup):
     assert json.loads(row.points_json) == ["Wichtig"]
     assert row.deadline == date(2026, 2, 3) and row.needs_reply
     assert row.model == "mistral-small-latest"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("body", ["", " \n\t "])
+async def test_compute_insight_without_text_makes_no_model_call(setup, body):
+    row = await insights.compute_insight(message(subject="PayPal-Überweisung", body_text=body), today=date(2026, 2, 1))
+    assert setup.requests == []
+    assert json.loads(row.points_json) == [] and json.loads(row.followups_json) == []
+    assert row.deadline is None and not row.needs_reply
 
 
 @pytest.mark.anyio

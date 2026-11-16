@@ -62,6 +62,10 @@ async def compute_insight(message: MailMessage, *, today: date) -> MailInsight:
     if is_seed_account(message.account_id):
         # Sample mail never costs model calls; only insights seeded up front are served.
         raise InsightError("Sample accounts have no generated insights")
+    if not message.body_text.strip():
+        # Without text the model could only guess from the subject (and did invent amounts and dates);
+        # an empty insight keeps the box hidden. A later re-read of the body drops it again.
+        return await mail_insight.upsert(message.id, points=[], deadline=None, needs_reply=False, followups=[], model="")
     system = (
         "Du fasst Mails für den Empfänger kurz zusammen. Antworte ausschließlich als JSON mit "
         'den Feldern points (Liste von bis zu drei kurzen Sätzen), deadline (Datum YYYY-MM-DD oder null), '
