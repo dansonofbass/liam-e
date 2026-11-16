@@ -7,7 +7,7 @@
 
 **Status:** gültig, Stand 2026-11-14. Quelle der Werte sind `apps/web/src/styles/tokens.css`
 (Tokens) und `apps/web/src/ds/` (Bausteine). Das Design-System „liam-e“ in Claude Design
-(https://claude.ai/artifact/MJRNJYUPnK6ciYFc2U2KAz, Stilrichtung C „Weich“), aus dem sie
+(Artefakt des Owners, nicht öffentlich, Stilrichtung C „Weich“), aus dem sie
 entstanden sind, wird ihnen nachgeführt (§10).
 
 ## Konflikt-Hierarchie
@@ -606,7 +606,7 @@ DESIGN.md folgt dem Aufbau und den Regeln von smartpaper-ng. Bewusst anders:
 8. **Schrift selbst gehostet** über Fontsource, keine Übertragung an Google (§4).
 9. **Textkatalog** `apps/web/src/i18n/de.ts` für alle Texte der Oberfläche (§2.8).
 10. **Screens abgenommen** auf dem Design-Canvas „liam-e Oberfläche“, Seite „Screens“
-    (https://claude.ai/artifact/PdW36jpJZ5beBAgTh27yDC): Chat-Start, Antwort mit
+    (Artefakt des Owners, nicht öffentlich): Chat-Start, Antwort mit
     Streaming, Vorschlag bestätigen, Posteingang, Konten, dazu Handy mit Chat, Schublade,
     Posteingang und Mail. Darin entschieden: „Kurz gefasst“ über jeder Mail, kein direktes
     Antworten (§9.4), Einzelaktionen sofort mit „Rückgängig“ (§9.2), Aktionsleisten am
