@@ -245,6 +245,25 @@ test('missing conversation in a stream offers a new conversation', async () => {
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
 })
 
+test('account change in a conversation offers a new conversation instead of a retry', async () => {
+  const { router } = setup('/chat/c')
+  globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'conversation_scope_change_requires_new' } }), { status: 409 }))) as unknown as typeof fetch
+  await send()
+  const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten/)).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
+  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+})
+
+test('a template deleted during the answer says so and offers a retry', async () => {
+  setup('/chat/c')
+  const frames = ['event: start\ndata: {"event":"start","conversation_id":"c","user_message_id":"u"}\n\n', 'event: error\ndata: {"event":"error","code":"context_revoked"}\n\n']
+  globalThis.fetch = (() => Promise.resolve(new Response(frames.join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))) as unknown as typeof fetch
+  await send()
+  const notice = (await screen.findByText(/Die Vorlage wurde gelöscht/)).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
+})
+
 test('unknown model refusal renders its explanation', async () => {
   spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'model_unknown' } } }) as never)
   const { client } = setup('/chat/c')

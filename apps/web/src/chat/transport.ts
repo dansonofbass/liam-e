@@ -2,8 +2,13 @@ import { apiBaseUrl } from '../api/client-config'
 import type { ChatEvent, ChatStreamRequest } from '../api/generated/types.gen'
 import { parseSse } from './sse'
 
+// Refusals before the stream starts that the conversation view explains on their own.
+const KNOWN_REFUSALS = ['conversation_not_found', 'model_unknown', 'conversation_scope_change_requires_new', 'context_unavailable', 'context_invalid', 'version_conflict'] as const
+export type ChatRefusal = typeof KNOWN_REFUSALS[number]
+const isKnownRefusal = (code: string | undefined): code is ChatRefusal => (KNOWN_REFUSALS as readonly (string | undefined)[]).includes(code)
+
 export class ChatStreamError extends Error {
-  constructor(public code: 'internal' | 'aborted' | 'conversation_not_found' | 'model_unknown', public detailCode?: string) {
+  constructor(public code: 'internal' | 'aborted' | ChatRefusal, public detailCode?: string) {
     super('Chat stream failed')
     this.name = 'ChatStreamError'
   }
@@ -26,7 +31,7 @@ export async function* streamChatTurn(body: ChatStreamRequest, signal: AbortSign
         if (isAbort(error)) throw error
         /* No JSON detail. */
       }
-      throw new ChatStreamError(detailCode === 'conversation_not_found' || detailCode === 'model_unknown' ? detailCode : 'internal', detailCode)
+      throw new ChatStreamError(isKnownRefusal(detailCode) ? detailCode : 'internal', detailCode)
     }
     if (!response.body) throw new ChatStreamError('aborted')
     for await (const frame of parseSse(response.body)) {
