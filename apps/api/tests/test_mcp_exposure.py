@@ -36,6 +36,10 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "mail_actions_undo",
         "mail_message_action",
         "mail_sync_all",
+        "tasks_create",
+        "tasks_occurrence_complete",
+        "tasks_occurrence_reopen",
+        "tasks_occurrence_skip",
     }
 )
 

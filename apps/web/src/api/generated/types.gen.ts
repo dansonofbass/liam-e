@@ -921,62 +921,6 @@ export type OAuthAuthorizeOut = {
 };
 
 /**
- * OccurrenceOut
- */
-export type OccurrenceOut = {
-    /**
-     * End At
-     */
-    end_at: string | null;
-    /**
-     * End Date
-     */
-    end_date: string | null;
-    /**
-     * Event Id
-     */
-    event_id: string;
-    /**
-     * Id
-     */
-    id: string;
-    /**
-     * Source Id
-     */
-    source_id: string;
-    /**
-     * Start At
-     */
-    start_at: string | null;
-    /**
-     * Start Date
-     */
-    start_date: string | null;
-    /**
-     * Timezone
-     */
-    timezone: string | null;
-    /**
-     * Title
-     */
-    title: string;
-};
-
-/**
- * OccurrencePage
- */
-export type OccurrencePage = {
-    /**
-     * Items
-     */
-    items: Array<OccurrenceOut>;
-    /**
-     * Next Cursor
-     */
-    next_cursor: string | null;
-};
-
-/**
  * Proposal
  */
 export type Proposal = {
@@ -1272,6 +1216,62 @@ export type SyncOut = {
 };
 
 /**
+ * TaskCreate
+ */
+export type TaskCreate = {
+    /**
+     * Creation Key
+     */
+    creation_key: string;
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Rrule
+     */
+    rrule?: string | null;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * TaskCreated
+ */
+export type TaskCreated = {
+    /**
+     * Created
+     */
+    created: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * UndoIn
  */
 export type UndoIn = {
@@ -1331,6 +1331,124 @@ export type ValidationError = {
     type: string;
 };
 
+/**
+ * VersionIn
+ */
+export type VersionIn = {
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * OccurrenceOut
+ */
+export type ApiRoutersApiV1CalendarSchemasOccurrenceOut = {
+    /**
+     * End At
+     */
+    end_at: string | null;
+    /**
+     * End Date
+     */
+    end_date: string | null;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Start At
+     */
+    start_at: string | null;
+    /**
+     * Start Date
+     */
+    start_date: string | null;
+    /**
+     * Timezone
+     */
+    timezone: string | null;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * OccurrencePage
+ */
+export type ApiRoutersApiV1CalendarSchemasOccurrencePage = {
+    /**
+     * Items
+     */
+    items: Array<ApiRoutersApiV1CalendarSchemasOccurrenceOut>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * OccurrenceOut
+ */
+export type ApiRoutersApiV1TasksSchemasOccurrenceOut = {
+    /**
+     * Due At
+     */
+    due_at: string | null;
+    /**
+     * Due Local
+     */
+    due_local: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Occurrence Key
+     */
+    occurrence_key: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Series Id
+     */
+    series_id: string;
+    /**
+     * Status
+     */
+    status: 'open' | 'completed' | 'skipped' | 'cancelled';
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * OccurrencePage
+ */
+export type ApiRoutersApiV1TasksSchemasOccurrencePage = {
+    /**
+     * Items
+     */
+    items: Array<ApiRoutersApiV1TasksSchemasOccurrenceOut>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
 export type HealthData = {
     body?: never;
     path?: never;
@@ -1388,7 +1506,7 @@ export type CalendarOccurrencesListResponses = {
     /**
      * Successful Response
      */
-    200: OccurrencePage;
+    200: ApiRoutersApiV1CalendarSchemasOccurrencePage;
 };
 
 export type CalendarOccurrencesListResponse = CalendarOccurrencesListResponses[keyof CalendarOccurrencesListResponses];
@@ -1418,7 +1536,7 @@ export type CalendarOccurrenceGetResponses = {
     /**
      * Successful Response
      */
-    200: OccurrenceOut;
+    200: ApiRoutersApiV1CalendarSchemasOccurrenceOut;
 };
 
 export type CalendarOccurrenceGetResponse = CalendarOccurrenceGetResponses[keyof CalendarOccurrenceGetResponses];
@@ -2280,3 +2398,164 @@ export type MailSyncAllResponses = {
 };
 
 export type MailSyncAllResponse = MailSyncAllResponses[keyof MailSyncAllResponses];
+
+export type TasksCreateData = {
+    body: TaskCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tasks';
+};
+
+export type TasksCreateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksCreateError = TasksCreateErrors[keyof TasksCreateErrors];
+
+export type TasksCreateResponses = {
+    /**
+     * Successful Response
+     */
+    200: TaskCreated;
+};
+
+export type TasksCreateResponse = TasksCreateResponses[keyof TasksCreateResponses];
+
+export type TasksOccurrencesListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Status
+         */
+        status?: 'open' | 'completed' | 'skipped' | 'cancelled' | null;
+        /**
+         * Due From
+         */
+        due_from?: string | null;
+        /**
+         * Due To
+         */
+        due_to?: string | null;
+        /**
+         * Cursor
+         */
+        cursor?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tasks/occurrences';
+};
+
+export type TasksOccurrencesListErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksOccurrencesListError = TasksOccurrencesListErrors[keyof TasksOccurrencesListErrors];
+
+export type TasksOccurrencesListResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1TasksSchemasOccurrencePage;
+};
+
+export type TasksOccurrencesListResponse = TasksOccurrencesListResponses[keyof TasksOccurrencesListResponses];
+
+export type TasksOccurrenceCompleteData = {
+    body: VersionIn;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/occurrences/{occurrence_id}/complete';
+};
+
+export type TasksOccurrenceCompleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksOccurrenceCompleteError = TasksOccurrenceCompleteErrors[keyof TasksOccurrenceCompleteErrors];
+
+export type TasksOccurrenceCompleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1TasksSchemasOccurrenceOut;
+};
+
+export type TasksOccurrenceCompleteResponse = TasksOccurrenceCompleteResponses[keyof TasksOccurrenceCompleteResponses];
+
+export type TasksOccurrenceReopenData = {
+    body: VersionIn;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/occurrences/{occurrence_id}/reopen';
+};
+
+export type TasksOccurrenceReopenErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksOccurrenceReopenError = TasksOccurrenceReopenErrors[keyof TasksOccurrenceReopenErrors];
+
+export type TasksOccurrenceReopenResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1TasksSchemasOccurrenceOut;
+};
+
+export type TasksOccurrenceReopenResponse = TasksOccurrenceReopenResponses[keyof TasksOccurrenceReopenResponses];
+
+export type TasksOccurrenceSkipData = {
+    body: VersionIn;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/occurrences/{occurrence_id}/skip';
+};
+
+export type TasksOccurrenceSkipErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksOccurrenceSkipError = TasksOccurrenceSkipErrors[keyof TasksOccurrenceSkipErrors];
+
+export type TasksOccurrenceSkipResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1TasksSchemasOccurrenceOut;
+};
+
+export type TasksOccurrenceSkipResponse = TasksOccurrenceSkipResponses[keyof TasksOccurrenceSkipResponses];

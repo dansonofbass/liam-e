@@ -1,11 +1,12 @@
 """Transactional access to materialized task occurrences."""
 
-from sqlalchemy import select, update
+from sqlalchemy import select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.models._common import utcnow
 from db.models.task_occurrence import TaskOccurrence
+from db.models.task_series import TaskSeries
 
 
 async def insert_once(session: AsyncSession, row: TaskOccurrence) -> bool:
@@ -15,6 +16,21 @@ async def insert_once(session: AsyncSession, row: TaskOccurrence) -> bool:
         ).returning(TaskOccurrence.id)
     )
     return result.scalar_one_or_none() is not None
+
+
+async def list_page(session: AsyncSession, *, scope: str, status: str | None, due_from: str | None,
+                    due_to: str | None, after: tuple[str, str] | None, limit: int) -> list[TaskOccurrence]:
+    query = select(TaskOccurrence).join(TaskSeries, TaskOccurrence.series_id == TaskSeries.id).where(TaskSeries.scope == scope)
+    if status is not None:
+        query = query.where(TaskOccurrence.status == status)
+    if due_from is not None:
+        query = query.where(TaskOccurrence.due_local >= due_from)
+    if due_to is not None:
+        query = query.where(TaskOccurrence.due_local < due_to)
+    if after is not None:
+        query = query.where(tuple_(TaskOccurrence.due_local, TaskOccurrence.id) > after)
+    result = await session.execute(query.order_by(TaskOccurrence.due_local, TaskOccurrence.id).limit(limit))
+    return list(result.scalars().all())
 
 
 async def get(session: AsyncSession, occurrence_id: str) -> TaskOccurrence | None:

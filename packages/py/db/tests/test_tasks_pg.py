@@ -125,6 +125,32 @@ def test_parallel_reconcile_materializes_each_occurrence_once(pg_db):
     asyncio.run(run())
 
 
+def test_occurrence_list_scope_filters_and_cursor(pg_db):
+    async def run():
+        from db.accessors import task_occurrence, task_series
+        from db.engine import get_session_maker
+        from db.models.task_occurrence import TaskOccurrence
+        from db.models.task_series import TaskSeries
+
+        first = TaskSeries(scope='app', creation_key='first', creation_hash='hash', title='Example')
+        other = TaskSeries(scope='other', creation_key='second', creation_hash='hash', title='Example')
+        async with get_session_maker()() as session:
+            await task_series.create_once(session, first)
+            await task_series.create_once(session, other)
+            for series, key in ((first, '2024-01-01'), (first, '2024-01-02'), (other, '2024-01-02')):
+                await task_occurrence.insert_once(session, TaskOccurrence(series_id=series.id, revision_id=series.id, occurrence_key=key, due_local=key))
+            await session.commit()
+        async with get_session_maker()() as session:
+            kwargs = dict(scope='app', status='open', due_from='2024-01-01', due_to='2024-01-03', limit=1)
+            page = await task_occurrence.list_page(session, after=None, **kwargs)
+            assert [row.due_local for row in page] == ['2024-01-01']
+            next_page = await task_occurrence.list_page(session, after=(page[0].due_local, page[0].id), **kwargs)
+            assert [row.due_local for row in next_page] == ['2024-01-02']
+            assert await task_occurrence.list_page(session, after=(next_page[0].due_local, next_page[0].id), **kwargs) == []
+
+    asyncio.run(run())
+
+
 def test_domain_state_transitions_and_conflicts(pg_db):
     async def run():
         from api.tasks.state import StateConflict, transition
