@@ -300,7 +300,7 @@ jetzt als öffentlich.
 - Minimale Diffs, bestehende Patterns kopieren (siehe Modul-Docstrings — sie dokumentieren die Konventionen jeweils lokal).
 - Nach API-Änderungen immer `gen-types` laufen lassen und `apps/api/openapi.json` + `apps/web/src/api/generated` mit committen.
 - Änderungen an Tabellen immer mit Migration (`db:revision` + `db:migrate`), nie von Hand editierte `versions/`-Dateien.
-- Vor dem Commit: `bun run check` (baut alles und prüft den generierten Client) und die betroffenen Test-Suiten laufen lassen.
+- Vor dem Commit: `bun run check` (baut alles, prüft die Typen der Oberfläche mit `tsc` und den generierten Client) und die betroffenen Test-Suiten laufen lassen.
 - Issues und PRs über die Vorlagen in `.github/` (`ISSUE_TEMPLATE/`, `pull_request_template.md`). Eine Aufgabe ergibt
   genau einen Branch und einen PR, auch wenn sie mehrere Issues umfasst; jedes Issue bekommt eigene Commits und ein
   eigenes Schließwort (`Closes #12. Closes #13.`). Was nicht geprüft wurde, steht im PR ausdrücklich als nicht geprüft.

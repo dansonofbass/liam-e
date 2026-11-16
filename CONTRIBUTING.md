@@ -11,7 +11,7 @@ bun run install-all          # Abhängigkeiten und generierter API-Client
 bunx nx run api:serve        # API auf Port 3000
 bun run dev:web              # Oberfläche auf Port 3001
 
-bun run check                # Build und Drift-Prüfung des generierten Clients
+bun run check                # Build, Typprüfung der Oberfläche, Drift-Prüfung des Clients
 bunx nx run web:test
 bash tools/uv.sh run --no-sync pytest tests apps/api/tests packages/py -q
 RUN_PG_CONTRACT=1 bunx nx run db:test-pg-contract   # braucht Postgres mit pgvector
