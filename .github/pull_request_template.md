@@ -24,8 +24,11 @@ Closes #
 
 ## Verträge
 
+- [ ] Eine Aufgabe, ein Branch, dieser eine PR; jedes Issue hat eigene Commits und oben ein eigenes Schließwort
 - [ ] API geändert: `apps/api/openapi.json` und `apps/web/src/api/generated/` neu erzeugt und committet (`bash tools/gen-types.sh --check` grün)
-- [ ] Tabellen geändert: Migration mit `bunx nx run db:revision` erzeugt, nicht von Hand geschrieben
+- [ ] Tabellen geändert: Migration mit `bunx nx run db:revision` erzeugt, nicht von Hand geschrieben, und mit `bunx nx run db:migrate` angewendet
+- [ ] Neue Settings als Modul unter `packages/py/env/src/env/`, jeder Name leer in `.env.example`, Secrets als `WorkspaceSecret`
+- [ ] Neue Web-Route: `bunx nx run web:gen-routes` gelaufen
 - [ ] Neue verändernde Operation in `MUTATING_OPERATIONS` (`apps/api/tests/test_mcp_exposure.py`) und in der Endpunkt-Tabelle von AGENTS.md
 - [ ] Der Agent verändert oder versendet weiterhin nur nach bestätigter Vorschlagskarte
 - [ ] Texte der Oberfläche auf Deutsch im Textkatalog, nach DESIGN.md; Code, Kommentare und Commits auf Englisch
