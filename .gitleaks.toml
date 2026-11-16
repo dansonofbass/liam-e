@@ -1,0 +1,18 @@
+# gitleaks configuration for the CI job `secrets` (.github/workflows/ci.yml), which scans the
+# whole history. The default rules stay active. An allowlist entry covers one reviewed false
+# positive and says why; .gitleaksignore stays empty. A real secret is never allowlisted: rotate
+# it, then remove it (AGENTS.md, "Veröffentlichung und private Daten").
+
+title = "liam-e"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Tests use visible throwaway values (test-only, keys generated at run time); provider-specific token rules stay active there"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^apps/api/tests/''',
+  '''^packages/py/[^/]+/tests/''',
+  '''^apps/web/src/.+\.test\.tsx?$''',
+]

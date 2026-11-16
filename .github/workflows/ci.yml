@@ -1,7 +1,7 @@
 name: CI
 
 # The checks that otherwise only run locally: `bun run check`, the web tests, pytest and the live
-# Postgres contract suite. The Bun and uv versions follow package.json `packageManager`
+# Postgres contract suite, plus a secret scan of the whole history (job `secrets`). The Bun and uv versions follow package.json `packageManager`
 # (bun@1.4.0), deploy/docker/Dockerfile.web (oven/bun:1.4.0, node:24) and
 # deploy/docker/Dockerfile.api (uv 0.11.17). Python comes from .python-version (3.14), which uv
 # downloads on demand.
@@ -128,3 +128,30 @@ jobs:
       # needs CREATEDB; the image's superuser has it.
       - name: Run Postgres contract suites
         run: bash tools/db.sh test-pg-contract
+
+  # gitleaks over the whole history, every branch and tag, with the allowlists in .gitleaks.toml.
+  # The binary is downloaded from the release page and checked against its SHA-256 before it runs.
+  # .gitleaksignore must stay empty: a real finding is rotated, never silenced by fingerprint.
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install checksum-verified gitleaks and scan the history
+        env:
+          GITLEAKS_VERSION: 8.30.0
+          GITLEAKS_SHA256: 79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e
+        run: |
+          set -euo pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}" \
+            --output "${RUNNER_TEMP}/${archive}"
+          printf '%s  %s\n' "$GITLEAKS_SHA256" "${RUNNER_TEMP}/${archive}" | sha256sum --check --strict
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "$RUNNER_TEMP" gitleaks
+          test ! -s .gitleaksignore
+          "${RUNNER_TEMP}/gitleaks" git --redact --no-banner --log-opts="--all" --config .gitleaks.toml .
