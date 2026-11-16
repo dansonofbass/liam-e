@@ -1,11 +1,31 @@
-import { Notice } from '../ds'
+import { useLayoutEffect, useRef } from 'react'
+import { Menu, Notice } from '../ds'
 import { de } from '../i18n/de'
 import { useMailActionsContext } from './useMailActions'
 
 // Feedback of the shared mail actions. The list renders it as an overlay; the reading view
 // renders it inline when it stands alone (mobile and tablet), since the list is unmounted there.
 export function ActionToast({ inline }: { inline?: boolean }) {
-  const { toast, undo } = useMailActionsContext()
-  if (!toast) return null
-  return <div className={inline ? 'le-inbox-toast le-inbox-toast--inline' : 'le-inbox-toast'}><Notice tone={toast.tone} action={toast.undoable ? { label: de.proposal.undo, onClick: () => { void undo() } } : undefined}><span>{toast.text}</span></Notice></div>
+  const { toast, undo, entries } = useMailActionsContext()
+  const root = useRef<HTMLDivElement>(null)
+  const lastFocus = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const remember = (event: FocusEvent) => {
+      const active = event.target as HTMLElement | null
+      const menuId = root.current?.querySelector<HTMLElement>('[aria-controls]')?.getAttribute('aria-controls')
+      lastFocus.current = active && (root.current?.contains(active) || (menuId && document.getElementById(menuId)?.contains(active))) ? active : null
+    }
+    document.addEventListener('focusin', remember)
+    return () => document.removeEventListener('focusin', remember)
+  }, [])
+  useLayoutEffect(() => {
+    if (lastFocus.current && !lastFocus.current.isConnected && document.activeElement === document.body) {
+      const next = root.current?.querySelector<HTMLElement>('button:not([disabled])') ?? document.querySelector<HTMLElement>('.le-inbox-scroll, .le-mail-topbar button')
+      lastFocus.current = null
+      next?.focus({ preventScroll: true })
+    }
+  }, [entries.length])
+  if (!toast && !entries.length) return null
+  const single = entries.length === 1 ? entries[0] : undefined
+  return <div ref={root} className={inline ? 'le-inbox-toast le-inbox-toast--inline' : 'le-inbox-toast'}><Notice tone={toast?.tone ?? 'success'}><span>{toast?.text}</span>{single && <button type="button" className="le-link" disabled={single.pending} onClick={() => { void undo(single.actionId) }}>{de.proposal.undo}</button>}{entries.length > 1 && <Menu placement="up-end" trigger={props => <button type="button" className="le-link" {...props}>{de.inbox.recentActions(entries.length)}</button>} items={entries.map(entry => ({ label: de.inbox.undoAction(entry.label), disabled: entry.pending, onSelect: () => { void undo(entry.actionId) } }))} />}</Notice></div>
 }
