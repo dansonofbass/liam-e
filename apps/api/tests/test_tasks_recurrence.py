@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import pytest
 
-from api.tasks.recurrence import expand
+from api.tasks.recurrence import expand, expand_page
 
 
 def test_count_includes_skipped_gap_candidate():
@@ -25,6 +25,28 @@ def test_until_and_overlap():
 def test_invalid_rules(rule):
     with pytest.raises(ValueError):
         expand(date(2024, 1, 1), rule, date(2024, 2, 1))
+
+
+def test_pages_include_gap_in_cursor_and_match_preview():
+    start = datetime(2024, 3, 30, 2, 30)
+    end = datetime(2024, 4, 5)
+    rule = 'FREQ=DAILY;COUNT=5'
+    cursor = None
+    result = []
+    while True:
+        values, cursor = expand_page(start, rule, end, 'Europe/Berlin', cursor=cursor, limit=2)
+        result.extend(values)
+        if cursor is None:
+            break
+    assert result == [v.replace(tzinfo=None) for v in expand(start, rule, end, 'Europe/Berlin')]
+    assert [v.day for v in result] == [30, 1, 2, 3]
+
+
+def test_page_rejects_non_candidate_cursor_and_invalid_limit():
+    with pytest.raises(ValueError):
+        expand_page(date(2024, 1, 1), 'FREQ=DAILY;INTERVAL=2', date(2024, 2, 1), cursor=date(2024, 1, 2))
+    with pytest.raises(ValueError):
+        expand_page(date(2024, 1, 1), 'FREQ=DAILY', date(2024, 2, 1), limit=0)
 
 
 def test_invalid_start_and_zone():

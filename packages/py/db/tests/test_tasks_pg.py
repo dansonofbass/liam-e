@@ -32,3 +32,28 @@ def test_creation_and_occurrence_retries_are_idempotent(pg_db):
             await session.commit()
 
     asyncio.run(run())
+
+
+def test_complete_skip_compare_and_swap_has_one_winner(pg_db):
+    async def run():
+        from db.accessors import task_occurrence
+        from db.engine import get_session_maker
+        from db.models.task_occurrence import TaskOccurrence
+
+        row = TaskOccurrence(series_id='series-1', revision_id='revision-1', occurrence_key='2024-01-01', due_local='2024-01-01')
+        async with get_session_maker()() as session:
+            assert await task_occurrence.insert_once(session, row)
+            await session.commit()
+
+        async def attempt(target):
+            async with get_session_maker()() as session:
+                won = await task_occurrence.transition(session, row.id, version=1, expected='open', target=target)
+                await session.commit()
+                return won
+
+        assert sum(await asyncio.gather(attempt('completed'), attempt('skipped'))) == 1
+        async with get_session_maker()() as session:
+            stored = await task_occurrence.get(session, row.id)
+            assert stored.status in {'completed', 'skipped'} and stored.version == 2
+
+    asyncio.run(run())

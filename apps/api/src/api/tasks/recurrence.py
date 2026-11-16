@@ -7,6 +7,7 @@ wall time occurs once, with the earlier offset (fold=0).
 """
 
 from datetime import date, datetime, time, timezone
+from itertools import islice
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.rrule import rrulestr
@@ -19,8 +20,8 @@ def _valid_wall(value: datetime) -> bool:
     return value.astimezone(timezone.utc).astimezone(value.tzinfo).replace(tzinfo=None) == value.replace(tzinfo=None)
 
 
-def expand(start: date | datetime, rule: str, through: date | datetime, zone: str | None = None) -> list[date | datetime]:
-    """Expand through an inclusive bound; reject unsupported and invalid rules."""
+def _parse(start: date | datetime, rule: str, through: date | datetime, zone: str | None):
+    """Validate a rule and construct the parser and inclusive local bound."""
     timed = isinstance(start, datetime)
     if timed != isinstance(through, datetime):
         raise ValueError('start and bound must have the same precision')
@@ -61,6 +62,54 @@ def expand(start: date | datetime, rule: str, through: date | datetime, zone: st
     try:
         recurrence = rrulestr(rule, dtstart=dtstart)
         bound = through.replace(tzinfo=dtstart.tzinfo, fold=0) if timed else datetime.combine(through, time.max)
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise ValueError('invalid recurrence') from exc
+    return recurrence, dtstart, bound, timed
+
+
+def expand_page(
+    start: date | datetime, rule: str, through: date | datetime, zone: str | None = None,
+    *, cursor: date | datetime | None = None, limit: int = 100,
+) -> tuple[list[date | datetime], date | datetime | None]:
+    """Return at most limit candidates and a local cursor, including skipped gaps.
+
+    A non-null cursor means another page must be requested, even if it turns out
+    to be empty. Bind the cursor to the revision and target in the caller.
+    """
+    if not 1 <= limit <= 1000:
+        raise ValueError('invalid page size')
+    recurrence, dtstart, bound, timed = _parse(start, rule, through, zone)
+    if cursor is not None:
+        if isinstance(cursor, datetime) != timed:
+            raise ValueError('invalid cursor precision')
+        if timed:
+            if cursor.tzinfo is not None:
+                raise ValueError('cursor must be local')
+            after = cursor.replace(tzinfo=dtstart.tzinfo, fold=0)
+        else:
+            after = datetime.combine(cursor, time.min)
+        if after < dtstart or after > bound or recurrence.before(after, inc=True) != after:
+            raise ValueError('invalid cursor')
+    else:
+        after = dtstart
+    try:
+        candidates = list(islice(recurrence.xafter(after, inc=cursor is None), limit))
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise ValueError('invalid recurrence') from exc
+    candidates = [value for value in candidates if value <= bound]
+    values = [value for value in candidates if not timed or _valid_wall(value)]
+    local_values = [value.replace(tzinfo=None) if timed else value.date() for value in values]
+    next_cursor = None
+    if len(candidates) == limit:
+        last = candidates[-1]
+        next_cursor = last.replace(tzinfo=None) if timed else last.date()
+    return local_values, next_cursor
+
+
+def expand(start: date | datetime, rule: str, through: date | datetime, zone: str | None = None) -> list[date | datetime]:
+    """Expand through an inclusive bound; reject unsupported and invalid rules."""
+    recurrence, dtstart, bound, timed = _parse(start, rule, through, zone)
+    try:
         values = recurrence.between(dtstart, bound, inc=True)
     except (ValueError, TypeError, OverflowError) as exc:
         raise ValueError('invalid recurrence') from exc
