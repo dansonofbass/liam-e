@@ -160,8 +160,13 @@ Single-Owner-App wird vom Deployment beschränkt, nicht durch eine neue App-Iden
 `prompt_template` hält Name, Version und aktuelle Revision; Bearbeiten erzeugt eine neue
 `prompt_revision`. Auswahlen in `chat_conversation.prompt_revision_id` bleiben angeheftet.
 Conversation-PATCH benötigt `expected_version`; `null` als Revision wählt den Standard.
+Vorlagen-POST nimmt `name` und `text`, PATCH zusätzlich `expected_version`, DELETE
+`expected_version` als Queryparameter. GET einer Vorlage liefert auch `revisions`
+(neueste zuerst), damit ältere Revisionen ausdrücklich gewählt werden können.
 Neue Turns speichern Revisionsreferenz/Hash, App-Prompt-Version und den aufgelösten
 Kontoumfang in `chat_context`; `chat_message.context_id` verbindet den Verlauf damit.
+Der JSON-Kontoumfang enthält `account_ids`, `selection` (Konto-ID oder `null` für alle)
+und bei unbelegtem Altverlauf `legacy_mixed: true`.
 `preference_revision_id` bleibt als Erweiterungspunkt leer. Text wird nur als
 Nutzerinhalt an das Modell gegeben, nie als App-Regel oder Chat-Extra gespeichert.
 Löschen entfernt Vorlageninhalt und Revisionsinhalt, hinterlässt `removed`-Markierungen,

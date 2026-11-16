@@ -56,6 +56,17 @@ class PromptOut(BaseModel):
     content_hash: str
 
 
+class PromptRevisionOut(BaseModel):
+    id: str
+    number: int
+    content: str
+    content_hash: str
+
+
+class PromptDetailOut(PromptOut):
+    revisions: list[PromptRevisionOut]
+
+
 async def output(row) -> PromptOut:
     if row is None:
         raise refuse(404, 'prompt_unavailable', 'Diese Vorlage gibt es nicht mehr. Wähle eine andere.')
@@ -77,8 +88,14 @@ async def create_prompt(body: PromptCreate) -> PromptOut:
 
 
 @router.get('/{id}', operation_id='prompt_get')
-async def get_prompt(id: str) -> PromptOut:
-    return await output(await prompt_template.get_template(id))
+async def get_prompt(id: str) -> PromptDetailOut:
+    current = await output(await prompt_template.get_template(id))
+    revisions = await prompt_revision.list_revisions(id)
+    if not revisions:
+        raise refuse(404, 'prompt_unavailable', 'Diese Vorlage gibt es nicht mehr. Wähle eine andere.')
+    return PromptDetailOut(**current.model_dump(), revisions=[
+        PromptRevisionOut.model_validate(revision, from_attributes=True) for revision in revisions
+    ])
 
 
 @router.patch('/{id}', operation_id='prompt_update')

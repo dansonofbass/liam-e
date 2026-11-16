@@ -22,6 +22,10 @@ def test_revisions_concurrent_updates_and_revocation(pg_db):
         assert sum(isinstance(x, p.StaleVersion) for x in results) == 1
         current = await p.get_template(first.id)
         assert current.version == 2
+        assert [rev.number for rev in await r.list_revisions(first.id)] == [2, 1]
+        _, pinned, old_content = await c.resolve(conversation_id=None, title='', model='',
+            revision_id=first.revision_id, account_id=None, app_prompt_version='test')
+        assert pinned.prompt_revision_id == first.revision_id and old_content == content
         assert (await r.get_revision(first.revision_id)).content == content
         assert (await conversations.get_conversation(conversation.id)).prompt_revision_id == first.revision_id
         changes = await asyncio.gather(
@@ -41,6 +45,9 @@ def test_revisions_concurrent_updates_and_revocation(pg_db):
         assert await p.get_template(first.id) is None
         assert (await conversations.get_conversation(conversation.id)).prompt_revision_id is None
         assert (await messages.list_messages(conversation.id))[0].content == 'Hallo'
+        _, next_snapshot, next_content = await c.resolve(conversation_id=conversation.id, title='', model='',
+            revision_id=None, account_id=None, app_prompt_version='test')
+        assert next_snapshot.prompt_revision_id is None and next_content is None
         with pytest.raises(c.ContextUnavailable):
             await c.resolve(conversation_id=None, title='', model='', revision_id=first.revision_id,
                             account_id=None, app_prompt_version='test')
@@ -52,10 +59,15 @@ def test_account_scope_and_unknown_history(pg_db):
         from db.accessors import mail_account as accounts, chat_context as c
         from db.accessors import chat_conversation as conversations, chat_message as messages
         a = await accounts.create_account(provider='imap', auth_type='imap_password', email_address='a@example.test')
-        b = await accounts.create_account(provider='imap', auth_type='imap_password', email_address='b@example.test')
         async def resolve(id=None, account=None):
             return await c.resolve(conversation_id=id, title='', model='', revision_id=None,
                                    account_id=account, app_prompt_version='test')
+        legacy_single = await conversations.create_conversation()
+        await messages.add_message(conversation_id=legacy_single.id, role='user', content='Unbelegte Herkunft')
+        await resolve(legacy_single.id)
+        with pytest.raises(c.ScopeChange):
+            await resolve(legacy_single.id, a.id)
+        b = await accounts.create_account(provider='imap', auth_type='imap_password', email_address='b@example.test')
         with pytest.raises(ValueError):
             await resolve(account='invalid')
         for initial, rejected in [(a.id, b.id), (a.id, None), (None, a.id), (b.id, a.id)]:

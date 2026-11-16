@@ -1010,6 +1010,40 @@ export type PromptCreate = {
 };
 
 /**
+ * PromptDetailOut
+ */
+export type PromptDetailOut = {
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Revisions
+     */
+    revisions: Array<PromptRevisionOut>;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * PromptOut
  */
 export type PromptOut = {
@@ -1037,6 +1071,28 @@ export type PromptOut = {
      * Version
      */
     version: number;
+};
+
+/**
+ * PromptRevisionOut
+ */
+export type PromptRevisionOut = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Number
+     */
+    number: number;
 };
 
 /**
@@ -2672,7 +2728,7 @@ export type PromptGetResponses = {
     /**
      * Successful Response
      */
-    200: PromptOut;
+    200: PromptDetailOut;
 };
 
 export type PromptGetResponse = PromptGetResponses[keyof PromptGetResponses];

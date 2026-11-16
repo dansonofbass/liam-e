@@ -34,6 +34,8 @@ def library(monkeypatch):
     monkeypatch.setattr(p, 'get_template', AsyncMock(side_effect=lambda id: rows.get(id)))
     monkeypatch.setattr(p, 'list_templates', AsyncMock(side_effect=lambda: list(rows.values())))
     monkeypatch.setattr(r, 'get_revision', AsyncMock(side_effect=lambda id: revisions.get(id)))
+    monkeypatch.setattr(r, 'list_revisions', AsyncMock(side_effect=lambda id: sorted(
+        [rev for rev in revisions.values() if rev.template_id == id], key=lambda rev: -rev.number)))
     return TestClient(build_app()), revisions
 
 
@@ -43,11 +45,14 @@ def test_crud_revision_and_versions(library):
     assert response.status_code == 201
     first = response.json()
     path = '/api/v1/prompts/' + first['id']
-    assert client.get(path).json() == first
+    detail = client.get(path).json()
+    assert detail.pop('revisions')[0]['id'] == first['revision_id']
+    assert detail == first
     assert client.get('/api/v1/prompts').json() == [first]
     second = client.patch(path, json={'expected_version': 1, 'text': 'Zweiter Text'}).json()
     assert second['revision_id'] != first['revision_id'] and second['version'] == 2
     assert revisions[first['revision_id']].content == 'Erster Text'
+    assert [rev['number'] for rev in client.get(path).json()['revisions']] == [2, 1]
     assert revisions[first['revision_id']].owner_scope == 'installation'
     assert client.patch(path, json={'expected_version': 1, 'text': 'Veraltet'}).status_code == 409
     assert client.delete(path + '?expected_version=1').status_code == 409

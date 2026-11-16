@@ -94,6 +94,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         client = None
         for round_index in range(max(1, mail_env.mail_chat_max_tool_rounds)):
             if not await chat_context.is_live(snapshot.id):
+                if all_text: await save(True)
                 yield ErrorEvent(code='context_revoked')
                 return
             calls = []
@@ -175,6 +176,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
             messages.append({'role':'assistant', 'content':round_text, 'tool_calls':payload})
             for call in payload:
                 if not await chat_context.is_live(snapshot.id):
+                    if all_text: await save(True)
                     yield ErrorEvent(code='context_revoked')
                     return
                 name = call['function']['name']
@@ -190,6 +192,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                         status = await tool_status(name, args, ctx)
                         if status: yield status
                         if not await chat_context.is_live(snapshot.id):
+                            if all_text: await save(True)
                             yield ErrorEvent(code='context_revoked')
                             return
                         outcome = await execute_tool(name, args, ctx)

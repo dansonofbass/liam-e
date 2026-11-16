@@ -1627,6 +1627,52 @@
         "title": "PromptCreate",
         "type": "object"
       },
+      "PromptDetailOut": {
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/PromptRevisionOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "revision_id",
+          "text",
+          "content_hash",
+          "revisions"
+        ],
+        "title": "PromptDetailOut",
+        "type": "object"
+      },
       "PromptOut": {
         "properties": {
           "content_hash": {
@@ -1663,6 +1709,34 @@
           "content_hash"
         ],
         "title": "PromptOut",
+        "type": "object"
+      },
+      "PromptRevisionOut": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "content",
+          "content_hash"
+        ],
+        "title": "PromptRevisionOut",
         "type": "object"
       },
       "PromptUpdate": {
@@ -4240,7 +4314,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PromptOut"
+                  "$ref": "#/components/schemas/PromptDetailOut"
                 }
               }
             },

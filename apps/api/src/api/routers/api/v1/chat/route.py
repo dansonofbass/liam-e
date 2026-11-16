@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from api.errors import refuse
 from api.mail import agent
+from api.mail.models_catalog import list_chat_models
 from . import schemas
 
 router = APIRouter()
@@ -21,6 +22,8 @@ class ChatTurnRequest(BaseModel):
 @router.post('', operation_id='chat_turn', summary='Send a message to the mail agent')
 async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
     """Run a complete chat turn and return its visible messages."""
+    if not body.conversation_id and body.model is not None and body.model not in {m.id for m in await list_chat_models()}:
+        raise refuse(422, 'model_unknown', 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.')
     conversation_id = ''
     user_id = ''
     try:

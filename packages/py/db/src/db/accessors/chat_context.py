@@ -2,6 +2,7 @@
 import json
 from sqlalchemy import select
 from db.engine import get_session_maker
+from db.models._common import utcnow
 from db.models.chat_context import ChatContext
 from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
@@ -54,6 +55,7 @@ async def configure(conversation_id, expected_version, *, revision_id=None, chan
         if title is not None:
             row.title = title
         row.version += 1
+        row.updated_at = utcnow()
         await session.commit()
         return row
 
