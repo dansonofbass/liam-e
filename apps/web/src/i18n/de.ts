@@ -151,7 +151,7 @@ export const de = {
     title: 'Posteingang', groups: { today: 'Heute', yesterday: 'Gestern', week: 'Diese Woche', older: 'Älter' },
     done: { archive: (subject: string) => `„${noticeSubject(subject)}“ archiviert.`, trash: (subject: string) => `„${noticeSubject(subject)}“ in den Papierkorb gelegt.`, spam: (subject: string) => `„${noticeSubject(subject)}“ als Spam markiert.`, mark_read: (subject: string) => `„${noticeSubject(subject)}“ als gelesen markiert.`, mark_unread: (subject: string) => `„${noticeSubject(subject)}“ als ungelesen markiert.` },
     doneShort: { archive: 'Mail archiviert.', trash: 'Mail in den Papierkorb gelegt.', spam: 'Mail als Spam markiert.', mark_read: 'Mail als gelesen markiert.', mark_unread: 'Mail als ungelesen markiert.' },
-    recentActions: (n: number) => `Letzte Aktionen (${n})`, undoAction: (text: string) => `${text} Rückgängig`,
+    recentActions: (n: number) => `Letzte Aktionen (${n})`, undoAction: (text: string) => `Rückgängig: ${String(text).replace(/\.$/, '')}`, undoRunning: 'Wird zurückgenommen …',
     undoCapacity: 'Warte kurz, bis eine Rücknahme abgelaufen ist, oder mach eine Aktion rückgängig.',
     undoSkipped: 'Diese Aktion lässt sich nicht mehr rückgängig machen. Die Mail wurde inzwischen geändert.',
     undoExpired: 'Die Frist für diese Rücknahme ist abgelaufen.',

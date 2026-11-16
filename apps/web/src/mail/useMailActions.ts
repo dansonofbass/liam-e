@@ -97,7 +97,8 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     return false
   }
   const run = (id: string, kind: Kind, options?: { silent?: boolean }) => {
-    if (!options?.silent && !checkCapacity()) return Promise.resolve(true)
+    // Refused before anything changed: nothing was removed, so nothing came back.
+    if (!options?.silent && !checkCapacity()) return Promise.resolve(false)
     if (!options?.silent) { reservations.current++; setReserved(reservations.current) }
     return enqueue(id, () => execute(id, kind, options))
   }
@@ -183,7 +184,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
   }
   const latest = entries.at(-1)
   const toast: Toast | null = notice ? { tone: 'danger', text: notice, undoable: false } : latest ? { tone: 'success', text: latest.text, undoable: true } : null
-  return { run, undo, notify, toast, entries, checkCapacity, capacityAvailable: entries.length + reserved < LIMIT }
+  return { run, undo, notify, toast, entries, checkCapacity, capacityAvailable: entries.filter(entry => entry.pending || entry.deadline > clock.now()).length + reserved < LIMIT }
 }
 
 const MailActionsContext = createContext<ReturnType<typeof useMailActions> | null>(null)

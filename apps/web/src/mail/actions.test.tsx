@@ -398,7 +398,9 @@ test('capacity reserves slots for in-flight actions and becomes available on exp
   act(() => { for (let i = 0; i < 20; i++) void actions.run(String(i), 'archive') })
   await waitFor(() => expect(request).toHaveBeenCalledTimes(20))
   expect(actions.capacityAvailable).toBe(false)
-  await act(async () => { await actions.run('extra', 'archive') })
+  let refused: boolean | undefined
+  await act(async () => { refused = await actions.run('extra', 'archive') })
+  expect(refused).toBe(false)
   expect(request).toHaveBeenCalledTimes(20)
   await act(async () => { finishes.forEach((finish, i) => finish({ data: { action_id: `a-${i}`, message: { subject: `Mail ${i}` } }, response: { status: 200 } })) })
   expect(actions.entries).toHaveLength(20); expect(actions.capacityAvailable).toBe(false)
@@ -416,8 +418,25 @@ test('multiple actions use a portal menu with separate undo items and keyboard f
   fireEvent.click(trigger); const menu = screen.getByRole('menu')
   expect(menu.parentElement).toBe(document.body)
   expect(screen.getAllByRole('menuitem')).toHaveLength(2)
+  expect(screen.getAllByRole('menuitem')[0]?.textContent).toBe('Rückgängig: „Erste“ archiviert')
   await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('menuitem')[0] ?? null))
   fireEvent.keyDown(menu, { key: 'Escape' }); expect(document.activeElement).toBe(trigger)
+})
+
+test('a menu item whose undo is running stays focusable and says why', async () => {
+  window.matchMedia = ((query: string) => ({ matches: query.includes('1024px'), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+  success()
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((() => new Promise(() => {})) as never)
+  const client = new QueryClient()
+  function Trigger() { const { run } = useMailActionsContext(); return <><button onClick={() => { void run('1', 'archive') }}>one</button><button onClick={() => { void run('2', 'trash') }}>two</button></> }
+  render(<QueryClientProvider client={client}><MailActionsProvider><Trigger /><ActionToast /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('one')); await screen.findByText('Rückgängig')
+  fireEvent.click(screen.getByText('two')); fireEvent.click(await screen.findByText('Letzte Aktionen (2)'))
+  fireEvent.click(screen.getAllByRole('menuitem')[0]!)
+  fireEvent.click(await screen.findByText('Letzte Aktionen (2)'))
+  const item = screen.getAllByRole('menuitem')[0]!
+  expect(item.getAttribute('aria-disabled')).toBe('true')
+  expect(item.textContent).toContain('Wird zurückgenommen …')
 })
 
 test('focus moves to the remaining undo when a menu item completes', async () => {
