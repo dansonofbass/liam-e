@@ -44,11 +44,14 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `actions.py` — Indexänderungen und einmaliges Rückgängigmachen; `action_backends.py` — Provider-Aktionen.
 - `proposals.py` — Vorschläge speichern, bestätigen, abbrechen und nach Bestätigung ausführen.
 - `newsletters.py` — Newsletter erkennen und unterstützte Abbestellwege ausführen.
-- `insights.py` — Kurzfassungen und Fristen erzeugen und zwischenspeichern.
+- `insights.py` — Kurzfassungen und Fristen erzeugen und zwischenspeichern; ohne Mailtext gibt es keinen Modellaufruf, sondern eine leere Kurzfassung.
 - `original.py` — Kopfzeilen und Quelltext einer Mail lesend beim Anbieter abrufen; nichts davon wird gespeichert.
 - `jobs.py` — dauerhafte Jobs und periodisches Einreihen von Abrufen.
-- `sync.py` — inkrementelle Änderungen im Index anwenden; `sync_connector.py`, `sync_gmail.py`,
-  `sync_graph.py`, `sync_imap.py` — Abruf und Parsing je Provider; `sync_types.py` — gemeinsame Sync-Typen und Helfer.
+- `sync.py` — inkrementelle Änderungen im Index anwenden und veraltete Body-Texte nachlesen; `sync_connector.py`, `sync_gmail.py`,
+  `sync_graph.py`, `sync_imap.py` — Abruf, Parsing und Nachlesen (`fetch_bodies`) je Provider; `sync_types.py` — gemeinsame Sync-Typen und Helfer,
+  darunter `body_text`/`html_to_text` (eine Textfassung für alle Provider: `text/plain` zuerst, außer es ist nur ein kurzer
+  Platzhalter neben längerem HTML; sonst HTML ohne Stile, Skripte, Kommentare und unsichtbare Füllzeichen, mit Absätzen und
+  Listenpunkten), `BODY_VERSION` und `reread_http` (Nachlesen über REST, je Mail ausgewertet).
 - `send.py` — Versand über SMTP, Gmail, Graph oder Connector nach Bestätigung.
 - `connectors.py` — Zugriff auf Mistral-Studio-Connectoren und deren Werkzeuge.
 - `providers.py` — Provider-Registry, OAuth-Endpunkte und IMAP/SMTP-Voreinstellungen.
@@ -109,7 +112,7 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 
 - `mail_account` — verbundenes Konto: `provider` z.B. `google`, `microsoft`, `imap` oder Connector-Name wie `gmail`; `auth_type` ist `oauth2`, `imap_password` oder `mistral_connector`.
 - `mail_credential` — verschlüsseltes Payload pro Konto+Art (`oauth2_tokens` | `imap_password`), unique (`account_id`, `kind`).
-- `mail_message` — Mail-Index mit `folder`, `provider_uid`, `thread_id`, `subject`, `sender`, `sender_address`, `recipients_json`, `cc_json`, `reply_to_json` (Reply-To-Adressen; Antworten gehen daran statt an den Absender, der Gmail-Connector liefert sie nicht), `snippet`, `body_text`, `internal_date`, Lese-/Prioritätsflags, `labels_json`, `attachments_json`, `list_unsubscribe` und `list_unsubscribe_post`; unique (`account_id`, `folder`, `provider_uid`), Volltextindex `search_tsv`.
+- `mail_message` — Mail-Index mit `folder`, `provider_uid`, `thread_id`, `subject`, `sender`, `sender_address`, `recipients_json`, `cc_json`, `reply_to_json` (Reply-To-Adressen; Antworten gehen daran statt an den Absender, der Gmail-Connector liefert sie nicht), `snippet`, `body_text`, `body_version` (Version der Textfassung, 0 = vor der Versionierung), `internal_date`, Lese-/Prioritätsflags, `labels_json`, `attachments_json`, `list_unsubscribe` und `list_unsubscribe_post`; unique (`account_id`, `folder`, `provider_uid`), Volltextindex `search_tsv`.
 - `mail_sync_state` — Cursor, Status, Fehler und letzter Abruf je Konto.
 - `mail_action` — ausgeführte Aktion mit `previous_json` und `undone_at` für Rückgängig.
 - `mail_insight` — Kurzfassung (`points_json`), Frist, Antwortbedarf, Folgevorschläge und Modell je Mail.
@@ -127,6 +130,18 @@ Einreihen aktiver Konten; kürzlich abgerufene Konten und Konten mit letztem Feh
 Verbinden reihen auch solche Konten ein; zur Ausführung muss der Worker laufen. `MAIL_SYNC_STALE_MINUTES` (Standard
 `10`) bestimmt, wann ein gesperrter Job als veraltet gilt. Nach einem erfolgreichen Abruf mit
 neuen Mails wird ein Insight-Job eingereiht, der fehlende Kurzfassungen auffüllt.
+
+Ändert sich die Textfassung (`body_text` in `sync_types.py`), wird `BODY_VERSION` erhöht. Jeder
+Abruf liest danach bis zu 25 INBOX-Mails mit älterer Version beim Anbieter nach (ohne sie als
+gelesen zu markieren) und überschreibt Text und Vorschau in derselben Zeile; ihre Kurzfassung wird
+verworfen, wenn sich der Text ändert oder leer bleibt. Kennt der Anbieter die Mail nicht mehr oder
+liefert er sie unter anderer Message-ID, bleibt der alte Text und nur die Version steigt. Eine Mail,
+die gerade nicht lesbar ist (Serverfehler, Ratenlimit, Verbindungsabbruch), wird später erneut
+gefragt, die übrigen gelten trotzdem. Ihre Wartezeit verdoppelt sich je Fehlschlag, von einer Stunde
+bis zu einem Tag (im API-Prozess gemerkt, ein Neustart vergisst sie), damit wenige unlesbare Mails
+die übrigen nicht aufhalten. Eine Kurzfassung wird nur gespeichert, solange die Mail noch den Text hat,
+den das Modell gelesen hat; neuer Text und das Verwerfen der alten Kurzfassung gehen in einer
+Transaktion. Ein Fehler beim Nachlesen lässt den Abruf selbst erfolgreich.
 
 Stoppt Studio eine inaktive Instanz, pausiert auch der Worker und damit das Polling, bis eine
 neue Anfrage die Instanz wieder startet. Gemessen wurden 31 Minuten Leerlauf **ohne** Stopp;

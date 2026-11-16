@@ -36,8 +36,11 @@ async def upsert_message(
     reply_to_json: str = "[]",
     attachments_json: str = "[]",
     is_flagged: bool = False,
+    body_version: int = 0,
+    drop_insight: bool = False,
 ) -> MailMessage:
-    """Insert the message, or refresh it when (account, folder, uid) already exists."""
+    """Insert the message, or refresh it when (account, folder, uid) already exists. `drop_insight`
+    removes its insight in the same transaction (the summarized text changed)."""
     async with get_session_maker()() as session:
         result = await session.execute(
             select(MailMessage).where(
@@ -66,11 +69,14 @@ async def upsert_message(
         message.recipients_json = recipients_json
         message.snippet = snippet
         message.body_text = body_text
+        message.body_version = body_version
         message.internal_date = internal_date
         message.has_attachments = has_attachments
         message.is_read = is_read
         message.labels_json = labels_json
         session.add(message)
+        if drop_insight and message.id:
+            await _drop_insight(session, message.id)
         await session.commit()
         return message
 
@@ -227,6 +233,51 @@ async def unread_without_insight(*, since: datetime, limit: int, exclude_account
 async def known_uids(account_id: str, folder: str) -> dict[str, str]:
     async with get_session_maker()() as session:
         return dict((await session.execute(select(MailMessage.provider_uid, MailMessage.id).where(MailMessage.account_id == account_id, MailMessage.folder == folder))).all())
+
+
+async def stale_body_texts(account_id: str, folder: str, version: int, uids: list[str]) -> dict[str, str]:
+    """Stored text of the given rows whose body comes from an older text extraction, by provider id."""
+    if not uids:
+        return {}
+    stmt = select(MailMessage.provider_uid, MailMessage.body_text).where(
+        MailMessage.account_id == account_id, MailMessage.folder == folder, MailMessage.body_version < version, MailMessage.provider_uid.in_(uids))
+    async with get_session_maker()() as session:
+        return {uid: text for uid, text in (await session.execute(stmt)).all()}
+
+
+async def stale_bodies(account_id: str, folder: str, version: int, *, limit: int, exclude: Collection[str] = ()) -> list[MailMessage]:
+    """The newest rows whose body comes from an older text extraction, to re-read from the provider;
+    `exclude` names rows that wait for a later try."""
+    stmt = select(MailMessage).where(MailMessage.account_id == account_id, MailMessage.folder == folder, MailMessage.body_version < version)
+    if exclude:
+        stmt = stmt.where(MailMessage.id.not_in(list(exclude)))
+    stmt = (stmt.order_by(MailMessage.internal_date.desc().nulls_last(), MailMessage.id).limit(limit))
+    async with get_session_maker()() as session:
+        return list((await session.execute(stmt)).scalars().all())
+
+
+async def _drop_insight(session, message_id: str) -> None:
+    # The row is written first: its lock makes an insight being stored for the old text either land
+    # before this delete or see the new text (mail_insight.upsert, `summarized`).
+    await session.flush()
+    await session.execute(delete(MailInsight).where(MailInsight.message_id == message_id))
+
+
+async def set_body(message_id: str, *, body_version: int, body_text: str | None = None, snippet: str | None = None, drop_insight: bool = False) -> None:
+    """Store a re-read body; without text only the version moves on (the provider no longer has the mail).
+    `drop_insight` removes its insight in the same transaction."""
+    async with get_session_maker()() as session:
+        row = await session.get(MailMessage, message_id)
+        if row is None:
+            return
+        row.body_version = body_version
+        if body_text is not None:
+            row.body_text = body_text
+        if snippet is not None:
+            row.snippet = snippet
+        if drop_insight:
+            await _drop_insight(session, message_id)
+        await session.commit()
 
 
 async def delete_folder(account_id: str, folder: str) -> int:

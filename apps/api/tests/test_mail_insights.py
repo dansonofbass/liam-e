@@ -25,8 +25,10 @@ def payload(**kwargs):
 def setup(monkeypatch):
     fake = FakeMistral()
     monkeypatch.setattr(insights, "mistral_client", lambda: fake)
-    async def upsert(message_id, **values):
+    async def upsert(message_id, *, summarized=None, **values):
+        fake.summarized.append(summarized)
         return MailInsight(message_id=message_id, points_json=json.dumps(values.pop("points")), followups_json=json.dumps(values.pop("followups")), **values)
+    fake.summarized = []
     monkeypatch.setattr(insights.mail_insight, "upsert", upsert)
     return fake
 
@@ -47,6 +49,45 @@ async def test_compute_insight_without_text_makes_no_model_call(setup, body):
     assert setup.requests == []
     assert json.loads(row.points_json) == [] and json.loads(row.followups_json) == []
     assert row.deadline is None and not row.needs_reply
+
+
+@pytest.mark.anyio
+async def test_insight_is_stored_only_for_the_text_the_model_read(setup):
+    setup.responses.append(payload())
+    await insights.compute_insight(message(), today=date(2026, 2, 1))
+    await insights.compute_insight(message(body_text=""), today=date(2026, 2, 1))
+    assert setup.summarized == ["Bitte bis Dienstag antworten.", ""]
+
+
+@pytest.mark.anyio
+async def test_text_reread_during_the_model_call_gets_a_summary_of_the_new_text(setup, monkeypatch):
+    # The sync re-read the body while the model worked: the old text's summary is refused (None), and
+    # the new text is summarized instead of keeping a summary of the CSS junk.
+    setup.responses.extend([payload(points=["Alt"]), payload(points=["Neu"])])
+    refused = [True, False]
+    async def upsert(message_id, *, summarized=None, **values):
+        setup.summarized.append(summarized)
+        if refused.pop(0):
+            return None
+        return MailInsight(message_id=message_id, points_json=json.dumps(values.pop("points")), followups_json=json.dumps(values.pop("followups")), **values)
+    monkeypatch.setattr(insights.mail_insight, "upsert", upsert)
+    monkeypatch.setattr(insights.mail_insight, "get", AsyncMock(return_value=None))
+    monkeypatch.setattr(insights.mail_message, "get_message", AsyncMock(side_effect=[message(body_text="96 p{ margin:10px }"), message(body_text="Kuchenbasar am Freitag")]))
+    row = await insights.get_or_compute("m1")
+    assert json.loads(row.points_json) == ["Neu"]
+    assert setup.summarized == ["96 p{ margin:10px }", "Kuchenbasar am Freitag"]
+    assert "Kuchenbasar am Freitag" in setup.requests[1]["messages"][1]["content"]
+
+
+@pytest.mark.anyio
+async def test_text_that_keeps_changing_is_reported_not_summarized(setup, monkeypatch):
+    setup.responses.extend([payload(), payload()])
+    monkeypatch.setattr(insights.mail_insight, "upsert", AsyncMock(return_value=None))
+    monkeypatch.setattr(insights.mail_insight, "get", AsyncMock(return_value=None))
+    monkeypatch.setattr(insights.mail_message, "get_message", AsyncMock(return_value=message()))
+    with pytest.raises(insights.InsightOutdated):
+        await insights.get_or_compute("m1")
+    assert len(setup.requests) == 2
 
 
 @pytest.mark.anyio

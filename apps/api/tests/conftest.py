@@ -41,6 +41,16 @@ def fake_store(monkeypatch):
     return FakeStore(monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def forget_reread_waits():
+    """The re-read backoff lives in the process (api.mail.sync); no test inherits another's waits."""
+    from api.mail import sync
+
+    sync._reread_backoff.clear()
+    yield
+    sync._reread_backoff.clear()
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     """Run `@pytest.mark.anyio` tests on asyncio only (the app's event loop)."""
