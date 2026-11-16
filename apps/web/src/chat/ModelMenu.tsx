@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { chatConversationUpdate } from '../api/generated/sdk.gen'
-import { modelsQuery } from '../api/queries'
+import { conversationsQuery, modelsQuery } from '../api/queries'
 import { errorCode, unwrap } from '../api/unwrap'
 import { Chip, Icon, Menu, Notice, Tooltip } from '../ds'
 import { de } from '../i18n/de'
@@ -20,11 +20,26 @@ export function ModelMenu({ conversationId, model, onChange }: { conversationId?
     if (!conversationId) { onChange?.(next); return }
     setBusy(true); setError(undefined)
     try {
-      await unwrap(chatConversationUpdate({ path: { conversation_id: conversationId }, body: { model: next }, throwOnError: true }))
+      const current = (await client.fetchQuery({ ...conversationsQuery(), staleTime: 0 })).find(item => item.id === conversationId)
+      if (!current) { setError(de.errors.conversation_not_found); return }
+      await unwrap(chatConversationUpdate({ path: { conversation_id: conversationId }, body: { model: next, expected_version: current.version }, throwOnError: true }))
       setChosen(next)
       onChange?.(next)
       void client.invalidateQueries({ queryKey: ['history', conversationId] })
-    } catch (failure) { setError(errorCode(failure instanceof Error ? failure.cause : failure) === 'model_unknown' ? de.chat.modelUnknown : de.chat.modelError) } finally { setBusy(false) }
+      void client.invalidateQueries({ queryKey: ['conversations'] })
+    } catch (failure) {
+      const code = errorCode(failure instanceof Error ? failure.cause : failure)
+      if (code === 'version_conflict') {
+        try {
+          const current = (await client.fetchQuery({ ...conversationsQuery(), staleTime: 0 })).find(item => item.id === conversationId)
+          if (!current) { setError(de.errors.conversation_not_found); return }
+          setChosen(current.model || models.find(item => item.is_default)?.id)
+          onChange?.(current.model)
+          setError(de.chat.modelConflict)
+          void client.invalidateQueries({ queryKey: ['history', conversationId] })
+        } catch { setError(de.chat.modelConflictReloadError) }
+      } else setError(code === 'model_unknown' ? de.chat.modelUnknown : de.chat.modelError)
+    } finally { setBusy(false) }
   }
   return <>{label && <Menu placement="down-end" trigger={props => <Tooltip content={de.chat.modelTip} pos="bottom"><Chip {...props} quiet disabled={busy}>{label}<Icon name="chevron-down" size="sm" /></Chip></Tooltip>} items={models.map(item => ({ label: item.description ? `${item.label} · ${item.description}` : item.label, onSelect: () => { void select(item.id) } }))} />}{error && <Notice tone="danger">{error}</Notice>}</>
 }

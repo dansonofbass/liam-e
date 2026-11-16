@@ -33,6 +33,8 @@ export const de = {
     noAccounts: 'Verbinde ein Konto, dann kann ich deine Mails lesen.', removeReference: 'Bezug entfernen', toEnd: 'Zum Ende',
     loadingReference: 'Mail wird geladen …', referenceError: 'Die Mail konnte nicht geladen werden. Versuch es gleich noch mal.',
     modelTip: 'Modell für diese Unterhaltung wählen',
+    modelConflict: 'Die Unterhaltung wurde inzwischen geändert. Der aktuelle Stand ist geladen. Prüfe das Modell und wähle bei Bedarf erneut.',
+    modelConflictReloadError: 'Die Unterhaltung wurde inzwischen geändert, aber der aktuelle Stand konnte nicht geladen werden. Versuch es gleich noch mal.',
     modelError: 'Das Modell konnte nicht geändert werden. Versuch es gleich noch mal.', modelUnknown: 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.',
     stand: (unread: number, accounts: number, time?: string) => `${plural(unread, { zero: 'Keine ungelesenen Mails', one: '# ungelesene Mail', other: '# ungelesene Mails' })} in ${plural(accounts, { one: '# Konto', other: '# Konten' })}${time ? ` · Stand ${time}` : ''}`,
   },
