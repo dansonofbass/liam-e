@@ -198,9 +198,54 @@ in der Probe HTTP 401.
   Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.
   Neue verändernde Operationen gehören bewusst in `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, sonst scheitert der Inventur-Test.
 
+## Veröffentlichung und private Daten
+
+liam-e soll veröffentlicht werden können. Alles, was in Git landet (Dateien und
+Commit-Nachrichten), und alles auf GitHub (Issues, PRs, Reviews, Kommentare) gilt deshalb schon
+jetzt als öffentlich.
+
+- **Nichts über den Owner oder seine Umgebung:** keine echten Namen, Mailadressen, Mail- oder
+  Kalenderinhalte, Kontakte, Hostnamen, internen Domains, IP-Adressen, absoluten lokalen Pfade,
+  Benutzer- oder Gerätenamen und keine Namen der eigenen Infrastruktur oder Werkzeuge. Pfade
+  relativ zum Repo angeben.
+- **Mistral-Tenant:** Organisations-, Workspace- und App-ID stehen nur in `mistral.json`, weil
+  `mistral deploy` sie dort braucht. Überall sonst `<organization-id>`, `<workspace-id>` und
+  `<app-id>`; App- und Gateway-URLs des Deployments nicht aufschreiben.
+- **Keine Links auf private Ressourcen:** Claude-Artefakte, Sitzungen und private Dokumente beim
+  Namen nennen statt verlinken (etwa Design-System „liam-e“). Ausgenommen ist nur die
+  Attributionszeile `Claude-Session` in Commits und PR-Beschreibungen.
+- **Testdaten sind synthetisch:** Adressen unter `example.org`, `example.com`, `example.net`,
+  `*.example` oder `*.test`, erfundene Namen und Inhalte. Provider-Voreinstellungen (`gmail.com`,
+  `icloud.com` …) sind Konfiguration; Tests dazu nehmen Platzhalter wie `me@` oder `x@`. Nie eine
+  echte Mail, einen echten Termin oder echte Kopfzeilen als Fixture übernehmen, auch nicht
+  gekürzt. Screenshots nur mit den Seed-Daten aus `api.mail.dev_seed`.
+- **Credentials nie im Klartext:** keine Passwörter, App-Passwörter, Tokens, API-Keys,
+  OAuth-Codes, Cookies oder Fernet-Schlüssel, weder in Code, Tests, Doku, `.env.example`,
+  Issues, PRs, Commit-Nachrichten und Logs noch in Aufträgen an andere Modelle. Werte gibt es nur
+  als Workspace-Secret in Studio oder lokal in `.env` (gitignored). Agents lesen `.env` nicht und
+  geben keine Werte daraus aus; Secret-*Namen* wie `yahoo-app-password` sind unkritisch. Tests
+  nehmen sichtbare Wegwerfwerte (`test-only`) oder zur Laufzeit erzeugte Schlüssel.
+- **Ein committetes Geheimnis gilt als verbrannt:** zuerst rotieren, dann entfernen; die
+  Historie behält es. Nie über eine Allowlist in `.gitleaks.toml` oder über `.gitleaksignore`
+  „lösen“.
+- **Logs und Fehlertexte** enthalten keine Mailinhalte, Adressen, Vorlagentexte, Tokens oder
+  Secret-Werte.
+- **Lokaler Agent-Zustand** (`.superpowers/`, `.codegraph/`, `.remember/`,
+  `.claude/settings.local.json`, `.claude/worktrees/`, Playwright-Ausgaben) bleibt ungetrackt;
+  `.gitignore` deckt ihn ab.
+- **Durchsetzung:** CI-Job `secrets` (gitleaks über die ganze Historie mit `.gitleaks.toml`) und
+  `tests/test_public_repo_hygiene.py` (Tenant-IDs außerhalb von `mistral.json`, private Links,
+  Home-Pfade, echt wirkende Mailadressen). Eine Ausnahme in der Allowlist braucht einen
+  geprüften Fehlalarm und eine Begründung im Eintrag.
+- Was vor einer Veröffentlichung noch zu tun ist, steht in
+  [docs/veroeffentlichung.md](docs/veroeffentlichung.md).
+
 ## Arbeitsweise für Agents
 - Vor jeder Arbeit an der Oberfläche (`apps/web`, Texte, auch Antworttexte des Assistenten) `DESIGN.md` lesen; sie regelt Tokens, Bausteine, Responsive-Verhalten und wie Texte klingen.
 - Minimale Diffs, bestehende Patterns kopieren (siehe Modul-Docstrings — sie dokumentieren die Konventionen jeweils lokal).
 - Nach API-Änderungen immer `gen-types` laufen lassen und `apps/api/openapi.json` + `apps/web/src/api/generated` mit committen.
 - Änderungen an Tabellen immer mit Migration (`db:revision` + `db:migrate`), nie von Hand editierte `versions/`-Dateien.
 - Vor dem Commit: `bun run check` (baut alles und prüft den generierten Client) und die betroffenen Test-Suiten laufen lassen.
+- Issues und PRs über die Vorlagen in `.github/` (`ISSUE_TEMPLATE/`, `pull_request_template.md`). Eine Aufgabe ergibt
+  genau einen Branch und einen PR, auch wenn sie mehrere Issues umfasst; jedes Issue bekommt eigene Commits und ein
+  eigenes Schließwort (`Closes #12. Closes #13.`). Was nicht geprüft wurde, steht im PR ausdrücklich als nicht geprüft.
