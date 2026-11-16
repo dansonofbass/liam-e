@@ -16,7 +16,8 @@ router = APIRouter()
 @router.post('', operation_id='tasks_create', summary='Create a personal task')
 async def create_task(body: TaskCreate) -> TaskCreated:
     try:
-        start = datetime.fromisoformat(body.start) if 'T' in body.start else date.fromisoformat(body.start)
+        # ISO 8601 allows a lowercase separator; a date has neither.
+        start = datetime.fromisoformat(body.start) if 't' in body.start.lower() else date.fromisoformat(body.start)
         async with get_session_maker()() as session:
             row, created = await create.create(
                 session, creation_key=body.creation_key, title=body.title, description=body.description,

@@ -43,6 +43,14 @@ def test_creation_and_conflict(client, access):
     assert client.post('/api/v1/tasks', json={**body, 'creation_key': ''}).status_code == 422
 
 
+@pytest.mark.parametrize(('start', 'kind'), [('2024-01-01', 'date'), ('2024-01-01T09:00', 'datetime'), ('2024-01-01t09:00', 'datetime')])
+def test_start_precision_follows_the_input(client, access, start, kind):
+    _, create, _, _ = access
+    body = {'creation_key': 'k', 'title': 'Example', 'start': start, 'timezone': 'Europe/Berlin'}
+    assert client.post('/api/v1/tasks', json=body).status_code == 200
+    assert type(create.await_args.kwargs['start']).__name__ == kind
+
+
 def test_new_task_is_visible_and_retry_does_not_reconcile_again(client, access):
     _, create, listing, _ = access
     row = TaskOccurrence(id='o', series_id='s', revision_id='r', occurrence_key='2024-01-01', due_local='2024-01-01')
