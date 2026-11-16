@@ -62,6 +62,34 @@ def test_adapter_to_index_end_to_end(pg_db):
     asyncio.run(run())
 
 
+def test_source_scope_and_delete(pg_db):
+    async def run():
+        from db.accessors import calendar_occurrence, calendar_source
+        from db.engine import get_session_maker
+        from db.models.calendar_event import CalendarEvent
+        from db.models.calendar_occurrence import CalendarOccurrence
+        from db.models.calendar_source import CalendarSource
+        from db.models.calendar_sync_state import CalendarSyncState
+
+        source = CalendarSource(provider="synthetic", connection_ref="local", external_id="calendar", name="Example", timezone="UTC")
+        event = CalendarEvent(source_id=source.id, external_id="event")
+        occurrence = CalendarOccurrence(source_id=source.id, event_id=event.id, external_id="instance", start_date=date(2026, 1, 1), end_date=date(2026, 1, 3))
+        async with get_session_maker()() as session:
+            session.add_all([source, event, occurrence, CalendarSyncState(source_id=source.id)])
+            await session.commit()
+        assert (await calendar_occurrence.get_visible(occurrence.id)).id == occurrence.id
+        await calendar_source.set_active(source.id, False)
+        assert await calendar_occurrence.get_visible(occurrence.id) is None
+        rows = await calendar_occurrence.page_visible(start=datetime(2026, 1, 1, tzinfo=UTC), end=datetime(2026, 1, 2, tzinfo=UTC), start_date=date(2026, 1, 1), end_date=date(2026, 1, 2), source_id=None, after=None, limit=10)
+        assert rows == []
+        assert await calendar_source.remove(source.id)
+        async with get_session_maker()() as session:
+            assert await session.get(CalendarEvent, event.id) is None
+            assert await session.get(CalendarOccurrence, occurrence.id) is None
+            assert await session.get(CalendarSyncState, source.id) is None
+    asyncio.run(run())
+
+
 def test_snapshot_rollback_and_parallel_replacement(pg_db):
     async def run():
         from db.accessors import mail_job

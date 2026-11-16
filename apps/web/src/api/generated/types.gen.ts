@@ -921,6 +921,62 @@ export type OAuthAuthorizeOut = {
 };
 
 /**
+ * OccurrenceOut
+ */
+export type OccurrenceOut = {
+    /**
+     * End At
+     */
+    end_at: string | null;
+    /**
+     * End Date
+     */
+    end_date: string | null;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Start At
+     */
+    start_at: string | null;
+    /**
+     * Start Date
+     */
+    start_date: string | null;
+    /**
+     * Timezone
+     */
+    timezone: string | null;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * OccurrencePage
+ */
+export type OccurrencePage = {
+    /**
+     * Items
+     */
+    items: Array<OccurrenceOut>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
  * Proposal
  */
 export type Proposal = {
@@ -1076,6 +1132,66 @@ export type SendDraft = {
 };
 
 /**
+ * SourceOut
+ */
+export type SourceOut = {
+    /**
+     * Capabilities
+     */
+    capabilities: Array<string>;
+    /**
+     * Coverage End
+     */
+    coverage_end: string | null;
+    /**
+     * Coverage Start
+     */
+    coverage_start: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Incomplete
+     */
+    incomplete: boolean;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Last Success At
+     */
+    last_success_at: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Stale
+     */
+    stale: boolean;
+    /**
+     * Timezone
+     */
+    timezone: string;
+};
+
+/**
+ * SourcePatch
+ */
+export type SourcePatch = {
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+};
+
+/**
  * StartEvent
  */
 export type StartEvent = {
@@ -1143,6 +1259,16 @@ export type SyncAllRequest = {
      * Only If Older Than Minutes
      */
     only_if_older_than_minutes?: number | null;
+};
+
+/**
+ * SyncOut
+ */
+export type SyncOut = {
+    /**
+     * Queued
+     */
+    queued: boolean;
 };
 
 /**
@@ -1220,6 +1346,190 @@ export type HealthResponses = {
 };
 
 export type HealthResponse2 = HealthResponses[keyof HealthResponses];
+
+export type CalendarOccurrencesListData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * From
+         */
+        from: string;
+        /**
+         * To
+         */
+        to: string;
+        /**
+         * Source Id
+         */
+        source_id?: string | null;
+        /**
+         * Cursor
+         */
+        cursor?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/calendar/occurrences';
+};
+
+export type CalendarOccurrencesListErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarOccurrencesListError = CalendarOccurrencesListErrors[keyof CalendarOccurrencesListErrors];
+
+export type CalendarOccurrencesListResponses = {
+    /**
+     * Successful Response
+     */
+    200: OccurrencePage;
+};
+
+export type CalendarOccurrencesListResponse = CalendarOccurrencesListResponses[keyof CalendarOccurrencesListResponses];
+
+export type CalendarOccurrenceGetData = {
+    body?: never;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/occurrences/{occurrence_id}';
+};
+
+export type CalendarOccurrenceGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarOccurrenceGetError = CalendarOccurrenceGetErrors[keyof CalendarOccurrenceGetErrors];
+
+export type CalendarOccurrenceGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: OccurrenceOut;
+};
+
+export type CalendarOccurrenceGetResponse = CalendarOccurrenceGetResponses[keyof CalendarOccurrenceGetResponses];
+
+export type CalendarSourcesListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/sources';
+};
+
+export type CalendarSourcesListResponses = {
+    /**
+     * Response Calendar Sources List
+     *
+     * Successful Response
+     */
+    200: Array<SourceOut>;
+};
+
+export type CalendarSourcesListResponse = CalendarSourcesListResponses[keyof CalendarSourcesListResponses];
+
+export type CalendarSourceDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Source Id
+         */
+        source_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/sources/{source_id}';
+};
+
+export type CalendarSourceDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarSourceDeleteError = CalendarSourceDeleteErrors[keyof CalendarSourceDeleteErrors];
+
+export type CalendarSourceDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CalendarSourceDeleteResponse = CalendarSourceDeleteResponses[keyof CalendarSourceDeleteResponses];
+
+export type CalendarSourceUpdateData = {
+    body: SourcePatch;
+    path: {
+        /**
+         * Source Id
+         */
+        source_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/sources/{source_id}';
+};
+
+export type CalendarSourceUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarSourceUpdateError = CalendarSourceUpdateErrors[keyof CalendarSourceUpdateErrors];
+
+export type CalendarSourceUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourceOut;
+};
+
+export type CalendarSourceUpdateResponse = CalendarSourceUpdateResponses[keyof CalendarSourceUpdateResponses];
+
+export type CalendarSourceSyncData = {
+    body?: never;
+    path: {
+        /**
+         * Source Id
+         */
+        source_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/sources/{source_id}/sync';
+};
+
+export type CalendarSourceSyncErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarSourceSyncError = CalendarSourceSyncErrors[keyof CalendarSourceSyncErrors];
+
+export type CalendarSourceSyncResponses = {
+    /**
+     * Successful Response
+     */
+    200: SyncOut;
+};
+
+export type CalendarSourceSyncResponse = CalendarSourceSyncResponses[keyof CalendarSourceSyncResponses];
 
 export type ChatTurnData = {
     body: ChatTurnRequest;
