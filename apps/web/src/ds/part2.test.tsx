@@ -1,5 +1,5 @@
 import { afterEach, expect, mock, test } from 'bun:test'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { AccountOut, MessageListItemOut, ProposalItem, SendDraft } from '../api/generated/types.gen'
 import { ConfirmCard } from './ConfirmCard'
 import { MailRow } from './MailRow'
@@ -46,6 +46,15 @@ test('confirm checkbox alignment and coarse mail reference targets', async () =>
   render(<ConfirmCard title="Bestätigen?" reason="Grund" items={items} confirmLabel={n => `${n} bestätigen`} onConfirm={() => {}} onCancel={() => {}} />)
   const name = screen.getByLabelText('a').closest('.le-confirm-item-name')
   expect(name?.querySelector('strong')?.textContent).toBe('a')
+})
+
+test('the "more" button of a row names the subject for screen readers, its tooltip says only what it does', () => {
+  const subject = Array(20).fill('Sehr langer Betreff').join(' ')
+  render(<MailRow mail={{ ...mail, subject }} selected={false} coarse onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  const more = screen.getByRole('button', { name: `Weitere Aktionen zu ${subject}` })
+  fireEvent.keyDown(document.body, { key: 'Tab' })
+  act(() => more.focus())
+  expect(screen.getByRole('tooltip').textContent).toBe('Weitere Aktionen')
 })
 
 test('unread coarse mail exposes its actions and markers', () => {

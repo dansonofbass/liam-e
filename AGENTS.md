@@ -169,6 +169,7 @@ in der Probe HTTP 401.
 - TanStack Router: eine Datei pro Route unter `src/routes/`; Landing-Page über `staticData: { landing: <rank> }` claimen. Nach neuen Routen `bunx nx run web:gen-routes`.
 - API-Zugriff nur über den generierten Client (`src/api/generated/`, git-committed, nie manuell editieren) + `unwrap`/`dataOr404` aus `src/api/unwrap.ts`; `VITE_API_URL` konfiguriert die Base-URL. Aufrufe, deren Ergebnis vom HTTP-Status abhängt (404/409/502 bei Mail-Aktionen, Abrufen und Konten), dürfen den generierten Client ohne `unwrap` aufrufen und selbst nach Status verzweigen.
 - Styling mit Tailwind 4; Pfade/englische Literale mit `// i18n-exempt` markieren. Tests: `bun test` (jsdom-Setup in `src/test/setup.js`).
+- Tooltips und Menüs hängen im `<body>` und werden nie per CSS positioniert oder über einen Vorfahren gestaltet (kein `top`/`left`/`right`/`bottom` an `.le-menu`/`.le-tooltip`, kein `.le-x .le-menu`); die Lage kommt aus `src/ds/floating.ts` (`pos` bzw. `placement` ist nur die Wunschseite). `src/ds/floating.test.tsx` prüft das. Siehe DESIGN.md §5, „Schwebendes“.
 
 ## Sicherheit
 - OAuth-Client-Secrets und `MAIL_TOKEN_ENCRYPTION_KEY` sind **Workspace-Secrets** (`WorkspaceSecret`), nie im Code; lokal nur in `.env`. **Secret-Namen in Mistral Studio sind lowercase** — die Auflösung ist case-insensitiv: Secret `mail_token_encryption_key` füllt `MAIL_TOKEN_ENCRYPTION_KEY` (siehe Docstring von `env/_mistral_secrets.py`).

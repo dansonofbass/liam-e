@@ -266,13 +266,18 @@ test.each([{ mobile: false }, { mobile: true }])('the more-actions button is alw
   } finally { mail.can_unsubscribe = original }
 })
 
-test('the "Weitere Aktionen" menu stays inside the reading pane: right-aligned below desktop, hung from the start of the bar in the split view', async () => {
-  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
-  expect(css).toContain('@media (max-width: 1023px) { .le-mail-topbar .le-menu-anchor .le-menu { left: auto; right: 0; } }')
-  const split = css.match(/@media \(min-width: 1024px\) \{ \.le-mail-topbar \{ position: relative; \} \.le-mail-topbar \.le-menu-anchor \{ position: static; \} \.le-mail-topbar \.le-menu-anchor \.le-menu \{ ([^}]+)\} \}/u)?.[1]
-  for (const property of ['top: calc(var(--space-4) + var(--control-height-lg) + var(--space-1))', 'left: var(--space-5)']) expect(split).toContain(property)
-  // No rule may align it with the trigger at every width: at 1024 px the pane is narrower than trigger offset plus menu.
-  expect(css).not.toMatch(/^\.le-mail-topbar \.le-menu-anchor \.le-menu \{/mu)
+// Placement comes from floating.ts, which keeps the menu inside the viewport; no CSS rule positions it per context.
+test('the "Weitere Aktionen" menu hangs from the start of its trigger in the split view', async () => {
+  setup(); await screen.findByRole('heading', { name: 'Termin' })
+  fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
+  expect(screen.getByRole('menu').classList.contains('le-menu--down-start')).toBe(true)
+  expect(await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()).not.toMatch(/\.le-mail-topbar[^{]*\.le-menu/u)
+})
+
+test('the "Weitere Aktionen" menu hangs from the end of its trigger below desktop, where the actions end the bar', async () => {
+  setup({ mobile: true }); await screen.findByRole('heading', { name: 'Termin' })
+  fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }))
+  expect(screen.getByRole('menu').classList.contains('le-menu--down-end')).toBe(true)
 })
 
 test('with an unsubscribe route the entry is enabled and has no hint', async () => {
