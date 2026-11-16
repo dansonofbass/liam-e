@@ -125,6 +125,48 @@ def test_parallel_reconcile_materializes_each_occurrence_once(pg_db):
     asyncio.run(run())
 
 
+def test_creation_rolls_back_when_materialization_fails(pg_db, monkeypatch):
+    from datetime import date
+    from api.main import create_app
+    from api.routers.api.v1.tasks import route
+    from fastapi.testclient import TestClient
+    from mistralai_capabilities.fastapi.hooks import FastAPIHooks
+
+    async def fail(*args, **kwargs):
+        raise RuntimeError('synthetic failure')
+
+    original = route.reconcile.reconcile_batch
+    monkeypatch.setattr(route.reconcile, 'reconcile_batch', fail)
+    app = create_app(hooks=FastAPIHooks.empty())
+    body = {'creation_key': 'rollback', 'title': 'Example', 'start': date.today().isoformat()}
+    with TestClient(app, raise_server_exceptions=False) as client:
+        assert client.post('/api/v1/tasks', json=body).status_code == 500
+        assert client.get('/api/v1/tasks/occurrences').json()['items'] == []
+        monkeypatch.setattr(route.reconcile, 'reconcile_batch', original)
+        retry = client.post('/api/v1/tasks', json=body)
+        assert retry.status_code == 200 and retry.json()['created'] is True
+
+
+def test_created_task_is_immediately_visible_via_api(pg_db):
+    from datetime import date
+    from api.main import create_app
+    from fastapi.testclient import TestClient
+    from mistralai_capabilities.fastapi.hooks import FastAPIHooks
+
+    app = create_app(hooks=FastAPIHooks.empty())
+    body = {'creation_key': 'api-create', 'title': 'Example', 'start': date.today().isoformat()}
+    with TestClient(app) as client:
+        first = client.post('/api/v1/tasks', json=body)
+        assert first.status_code == 200 and first.json()['created'] is True
+        visible = client.get('/api/v1/tasks/occurrences')
+        assert visible.status_code == 200
+        assert len(visible.json()['items']) == 1
+        assert visible.json()['items'][0]['series_id'] == first.json()['id']
+        retry = client.post('/api/v1/tasks', json=body)
+        assert retry.status_code == 200 and retry.json()['created'] is False
+        assert len(client.get('/api/v1/tasks/occurrences').json()['items']) == 1
+
+
 def test_occurrence_list_scope_filters_and_cursor(pg_db):
     async def run():
         from db.accessors import task_occurrence, task_series

@@ -122,8 +122,9 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 ## Aufgabendomäne
 
 `api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
-Aufgabenrouter legen Serien an und lesen oder ändern bereits materialisierte Instanzen; sie
-starten selbst keinen Reconcile-Lauf. Serienrevision, Archivieren und Löschen sind noch offen.
+Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite
+in derselben Transaktion. Weitere Seiten werden nicht automatisch abgerufen. Serienrevision,
+Archivieren und Löschen sind noch offen.
 
 ## Kalenderdomäne
 

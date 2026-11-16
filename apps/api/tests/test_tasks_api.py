@@ -24,6 +24,8 @@ def access(monkeypatch):
     listing = AsyncMock(return_value=[])
     change = AsyncMock(return_value=TaskOccurrence(id='o', series_id='s', revision_id='r', occurrence_key='2024-01-01', due_local='2024-01-01'))
     monkeypatch.setattr(route.create, 'create', create)
+    monkeypatch.setattr(route.task_schedule_revision, 'get_by_version', AsyncMock(return_value=type('Revision', (), {'id': 'r'})()))
+    monkeypatch.setattr(route.reconcile, 'reconcile_batch', AsyncMock(return_value=(None, True)))
     monkeypatch.setattr(occurrences.task_occurrence, 'list_page', listing)
     monkeypatch.setattr(occurrences.state, 'transition', change)
     return session, create, listing, change
@@ -39,6 +41,33 @@ def test_creation_and_conflict(client, access):
     assert client.post('/api/v1/tasks', json=body).status_code == 409
     assert client.post('/api/v1/tasks', json={**body, 'start': 'invalid'}).status_code == 422
     assert client.post('/api/v1/tasks', json={**body, 'creation_key': ''}).status_code == 422
+
+
+def test_new_task_is_visible_and_retry_does_not_reconcile_again(client, access):
+    _, create, listing, _ = access
+    row = TaskOccurrence(id='o', series_id='s', revision_id='r', occurrence_key='2024-01-01', due_local='2024-01-01')
+
+    async def materialize(*args, **kwargs):
+        listing.return_value = [row]
+        return None, True
+
+    route.reconcile.reconcile_batch.side_effect = materialize
+    body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01'}
+    assert client.post('/api/v1/tasks', json=body).status_code == 200
+    response = client.get('/api/v1/tasks/occurrences')
+    assert response.status_code == 200 and response.json()['items'][0]['id'] == 'o'
+    series = create.return_value[0]
+    create.return_value = (series, False)
+    assert client.post('/api/v1/tasks', json=body).json()['created'] is False
+    route.reconcile.reconcile_batch.assert_awaited_once()
+
+
+def test_reconcile_failure_does_not_commit_creation(client, access):
+    session, _, _, _ = access
+    route.reconcile.reconcile_batch.side_effect = RuntimeError('synthetic failure')
+    with pytest.raises(RuntimeError, match='synthetic failure'):
+        client.post('/api/v1/tasks', json={'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01'})
+    session.commit.assert_not_awaited()
 
 
 def test_list_filters_cursor_and_invalid_input(client, access):
