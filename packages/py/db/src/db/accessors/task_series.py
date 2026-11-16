@@ -20,6 +20,8 @@ async def create_once(session: AsyncSession, row: TaskSeries) -> tuple[TaskSerie
     return result.scalar_one(), created
 
 
-async def get(session: AsyncSession, scope: str, series_id: str) -> TaskSeries | None:
-    result = await session.execute(select(TaskSeries).where(TaskSeries.id == series_id, TaskSeries.scope == scope))
-    return result.scalar_one_or_none()
+async def get(session: AsyncSession, scope: str, series_id: str, *, lock: bool = False) -> TaskSeries | None:
+    query = select(TaskSeries).where(TaskSeries.id == series_id, TaskSeries.scope == scope)
+    if lock:
+        query = query.with_for_update()
+    return (await session.execute(query)).scalar_one_or_none()
