@@ -51,6 +51,9 @@ class MailMessage(SQLModel, table=True):
     recipients_json: str = "[]"
     snippet: str = ""
     body_text: str = ""
+    # Version of the text extraction that produced body_text (api.mail.sync_types.BODY_VERSION);
+    # sync re-reads older bodies from the provider. 0 marks rows from before versioning.
+    body_version: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     internal_date: datetime | None = Field(
         default=None, sa_column=utc_datetime_column(nullable=True)
     )

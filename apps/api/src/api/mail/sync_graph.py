@@ -3,14 +3,15 @@
 import json
 from datetime import datetime
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 from db.models.mail_account import MailAccount
+from db.models.mail_message import MailMessage
 
 from api.mail import service
 from api.mail.providers import GRAPH_API
-from api.mail.sync_types import SyncChanges, addresses, attachments, common, strip_html
+from api.mail.sync_types import Reread, SyncChanges, addresses, attachments, body_text, common, reread_http
 
 
 def _safe_delta_url(url: str) -> bool:
@@ -87,12 +88,23 @@ async def fetch_attachments(
     return items
 
 
+async def fetch_bodies(account: MailAccount, messages: list[MailMessage], *, max_body_chars: int) -> Reread:
+    """Re-read message bodies by id; see `Reread` for the result."""
+    credentials = await service.load_credentials(account)
+    token = await service.valid_access_token(account, credentials)
+    async with httpx.AsyncClient(timeout=30, base_url=GRAPH_API) as client:
+        return await reread_http(
+            [message.provider_uid for message in messages],
+            lambda uid: client.get(f"/me/messages/{quote(uid, safe='')}", params={"$select": "id,body"}, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False),
+            lambda data: parse_message(data, folder="INBOX", max_body_chars=max_body_chars),
+        )
+
+
 def parse_message(message: dict[str, Any], *, folder: str, max_body_chars: int) -> dict[str, Any]:
     body = message.get('body') or {}
-    text = body.get('content') or ''
-    if body.get('contentType', '').lower() == 'html':
-        text = strip_html(text)
-    text = text[:max_body_chars]
+    content = body.get('content') or ''
+    html = body.get('contentType', '').lower() == 'html'
+    text = body_text([] if html else [content], [content] if html else [])[:max_body_chars]
     sender = (message.get('from') or {}).get('emailAddress', {}).get('address', '')
     headers = {h['name'].lower(): h['value'] for h in message.get('internetMessageHeaders') or []}
     headers['message-id'] = message.get('internetMessageId') or headers.get('message-id', '')

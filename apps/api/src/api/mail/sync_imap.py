@@ -12,24 +12,36 @@ from typing import Any
 
 from db.accessors import mail_message as message_access
 from db.models.mail_account import MailAccount
+from db.models.mail_message import MailMessage
 
 from api.mail import service, transport
 from api.mail.headers import sender_address
-from api.mail.sync_types import SyncChanges, addresses, common
+from api.mail.sync_types import Reread, SyncChanges, addresses, body_text, common
+
+
+def _open_inbox(connection, email_address: str, password: str) -> None:
+    try:
+        connection.login(email_address, password)
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error as error:
+        raise service.CredentialError("IMAP login rejected") from error
+    status, _ = connection.select('"INBOX"', readonly=True)
+    if status != "OK":
+        raise RuntimeError("IMAP select failed")
+
+
+def _logout(connection) -> None:
+    try:
+        connection.logout()
+    except (imaplib.IMAP4.error, OSError):
+        pass
 
 
 def _fetch(host: str, port: int, email_address: str, password: str, cursor: str, known: dict[str, str], limit: int, max_body_chars: int) -> SyncChanges:
     connection = transport.open_imap(host, port)
     try:
-        try:
-            connection.login(email_address, password)
-        except imaplib.IMAP4.abort:
-            raise
-        except imaplib.IMAP4.error as error:
-            raise service.CredentialError("IMAP login rejected") from error
-        status, _ = connection.select('"INBOX"', readonly=True)
-        if status != "OK":
-            raise RuntimeError("IMAP select failed")
+        _open_inbox(connection, email_address, password)
         _, values = connection.response("UIDVALIDITY")
         validity = values[0].decode() if values and values[0] else ""
         if not validity:
@@ -82,10 +94,30 @@ def _fetch(host: str, port: int, email_address: str, password: str, cursor: str,
             changes.upserts.append(parsed)
         return changes
     finally:
-        try:
-            connection.logout()
-        except (imaplib.IMAP4.error, OSError):
-            pass
+        _logout(connection)
+
+
+def _fetch_bodies(host: str, port: int, email_address: str, password: str, uids: list[str], max_body_chars: int) -> Reread:
+    connection = transport.open_imap(host, port)
+    try:
+        _open_inbox(connection, email_address, password)
+        found: Reread = {}
+        for uid in uids:
+            if not uid.isdigit():
+                found[uid] = None  # not an IMAP UID: never readable
+                continue
+            try:
+                status, data = connection.uid("fetch", uid, "(UID BODY.PEEK[])")
+            except (imaplib.IMAP4.error, OSError):
+                break  # connection lost: the rest waits for the next run
+            if status != "OK":
+                continue  # this mail failed now; asked again next run
+            part = next((entry for entry in data or [] if isinstance(entry, tuple) and entry[1]), None)
+            # No data: the server no longer has this UID.
+            found[uid] = parse_rfc822(part[1], max_body_chars=max_body_chars) if part is not None else None
+        return found
+    finally:
+        _logout(connection)
 
 
 async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int) -> SyncChanges:
@@ -97,22 +129,41 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
     return await asyncio.to_thread(_fetch, host, int(credentials.get("imap_port", 993)), account.email_address, password, cursor, known, limit, max_body_chars)
 
 
+async def fetch_bodies(account: MailAccount, messages: list[MailMessage], *, max_body_chars: int) -> Reread:
+    """Re-read INBOX messages by UID without marking them read (BODY.PEEK); see `Reread` for the result."""
+    uids = [message.provider_uid for message in messages]
+    credentials = await service.load_credentials(account)
+    host = credentials["imap_host"]
+    await transport.check_mail_host(host)
+    password = await service.imap_password(credentials)
+    return await asyncio.to_thread(_fetch_bodies, host, int(credentials.get("imap_port", 993)), account.email_address, password, uids, max_body_chars)
+
+
+def _part_text(part) -> str:
+    try:
+        content = part.get_content()
+        return content if isinstance(content, str) else ""
+    except LookupError:
+        # An unknown charset must not cost the text; undecodable bytes become replacement characters.
+        payload = part.get_payload(decode=True)
+        return payload.decode("utf-8", errors="replace") if isinstance(payload, bytes) else ""
+
+
 def parse_rfc822(raw: bytes, *, max_body_chars: int) -> dict[str, Any]:
     msg = email.message_from_bytes(raw, policy=policy.default)
-    parts, files = [], []
+    texts: dict[str, list[str]] = {"text/plain": [], "text/html": []}
+    files = []
     for part in msg.walk():
         try:
             filename = part.get_filename()
             if filename or part.get_content_disposition() == "attachment":
                 payload = part.get_payload(decode=True) or b""
                 files.append({"name": filename or "", "size": len(payload), "content_type": part.get_content_type()})
-            elif part.get_content_type() == "text/plain":
-                content = part.get_content()
-                if isinstance(content, str):
-                    parts.append(content)
+            elif part.get_content_type() in texts:
+                texts[part.get_content_type()].append(_part_text(part))
         except Exception:
             pass
-    body = '\n'.join(parts)[:max_body_chars]
+    body = body_text(texts["text/plain"], texts["text/html"])[:max_body_chars]
     def header(key: str) -> str:
         try:
             return str(msg.get(key, ""))

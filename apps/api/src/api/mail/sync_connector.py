@@ -11,11 +11,14 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
+
 from db.accessors import mail_message as message_access
 from db.models.mail_account import MailAccount
+from db.models.mail_message import MailMessage
 
 from api.mail import connectors
-from api.mail.sync_types import SyncChanges, attachments, common, strip_html
+from api.mail.sync_types import Reread, SyncChanges, attachments, body_text, common
 
 
 async def _search(provider: str, query: str) -> list[dict[str, Any]]:
@@ -125,8 +128,29 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
     return changes
 
 
+async def fetch_bodies(account: MailAccount, messages: list[MailMessage], *, max_body_chars: int) -> Reread:
+    """Re-read messages thread by thread; see `Reread` for the result."""
+    wanted: dict[str, list[str]] = {}
+    for message in messages:
+        wanted.setdefault(message.thread_id, []).append(message.provider_uid)
+    found: Reread = {}
+    for thread_id, uids in wanted.items():
+        try:
+            full = await connectors.call_read_tool_json(account.provider, "get_thread", {"threadId": thread_id, "messageFormat": "FULL_CONTENT"})
+        except ValueError:
+            # Text instead of JSON: an unknown thread, but also a tool error or rate limit. Not answered,
+            # so the mail is asked again later, each time after a longer wait (sync.refresh_bodies).
+            continue
+        except httpx.HTTPError:
+            break  # connector unreachable or refusing: the rest waits for the next run
+        items = {item.get("id"): item for item in full.get("messages", []) if isinstance(item, dict)} if isinstance(full, dict) else {}
+        for uid in uids:
+            found[uid] = parse_message(items[uid], thread_id=thread_id, folder="INBOX", max_body_chars=max_body_chars) if uid in items else None
+    return found
+
+
 def parse_message(message: dict[str, Any], *, thread_id: str, folder: str, max_body_chars: int) -> dict[str, Any]:
-    body = (message.get('plaintextBody') or strip_html(message.get('htmlBody') or ''))[:max_body_chars]
+    body = body_text([message.get('plaintextBody') or ''], [message.get('htmlBody') or ''])[:max_body_chars]
     labels = message.get('labelIds') or []
     sender = message.get('sender') or ''
     try:

@@ -1,14 +1,11 @@
 .le-tooltip-anchor, .le-menu-anchor { position: relative; display: inline-flex; }
-.le-tooltip { position: absolute; z-index: 30; width: max-content; max-width: 240px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-fade var(--le-dur-fast) ease; }
-.le-tooltip--top { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
-.le-tooltip--right { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
-.le-tooltip--bottom { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
-.le-tooltip--bottom-end { top: calc(100% + 8px); right: 0; }
-.le-tooltip--top-end { bottom: calc(100% + 8px); right: 0; }
-.le-menu-anchor .le-menu { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; }
+.le-tooltip { position: fixed; z-index: 60; width: max-content; max-width: 240px; max-height: calc(100dvh - 2 * var(--space-2)); overflow: hidden; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--tip-bg); color: var(--tip-ink); font-size: var(--font-size-caption); pointer-events: none; animation: le-fade var(--le-dur-fast) ease; }
+/* Hangs in <body> (Tooltip.tsx sets left/top); above the scrim and dialogs (z-index 50). */
+/* Menus hang in <body>: Menu.tsx sets left/top and the room they have (floating.ts), the default room only
+   holds until then. They scroll within at most 60 % of the screen; above the scrim (50), below tooltips (60). */
+.le-menu { position: fixed; z-index: 55; --le-menu-room: 100dvh; max-width: calc(100vw - 2 * var(--space-4)); max-height: min(60dvh, var(--le-menu-room)); overflow-y: auto; overscroll-behavior: contain; }
 /* Menus for triggers at the bottom of the screen open upwards and size to their items. */
-.le-menu-anchor .le-menu--up-start, .le-menu-anchor .le-menu--up-end { top: auto; bottom: calc(100% + var(--space-2)); width: max-content; min-width: calc(3 * var(--space-8)); max-width: calc(100vw - 2 * var(--space-4)); }
-.le-menu-anchor .le-menu--up-end { left: auto; right: 0; }
+.le-menu--up-start, .le-menu--up-end { width: max-content; min-width: calc(3 * var(--space-8)); }
 .le-menu-item--danger, .le-menu-item--danger .le-ico { color: var(--danger); }
 .le-menu-item[aria-disabled="true"], .le-menu-item[aria-disabled="true"] .le-ico { color: var(--ink-muted); cursor: not-allowed; }
 .le-menu-item[aria-disabled="true"]:hover { background: transparent; }
@@ -29,9 +26,6 @@
 .le-mailrow-marks { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-muted); }
 .le-mailrow-more { display: none; position: relative; z-index: 3; align-self: flex-end; }
 .le-mailrow-more--coarse { display: block; }
-.le-mailrow-more .le-menu-anchor .le-menu { left: auto; right: 0; }
-/* The model chip sits at the right end of the chat header, so its menu opens to the left; the long model list scrolls instead of running off screen. */
-.le-chat-header .le-menu-anchor .le-menu, .le-chat-topbar .le-menu-anchor .le-menu { left: auto; right: 0; max-width: calc(100vw - 2 * var(--space-4)); max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain; }
 @media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } }
 @media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor .le-chip, .le-chat-topbar .le-menu-anchor .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-drawer-brand .le-icon-btn, .le-shell-status .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
@@ -144,9 +138,6 @@
 
 .le-mail-view { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .le-mail-topbar { flex-shrink: 0; }
-/* Below desktop the actions end the bar, and the menu hangs from its trigger's right edge. In the split view they start the bar and the reading pane can be narrower than trigger plus menu, so the menu hangs from the bar's start, below its first row. */
-@media (max-width: 1023px) { .le-mail-topbar .le-menu-anchor .le-menu { left: auto; right: 0; } }
-@media (min-width: 1024px) { .le-mail-topbar { position: relative; } .le-mail-topbar .le-menu-anchor { position: static; } .le-mail-topbar .le-menu-anchor .le-menu { top: calc(var(--space-4) + var(--control-height-lg) + var(--space-1)); left: var(--space-5); } }
 .le-mail-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
 .le-mail-article { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-4); }
 .le-mail-header { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }

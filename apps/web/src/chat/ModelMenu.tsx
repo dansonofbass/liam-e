@@ -26,5 +26,5 @@ export function ModelMenu({ conversationId, model, onChange }: { conversationId?
       void client.invalidateQueries({ queryKey: ['history', conversationId] })
     } catch (failure) { setError(errorCode(failure instanceof Error ? failure.cause : failure) === 'model_unknown' ? de.chat.modelUnknown : de.chat.modelError) } finally { setBusy(false) }
   }
-  return <>{label && <Menu trigger={props => <Tooltip content={de.chat.modelTip} pos="bottom"><Chip {...props} quiet disabled={busy}>{label}<Icon name="chevron-down" size="sm" /></Chip></Tooltip>} items={models.map(item => ({ label: item.description ? `${item.label} · ${item.description}` : item.label, onSelect: () => { void select(item.id) } }))} />}{error && <Notice tone="danger">{error}</Notice>}</>
+  return <>{label && <Menu placement="down-end" trigger={props => <Tooltip content={de.chat.modelTip} pos="bottom"><Chip {...props} quiet disabled={busy}>{label}<Icon name="chevron-down" size="sm" /></Chip></Tooltip>} items={models.map(item => ({ label: item.description ? `${item.label} · ${item.description}` : item.label, onSelect: () => { void select(item.id) } }))} />}{error && <Notice tone="danger">{error}</Notice>}</>
 }

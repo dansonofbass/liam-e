@@ -1,9 +1,12 @@
+import base64
 import json
+import time
+from email.message import EmailMessage
 from pathlib import Path
 
 import pytest
 
-from api.mail import headers, sync_connector, sync_gmail, sync_graph, sync_imap
+from api.mail import headers, sync_connector, sync_gmail, sync_graph, sync_imap, sync_types
 
 
 def test_sender_address_decodes_and_lowercases():
@@ -287,3 +290,150 @@ def test_graph_parse_falls_back_to_the_reply_to_header_without_reply_to_field():
 def test_connector_parse_has_no_reply_to():
     parsed = sync_connector.parse_message(fixture("connector_thread.json")["messages"][0], thread_id="1", folder="INBOX", max_body_chars=100)
     assert "reply_to_json" not in parsed
+
+
+# Mail bodies: every provider path turns HTML into the same readable text (DESIGN.md §9.3: mail shows as text).
+TEMPLATE_HTML = (FIXTURES / 'template_mail.html').read_text()
+TEMPLATE_TEXT = (
+    'Waffeltag – Helfer gesucht\n\n'
+    'Am Freitag, 21. November, findet der Waffeltag statt.\nWir suchen Helfer & Kuchenspenden.\n\n'
+    '• Aufbau ab 8 Uhr\n• Verkauf ab 10 Uhr\n\n'
+    'Hallo,\n\nbis bald!\n\n'
+    'Melde dich bis Donnerstag: Jetzt anmelden'
+)
+
+
+def _imap_raw(plain: str | None, html: str | None) -> bytes:
+    message = EmailMessage()
+    message['From'] = 'Fox Education <no-reply@fox.example>'
+    message['Subject'] = 'Waffeltag'
+    if plain is not None:
+        message.set_content(plain)
+    if html is not None:
+        if plain is None:
+            message.set_content(html, subtype='html')
+        else:
+            message.add_alternative(html, subtype='html')
+    return bytes(message)
+
+
+def _b64(text: str) -> str:
+    return base64.urlsafe_b64encode(text.encode()).decode().rstrip('=')
+
+
+def _parse(provider: str, plain: str | None, html: str | None) -> dict:
+    if provider == 'imap':
+        return sync_imap.parse_rfc822(_imap_raw(plain, html), max_body_chars=200_000)
+    if provider == 'gmail':
+        parts = [{'mimeType': mime, 'body': {'data': _b64(text)}} for mime, text in (('text/plain', plain), ('text/html', html)) if text is not None]
+        return sync_gmail.parse_message({'id': 'g1', 'payload': {'mimeType': 'multipart/alternative', 'headers': [], 'parts': parts}}, max_body_chars=200_000)
+    if provider == 'graph':
+        # Graph hands out one body: HTML when the mail has HTML.
+        body = {'contentType': 'html', 'content': html} if html is not None else {'contentType': 'text', 'content': plain}
+        return sync_graph.parse_message({'id': 'm1', 'body': body}, folder='INBOX', max_body_chars=200_000)
+    return sync_connector.parse_message({'id': 'c1', 'plaintextBody': plain or '', 'htmlBody': html or ''}, thread_id='t1', folder='INBOX', max_body_chars=200_000)
+
+
+PROVIDERS = ['imap', 'gmail', 'graph', 'connector']
+
+
+@pytest.mark.parametrize('provider', PROVIDERS)
+def test_html_only_mail_becomes_readable_text_on_every_provider(provider):
+    parsed = _parse(provider, None, TEMPLATE_HTML)
+    assert parsed['body_text'] == TEMPLATE_TEXT
+    assert parsed['snippet'].startswith('Waffeltag – Helfer gesucht Am Freitag')
+
+
+PLAIN_LETTER = 'Hallo zusammen,\n\n' + 'am Freitag ist Waffeltag, und wir suchen noch Helfer für den Stand. ' * 4 + '\n\nViele Grüße'
+
+
+@pytest.mark.parametrize('provider', ['imap', 'gmail', 'connector'])
+def test_plain_part_wins_over_html_part(provider):
+    assert _parse(provider, PLAIN_LETTER + '\n', TEMPLATE_HTML)['body_text'] == PLAIN_LETTER
+
+
+@pytest.mark.parametrize('provider', ['imap', 'gmail', 'connector'])
+def test_a_short_plain_part_wins_over_html_saying_the_same(provider):
+    assert _parse(provider, 'Danke, bis morgen.\n', '<p>Danke, bis <b>morgen</b>.</p>')['body_text'] == 'Danke, bis morgen.'
+
+
+@pytest.mark.parametrize('provider', ['imap', 'gmail', 'connector'])
+def test_a_stub_plain_part_gives_way_to_the_html_text(provider):
+    # Newsletters often send only "view this in your browser" as their plain-text part.
+    assert _parse(provider, 'Diese E-Mail im Browser ansehen.\n', TEMPLATE_HTML)['body_text'] == TEMPLATE_TEXT
+
+
+@pytest.mark.parametrize('provider', ['imap', 'gmail', 'connector'])
+def test_blank_plain_part_falls_back_to_html(provider):
+    assert _parse(provider, ' \n', TEMPLATE_HTML)['body_text'] == TEMPLATE_TEXT
+
+
+@pytest.mark.parametrize('html, text', [
+    ('<title>Hallo<body><p>Inhalt</p>', 'Hallo\n\nInhalt'),  # an unclosed <title> would swallow the mail
+    ('<html><title>Hallo<p>Inhalt</p>', 'Hallo\n\nInhalt'),
+    ('<head><style>p{color:red}</style><p>Inhalt', 'Inhalt'),  # body content ends an open <head>
+    ('<body><p>a</p><head><p>b</p>', 'a\n\nb'),  # a stray <head> inside the body hides nothing
+    ('<noscript>Ohne Skript<p>sichtbar</p></noscript>', 'Ohne Skript\n\nsichtbar'),  # mail clients run no scripts
+    ('<ul><li><img src="x"></li></ul><p>Danach</p>', 'Danach'),  # an image-only item leaves no bullet behind
+    ('<pre>def f():\n    return 1</pre>', 'def f():\n    return 1'),  # <pre> keeps its indentation
+    ('<p>vor</p><pre>\n  eingerückt\n    tiefer</pre><p>nach</p>', 'vor\n\n  eingerückt\n    tiefer\n\nnach'),
+])
+def test_html_to_text_survives_broken_and_unusual_markup(html, text):
+    assert sync_types.html_to_text(html) == text
+
+
+def test_an_unclosed_style_still_hides_what_follows():
+    # Negative case: browsers render nothing after an unclosed <style> either; no retry brings CSS back.
+    assert sync_types.html_to_text('<p>Text</p><style>p { margin: 0 }') == 'Text'
+
+
+def test_deeply_nested_skipped_elements_cost_linear_time():
+    # Mail is untrusted: 50 000 nested <template> and stray end tags took a minute with an unbounded
+    # stack (every end tag searched it), and the sync worker stood still.
+    count = 50_000
+    html = '<template>' * count + '</style></head>' * count + '</template>' * count + '<p>Hallo</p>'
+    started = time.perf_counter()
+    assert sync_types.html_to_text(html) == 'Hallo'
+    assert sync_types.html_to_text('<template>' * count + 'Versteckt') == ''
+    assert time.perf_counter() - started < 3
+
+
+def test_text_stays_hidden_while_untracked_deep_elements_close():
+    # Beyond the tracked depth, end tags first close the untracked openings, never the outer ones.
+    depth = sync_types._MAX_SKIP_DEPTH + 1
+    html = '<template>' * depth + '</template>' * (depth - 1) + 'Versteckt' + '</template>' + 'Sichtbar'
+    assert sync_types.html_to_text(html) == 'Sichtbar'
+    assert sync_types.html_to_text('<template>' * depth + '</template>' * depth + '<p>Danach</p>') == 'Danach'
+
+
+def test_large_html_is_read_to_the_end():
+    # An inline image of several MB before the text (data URI) must not cost the text.
+    image = '<img src="data:image/png;base64,' + 'A' * 5_000_000 + '">'
+    started = time.perf_counter()
+    assert sync_types.html_to_text(image + '<p>Frist am Freitag</p>') == 'Frist am Freitag'
+    assert time.perf_counter() - started < 3
+
+
+def test_html_to_text_drops_styles_scripts_title_and_comments():
+    text = sync_types.html_to_text(TEMPLATE_HTML)
+    for leaked in ('margin', '{', '96', 'Neue Mitteilung', 'nicht anzeigen', 'mso', '<'):
+        assert leaked not in text
+
+
+def test_html_to_text_without_readable_content_is_empty():
+    assert sync_types.html_to_text('<html><head><style>p{margin:0}</style></head><body><img src="x.png"></body></html>') == ''
+
+
+def test_html_to_text_survives_broken_markup():
+    # An unclosed <head> must not swallow the mail, and a self-closed <style/> must not hide what follows.
+    assert sync_types.html_to_text('<head><style>p{margin:0}</style><body><p>Hallo</p>') == 'Hallo'
+    assert sync_types.html_to_text('<p>Vor</p><style/><p>Nach</p>') == 'Vor\n\nNach'
+
+
+def test_html_to_text_keeps_preformatted_lines():
+    assert sync_types.html_to_text('<pre>Zeile 1\nZeile 2</pre>') == 'Zeile 1\nZeile 2'
+
+
+def test_parse_rfc822_reads_text_with_unknown_charset():
+    raw = b'From: a@b.org\r\nContent-Type: text/plain; charset="x-unknown"\r\n\r\nHallo Welt'
+    assert sync_imap.parse_rfc822(raw, max_body_chars=100)['body_text'] == 'Hallo Welt'

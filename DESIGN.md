@@ -293,6 +293,17 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   Tipp-Punkte 1,2 s, Caret 1 s. Wechselt der Bereich (Chat, Posteingang, Konten), blendet
   der Inhalt der Hauptfläche über; innerhalb eines Bereichs, etwa von der Liste zur Mail
   oder zwischen Unterhaltungen, nicht. Seitenleiste und Composer bleiben stehen.
+- **Schwebendes (Tooltip, Menü) liegt immer ganz im Bild und obenauf.** Beide hängen im
+  `<body>`, ihre Lage kommt nur aus `ds/floating.ts`: feste Koordinaten zum Bildschirm, 8 px
+  Abstand zum Auslöser und zum Rand. Die gewünschte Seite ist ein Wunsch; fehlt dort der Platz,
+  springt es auf die Gegenseite und rückt in den Bildschirm. Ein Menü scrollt in dem Raum, den es
+  hat (höchstens 60 % der Bildschirmhöhe); ein Tooltip, der auf keiner Seite Platz hat, rückt ganz
+  ins Bild, notfalls über seinen Auslöser, und wird nie höher als der Bildschirm. So schneidet kein Scrollbereich und kein `overflow`
+  um den Auslöser es ab, und kein Stapelkontext (`z-index`, `transform`) eines Vorfahren legt
+  sich darüber. Reihenfolge über der Abdunklung (50): Menü 55, Tooltip 60. Keine CSS-Regel setzt
+  `top`, `left`, `right`, `bottom` oder `inset` an `.le-menu` oder `.le-tooltip` oder gestaltet
+  sie über einen Vorfahren (`.le-chat-header .le-menu` greift im `<body>` nie);
+  `ds/floating.test.tsx` prüft beides.
 - **`prefers-reduced-motion`** immer beachten: dann nur Überblenden (`le-rise` wird zu
   `le-fade`, Seitenwechsel und Schublade blenden weiter über), kein Aufsteigen, kein
   Hereinschieben, Streaming zeigt den Text sofort. Schleifen (Tipp-Punkte, Caret, Spinner)
@@ -342,10 +353,14 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   - Badge zeigt ab 1.000 „999+“.
   - Tooltip an fünf Stellen: `top` (Standard), `top-end`, `bottom`, `bottom-end` und
     `right` (Symbolleiste am Tablet).
+    Die Stelle ist ein Wunsch (§5, Schwebendes).
   - Menu: Einträge mit Symbol, `tone: 'danger'`, `disabled` mit `hint` (bleibt fokussierbar
     und sagt, warum der Eintrag nicht geht) und `checked` (Auswahl, Rolle `menuitemradio`,
     `check` an der gewählten Zeile; der Fokus beginnt dort). Pfeiltasten bewegen den Fokus,
-    Escape schließt. `placement` `up-start` oder `up-end` öffnet nach oben.
+    Escape schließt. `placement` nennt Seite und Kante: `down-start` (Standard), `down-end`,
+    `up-start` oder `up-end`; auch das ist ein Wunsch (§5, Schwebendes). Der Fokus springt
+    hinein, sobald das Menü platziert ist; Tab schließt es und macht beim Auslöser weiter, so
+    bleibt die Fokusreihenfolge die der Seite.
 - **Zustände ohne Inhalt sind Pflicht:** jede Liste und Ansicht hat Leer, Laden
   (Platzhalterzeilen, kein Spinner über der ganzen Fläche) und Fehler mit Ursache und
   nächstem Schritt. Platzhalter sind statische Balken auf `surface-soft` in `radius-sm`,
@@ -439,9 +454,9 @@ Anfang an mit.
   der normalen Schrift; er holt beides erst beim Öffnen vom Anbieter und speichert nichts.
   Er gehört zu seiner Mail: Wechselt die Mail, etwa über „Zurück“ im Browser, schließt er.
   Bei Konten, die das Original nicht liefern (Connector), ist der Eintrag gesperrt, mit
-  Hinweis. Das Menü bleibt im Lesebereich: Unter `desktop` hängt es rechtsbündig an seinem
-  Knopf, in der geteilten Ansicht am Anfang der Leiste unter deren erster Zeile, weil der
-  Lesebereich bei 1024 px schmaler ist als Knopfabstand plus Menü.
+  Hinweis. Unter `desktop` hängt das Menü rechtsbündig an seinem Knopf (`down-end`), in der
+  geteilten Ansicht linksbündig (`down-start`); reicht der Platz nicht, rückt es in den
+  Bildschirm (§5, Schwebendes).
 - Filter-Chips stehen auf `mobile` in einer Zeile, die für sich seitlich scrollt; die Seite
   scrollt nie seitlich.
 

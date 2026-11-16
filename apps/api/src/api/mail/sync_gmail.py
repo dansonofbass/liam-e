@@ -4,12 +4,14 @@ import base64
 import json
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from db.models.mail_account import MailAccount
+from db.models.mail_message import MailMessage
 
 from api.mail import providers, service
-from api.mail.sync_types import SyncChanges, addresses, common
+from api.mail.sync_types import Reread, SyncChanges, addresses, body_text, common, reread_http
 
 
 async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int) -> SyncChanges:
@@ -77,25 +79,37 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
     return changes
 
 
+async def fetch_bodies(account: MailAccount, messages: list[MailMessage], *, max_body_chars: int) -> Reread:
+    """Re-read messages by id (format=full does not mark them read); see `Reread` for the result."""
+    credentials = await service.load_credentials(account)
+    token = await service.valid_access_token(account, credentials)
+    async with httpx.AsyncClient(timeout=30, base_url=providers.GMAIL_API) as client:
+        return await reread_http(
+            [message.provider_uid for message in messages],
+            lambda uid: client.get(f"/messages/{quote(uid, safe='')}", params={"format": "full"}, headers={"Authorization": f"Bearer {token}"}),
+            lambda data: parse_message(data, max_body_chars=max_body_chars),
+        )
+
+
 def parse_message(message: dict[str, Any], *, max_body_chars: int) -> dict[str, Any]:
     payload = message.get('payload') or {}
     headers = {h['name'].lower(): h['value'] for h in payload.get('headers', [])}
     files: list[dict[str, Any]] = []
-    texts: list[str] = []
+    texts: dict[str, list[str]] = {'text/plain': [], 'text/html': []}
 
     def walk(part: dict[str, Any]) -> None:
         filename = part.get('filename')
         body = part.get('body') or {}
         if filename:
             files.append({'name': filename, 'size': body.get('size', 0), 'content_type': part.get('mimeType', '')})
-        elif part.get('mimeType') == 'text/plain' and body.get('data'):
+        elif part.get('mimeType') in texts and body.get('data'):
             data = body['data']
-            texts.append(base64.urlsafe_b64decode(data + '=' * (-len(data) % 4)).decode(errors='replace'))
+            texts[part['mimeType']].append(base64.urlsafe_b64decode(data + '=' * (-len(data) % 4)).decode(errors='replace'))
         for child in part.get('parts') or []:
             walk(child)
 
     walk(payload)
-    body = '\n'.join(texts)[:max_body_chars]
+    body = body_text(texts['text/plain'], texts['text/html'])[:max_body_chars]
     labels = message.get('labelIds') or []
     sender = headers.get('from', '')
     return {**common(sender, headers), 'folder': 'INBOX', 'provider_uid': message['id'],

@@ -77,11 +77,12 @@ test('views with their own scroll area share one viewport-height rule', async ()
   for (const property of ['height: 100dvh', 'overflow: hidden']) expect(rules[0]).toContain(property)
 })
 
-test('the model menu in the chat header opens to the left of its right-aligned chip', async () => {
+test('menus scroll within 60 % of the screen and never beyond the room they have', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
-  const rule = css.split('.le-chat-header .le-menu-anchor .le-menu, .le-chat-topbar .le-menu-anchor .le-menu {')[1]?.split('}')[0] ?? ''
-  for (const property of ['left: auto', 'right: 0', 'max-width: calc(100vw - 2 * var(--space-4))', 'max-height: 60dvh', 'overflow-y: auto']) expect(rule).toContain(property)
-  expect(css.indexOf('.le-chat-header .le-menu-anchor .le-menu')).toBeGreaterThan(css.indexOf('.le-menu-anchor .le-menu {'))
+  const rule = css.match(/(?:^|\n)\.le-menu \{([^}]*)\}/u)?.[1] ?? ''
+  for (const property of ['max-width: calc(100vw - 2 * var(--space-4))', 'max-height: min(60dvh, var(--le-menu-room))', 'overflow-y: auto']) expect(rule).toContain(property)
+  // The model menu aligns with its right-aligned chip through its placement (ModelMenu.tsx), not a CSS offset.
+  expect(await Bun.file(new URL('../chat/ModelMenu.tsx', import.meta.url)).text()).toContain('<Menu placement="down-end"')
 })
 
 test('on a phone the main sheet fills the screen without frame, rounding or shadow', async () => {

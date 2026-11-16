@@ -42,6 +42,62 @@ def test_reply_to_json_round_trips_and_old_inserts_get_the_server_default(pg_db)
     asyncio.run(run())
 
 
+def test_stale_bodies_are_found_rewritten_and_searchable(pg_db):
+    async def run():
+        from db.accessors import mail_insight as i
+        from db.accessors import mail_message as m
+        from db.engine import get_session_maker
+        from sqlalchemy import text
+
+        now = datetime.now(UTC)
+        old = await m.upsert_message(account_id="a", folder="INBOX", provider_uid="1", body_text="96 p{ margin:10px }", internal_date=now - timedelta(days=2))
+        new = await m.upsert_message(account_id="a", folder="INBOX", provider_uid="2", body_text="Waffeltag", internal_date=now, body_version=1)
+        await m.upsert_message(account_id="a", folder="Sent", provider_uid="3")
+        await m.upsert_message(account_id="b", folder="INBOX", provider_uid="4")
+        undated = await m.upsert_message(account_id="a", folder="INBOX", provider_uid="5")
+        async with get_session_maker()() as session:
+            # A row written before the column existed gets version 0 from the server default.
+            await session.execute(text("INSERT INTO mail_message (id, account_id, folder, provider_uid, thread_id, subject, sender, sender_address, list_unsubscribe, list_unsubscribe_post, rfc_message_id, \"references\", cc_json, reply_to_json, attachments_json, is_flagged, recipients_json, snippet, body_text, has_attachments, is_read, labels_json, created_at) VALUES ('legacy', 'a', 'INBOX', '6', '', '', '', '', '', '', '', '', '[]', '[]', '[]', false, '[]', '', '', false, false, '[]', now())"))
+            await session.commit()
+
+        uids = ["1", "2", "3", "4", "5", "6", "unknown"]
+        assert await m.stale_body_texts("a", "INBOX", 1, uids) == {"1": "96 p{ margin:10px }", "5": "", "6": ""}
+        assert await m.stale_body_texts("a", "INBOX", 1, ["2", "5"]) == {"5": ""}
+        assert await m.stale_body_texts("a", "INBOX", 0, uids) == {}
+        assert await m.stale_body_texts("a", "INBOX", 1, []) == {}
+        # Newest first, undated rows last; only the requested account and folder.
+        assert [row.provider_uid for row in await m.stale_bodies("a", "INBOX", 1, limit=10)][0] == "1"
+        assert {row.id for row in await m.stale_bodies("a", "INBOX", 1, limit=10)} == {old.id, undated.id, "legacy"}
+        assert len(await m.stale_bodies("a", "INBOX", 1, limit=2)) == 2
+        # Rows that wait for a later try are left out.
+        assert {row.id for row in await m.stale_bodies("a", "INBOX", 1, limit=10, exclude=[old.id, "unknown"])} == {undated.id, "legacy"}
+
+        for message_id in (old.id, new.id):
+            await i.upsert(message_id, points=["x"], deadline=None, needs_reply=False, followups=[], model="m")
+        await m.set_body(old.id, body_version=1, body_text="Kuchenbasar am Freitag", snippet="Kuchenbasar", drop_insight=True)
+        await m.set_body(undated.id, body_version=1)
+        await m.set_body("missing", body_version=1)
+        rewritten, untouched = await m.get_message(old.id), await m.get_message(undated.id)
+        assert (rewritten.body_text, rewritten.snippet, rewritten.body_version) == ("Kuchenbasar am Freitag", "Kuchenbasar", 1)
+        assert (untouched.body_text, untouched.body_version) == ("", 1)
+        assert await m.stale_body_texts("a", "INBOX", 1, uids) == {"6": ""}
+        # The generated fulltext column follows the rewritten text.
+        assert [row.id for row in await m.list_page(query="Kuchenbasar", limit=10)] == [old.id]
+        # The new text took the old insight with it, in the same write; other insights stay.
+        assert await i.get(old.id) is None
+        assert await i.get(new.id) is not None
+        await m.upsert_message(account_id="a", folder="INBOX", provider_uid="2", body_text="Waffeltag fällt aus", internal_date=now, body_version=1, drop_insight=True)
+        assert await i.get(new.id) is None
+
+        # A summary is stored only while the mail still has the text the model read.
+        assert await i.upsert(old.id, points=["alt"], deadline=None, needs_reply=False, followups=[], model="m", summarized="96 p{ margin:10px }") is None
+        assert await i.get(old.id) is None
+        assert await i.upsert("missing", points=["x"], deadline=None, needs_reply=False, followups=[], model="m", summarized="") is None
+        stored = await i.upsert(old.id, points=["neu"], deadline=None, needs_reply=False, followups=[], model="m", summarized="Kuchenbasar am Freitag")
+        assert stored is not None and (await i.get(old.id)).points_json == '["neu"]'
+    asyncio.run(run())
+
+
 def test_unread_without_insight_can_exclude_accounts(pg_db):
     async def run():
         from db.accessors import mail_message as m

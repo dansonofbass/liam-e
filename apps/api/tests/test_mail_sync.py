@@ -1,6 +1,9 @@
 """Incremental inbox sync contracts; all providers are faked."""
 
+import imaplib
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -142,6 +145,8 @@ async def test_sync_account_applies_changes_and_reports_new_ids(monkeypatch):
     monkeypatch.setattr(sync.message_access, "known_uids", known)
     monkeypatch.setattr(sync.message_access, "upsert_message", upsert)
     monkeypatch.setattr(sync.message_access, "set_state", set_state)
+    monkeypatch.setattr(sync.message_access, "stale_body_texts", AsyncMock(return_value={}))
+    monkeypatch.setattr(sync.message_access, "stale_bodies", AsyncMock(return_value=[]))
     monkeypatch.setattr(sync_imap, "fetch_changes", fetch)
     result = await sync.sync_account("a")
     assert result.new_message_ids == ["local-new"]
@@ -543,3 +548,257 @@ async def test_connector_falls_back_to_thread_state_without_messages(monkeypatch
 ])
 def test_missing_mistral_access_is_not_an_expired_login(failure, code):
     assert sync._error_code(failure) == code
+
+
+# Bodies stored by an older text extraction are re-read in place: same row, new text, insight dropped.
+def stored(id, uid, *, version=0, body="", rfc="", thread="t1"):
+    from db.models.mail_message import MailMessage
+    return MailMessage(id=id, account_id="a", provider_uid=uid, folder="INBOX", body_text=body, snippet=body, body_version=version, rfc_message_id=rfc, thread_id=thread)
+
+
+def refresh_store(monkeypatch, fake_store, rows, fetch_bodies, upserts=()):
+    fake_store.accounts["a"] = account()
+    for row in rows:
+        fake_store.messages[row.id] = row
+        fake_store.insights[row.id] = "old insight"
+    async def known(account_id, folder):
+        return {row.provider_uid: row.id for row in fake_store.messages.values() if row.account_id == account_id and row.folder == folder}
+    async def upsert(*, account_id, provider_uid, body_version, drop_insight=False, **fields):
+        row = next(row for row in fake_store.messages.values() if row.provider_uid == provider_uid)
+        row.body_text, row.body_version = fields["body_text"], body_version
+        if drop_insight:
+            fake_store.insights.pop(row.id, None)
+        return row
+    monkeypatch.setattr(sync.message_access, "known_uids", known)
+    monkeypatch.setattr(sync.message_access, "upsert_message", upsert)
+    monkeypatch.setattr(sync_imap, "fetch_changes", AsyncMock(return_value=sync_types.SyncChanges(upserts=list(upserts), cursor="7:9")))
+    monkeypatch.setattr(sync_imap, "fetch_bodies", fetch_bodies)
+
+
+def read(text, rfc=""):
+    return {"body_text": text, "snippet": text, "rfc_message_id": rfc}
+
+
+@pytest.mark.anyio
+async def test_sync_rereads_stale_bodies_and_drops_their_insights(monkeypatch, fake_store):
+    fetch_bodies = AsyncMock(return_value={"5": read("Lesbarer Text", "<m@x>")})
+    refresh_store(monkeypatch, fake_store, [stored("m1", "5", body="96 p{ margin:10px }", rfc="<m@x>"), stored("m2", "6", version=sync_types.BODY_VERSION, body="aktuell")], fetch_bodies)
+    result = await sync.sync_account("a")
+    assert result.status == "ok"
+    assert [row.id for row in fetch_bodies.await_args.args[1]] == ["m1"]
+    assert fake_store.messages["m1"].body_text == "Lesbarer Text" and fake_store.messages["m1"].snippet == "Lesbarer Text"
+    assert fake_store.messages["m1"].body_version == sync_types.BODY_VERSION
+    assert "m1" not in fake_store.insights and fake_store.insights["m2"] == "old insight"
+
+
+@pytest.mark.anyio
+async def test_sync_reread_with_same_text_keeps_the_insight(monkeypatch, fake_store):
+    refresh_store(monkeypatch, fake_store, [stored("m1", "5", body="gleich")], AsyncMock(return_value={"5": read("gleich")}))
+    await sync.sync_account("a")
+    assert fake_store.messages["m1"].body_version == sync_types.BODY_VERSION
+    assert fake_store.insights["m1"] == "old insight"
+
+
+@pytest.mark.anyio
+async def test_sync_reread_that_stays_empty_drops_the_insight_made_from_the_subject(monkeypatch, fake_store):
+    refresh_store(monkeypatch, fake_store, [stored("m1", "5"), stored("m2", "6")], AsyncMock(return_value={"5": read(""), "6": None}))
+    await sync.sync_account("a")
+    assert "m1" not in fake_store.insights and "m2" not in fake_store.insights
+    assert fake_store.messages["m2"].body_version == sync_types.BODY_VERSION
+
+
+@pytest.mark.anyio
+async def test_sync_reread_leaves_text_of_mail_the_provider_no_longer_has(monkeypatch, fake_store):
+    refresh_store(monkeypatch, fake_store, [stored("m1", "5", body="alt")], AsyncMock(return_value={"5": None}))
+    await sync.sync_account("a")
+    # The version moves on so a vanished mail is not asked for again on every run.
+    assert fake_store.messages["m1"].body_version == sync_types.BODY_VERSION
+    assert fake_store.messages["m1"].body_text == "alt" and fake_store.insights["m1"] == "old insight"
+
+
+@pytest.mark.anyio
+async def test_sync_reread_keeps_mails_it_could_not_read_for_the_next_run(monkeypatch, fake_store):
+    # One mail failed (no entry), the other was read: the read one is done, the failed one waits.
+    refresh_store(monkeypatch, fake_store, [stored("m1", "5", body="alt"), stored("m2", "6", body="alt")], AsyncMock(return_value={"6": read("neu")}))
+    await sync.sync_account("a")
+    assert (fake_store.messages["m1"].body_version, fake_store.messages["m1"].body_text, fake_store.insights["m1"]) == (0, "alt", "old insight")
+    assert (fake_store.messages["m2"].body_version, fake_store.messages["m2"].body_text) == (sync_types.BODY_VERSION, "neu")
+
+
+@pytest.mark.anyio
+async def test_sync_reread_lets_an_unreadable_mail_wait_instead_of_holding_up_the_others(monkeypatch, fake_store):
+    # The list is read newest first: a mail that never answers (a deleted thread the connector reports
+    # as text) must not take a place in every run, nor be asked for every five minutes.
+    monkeypatch.setattr(sync, "BODY_REFRESH_BATCH", 1)
+    fetch_bodies = AsyncMock(side_effect=lambda account, rows, **_: {"6": read("neu")} if rows[0].provider_uid == "6" else {})
+    refresh_store(monkeypatch, fake_store, [stored("m1", "5", body="alt"), stored("m2", "6", body="alt")], fetch_bodies)
+    await sync.sync_account("a")
+    failures, retry_at = sync._reread_backoff["m1"]
+    assert failures == 1 and retry_at - datetime.now(UTC) > sync.REREAD_WAIT - timedelta(minutes=1)
+    await sync.sync_account("a")
+    assert [call.args[1][0].id for call in fetch_bodies.await_args_list] == ["m1", "m2"]
+    assert fake_store.messages["m2"].body_text == "neu"
+    await sync.sync_account("a")  # m1 still waits, nothing else is stale
+    assert fetch_bodies.await_count == 2
+    # After its wait it is asked again; every failure doubles the wait, up to a day.
+    sync._reread_backoff["m1"] = (1, datetime.now(UTC) - timedelta(seconds=1))
+    await sync.sync_account("a")
+    assert fetch_bodies.await_count == 3 and sync._reread_backoff["m1"][0] == 2
+    assert sync._reread_backoff["m1"][1] - datetime.now(UTC) > 2 * sync.REREAD_WAIT - timedelta(minutes=1)
+    sync._reread_backoff["m1"] = (40, datetime.now(UTC) - timedelta(seconds=1))
+    await sync.sync_account("a")
+    assert sync._reread_backoff["m1"][1] - datetime.now(UTC) <= sync.REREAD_WAIT_MAX
+
+
+@pytest.mark.anyio
+async def test_sync_reread_forgets_the_wait_of_a_mail_it_finally_reads(monkeypatch, fake_store):
+    refresh_store(monkeypatch, fake_store, [stored("m1", "5", body="alt")], AsyncMock(return_value={"5": read("neu")}))
+    sync._reread_backoff["m1"] = (3, datetime.now(UTC) - timedelta(seconds=1))
+    await sync.sync_account("a")
+    assert "m1" not in sync._reread_backoff and fake_store.messages["m1"].body_text == "neu"
+
+
+@pytest.mark.anyio
+async def test_sync_reread_never_takes_text_of_another_mail(monkeypatch, fake_store):
+    refresh_store(monkeypatch, fake_store, [stored("m1", "5", body="alt", rfc="<m@x>")], AsyncMock(return_value={"5": read("fremd", "<other@x>")}))
+    await sync.sync_account("a")
+    assert fake_store.messages["m1"].body_text == "alt" and fake_store.insights["m1"] == "old insight"
+    assert fake_store.messages["m1"].body_version == sync_types.BODY_VERSION
+
+
+@pytest.mark.anyio
+async def test_sync_reread_failure_keeps_sync_ok_and_retries_later(monkeypatch, fake_store):
+    refresh_store(monkeypatch, fake_store, [stored("m1", "5")], AsyncMock(side_effect=httpx.ConnectError("down")))
+    result = await sync.sync_account("a")
+    assert result.status == "ok"
+    assert fake_store.messages["m1"].body_version == 0 and fake_store.insights["m1"] == "old insight"
+
+
+@pytest.mark.anyio
+async def test_sync_reupsert_of_stale_row_drops_its_insight_only_when_the_text_changes(monkeypatch, fake_store):
+    fetch_bodies = AsyncMock(return_value={})
+    rows = [stored("m1", "5", body="alt"), stored("m2", "6", body="gleich")]
+    refresh_store(monkeypatch, fake_store, rows, fetch_bodies, upserts=[{"folder": "INBOX", "provider_uid": "5", "body_text": "neu"}, {"folder": "INBOX", "provider_uid": "6", "body_text": "gleich"}])
+    await sync.sync_account("a")
+    assert fake_store.messages["m1"].body_version == fake_store.messages["m2"].body_version == sync_types.BODY_VERSION
+    assert "m1" not in fake_store.insights and fake_store.insights["m2"] == "old insight"
+    fetch_bodies.assert_not_awaited()
+
+
+@pytest.mark.parametrize("old, new, outdated", [("a", "b", True), ("a", "a", False), ("", "", True), ("  ", "  ", True)])
+def test_insight_is_outdated_when_the_text_changes_or_there_is_none(old, new, outdated):
+    assert sync.insight_outdated(old, new) is outdated
+
+
+class FlakyIMAP(FakeIMAP):
+    """UID 6 answers NO; UID 8 loses the connection."""
+
+    def uid(self, command, *args):
+        if command.lower() == "fetch" and str(args[0]) == "6":
+            self.commands.append(("fetch", *args))
+            return "NO", [b"[UNAVAILABLE]"]
+        if command.lower() == "fetch" and str(args[0]) == "8":
+            raise imaplib.IMAP4.abort("socket error")
+        return super().uid(command, *args)
+
+
+async def imap_bodies(monkeypatch, server, uids):
+    async def credentials(_): return {"imap_host": "example.org"}
+    async def password(_): return "secret"
+    async def check(_): pass
+    monkeypatch.setattr(sync_imap.service, "load_credentials", credentials)
+    monkeypatch.setattr(sync_imap.service, "imap_password", password)
+    monkeypatch.setattr(sync_imap.transport, "check_mail_host", check)
+    monkeypatch.setattr(sync_imap.transport, "open_imap", lambda *_: server)
+    return await sync_imap.fetch_bodies(account(), [stored(f"m{uid}", uid) for uid in uids], max_body_chars=100)
+
+
+@pytest.mark.anyio
+async def test_imap_fetch_bodies_peeks_and_marks_vanished_uids_gone(monkeypatch):
+    server = FakeIMAP([5])
+    found = await imap_bodies(monkeypatch, server, ["5", "6", "x"])
+    assert found["5"]["body_text"] == "body" and found["6"] is None and found["x"] is None
+    fetches = [str(c) for c in server.commands if c[0] == "fetch"]
+    assert fetches and all("BODY.PEEK[]" in c for c in fetches)
+    assert ("select", '"INBOX"') in server.commands
+
+
+@pytest.mark.anyio
+async def test_imap_fetch_bodies_keeps_what_it_read_when_one_mail_or_the_connection_fails(monkeypatch):
+    found = await imap_bodies(monkeypatch, FlakyIMAP([5, 6, 7, 8, 9]), ["5", "6", "7", "8", "9"])
+    # 6 failed now (asked again next run); the lost connection at 8 leaves 8 and 9 for the next run.
+    assert sorted(found) == ["5", "7"]
+
+
+def gmail_or_graph(module):
+    if module is sync_gmail:
+        return httpx.Response(200, json={"id": "m/1", "payload": {"mimeType": "text/html", "headers": [], "body": {"data": "PHA-SGFsbG88L3A-"}}})
+    return httpx.Response(200, json={"id": "m/1", "body": {"contentType": "html", "content": "<p>Hallo</p>"}})
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("module, provider, path", [(sync_gmail, "google", "/messages/m%2F1"), (sync_graph, "microsoft", "/me/messages/m%2F1")])
+async def test_api_fetch_bodies_marks_mails_the_provider_no_longer_has(monkeypatch, module, provider, path):
+    await token_setup(monkeypatch, module)
+    seen = []
+    def handler(request):
+        seen.append(request.url.raw_path.decode().split("?")[0])
+        return httpx.Response(404) if seen[-1].endswith("gone") else gmail_or_graph(module)
+    mock_client(monkeypatch, module, handler)
+    found = await module.fetch_bodies(account(provider, "oauth2"), [stored("a1", "m/1"), stored("a2", "gone")], max_body_chars=100)
+    assert found["m/1"]["body_text"] == "Hallo" and found["gone"] is None
+    assert any(p.endswith(path) for p in seen)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("module, provider", [(sync_gmail, "google"), (sync_graph, "microsoft")])
+async def test_api_fetch_bodies_skips_a_failing_mail_and_stops_when_rate_limited(monkeypatch, module, provider):
+    await token_setup(monkeypatch, module)
+    answers = {"ok1": None, "boom": 503, "bad": 400, "ok2": None, "limit": 429, "after": None}
+    asked = []
+    def handler(request):
+        uid = request.url.raw_path.decode().split("?")[0].rsplit("/", 1)[-1]
+        asked.append(uid)
+        return httpx.Response(answers[uid]) if answers[uid] else gmail_or_graph(module)
+    mock_client(monkeypatch, module, handler)
+    found = await module.fetch_bodies(account(provider, "oauth2"), [stored(uid, uid) for uid in answers], max_body_chars=100)
+    assert {uid: (parsed or {}).get("body_text") for uid, parsed in found.items()} == {"ok1": "Hallo", "bad": None, "ok2": "Hallo"}
+    assert asked == ["ok1", "boom", "bad", "ok2", "limit"]
+
+
+@pytest.mark.anyio
+async def test_api_fetch_bodies_returns_what_it_read_when_the_provider_goes_away(monkeypatch):
+    await token_setup(monkeypatch, sync_gmail)
+    def handler(request):
+        if request.url.raw_path.decode().endswith("down?format=full"):
+            raise httpx.ConnectError("down")
+        return gmail_or_graph(sync_gmail)
+    mock_client(monkeypatch, sync_gmail, handler)
+    found = await sync_gmail.fetch_bodies(account("google", "oauth2"), [stored("a", "first"), stored("b", "down"), stored("c", "never")], max_body_chars=100)
+    assert list(found) == ["first"]
+
+
+@pytest.mark.anyio
+async def test_connector_fetch_bodies_reads_each_thread_once(monkeypatch):
+    calls = []
+    async def call(provider, tool, args):
+        calls.append(args["threadId"])
+        if args["threadId"] == "text":
+            raise ValueError("not JSON")
+        return {"id": "t1", "messages": [{"id": "x1", "htmlBody": "<p>Eins</p>"}, {"id": "x2", "plaintextBody": "Zwei"}, {"id": "x3", "plaintextBody": "nicht gefragt"}]}
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
+    found = await sync_connector.fetch_bodies(account("gmail", "connector"), [stored("a", "x1"), stored("b", "x2"), stored("c", "x9"), stored("d", "y", thread="text")], max_body_chars=100)
+    # x9 is not in its thread any more (gone); a text answer may be a tool error, so y is asked again next run.
+    assert {uid: (parsed or {}).get("body_text") for uid, parsed in found.items()} == {"x1": "Eins", "x2": "Zwei", "x9": None}
+    assert calls == ["t1", "text"]
+
+
+@pytest.mark.anyio
+async def test_connector_fetch_bodies_returns_what_it_read_when_the_connector_fails(monkeypatch):
+    async def call(provider, tool, args):
+        if args["threadId"] == "t2":
+            raise httpx.ConnectError("down")
+        return {"messages": [{"id": "x1", "plaintextBody": "Eins"}]}
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
+    found = await sync_connector.fetch_bodies(account("gmail", "connector"), [stored("a", "x1"), stored("b", "x2", thread="t2"), stored("c", "x3", thread="t3")], max_body_chars=100)
+    assert list(found) == ["x1"]

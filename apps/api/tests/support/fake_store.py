@@ -2,7 +2,7 @@
 
 import json
 from sqlalchemy.exc import IntegrityError
-from db.accessors import mail_account, mail_action, mail_credential, mail_sync_state, mail_job, mail_message
+from db.accessors import mail_account, mail_action, mail_credential, mail_insight, mail_sync_state, mail_job, mail_message
 from db.models.mail_action import MailAction
 from db.models.mail_job import MailJob
 from db.models.mail_account import MailAccount
@@ -18,11 +18,15 @@ class FakeStore:
         self.unread = {}
         self.messages = {}
         self.actions = {}
+        self.insights = {}
         for name in ("record", "get_many", "mark_undone", "release", "latest_open", "delete_for_account"):
             monkeypatch.setattr(mail_action, name, getattr(self, "action_" + name))
         monkeypatch.setattr(mail_message, "get_message", self.get_message)
         monkeypatch.setattr(mail_message, "set_state", self.set_message_state)
         monkeypatch.setattr(mail_message, "delete_duplicate", self.delete_duplicate)
+        monkeypatch.setattr(mail_message, "stale_body_texts", self.stale_body_texts)
+        monkeypatch.setattr(mail_message, "stale_bodies", self.stale_bodies)
+        monkeypatch.setattr(mail_message, "set_body", self.set_body)
         for name in ("enqueue", "claim_next", "finish", "fail", "latest_for_account", "delete_for_account"):
             monkeypatch.setattr(mail_job, name, getattr(self, "job_" + name))
         monkeypatch.setattr(mail_message, "count_unread", self.count_unread)
@@ -62,6 +66,25 @@ class FakeStore:
                     setattr(row, key, value)
             return row.model_copy()
         return None
+
+    def _stale(self, account_id, folder, version):
+        return [row for row in self.messages.values() if row.account_id == account_id and row.folder == folder and row.body_version < version]
+
+    async def stale_body_texts(self, account_id, folder, version, uids):
+        return {row.provider_uid: row.body_text for row in self._stale(account_id, folder, version) if row.provider_uid in uids}
+
+    async def stale_bodies(self, account_id, folder, version, *, limit, exclude=()):
+        return [row.model_copy() for row in self._stale(account_id, folder, version) if row.id not in exclude][:limit]
+
+    async def set_body(self, message_id, *, body_version, body_text=None, snippet=None, drop_insight=False):
+        row = self.messages[message_id]
+        row.body_version = body_version
+        if body_text is not None:
+            row.body_text = body_text
+        if snippet is not None:
+            row.snippet = snippet
+        if drop_insight:
+            self.insights.pop(message_id, None)
 
     async def delete_duplicate(self, account_id, folder, provider_uid, *, keep_id, rfc_message_id):
         for key, row in list(self.messages.items()):
