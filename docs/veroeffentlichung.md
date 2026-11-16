@@ -10,12 +10,13 @@ Geprüft wurden alle getrackten Dateien, die Git-Historie aller Branches und die
 und Pull Requests auf GitHub.
 
 - **Dateien:** Die Mistral-IDs stehen nur noch in `mistral.json`. Links auf private
-  Claude-Artefakte sind durch Namen ersetzt. Testadressen sind synthetisch, absolute Home-Pfade
-  gibt es nicht. `tests/test_public_repo_hygiene.py` hält diesen Stand fest.
+  Claude-Artefakte sind durch Namen ersetzt, Namen anderer Projekte des Owners durch eine
+  allgemeine Beschreibung. Testadressen sind synthetisch, absolute Home-Pfade gibt es nicht.
+  `tests/test_public_repo_hygiene.py` hält diesen Stand fest (Projektnamen prüft er nicht).
 - **Historie:** Eine lokale Suche nach gängigen Schlüssel- und Tokenmustern fand nichts. Den
   verbindlichen Nachweis liefert der CI-Job `secrets` (gitleaks über die ganze Historie). Ältere
   Commits enthalten aber noch die Mistral-IDs (im Umsetzungsplan vom 13.11.) und die
-  Artefaktlinks (DESIGN.md, Plan, Spec). Commits tragen den Vornamen des Autors, eine
+  Artefaktlinks (DESIGN.md, Plan, Spec) sowie Namen anderer Projekte des Owners (DESIGN.md). Commits tragen den Vornamen des Autors, eine
   GitHub-noreply-Adresse und `Claude-Session`-Links.
 - **Issues und PRs:** keine privaten Angaben gefunden. PR-Beschreibungen nennen Review-Profile und
   Modellfamilien der Werkzeuge, mit denen geprüft wurde.
@@ -39,8 +40,10 @@ und Pull Requests auf GitHub.
 
 - Private Schwachstellenmeldung einschalten; SECURITY.md und das Issue-Formular verweisen darauf.
 - Secret Scanning und Push Protection einschalten.
-- Branch-Schutz für `main`: Änderungen nur über PRs, die CI-Jobs `check`, `web-test`, `pytest`,
-  `pg-contract` und `secrets` als Pflicht.
+- Branch-Schutz für `main`: Änderungen nur über PRs. Als Pflichtprüfungen die Checks so
+  auswählen, wie GitHub sie nach einem CI-Lauf anbietet: „bun run check“, „Web tests“,
+  „pytest“, „Postgres contract suite“ und „Secret scan (gitleaks)“ (die Job-IDs `check`,
+  `web-test`, `pytest`, `pg-contract`, `secrets` erscheinen dort nicht).
 - Dependabot-Sicherheitsupdates einschalten.
 
 ## Was nie öffentlich wird

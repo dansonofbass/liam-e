@@ -255,8 +255,8 @@ jetzt als öffentlich.
   geben keine Werte daraus aus; Secret-*Namen* wie `yahoo-app-password` sind unkritisch. Tests
   nehmen sichtbare Wegwerfwerte (`test-only`) oder zur Laufzeit erzeugte Schlüssel.
 - **Ein committetes Geheimnis gilt als verbrannt:** zuerst rotieren, dann entfernen; die
-  Historie behält es. Nie über eine Allowlist in `.gitleaks.toml` oder über `.gitleaksignore`
-  „lösen“.
+  Historie behält es. Nie über eine Allowlist in `.gitleaks.toml`, über `.gitleaksignore` oder
+  einen Kommentar `gitleaks:allow` „lösen“ (die CI ignoriert solche Kommentare).
 - **Logs und Fehlertexte** enthalten keine Mailinhalte, Adressen, Vorlagentexte, Tokens oder
   Secret-Werte.
 - **Lokaler Agent-Zustand** (`.superpowers/`, `.codegraph/`, `.remember/`,
@@ -264,8 +264,9 @@ jetzt als öffentlich.
   `.gitignore` deckt ihn ab.
 - **Durchsetzung:** CI-Job `secrets` (gitleaks über die ganze Historie mit `.gitleaks.toml`) und
   `tests/test_public_repo_hygiene.py` (Tenant-IDs außerhalb von `mistral.json`, private Links,
-  Home-Pfade, echt wirkende Mailadressen). Eine Ausnahme in der Allowlist braucht einen
-  geprüften Fehlalarm und eine Begründung im Eintrag.
+  Home-Pfade, echt wirkende Mailadressen). Die Allowlist ist leer; eine Ausnahme braucht einen
+  geprüften Fehlalarm, gilt nur für die Regel, die Datei und den konkreten Wert und nennt die
+  Begründung im Eintrag. CI-Actions sind auf Commit-SHAs gepinnt.
 - Was vor einer Veröffentlichung noch zu tun ist, steht in
   [docs/veroeffentlichung.md](docs/veroeffentlichung.md).
 

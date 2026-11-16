@@ -6,8 +6,10 @@ checks cover what a secret scanner does not look for: the Mistral tenant IDs out
 mail addresses that could belong to a real person. Credentials are the job of gitleaks
 (`.gitleaks.toml`, CI job `secrets`).
 
-The checks read `git ls-files`, so they see exactly what a clone would publish. Lock files,
-the generated API client and vendored agent skills are skipped: nobody writes them by hand.
+The checks read `git ls-files`, so they see exactly what a clone would publish. Tenant IDs and
+private links are looked for in every tracked text file. The address and home-path heuristics
+skip lock files, the generated API client and vendored agent skills, which nobody writes by hand
+and which hold upstream examples.
 """
 
 from __future__ import annotations
@@ -34,12 +36,14 @@ RESERVED_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
 SYNTHETIC_LOCAL_PART = re.compile(r"^(?:[a-z]|me|test|user|noreply|no-reply)$")
 
 ADDRESS = re.compile(r"(?<![\w.%+-])([A-Za-z0-9._%+-]+)@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?![\w.-]*\w)")
-HOME_PATH = re.compile(r"(?<![\w.~-])/(?:home|Users)/[A-Za-z][\w.-]*/")
-PRIVATE_LINK = re.compile(r"claude\.ai/(?:artifact|code)/[A-Za-z0-9_-]+")
+HOME_PATH = re.compile(r"(?<![\w.~-])/(?:home|Users)/[A-Za-z_][\w.-]*(?![\w-])")
+WINDOWS_HOME = re.compile(r"(?i)(?<![\w])[a-z]:\\Users\\[^\\\s\"'<>]+")
+PRIVATE_LINK = re.compile(r"(?<![\w-])claude\.ai/(?:artifact|chat|code|project|public|share)/[A-Za-z0-9_-]+")
+DEPLOYMENT_KEYS = ("organizationId", "workspaceId", "appId")
 
 
 @cache
-def tracked_texts() -> dict[str, str]:
+def tracked_texts(*, everything: bool = False) -> dict[str, str]:
     try:
         listing = subprocess.run(
             ["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True
@@ -51,7 +55,9 @@ def tracked_texts() -> dict[str, str]:
     texts: dict[str, str] = {}
     for raw in listing.split(b"\0"):
         path = raw.decode()
-        if not path or path.startswith(SKIPPED_PREFIXES) or Path(path).name in SKIPPED_NAMES:
+        if not path:
+            continue
+        if not everything and (path.startswith(SKIPPED_PREFIXES) or Path(path).name in SKIPPED_NAMES):
             continue
         file = ROOT / path
         if not file.is_file():
@@ -63,9 +69,9 @@ def tracked_texts() -> dict[str, str]:
     return texts
 
 
-def hits(pattern: re.Pattern[str], *, keep=lambda _match: True) -> list[str]:
+def hits(pattern: re.Pattern[str], *, keep=lambda _match: True, everything: bool = False) -> list[str]:
     found = []
-    for path, text in tracked_texts().items():
+    for path, text in tracked_texts(everything=everything).items():
         for number, line in enumerate(text.splitlines(), start=1):
             for match in pattern.finditer(line):
                 if keep(match):
@@ -75,22 +81,25 @@ def hits(pattern: re.Pattern[str], *, keep=lambda _match: True) -> list[str]:
 
 def test_tenant_ids_appear_only_in_mistral_json() -> None:
     deployment = json.loads((ROOT / "mistral.json").read_text(encoding="utf-8")).get("deployment", {})
+    ids = {key: deployment.get(key) for key in DEPLOYMENT_KEYS}
+    # Without the IDs there is nothing to look for, and the test would pass vacuously.
+    assert all(isinstance(value, str) and value for value in ids.values()), "mistral.json lacks deployment IDs"
     leaks = [
         f"{path}: {key}"
-        for path, text in tracked_texts().items()
+        for path, text in tracked_texts(everything=True).items()
         if path != "mistral.json"
-        for key, value in deployment.items()
-        if isinstance(value, str) and value and value in text
+        for key, value in ids.items()
+        if value.lower() in text.lower()
     ]
     assert leaks == [], "Mistral tenant IDs belong in mistral.json only; write <organization-id> etc."
 
 
 def test_no_links_to_private_claude_resources() -> None:
-    assert hits(PRIVATE_LINK) == [], "name the artifact or session instead of linking it"
+    assert hits(PRIVATE_LINK, everything=True) == [], "name the artifact or session instead of linking it"
 
 
 def test_no_absolute_home_paths() -> None:
-    assert hits(HOME_PATH) == [], "use repository-relative paths or a placeholder"
+    assert hits(HOME_PATH) + hits(WINDOWS_HOME) == [], "use repository-relative paths or a placeholder"
 
 
 def is_personal_address(match: re.Match[str]) -> bool:
@@ -129,7 +138,33 @@ def test_address_rule(address: str, personal: bool) -> None:
 @pytest.mark.parametrize(
     ("text", "flagged"),
     # Split like the addresses above.
-    [("/home" + "/someone/project", True), ("/Users" + "/someone/x", True), ("~/project", False), ("/home/", False)],
+    [
+        ("/home" + "/someone/project", True),
+        ("/home" + "/someone", True),
+        ("/home" + "/_build/project", True),
+        ("/Users" + "/someone/x", True),
+        ("C:" + "\\Users\\Someone\\project", True),
+        ("~/project", False),
+        ("/home/", False),
+        ("apps/home/view.tsx", False),
+    ],
 )
 def test_home_path_rule(text: str, flagged: bool) -> None:
-    assert bool(HOME_PATH.search(text)) is flagged
+    assert bool(HOME_PATH.search(text) or WINDOWS_HOME.search(text)) is flagged
+
+
+@pytest.mark.parametrize(
+    ("text", "flagged"),
+    # Split so that this file holds no link the scan would flag.
+    [
+        ("https://claude" + ".ai/artifact/test-only", True),
+        ("https://claude" + ".ai/code/session_test-only", True),
+        ("https://claude" + ".ai/chat/00000000-0000-4000-8000-000000000000", True),
+        ("https://claude" + ".ai/project/test-only", True),
+        ("https://claude" + ".ai/share/test-only", True),
+        ("https://notclaude" + ".ai/artifact/test-only", False),
+        ("https://claude" + ".ai/", False),
+    ],
+)
+def test_private_link_rule(text: str, flagged: bool) -> None:
+    assert bool(PRIVATE_LINK.search(text)) is flagged

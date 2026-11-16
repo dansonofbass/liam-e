@@ -578,20 +578,20 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 
 ---
 
-## Abweichungen von smartpaper-ng
+## Abweichungen von der Vorlage
 
-DESIGN.md folgt dem Aufbau und den Regeln von smartpaper-ng. Bewusst anders:
+DESIGN.md folgt dem Aufbau und den Regeln einer älteren Design-Vorgabe des Owners. Bewusst anders:
 
-- **Ich-Form des Assistenten** ist erlaubt (Owner-Beispiel 2026-11-13); smartpaper-ng
+- **Ich-Form des Assistenten** ist erlaubt (Owner-Beispiel 2026-11-13); die Vorlage
   verbietet sie. Floskeln und Gefühle bleiben verboten (§2.2).
 - **Weiche Form:** Pillen-Buttons, Radien bis 24 px, farbige Blase für eigene Nachrichten
-  und Schatten für schwebende Flächen; smartpaper-ng ist flacher und trennt ohne Schatten.
+  und Schatten für schwebende Flächen; die Vorlage ist flacher und trennt ohne Schatten.
 - **Keine Mono-Schrift:** Zahlen sind tabellarisch statt in einer zweiten Familie.
 - **Deutsch als einzige Sprache der Oberfläche**; es gibt keine englische Fassung.
 
 ## Entschieden (2026-11-13, Owner)
 
-1. **Neues Design-System**, Stilrichtung C „Weich“; OMP Control wird nicht verwendet.
+1. **Neues Design-System**, Stilrichtung C „Weich“; ein bestehendes Design-System wird nicht übernommen.
 2. **Startseite ist der Chat** mit Schnellaktionen: Ungelesenes zusammenfassen,
    Priorisieren, Newsletter aufräumen, Heute fällig.
 3. **Vorschlagen und mit einem Klick bestätigen**, nichts ohne Bestätigung (§9.2). Regeln,
