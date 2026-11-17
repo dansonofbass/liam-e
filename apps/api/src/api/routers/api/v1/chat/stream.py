@@ -10,14 +10,14 @@ from pydantic import BaseModel, Field, RootModel
 from starlette.responses import JSONResponse, StreamingResponse
 from mistralai_capabilities.fastapi.sse import event_stream_response, format_sse
 
-from api.errors import refuse
+from api.errors import quiet_validation_route, refuse
 from api.mail.agent import run_turn_events
 from api.mail.context_resolver import resolve_context
 from api.mail.chat_events import ChatEvent as ChatEventUnion, ErrorEvent
 from api.mail.models_catalog import list_chat_models
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(route_class=quiet_validation_route('chat_invalid', 'Prüfe die Nachricht: 1–8.000 Zeichen.'))
 
 
 class ChatEvent(RootModel[ChatEventUnion]):

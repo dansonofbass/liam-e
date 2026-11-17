@@ -17,7 +17,8 @@ TERMS_AND_FORMATS = (
 
 
 def system_prompt(*, today: date, account_scope: str | None) -> str:
-    scope = f"Das ausgewählte Konto ist {account_scope}." if account_scope else ""
+    # The address comes from the provider; keep it on one line so it cannot start a rule of its own.
+    scope = f"Das ausgewählte Konto ist {' '.join(account_scope.split())}." if account_scope else ""
     return (
         f"Heute ist der {today:%d.%m.%Y}. {scope}\n"
         "Antworte auf Deutsch, freundlich, knapp und sachlich. Sprich den Nutzer mit du "

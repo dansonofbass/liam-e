@@ -2,12 +2,12 @@
 from db.accessors import chat_message as message_access
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from api.errors import refuse
+from api.errors import quiet_validation_route, refuse
 from api.mail import agent
 from api.mail.models_catalog import list_chat_models
 from . import schemas
 
-router = APIRouter()
+router = APIRouter(route_class=quiet_validation_route('chat_invalid', 'Prüfe die Nachricht: 1–8.000 Zeichen.'))
 
 
 class ChatTurnRequest(BaseModel):
