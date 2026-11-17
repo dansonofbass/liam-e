@@ -260,7 +260,14 @@ Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
 spätere geprüfte Providerformulare. Aktuell zeigt er nur die fehlende Verfügbarkeit;
 er registriert keinen Adapter und bietet keine Verbindungsaktion an. Ein späteres
 Formular muss nach erfolgreicher Einrichtung die Query-Gruppe `calendar` invalidieren.
-Die Agenda verwendet UTC-Tagesgrenzen wie der Index-Endpunkt und nennt UTC an Uhrzeiten.
+Die Agenda gruppiert und zeigt Zeitpunkte in der Browser-Zeitzone; Ganztägiges bleibt
+bei seinem Datum. Lokale Tagesgrenzen werden in Zeitpunkte umgerechnet. Weil der
+Index-Endpunkt nur ganze UTC-Daten akzeptiert, wird das Abfragefenster nach außen
+aufgerundet und umfasst zusätzlich die Ganztagsdaten. Fenster über 90 UTC-Tagen werden
+in angrenzende Teilfenster aufgeteilt, die wie Cursorseiten nur ausdrücklich nachgeladen
+werden. Randtreffer außerhalb der gewählten lokalen Starttage werden ausgeblendet,
+doppelte Instanz-IDs aus angrenzenden Fenstern zusammengeführt. Eine leere Teilseite
+behauptet nicht „Keine Termine“, solange weitere Seiten oder Teilfenster fehlen.
 Ein Stand älter als 24 Stunden bekommt einen Altershinweis; beim Öffnen wird einmal je
 Quelle über den expliziten Verwaltungsendpunkt ein Abruf angefragt. Das verspricht keine
 Aktualität beim Anbieter. `seed_calendars` ergänzt fünf synthetische Quellen für Google-/ICS-

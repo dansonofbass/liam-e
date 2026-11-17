@@ -11,16 +11,16 @@ test('calendar windows are bounded and exclusive', () => {
 })
 test('absence requires successful active complete coverage for either provider', () => {
   for (const provider of ['ics', 'google']) {
-    expect(covers({ ...source, provider }, '2026-11-01', '2026-12-01')).toBe(true)
+    expect(covers({ ...source, provider }, '2026-11-01', '2026-12-01', 'UTC')).toBe(true)
     for (const patch of [{ is_active: false }, { stale: true }, { incomplete: true }, { last_success_at: null }, { coverage_start: null }]) {
-      expect(covers({ ...source, provider, ...patch }, '2026-11-01', '2026-12-01')).toBe(false)
+      expect(covers({ ...source, provider, ...patch }, '2026-11-01', '2026-12-01', 'UTC')).toBe(false)
     }
   }
-  expect(covers(source, '2026-11-01', '2026-12-02')).toBe(false)
+  expect(covers(source, '2026-11-01', '2026-12-02', 'UTC')).toBe(false)
 })
 test('age is distinct from index completeness', () => {
   expect(oldSource(source, Date.parse('2026-11-15T10:00:00Z'))).toBe(true)
-  expect(covers(source, '2026-11-13', '2026-11-14')).toBe(true)
+  expect(covers(source, '2026-11-13', '2026-11-14', 'UTC')).toBe(true)
 })
 test('all-day dates are not shifted by browser timezone', () => {
   expect(occurrenceDay({ id: 'test-only', source_id: source.id, event_id: 'test-only', title: 'Planung', start_date: '2026-11-13', end_date: '2026-11-14', start_at: null, end_at: null, timezone: null })).toBe('2026-11-13')
