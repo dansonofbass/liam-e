@@ -36,7 +36,7 @@ export function ChatComposer({ conversationId, contextMessageId, contextOccurren
     if (busy || !ready || !calendar.ready || !tasks.ready || !value.trim()) return
     onSend?.()
     void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, context_occurrence_id: contextOccurrenceId, calendar_source_ids: calendar.ids, task_source: tasks.scope.source, task_source_account_id: tasks.scope.account_id, model, ...(!conversationId ? { prompt_revision_id: promptRevisionId } : {}) })
-  }} onStop={stop} busy={busy} scope={scope} accounts={accounts} onScopeChange={value => { setScope(value); if (tasks.scope.source !== 'none') tasks.set(value ? { source: 'account', account_id: value } : { source: 'none' }) }} placeholder={de.chat.placeholder} autoFocus={autoFocus} /></>
+  }} onStop={stop} busy={busy} scope={scope} accounts={accounts} onScopeChange={value => { setScope(value); if (value !== scope) tasks.set({ source: 'none' }) }} placeholder={de.chat.placeholder} autoFocus={autoFocus} /></>
 }
 
 type Draft = { onDraft: (id: string) => void; disabled: boolean }

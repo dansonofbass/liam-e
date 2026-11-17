@@ -56,6 +56,24 @@ test('account chat explicitly includes personal tasks without granting other acc
   expect(requestBody.task_source_account_id).toBe('a')
 })
 
+for (const choice of ['Aufgaben dieses Kontos', 'Alle Aufgaben']) test(`changing the mail account clears the explicit task choice: ${choice}`, async () => {
+  setup()
+  summary.accounts.push({ ...summary.accounts[0]!, id: 'b', display_name: 'Arbeit', email_address: 'work@example.org' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
+  const area = await screen.findByRole('region', { name: 'Aufgaben im Chat' })
+  fireEvent.click(within(area).getByRole('button', { name: choice }))
+  expect(within(area).getByRole('button', { name: choice }).getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(screen.getByRole('button', { name: 'Privat' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Arbeit' }))
+  expect(within(area).getByRole('button', { name: 'Keine Aufgaben' }).getAttribute('aria-pressed')).toBe('true')
+  expect(within(area).getByRole('button', { name: 'Aufgaben dieses Kontos' }).getAttribute('aria-pressed')).toBe('false')
+  await send()
+  expect(requestBody.account_id).toBe('b')
+  expect(requestBody.task_source).toBe('none')
+  expect(requestBody.task_source_account_id).toBeUndefined()
+})
+
 test('shows status, streams text and stops the answer', async () => {
   setup('/chat/c'); await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'status', code: 'searching', count: 4 }) })
