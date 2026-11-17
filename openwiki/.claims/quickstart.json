@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:7793ad7782ccadf3e0625476b7a42131a4dc9e94897bb2f30bfb5cb62b6ed72a",
+  "claims": [
+    {
+      "id": "claim_f6eed17015f44d3c904f02defe24ea1b",
+      "statement": "Der Webchat und der Posteingang arbeiten mit dem Postgres-Mailindex. Für Änderungen und Versand durch den Assistenten gibt es einen eigenen Bestätigungsschritt.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/agent_tools.py#L88-L128",
+          "version": "repo-lines-v1:sha256:54922dee9e60a59e691de256d7370687e7d5eb410b443b1627262c224cf01b6e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2NWMzY2Y5M2RiOTgxYWFjNTA5YWUwMzUyMzk4OGU2NWY2OTMwYmZmMmU1YWEwZDg0NDdmYTY0MzFiOTc1N2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIxMzFjNDViYWU1OTc2YTdjMWQxOTEyNDBiNmYzNDgxNDBkNDUxNDAxNjUzNGNlMjBiYTc2MmVjNGQwZjI0ZGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjNWQ2OTg5OTM4YmI5NzZlZjNhZTYyZWZjZGU1NzJiM2MwOTBlNjhmNGMyZDE0N2RmNWE4M2Q5MjRiMDkwOTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiOTg5Y2Y2NjIzOTMyMmViYzA3MzZmODczMTlkOTRjODFjZWM1M2UyNmIyYTk3ZDY3ZmFmOTNlMDY5NmRlNWEifQ"
+        },
+        {
+          "resource": "repo://apps/api/src/api/mail/proposals.py#L219-L252",
+          "version": "repo-lines-v1:sha256:3db068cb0f195d252659aeb43806a3a7078e1ee4a17cc29857ea56d6e40005c0:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiNDgwODg0NjhiNDMyYzEzOTIwODFhNTg2YmI4ZjNlNGM1OTA5NjE4NzI3MTE1OWQ4N2E0MTM3NTA4NWU4NDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiMWUyZGIyNmQwMGIzM2RhMDkxN2EzZTYyYTJjMzA0MTY4MzFkNzNmMzA0NGQxYWI0NDI0ZmNiNGI1MDMwZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmNjc4MDk5ZmNjMDA3NzY2YWJmYTkyZjBjMDUyYjc2OTEyMzI2M2Y5OWU1MDgwMmNmZTlmNzY3NjNjOTg1NzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0e96afa197d84fee93bd9f53d7592dc1",
+      "statement": "Die wirksamen Webrouten für Einstellungen führen zur Vorlagenbibliothek, während Aufgaben und Kalender in der implementierten Oberfläche keine eigenen Routen haben.",
+      "evidence": [
+        {
+          "resource": "repo://apps/web/src/prompts/Settings.tsx",
+          "version": "repo-file-v1:sha256:3ff9ef085aa29930a8a027cd16b66af5663243a8333f3cbed48d6fc1f286a1fc"
+        },
+        {
+          "resource": "repo://apps/web/src/routes/_app.tsx",
+          "version": "repo-file-v1:sha256:124532322410dcf0172d050b4abc88b6df01796c8936b8a1140b5f738fb24eb4"
+        },
+        {
+          "resource": "repo://apps/web/src/routes/_app/settings/index.tsx",
+          "version": "repo-file-v1:sha256:57a465e818fe6c54aafc24e77b9939041080e7221c65e28536d0ff8fa731c243"
+        },
+        {
+          "resource": "repo://apps/web/src/routes/_app/settings/prompts/index.tsx",
+          "version": "repo-file-v1:sha256:f416c670a0d40efceecfdb8ceb573899763a49c8d30376ecd623d2d515d582b7"
+        }
+      ]
+    },
+    {
+      "id": "claim_892ce88597824340827165776382b7a3",
+      "statement": "Der Seed setzt eine lokale Datenbank voraus und nutzt Beispielkonten, für die externe Kontoaktionen gesperrt sind.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/dev_seed.py#L38-L77",
+          "version": "repo-lines-v1:sha256:3332de99082e3937e1dba31f7a71ff669ad6bb862d14cefb4625e0ef1eed1386:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3NDgwZjlhOTI3MGZiMjhmMGUwNGNmOGU3YjdjNWNlMmU4YTc4MTQ4NjQ2YWY0YTk1YzVhYmVhNmFiZGQ5MDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcxMTEyOGU0NDk1YzI5MGE4Y2RjMjg4NjIwZjk1NzAzY2NjOWViODk0MTE5MjZmMjNjNjI4NzE4ZTcwZTUzNTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkMTA1MTZjZjlhOTFjMjc3NzU5ZDAwYTQ2Y2NmZGMyZjU2MmRjZDU1MzQ4ZWU5ZGI4Mzc5MGIxZDlmN2JjMzIifQ"
+        },
+        {
+          "resource": "repo://apps/api/tests/test_seed_guard.py",
+          "version": "repo-file-v1:sha256:c0acef2b6927eb72b0d6ba516b573307b04ae3f88ab46c94267188073bd4b815"
+        }
+      ]
+    },
+    {
+      "id": "claim_8b8c3147a80a4e7c9a4fbf3537798b43",
+      "statement": "Der generierte Webclient und der OpenAPI-Vertrag werden aus den Serverrouten erzeugt und per Drift-Prüfung abgeglichen.",
+      "evidence": [
+        {
+          "resource": "repo://tools/gen-types.sh#L20-L79",
+          "version": "repo-lines-v1:sha256:9a345494d2a227f7cbd4bac9d11df2cf5acac1219770884ea1bb4b479fd2b750:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiYjIwMTFkOWE4MGRhNWM3ZDA3ZWZjMzYzMWM4M2VlMmM5NjJkNjg5YzllODY2ZmVkNGUzZTNkMjExNmZhN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwY2I2Yzc0Zjk5Y2ZkMTNhYWQ5MmFlZDkxN2RkNzRmYzI3MmRmY2ViNjA0NTFhZDk2ODM2MDI4ODU4YjE5Y2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQyNjg3MjAyYmNjMzZiNjFhNDE1OTU1ZTIyYzQyN2Q3NGY5MzFmNWJjNDNhMzhlNDQ5MGVhNmVjZTYzOGIwNGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFiNDkwMWFmZGI1YWNkMDJhMzdkYzFjODZhY2VhZDRkZWU5NDcxZjJkZDYwODk4NjVhNDZmNjA5YjZkZWU4NjIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-11-17T18:59:26.600Z"
+  }
+}

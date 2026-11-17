@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:cde9d9e1540be9c90c2b8c5852390b947b1c76d9bfc403a58f63ca9794902de3",
+  "claims": [
+    {
+      "id": "claim_bc6f1341be3e41e7bf3c664d0f062d5c",
+      "statement": "Der Postgres-Mailindex identifiziert Nachrichten je Konto, Ordner und Provider-ID und hat einen deutschen Volltextindex über Betreff, Absender und Body.",
+      "evidence": [
+        {
+          "resource": "repo://packages/py/db/src/db/models/mail_message.py#L19-L56",
+          "version": "repo-lines-v1:sha256:b8a846c1af13313458e7cff46b62be3584e596122632903cd426145bee868a7f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZjM2ZjkyMWQ4YzUxOWYzNmUwOWJiY2NjOWFhZjE3MjE0MWI4MjYyNzA0MTYwNzc2M2JiMTUxODQ1ZmQ1MDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExYzFlMGZiOTAxYWUwM2FlMGY2MmY4YmRkMTc5MDRhMjdiMTA0NDUwOWVjYjg0YWFiMDM5ZDFjZWE1MWU3YTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlZGQ5MzUxNDI5ZDJlOGI4NDIzMjYzOWM1Y2VkZjI0ZGVkYTRmZTZkNzNjYThmMDg4NGIyZTY2MGQzYTI0MGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwYjliNzE3MGQ2YWMzOTEwMGE4ZjdjNmVhNmNlMWVlZTg1YTdjMTEwNDM5ZDQ4OTJiMDhhMzMwMDcwY2ZiNmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4ce6573f16864a94a6abd80fbf21d263",
+      "statement": "Offene Jobs werden über einen partiellen eindeutigen Index auf dem Deduplizierungsschlüssel zusammengefasst.",
+      "evidence": [
+        {
+          "resource": "repo://packages/py/db/src/db/models/mail_job.py",
+          "version": "repo-file-v1:sha256:d29045d928d82d05b3ccdf753be769b31e1bea4cafdc7e5350d06930d8addbf1"
+        }
+      ]
+    },
+    {
+      "id": "claim_d3d772c849724b858cd45b1d8cf5acf4",
+      "statement": "Ein Chat-Kontext speichert Vorlagenrevision, Hash, App-Prompt-Version und aufgelösten Kontoumfang je Turn.",
+      "evidence": [
+        {
+          "resource": "repo://packages/py/db/src/db/accessors/chat_context.py#L63-L106",
+          "version": "repo-lines-v1:sha256:db9f891754f0f7a3d439a7c294aec1d0b2e9a38cf5acfe3ca87226f1411362d7:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwZjc1OTkwMThkODNhZThkZWQ3NzM1ZmMwYzI5NWEzMTliYjM0OGUwMDJmOGYzNTRmMTg3ZTQ4ODJmMWYyNTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyODIxZTJlZjRlODFjMWIyMmIzODczM2M5ZGMyNzg2MDQ3OGE5MDY5MGI4ZTZiMDI2OGQ5ZWE4YTMwMmM2N2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjljY2Y0MmVhMTY2NmQ3Mzg5ZWM2OWY2Zjg4ZDRmNDFmNWE1NGY2OGY1ODk5MzZmOTQ0MmZlOWY4MmY5MWFiMWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlhYmVkNDU2YTJlZWFkZDJlYWQ2ZDg5MDFlODM0YTM3MGYxYmM2ODA3MzBlZGM2NGQwNWUzMWY4MmYwMzJlODcifQ"
+        },
+        {
+          "resource": "repo://packages/py/db/src/db/models/chat_context.py",
+          "version": "repo-file-v1:sha256:efedc3b5f0e963e5ab88a4e268f97fa7541664679b1b97b3ce35fd98aae416f8"
+        }
+      ]
+    },
+    {
+      "id": "claim_df6ece332bb44bb38e8973610b9a9dbe",
+      "statement": "Kalender-Snapshots aktualisieren Instanzen und Abdeckung in derselben Transaktion und prüfen den aktuellen Jobbesitz unter Sperre.",
+      "evidence": [
+        {
+          "resource": "repo://packages/py/db/src/db/accessors/calendar_snapshot.py#L43-L104",
+          "version": "repo-lines-v1:sha256:9c4071540c0bd22187fe4c3b0937d26b7b514011fa50bf8db2619490dfabb6c3:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2ZjFlNmQ5ZTc3MDRiZTg0MGQyYjdhYmFiZWEzMzliNTlmN2FhNzE5NGViMjJjZWY1NWIzZDJkNzljNDFiMTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyODIxZTJlZjRlODFjMWIyMmIzODczM2M5ZGMyNzg2MDQ3OGE5MDY5MGI4ZTZiMDI2OGQ5ZWE4YTMwMmM2N2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY0OWNlOTRhNzk0OTQzNWRlMDQ2Zjg3NDJmYzVjZDYxODMzZTMzYWVkMmNhNTFjMmYzZmRlNTFkYjU1ZmIzZWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_21b6790d49fd410f90ee54c1a54c60c7",
+      "statement": "Aufgabeninstanzen sind je Revision und ursprünglichem Instanzschlüssel eindeutig. Reconcile speichert Instanzen und Fortschritt in der Transaktion des Aufrufers.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/tasks/reconcile.py#L100-L127",
+          "version": "repo-lines-v1:sha256:c0c7b9703261bbf116a415b9f8b2556ec201a368f9454ed8c58e2ca4a83b493d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ2OWU1MTIxZjMwZDBiMjMzZjMyZGMzZDEzYWQyNGMzNzdkY2M4NWQyNDk2NDllOGMxZDFlMmVlZTI1OTlhMGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhODc3NTBmMzdjY2UzMDliNzJhMWMzYjc1YTUxOTJkMWRmMTRmYjAwZjU4MmM5Y2IzYzlmZTI1NmI0NGFiNjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNiYzQwY2QyZDQ4OTM1NWYyODk1NDEwMjk5ZDJlOTJlZTA5ZDRlY2JjN2VlNDI5NWQyNTgwMzE4ZmI0NDU1YTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://packages/py/db/src/db/models/task_occurrence.py#L11-L28",
+          "version": "repo-lines-v1:sha256:7b5fadac8782c68ffbcca477ac5795e27c0ab4e0c2ba9cfa02ff731409d20bd4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3NTQxZWI5MmRmNWVjNzZhMWEwODBkZjc1MTUzMjhhZGI3ZGUwNTc4NzA0ZGY4OWNlY2FiYjA3YTcwMzk5ZWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjYTUxMjEzZWE0ZjY5ODY0MzczOThkY2ZjZjgwODE2ZjFlNWQwZDkwNjhmNTM1NWU0MGIzNGI0ZGJiZWUzZGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlZGQ5MzUxNDI5ZDJlOGI4NDIzMjYzOWM1Y2VkZjI0ZGVkYTRmZTZkNzNjYThmMDg4NGIyZTY2MGQzYTI0MGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b8efcd87355b4a7bb8e15343598434f5",
+      "statement": "Die lokale Migration wendet alle Alembic-Zweige mit upgrade heads an.",
+      "evidence": [
+        {
+          "resource": "repo://tools/db.sh#L23-L29",
+          "version": "repo-lines-v1:sha256:6ba6acb439c2d76327b817ed3f2fe971eb0e457bb4970b5a78f9fe705c083e41:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTYxMDgyOTFiZDFmZjAxOTYxZGY2NWVkNzZlNGRhYzYxNzJhYTc4YWM1YWMwODEyYjJiNzM1NTkwMTkxODMzOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODFlYjEwNDdmNGQyNzIyYTdlZjJmNGY4NGExM2Q1OWMyMjEzNTc5Mzk1YjMzYmFjMGJiMGJhYzQ1M2FhOWE2YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDk2Mzc0ZGEwYjE0MDJlZDQwYzQ0YjE3ODYzNDk3YzdhNzcwYzdhODdlMGYyNTMxYWExNzg2NWI3ZGQwMjAxYyJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-11-17T18:59:26.600Z"
+  }
+}

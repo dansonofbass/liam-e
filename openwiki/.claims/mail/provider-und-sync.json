@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:94808edbeac32428cd847083a64d190259e340c475ee7a539a0d7bf4946ef8f0",
+  "claims": [
+    {
+      "id": "claim_59149742290a463aaea6cb5793887161",
+      "statement": "Gelistete Gmail- oder Outlook-Connectoren haben im Verbindungsformular Vorrang vor dem eigenen OAuth-Pfad.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/routers/api/v1/mail/accounts.py#L341-L354",
+          "version": "repo-lines-v1:sha256:184fac23aa7b1ad22b49a4901e8891950d08592afd827c8d13af580b586dba06:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlN2U3YTIwZjI4NWIyZjE4MmJiYjc3Y2YyOWIyMTU2NjBiZmQyZGM2NDRlZGUyNjc3N2IzODhmMGM3NjRmZjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNiOTA1MDBjYzg1ZDgzZjQ4MGYzN2JkYmQ1NzljYWFiMDg2MjI1ZDkwNTU5NjM3ODhiZWM5NzRhYjAyMTJjZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwYmNhMjdmNDFjY2Y1MTYzZGZjYjJjOGE3ZTgxZGY2MTM4ZmM4ODk3YjhiMmE0Y2U3YTQ3ZDVjMjdlODMyMjgifQ"
+        },
+        {
+          "resource": "repo://apps/web/src/accounts/ConnectPanel.tsx#L26-L53",
+          "version": "repo-lines-v1:sha256:1a4c09607ba479fe824bd542f89412ea597dae8a4b0563d62cccb3147fa92abd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxNTk4NTQ5YWYxNTdlYTA3ODMzYWEzNzQ2NjkxZDUwNjMyZDA4ZmZiZjhkM2ZhN2QzY2VjYTcyNDhjMjVmMzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmZDdhM2VhN2Y2YTdkNGRlNjExMmNmOWJjNzVlZjZmMjM4ZDY2NWVlMDgwMDQ0MmY2ZTFiYmUwNTA4MzMzOWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM4NTk5MzUzZTIzZTg3MWQ2NmY5MDg3OTdkMWJiYTg5NWIxOTY3ZGI2YmUzYmQ0YjE4NTU0MDE5YzVmOWI5MTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiYTQ2YjhlYzQ1OWRhMWU5ODQ1OGQ4NzhkMzVlYWYxMDExMGEwMDIyYmJhY2FmNGY0ZDgxOGFjYzliMzUxMjQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_907da6ac20804ed8bd3adae803128130",
+      "statement": "Die datierte Studio-Leseprobe zeigt Gmail-Werkzeugformate und meldet für die Outlook-Werkzeugliste HTTP 401.",
+      "evidence": [
+        {
+          "resource": "repo://docs/superpowers/probes/2026-11-13-studio-proben.md#L50-L67",
+          "version": "repo-lines-v1:sha256:22ce172503e18875d6186500f192ceba191413dd4e63b23d7055820d7d21787c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiYWNhMzg3YTY2NjhmZWIxYjk0MWEzZjEzMmNjYjk1ZDRjZmIwZTdjMzliZTY4ZGRhZGQzMDBmYzlhNTA4NzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllZWU3NWYwODk2ODViMjg0NGUyMGI4OWIxMDgyYjU1YzU3ZDkwYzMxMTUyMDBlNTI1YjM0YWJhZGM4ZjZjN2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg4ZDM1YjgyODQyNjkwMjBhYzI1Mzg5M2ZjMGRhYjZlN2M1ODExYzI5NmMyYzUyOTU0OGZjODhlNDgxY2Q1OTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0NDc5YTU1NGNhZGI2Njc2ZmU5YTJhYmVmYmY3NzhlODIyNTk4MDlkMmQ3NDQ1N2I4OWFjZmM4MDFkM2YxNmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e7254cf1c58949cf9eb3272888b35af6",
+      "statement": "Der Credential-Service löst IMAP-Secret-Referenzen bei Bedarf auf und speichert erneuerte OAuth-Tokens verschlüsselt.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/service.py#L54-L104",
+          "version": "repo-lines-v1:sha256:fd8fd5fa898d89a11b735f0d3f2429d6d7fc1c7d771fb795f011c10ebe656aed:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyZDc5MjEyNzg5ZGRhNDZkNDliMjdkMGI4MDk1ZGUzOTkyYTE2MmNmMWQyMWQ0OTQ2YmY0ZDViOWYxMDU5MzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNiODIxMTk2MzNmZWU1MmQwNjFhNGVjNzBiNzA0NWQ4MTRjMmVhODc0MjNkNGM4YWQyZjg4NDFmODE2YTA5M2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJhYmU3NDA5ODY1NWRjZWNjZTQzY2NkOGU0ODhkMTA5YTg3ODg1ZGM1MDQ3Y2Q4OWY1MDZlYzlhYTVjNzkyMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0NjE0NTcwZDVkZmRkY2U5NWQ2MjFhMjAzODcyNThlNTRhYWE4Y2I4ZjY3YWEwNTUyZGI0MWU4ZjBhYzBiOWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_edbae61f272b47deae6c1c3833774d12",
+      "statement": "Die Mail-Originalansicht ist für IMAP, Google- und Microsoft-OAuth verfügbar und schließt Connector- und Seed-Konten aus.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/original.py#L18-L23",
+          "version": "repo-lines-v1:sha256:e6abbf7fb65548868b84a03e46c5261ca77e5eb7ce461b446f3bf0361082f44c:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZThhY2RlNTRjNTIyMmMyNzMwOTU1MWFkMTFiOTAyYWVjNDcwNzNlYWI2ZDUxYTk1N2UzMjJmM2ZmN2UzNzQ2NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzg5NGNkZDMwMzM5MzAwMWFhMTJlMmRjNDEzZTRiNWQyZjNmZWQ3YjM0OGZjYzNhMjExMzI5NDhhOWRmZWNjMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWIxYjE2YWRmMWVhODI4ZWQ4MmFiY2JiYTg4MThmODdmOWQ2N2VhZjNkNjJhZjExNDZlYjY5MmRjYTFkZGFmOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDEyM2Q5ZTRhZWVmNTgyMDllYTQyNzI2MjJmOGQ3MzkxMzA4MGJhZGNkOGU4OTM3ZmUzYTNmZTk2ZTc0Zjg2MiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_11f5fae4829d4e5aaa71ae24ebac0d2a",
+      "statement": "Der API-Worker verarbeitet deduplizierte Postgres-Jobs und überspringt beim periodischen Einreihen inaktive oder abgelaufene Konten.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/jobs.py#L27-L111",
+          "version": "repo-lines-v1:sha256:afeb06fc8ce5560b5b80ba31bc7feb7c53df496850f9f42acf3a47a2c3201ecd:eyJzZWxlY3RlZExpbmVDb3VudCI6ODUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiNzM4N2UyYTA0YTAwNDlkOTUwNjZhNDBlNmIwOGQxMGZkY2NhMDliNGU3M2E0NTFiYWJmOWYwZmQxYjBiOGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1ODVjYzU0Nzk3ZjEzZWUxMjdkMmE2YjNmNzYxM2ExNmE4MjAyNDZiN2Q2NGQwNmVmOWM1MmIyNGNmZDhmNWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZkMTFjOWY0NTk3YmQ3NTQ3ODRlZTgyMjE0YjI0MmQwOTdjNjM0OGMyMDBiNzNjNTk2ZDI0YjUyZTdkNTkzMDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3NTk5ODhiYzk3YTU5NDQzYTZmYTljMTc3N2U5ZGMzYWM1N2VmYzViOTNhMThmOWU2MjQzZDAyOGViMmExZDIifQ"
+        },
+        {
+          "resource": "repo://packages/py/db/src/db/models/mail_job.py",
+          "version": "repo-file-v1:sha256:d29045d928d82d05b3ccdf753be769b31e1bea4cafdc7e5350d06930d8addbf1"
+        }
+      ]
+    },
+    {
+      "id": "claim_688a9fd319464dd3bd563cb53b0d4221",
+      "statement": "Der Abruf hält einen eigenen Provider-Cursor je Konto und wendet Adapteränderungen im lokalen Posteingangsindex an.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/sync.py#L48-L109",
+          "version": "repo-lines-v1:sha256:1c6fe908269ececb4df793fc8ee2e7d28a0523311d79d3f69cea69f1d3e58499:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyMDNjZWZmZjA4ZTBmZTc3ZGI5MjdiZjkxMzU3YzhiZWM4ZjEzZTI4N2E0YTRiYTQ4N2Q3MmJiZTdjYTA3ZDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJhZTAzMDdjODFhMGE3OTE0OGIzYTljNGQxM2EyNzM2YTFhNWZhNWQyYzQxNWY3MDc4OWY5YmYwZWE3NGU4YWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFmNjE5Mjg2MzE0MDcwYzRhMzg1YWQ3ODE3ZDZiZTczNDhhOGFiNGRiYzNkZjFkNzkyOTJkNjdjYTc2YTA4NzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAyZmMyZjc4NThmZDY1ZTk0MjRkODMwOWMyMmEyZTQ0NTlkOWU1N2Y1OGUyNDUzMzNjYzg2OWEyZTY3ZmIyODkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6bdbd2b1e4df4252b97b5575f7daa324",
+      "statement": "Nach einer Änderung der Body-Version liest der Sync ältere Posteingangstexte in Chargen nach und verwirft überholte Kurzfassungen.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/sync.py#L112-L145",
+          "version": "repo-lines-v1:sha256:c8b736a5488080307d67646b74a41058bfa0f55c07075c5933a0b2339beb04b3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkNDlmYmU3YTNiNGUwMGMyZDIyZGU0MzIwMGI4YzM0MTY0ZmRlNmVmZmIyMDllM2NhMDVjMzEyY2Q1YTVlY2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhNDFiMjZjOGQzZGY2NGI2MmIyZTI1ZmMzODJjOWZjMjc2ZGQ4NTg0ZjgwNmRlZmQ4YjljNmYxMTFhMDQzN2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJjMzBlZGQ2YWQyYTFkY2FlNjlkMjFhZjc5ZTQyYmM5MmE4OTk3MjFkMzZkOGQ5ZDQ4ZDI3ZjY3MzQxNWUzMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI5ZTllNDk5ZjkyNDVhYWYxY2Q2ZjI0MjIxODE1OTllMjZjNzMyNDY1NDc1MjhiMzVhY2U2ZGJiNWRkMmRiMzkifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-11-17T18:59:26.600Z"
+  }
+}

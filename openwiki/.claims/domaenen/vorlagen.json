@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:9e06543f6b0d63a34e97f8e499fbcb5d8912d39ad7c32ba0164734b22c8d5bf9",
+  "claims": [
+    {
+      "id": "claim_2f423929580043e8ac794e860c8b3b45",
+      "statement": "Eine Vorlagenänderung erstellt eine neue Revision, die gespeicherte Auswahl der Unterhaltung bleibt an eine konkrete Revision gebunden.",
+      "evidence": [
+        {
+          "resource": "repo://packages/py/db/src/db/accessors/chat_context.py#L42-L79",
+          "version": "repo-lines-v1:sha256:f89d99cd86823f15e48d1eb64e7a028b97b8a59979a1b426b7515ef56a69856c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2ZjFlNmQ5ZTc3MDRiZTg0MGQyYjdhYmFiZWEzMzliNTlmN2FhNzE5NGViMjJjZWY1NWIzZDJkNzljNDFiMTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmNTg1Yjg4OTAxOTg3M2JjMWIyNGU0OTgwYzNkZWM5OWQ5NDFiNTk4ODA5MjNkZDNjM2RlYmNiNWUwNDY5NjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkxZTJhNzBiMzc3YmEwZWQ2ZDY2NDFjZDNkYmUwOGUwY2Q2OTUzYjAzMmQ2ODU0OTZjNGM2M2FhODVlYjFiZGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5MDU2MTI4ODRmM2IyMjVlYzJkMzY2Y2M0OWUyZTkzZGEyMGRhNzQ1Yzk2ZmQzMzI5NjYzYzAwZTMyOTdmNzcifQ"
+        },
+        {
+          "resource": "repo://packages/py/db/src/db/accessors/prompt_template.py#L66-L78",
+          "version": "repo-lines-v1:sha256:e74b40e006ba4933437027be82efde2ed53383b74ac5f9177065f6d57c814c42:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5N2I0N2JiODFjZTkzY2JhNjdhZmMwODY5OGE4MGNmYTA5M2E4NjY3ZTljOWY5NjUzMzc4MThkNjU3OGQxODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmYjU1ZjZlZDBkNmVkZmJmZWRlZGUwYTFlYTU2YjRmOTliZWQyYzY5YjAyZDcxNTRjODNkMGRiM2QzMmFjZmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJiNDVhZWJhNTI1MjlmYzhiODEwM2I1NTE5M2ExZTY3YTg1NDE2MzNiMzMxNzFjYmFjYmRhODgyNzc0MzYxODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ab1e3d591ed64b7695cbd54c7d58ac8e",
+      "statement": "Beim neuen Turn speichert die Auflösung Revision, Hash, App-Prompt-Version und Kontoumfang. Der Vorlagentext wird dem Modell als Nutzerinhalt übergeben.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/agent.py#L62-L98",
+          "version": "repo-lines-v1:sha256:23b861bca85281b62063da18f00419c3a2b11c84c3163b93d3e92017e144dfab:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyNTNjMjg1MjE1YmM5ZmRiMGVjY2MxOGM4ODg0MzFlNDYxMjQxNDUxN2VhZDk3YmY0N2YyYzQ1MDM2NmI2ODMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllNjBiMjJhODgyYzcxOTk1NzE3MGFlYjBmYzRmZTFlY2RlM2VlNDllY2Y0ZDgzZTYwYzk0ZDNjYWExN2I0MTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxYjdkYmViNGJlOTQxMTFkOTBhODNmZmFkZTFiMDZkMDk3ZWI5ZmJhNmU0NDI4ZGQ3YmRkYzM4ZmY5MDliOWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBhZGIxNmJkZDRhMDcyNGJlMTBlMDk3YTk5MmRmYTIxZDQwN2M2ZGNhZTBkMTg1Mzg2MTcyYzc2ZjZkZDM0MjYifQ"
+        },
+        {
+          "resource": "repo://packages/py/db/src/db/accessors/chat_context.py#L78-L105",
+          "version": "repo-lines-v1:sha256:72ffeea62d024aefc56c35adbe494908e8500cf012b9527442688c4e473889d9:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5N2I0N2JiODFjZTkzY2JhNjdhZmMwODY5OGE4MGNmYTA5M2E4NjY3ZTljOWY5NjUzMzc4MThkNjU3OGQxODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5ODYwZTc1MjRkYzE2YTY4Y2ZjYjY0MDhjZDBkYzVhZTRiMjdmY2ZjNzkxOGYzMDdlZjQ0YjI2OWJkNzBmOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQzMjAxNTYyMDUyN2FiY2QzNjliM2Q4ZTMzOWFhOGYxMjJjNmE5ZDNmMmMxOGE4ZjFlMmViNDUxYTVkMjkyM2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUwMWM2YjcxZGExZGJiMzMzM2NjNWMxNDUzOWUzYzdhMjM4ODliNWM3NjJhY2RkZTBiOTU5ZjM0Y2EyZmQ5MjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2163b54d1e864c4086b3207a04cbb4d3",
+      "statement": "Ein gespeicherter Chatverlauf kann nicht zu einem anderen ausgewählten Konto wechseln. Alle Konten bleibt bei Änderungen des Kontobestands dieselbe Auswahl.",
+      "evidence": [
+        {
+          "resource": "repo://packages/py/db/src/db/accessors/chat_context.py#L80-L105",
+          "version": "repo-lines-v1:sha256:402c13e9294f0226a451dc5373ad5bc53832f3ec76d56869c9b052d5eaa810ff:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3YzIwNTZmYWQ1ODAzYzgyZTQxZjc4MWM0YTY4ZWY5MTM3MjFlOTA2OWQzOTk5ZWUxMjYyNWFmMzM5YTk4YTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5ODYwZTc1MjRkYzE2YTY4Y2ZjYjY0MDhjZDBkYzVhZTRiMjdmY2ZjNzkxOGYzMDdlZjQ0YjI2OWJkNzBmOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiYzkxMDkwNjQzZmE5YWJhYTFiNmNiMTcwNDlhNGU3MTc0YmE4Mjg0NmNjODFlNjY1YzVhNTU1ODc4MDBlMWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUwMWM2YjcxZGExZGJiMzMzM2NjNWMxNDUzOWUzYzdhMjM4ODliNWM3NjJhY2RkZTBiOTU5ZjM0Y2EyZmQ5MjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_efd8b400428b4ecba36e13dd029b8220",
+      "statement": "Vorlagenlöschung räumt Revisionsinhalte ab, setzt Chat-Auswahlen zurück und widerruft betroffene Kontexte in derselben Transaktion.",
+      "evidence": [
+        {
+          "resource": "repo://packages/py/db/src/db/accessors/prompt_template.py#L47-L77",
+          "version": "repo-lines-v1:sha256:1a6ca869c123ec9f848bf31969ea6b9abe5c0c814eeb45a8ece54ac631ea5ee8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU4NzEyYWVhNWIyMmM2ZWM3MmZiZDljZjkzYTAwOWE0NjQwNTRhNzY3OGFkNGFkNGFjY2Q4MjQzNWYwYzE3MmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyODIxZTJlZjRlODFjMWIyMmIzODczM2M5ZGMyNzg2MDQ3OGE5MDY5MGI4ZTZiMDI2OGQ5ZWE4YTMwMmM2N2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjljY2Y0MmVhMTY2NmQ3Mzg5ZWM2OWY2Zjg4ZDRmNDFmNWE1NGY2OGY1ODk5MzZmOTQ0MmZlOWY4MmY5MWFiMWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlmYjU1ZjZlZDBkNmVkZmJmZWRlZGUwYTFlYTU2YjRmOTliZWQyYzY5YjAyZDcxNTRjODNkMGRiM2QzMmFjZmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_383a956d42aa4230a5ef969cda5f6998",
+      "statement": "Widerruf sperrt künftige Vorschlagsbestätigung beim Claim. Ein offener Vorschlag bleibt abbrechbar.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/tests/test_chat_proposals.py#L88-L103",
+          "version": "repo-lines-v1:sha256:22cc6e25206c32778012ef3e6907294eb6db9bc62b5d103a22cb5c2752efbdde:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI5OGMxNjYwMWZlMGE0OGM5NzRjYTBjYWY1YTEzYjk3ODQ3OGZiYzNhMGM1ZmY1MDdiNzg4OGIxZjk0ODI4MmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiNmUxMjMwZmYwNWE1MWZmZDczYmMzYmY5ODZlMjBhZTNkZDc3Zjc0YjgzMzU0YzlmMzYyMTZkNThiMDg1MWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE3ZGJkYWE3Njg4YmU1ZWRlZjhmNThiNmFlMzNiMjA4M2I1YzRiN2E4NzY3OWY3ZGNkODI3YTA1MWE2ZWEwM2QifQ"
+        },
+        {
+          "resource": "repo://packages/py/db/src/db/accessors/chat_message.py#L46-L73",
+          "version": "repo-lines-v1:sha256:d8c9d61a12bf3387b42e13c76760f5ee553dd892e472aa078536a235a37aad0e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlNDMyNTc5MDUyNmZiZTUxZjQ5MTZlNmE4ODAyMmIwYzJiZjcyMWY5Y2NlZjI4NzQzN2U5NGY5NGVjNDRmYmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjMmYwOGM5OTdmYzQ4OTdhNmJkMWU4NzE2MDI5MjQ1NWUxYWNmYjRiYTQ2MzBhMWZkNWM2MDg3MzQxYzZhZjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVjOGY2MDI0MWY3YjcwZjEyNjNjNTkwOGViYzYyOWNmNmQyMTdlNGRhMTBkZjJjYWRlN2Q1ZmVkZGUzMzkxMGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0MGJkMjhiNjQ4OTZiOTEwNzYzOTIyZjViZTBmYmY3N2MwZDZiOGIzYzFjYjhjZWQ2MjM0YjZkMzBhYTBmYjUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-11-17T18:59:26.600Z"
+  }
+}

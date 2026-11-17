@@ -6,20 +6,17 @@ Pull Requests gilt. Bitte vor größerer Arbeit ein Issue öffnen.
 
 ## Einrichtung und Prüfungen
 
-```bash
-bun run install-all          # Abhängigkeiten und generierter API-Client
-bunx nx run api:serve        # API auf Port 3000
-bun run dev:web              # Oberfläche auf Port 3001
+Die [Anleitung zur lokalen Entwicklung](docs/lokale-entwicklung.md) beschreibt
+Installation, Datenbank, Startreihenfolge und den Seed-Modus.
 
+```bash
 bun run check                # Build, Typprüfung der Oberfläche, Drift-Prüfung des Clients
 bunx nx run web:test
 bash tools/uv.sh run --no-sync pytest tests apps/api/tests packages/py -q
 RUN_PG_CONTRACT=1 bunx nx run db:test-pg-contract   # braucht Postgres mit pgvector
 ```
 
-Die Tests brauchen weder Provider-Zugang noch Mistral-Credentials. Zum Ansehen der Oberfläche
-füllt `bash tools/uv.sh run --no-sync python -m api.mail.dev_seed` eine lokale Datenbank mit
-Beispieldaten; die API dafür mit `MAIL_WORKER_ENABLED=false` starten.
+Die Tests brauchen weder Provider-Zugang noch Mistral-Credentials.
 
 ## Regeln in Kürze
 

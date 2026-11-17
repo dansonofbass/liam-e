@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:35d2c8f057f9738665192098f9ea164a2334bd3696d311337c9941cfb06a907b",
+  "claims": [
+    {
+      "id": "claim_e04b80fa4b3a4cd1aa6d6a6a24a8a0c1",
+      "statement": "Die Anlage einer neuen Aufgabe speichert Serie und erste Reconcile-Seite in einer Transaktion und verlangt auch für Datumsaufgaben eine Zeitzone.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/routers/api/v1/tasks/route.py#L65-L90",
+          "version": "repo-lines-v1:sha256:78f2b58a376783cb4686b95ab094388c473159cc745bb4a5e53effe17acdaf63:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5Y2RkMjVmZjY3ZWMyNTc0NjNjYWQxNzMzODk1OGQ3ZjE4NjllMTkzOTg5MDE5MDUxYmMxYzMxNDRmZDY5M2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMzOTlkM2ZiYTAzZTc1YWE5Nzc3NDE3Yjc3Y2FjNmY3ZjdjMTYwMWVmMTU4MzNhNmQ5ZDAyZTRmMGU4NjYxODQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4YzNlYzQ4M2RlNzFiYWNjNzBkMjVlNzZjYmM5ZTI4MzVkODI2Nzk2MWQ5YjJlYTE5NDEwMzNhZjM3OGU2NDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhhMjRkMWQ1NzVlOTY0MzY0ZWM4ODExMGZjNWJjMDU4NjQzZjk4OTRlNmMxOTM3ZDkwYzU4ZmMwMGY3NTgzZjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_736a23acbdce46c3982bbcd1f176ee1f",
+      "statement": "Reconcile koppelt Cursor und Instanzen an Revision und festes Ziel, und ein neuer Lauf benötigt den exakten Abschlusscursor.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/tasks/reconcile.py#L37-L127",
+          "version": "repo-lines-v1:sha256:c6652da797bd72d4f98912d7f6f67f420bc0c0ab0bb30aa63da16e3a5059a827:eyJzZWxlY3RlZExpbmVDb3VudCI6OTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4ZTU1NTU1ZDA2M2YyMTY1MmEwNTVhMWJhNDczNjY0YTNhZDJlNGUyZjZkODFiYzcxODlkNmI4MWFlNTliMDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhODc3NTBmMzdjY2UzMDliNzJhMWMzYjc1YTUxOTJkMWRmMTRmYjAwZjU4MmM5Y2IzYzlmZTI1NmI0NGFiNjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE1NTE5ZDBlYzUxMDUwNTEzY2Q1NTY3ZTMzOTI3MzZjMDI2ZWJlMmY2NjZmNTk3ODk2MTQ2YTM4OTNlN2E0YzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a91a6c033a7f4e50bb563dec5b192085",
+      "statement": "Die Aufgaben-Vorschau nutzt dieselbe Regelauswertung ohne Persistenz. Nicht existente lokale Uhrzeiten verbrauchen keinen COUNT-Platz.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/tasks/preview.py",
+          "version": "repo-file-v1:sha256:b1ce25e58e1550b66f218613ea6d55353a944a769a4198499bedd91b911d2139"
+        },
+        {
+          "resource": "repo://apps/api/src/api/tasks/recurrence.py#L102-L157",
+          "version": "repo-lines-v1:sha256:0c785e8a330508f9d3406feed89b7789c49eb2932c941ababba73a03a671e40a:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyMmNkZWI2MGUwMzRiOGUyOGMzNTg2MTUwZDQ0Y2NhZTE0ODIyNjQ2ZjdlZGJkYThhOWMwYmI5ZTMyYTA5MGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc0Mzc4YjUyYmRkMzJlN2YyMjJkZDNiYmFmYmZjMzgzNGFkZWY0ODllMThhNDU5MGJmMzhmMmZkOTFlNDM3NWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZjZTIxNWUwOWUzMGM1MDMxYTI4OWNkMmU3NWQyMmZmY2Y2OTg0ZWIyODllZjFlNzIyYWZiMzZjNjk2NjMyYWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1b6e1b7abbec4a28b277c53369e7abcf",
+      "statement": "Einzelverschiebungen behalten den alten Instanzschlüssel. Eine zulässige Verschiebung dieser und folgender Instanzen erzeugt eine neue Zeitplanrevision.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/tasks/patch.py#L42-L128",
+          "version": "repo-lines-v1:sha256:8dc30f51a7f19e8cee5ef89c4d9c09fef00b1b6a62970304eea221ed42d8cb6b:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1OWU5MTYxNTk0NzNkMjk3YTdlYTY3N2E1NDBkYWFmOWJiZjQ5NzE4MmUxNzU2Y2RhZjhiMzdkYWQyMTc4N2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4M2MzNzA1M2VkZTQwZDNlNzg3Y2M4NTVmYTdmNjI1NjFkYTRmZGQ5Y2I5Zjg1YzkyNzhjNjM0YTNlNmFkZjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwNDc0NzlmOWFkZDc3NjljMzc0N2E2MWEzOTc1OGYxM2QxNTgyMjgzNjZhYTBkYWJjMThiOGI1OGZkY2ZlY2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_670a94d40cf142c49d92dc9b695d3b30",
+      "statement": "Archivierung storniert nur offene zukünftige Instanzen. Dauerhaftes Löschen erfordert eine ausdrückliche Bestätigung und entfernt die Historie.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/tasks/lifecycle.py",
+          "version": "repo-file-v1:sha256:f9adf261af8e33e958afffcd4fb5f044f0a2a2e3bc9386c98b82f63decec676c"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-11-17T18:59:26.600Z"
+  }
+}

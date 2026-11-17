@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:5391e39c23eb6cef0bfe9b111a847f1ac6100258f258eb8108be61e0d6d807fa",
+  "claims": [
+    {
+      "id": "claim_1a1ff6960018407f93e09f25b80c8fea",
+      "statement": "Der Webclient nutzt standardmäßig die eigene Origin. Lokal kann eine explizite API-Origin für die getrennten Ports gesetzt werden.",
+      "evidence": [
+        {
+          "resource": "repo://apps/web/.env.example",
+          "version": "repo-file-v1:sha256:ef6d94a85f0039000a8eae0efad5333ae51e66d17fb3fd004575c09bc8f90ef7"
+        },
+        {
+          "resource": "repo://apps/web/src/api/client-config.ts",
+          "version": "repo-file-v1:sha256:c22c416b1e1d89fd1ba5b9bd17162d54c362267fa6ec851477890e9a71783fdd"
+        }
+      ]
+    },
+    {
+      "id": "claim_07ffe02ff48a48cdb1bd408ac066d5d8",
+      "statement": "Die versionierte Einzel-Nutzer-API nutzt die Zugangskontrolle des Studio-Gateways und deklariert keine zusätzliche routengruppenweite Nutzerprüfung.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/routers/api/v1/__init__.py",
+          "version": "repo-file-v1:sha256:c5dfcfcfa4e5de7cc14308f7aa3f75c6e335011a99159a82561e2b9fc330df78"
+        }
+      ]
+    },
+    {
+      "id": "claim_05c281b204d64f8fa7056a36f29f832d",
+      "statement": "Das Studio-Manifest routet Web und API getrennt und bindet verwaltetes Postgres ein.",
+      "evidence": [
+        {
+          "resource": "repo://mistral.json#L12-L71",
+          "version": "repo-lines-v1:sha256:7051ab3b9d4be5eb6f148e54f61524aebd315d7f44ed2e76c33ee1c3662a1daf:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2MjMxNTlkMmViNWNlMDIzNWI4OTA1ZDRkMGVmNGNmNWU1ZGJmMzVjMzljN2U5ZGE5ODBmNDJmOTJjZjI2YTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxZmJkNTI5OGI2ZGM4M2Q0NDJmODY2MGQ2NzAzOGZhOGY1MDFiMThmZWQ1NjBkZGUzZmYxN2MzNjA0NDkxOGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6b3ade80eb984b6baf8e2a611aebdad2",
+      "statement": "Der Mailworker läuft bei aktivierter Einstellung im API-Prozess und verwendet für die Jobs Postgres.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/lifespan/startup/mail_worker.py#L12-L16",
+          "version": "repo-lines-v1:sha256:c72817a59af7c46887c586f8eb57f317bb88d08e50d1019fc654bdcc80784880:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTgyOGFiZjY1YWI0NTc3NDgzNjQyZmRiMzQyYzc1ODFkYzE5ZDAyNGQ0ZGVhZTliMThmM2FhZmVhMjJkNTliNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTE3NjQ4N2NjOWQ5OTg5MGQ1N2ZjOGVlZWU2ZWExMWE4Y2MwZDFiYTI2MmI5NTU3YTljNjBlMTA1ZWU2MDIzYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzVkNGU4M2NjZTg5ZDhhNDA2MzM4NjVjM2E1MjcyYmJkZjdlZTQ4OTE1MDM1OTA4NjUxOTVmZTBjMjQ5NWQ5YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://apps/api/src/api/mail/jobs.py#L49-L68",
+          "version": "repo-lines-v1:sha256:8afd60d6b07f5f19ec31ad299716416f517103ba63dce127d5b18405f795c207:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwYjk1MDJlY2QwOGE4NWEyYTNkNDVmYjA1NmI5MzVjYWFlN2Y1Y2VhOTQxYzVjYTg0M2QxNTg0ZTNmMTFkYzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiODVkMWNhN2Y3NDcxZDNiNGM1ZDg4NzI3MmUyZDlmYWYzNzM1NTQ3N2ZhMzg3NTNlZDA1OTBmNTkzMmNhYTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0OWRlMTVhY2JjZTVhNzdiM2Y1MjRkNDEyNjBkZDhmYmExNDRiMTBkYjk1ZTA1YTU5YmEzNzU5YzQ5M2ZmNzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg2MjljYzliYWFiZTAxYmUyMzJkNjcyMzdiNGM5YTI2ZThlZTc3OTllZDhiNjRiNWI3MzRlNjRiMmEzZmY3NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a1bb41ec5f2c4d8ba644bc4b921cf06c",
+      "statement": "Die Health-Zusammenfassung liefert auch bei beeinträchtigter Abhängigkeit HTTP 200, während Readiness bei fehlender Bereitschaft HTTP 503 liefert.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/routers/api/internal/health.py",
+          "version": "repo-file-v1:sha256:a51a2cb1532fc990ed2d0cedb72f7baf1f5ed47f25d9ee1041bc3035de5536ed"
+        }
+      ]
+    },
+    {
+      "id": "claim_5c9920b0f4954d8c86b8ce3fcc5e37ff",
+      "statement": "Der Drift-Check erzeugt den OpenAPI-Vertrag und den TypeScript-Client zum Vergleich mit den eingecheckten Dateien neu.",
+      "evidence": [
+        {
+          "resource": "repo://tools/gen-types.sh#L20-L79",
+          "version": "repo-lines-v1:sha256:9a345494d2a227f7cbd4bac9d11df2cf5acac1219770884ea1bb4b479fd2b750:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiYjIwMTFkOWE4MGRhNWM3ZDA3ZWZjMzYzMWM4M2VlMmM5NjJkNjg5YzllODY2ZmVkNGUzZTNkMjExNmZhN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwY2I2Yzc0Zjk5Y2ZkMTNhYWQ5MmFlZDkxN2RkNzRmYzI3MmRmY2ViNjA0NTFhZDk2ODM2MDI4ODU4YjE5Y2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQyNjg3MjAyYmNjMzZiNjFhNDE1OTU1ZTIyYzQyN2Q3NGY5MzFmNWJjNDNhMzhlNDQ5MGVhNmVjZTYzOGIwNGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFiNDkwMWFmZGI1YWNkMDJhMzdkYzFjODZhY2VhZDRkZWU5NDcxZjJkZDYwODk4NjVhNDZmNjA5YjZkZWU4NjIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-11-17T18:59:26.600Z"
+  }
+}
