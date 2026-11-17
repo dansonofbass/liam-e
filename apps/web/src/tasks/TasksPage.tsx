@@ -1,5 +1,6 @@
 // i18n-exempt: route paths, CSS classes and API values.
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { tasksCreate } from '../api/generated/sdk.gen'
 import type { TaskCreate } from '../api/generated/types.gen'
@@ -13,24 +14,17 @@ import { localToday, taskWindow } from './window'
 import { reconcileTask } from './reconcile'
 import { SourceMail } from './SourceMail'
 import { formatTaskDue, formatTaskRule } from './format'
+import type { TaskSearch } from './filters'
 
 const t = de.tasks
 export function TasksPage() {
   const [creating, setCreating] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<string>()
-  const [status, setStatus] = useState<'open' | 'completed' | 'archived'>('open')
-  const [source, setSource] = useState('all'), [retryReconcile, setRetryReconcile] = useState(0)
-  useEffect(() => {
-    const params = new URLSearchParams(globalThis.window.location.search)
-    const savedStatus = params.get('status')
-    if (savedStatus === 'open' || savedStatus === 'completed' || savedStatus === 'archived') setStatus(savedStatus)
-    setSource(params.get('source') || 'all')
-  }, [])
-  const persistFilter = (key: string, value: string) => {
-    const url = new URL(globalThis.window.location.href)
-    if (value === 'all' || (key === 'status' && value === 'open')) url.searchParams.delete(key)
-    else url.searchParams.set(key, value)
-    globalThis.window.history.replaceState(globalThis.window.history.state, '', url)
-  }
+  const search = useSearch({ strict: false }) as TaskSearch
+  const navigate = useNavigate()
+  const status = search.status ?? 'open'
+  const source = search.source === 'account' ? search.source_account_id! : search.source ?? 'all'
+  const changeSearch = (change: Partial<TaskSearch>) => { void navigate({ to: '/tasks', search: previous => ({ ...previous, ...change }), replace: true }) }
+  const [retryReconcile, setRetryReconcile] = useState(0)
   const [period, setPeriod] = useState(0), [base] = useState(() => new Date())
   const window = taskWindow(base, period)
   const client = useQueryClient(), accounts = useQuery(accountsQuery())
@@ -82,8 +76,8 @@ export function TasksPage() {
   const groups = [t.overdue, t.today, t.later] as const
   const group = (day: string, zone: string | null) => { const today = localToday(zone); return day < today ? t.overdue : day === today ? t.today : t.later }
   return <main className="le-prompts"><h1 className="heading">{t.title}</h1><Button variant="primary" onClick={() => { setError(undefined); setCreating(true) }}>{t.create}</Button>
-    <div>{(['open', 'completed', 'archived'] as const).map(value => <Button key={value} variant={status === value ? 'primary' : 'secondary'} aria-pressed={status === value} onClick={() => { setStatus(value); persistFilter('status', value) }}>{value === 'open' ? t.open : value === 'completed' ? t.completed : t.archived}</Button>)}</div>
-    <TaskSelect label={t.source} value={source} onChange={value => { setSource(value); persistFilter('source', value) }} options={[{ value: 'all', label: t.allSources }, { value: 'unlinked', label: t.unlinked }, ...(accounts.data?.map(account => ({ value: account.id, label: account.email_address })) ?? [])]} />
+    <div>{(['open', 'completed', 'archived'] as const).map(value => <Button key={value} variant={status === value ? 'primary' : 'secondary'} aria-pressed={status === value} onClick={() => changeSearch({ status: value === 'open' ? undefined : value })}>{value === 'open' ? t.open : value === 'completed' ? t.completed : t.archived}</Button>)}</div>
+    <TaskSelect label={t.source} value={source} onChange={value => changeSearch(value === 'all' ? { source: undefined, source_account_id: undefined } : value === 'unlinked' ? { source: 'unlinked', source_account_id: undefined } : { source: 'account', source_account_id: value })} options={[{ value: 'all', label: t.allSources }, { value: 'unlinked', label: t.unlinked }, ...(accounts.data?.map(account => ({ value: account.id, label: account.email_address })) ?? [])]} />
     <p>{t.period}: {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p><div><Button variant="secondary" onClick={() => setPeriod(value => value - 1)}>{t.previousPeriod}</Button><Button variant="secondary" onClick={() => setPeriod(value => value + 1)}>{t.nextPeriod}</Button></div>
     {loading && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div key={i} className="le-prompt-placeholder" aria-hidden="true" />)}</>}
     {failed && <Notice tone="danger" action={{ label: t.retry, onClick: () => { void series.refetch(); void occurrences.refetch(); if (skippedActive) void skipped.refetch() } }}>{t.error}</Notice>}
