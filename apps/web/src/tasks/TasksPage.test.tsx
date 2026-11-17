@@ -35,7 +35,8 @@ afterEach(() => { cleanup(); globalThis.fetch = oldFetch; api.setConfig(oldConfi
 test('open list includes due instances of archived series and sends independent source filter', async () => {
   setup()
   expect(await screen.findByRole('link', { name: 'Archiviert und fällig' })).toBeTruthy()
-  fireEvent.change(screen.getByLabelText('Quelle'), { target: { value: 'unlinked' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Quelle' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Ohne Mailbezug' }))
   await waitFor(() => expect(requests.some(request => request.path.endsWith('/tasks') && request.search.includes('source=unlinked'))).toBe(true))
   expect(globalThis.window.location.search).toContain('source=unlinked')
 })
@@ -57,7 +58,8 @@ test('the delete confirmation traps focus and names irreversible history loss', 
 test('editing targets the selected occurrence and sends both versions and scope', async () => {
   setup(true, true)
   fireEvent.click(await screen.findByRole('button', { name: 'Fälligkeit bearbeiten' }))
-  fireEvent.change(screen.getByLabelText('Änderung gilt für'), { target: { value: 'this_and_following' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Änderung gilt für' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Diese und folgende' }))
   fireEvent.click(screen.getByRole('button', { name: 'Änderung speichern' }))
   await screen.findByText('Die Aufgabe wurde inzwischen geändert. Prüfe den aktuellen Stand.')
   expect(requests.find(request => request.method === 'PATCH')?.body).toMatchObject({ expected_version: 1, expected_occurrence_version: 1, occurrence_id: 'occ', scope: 'this_and_following', start: today, timezone: 'UTC' })

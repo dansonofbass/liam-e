@@ -11,8 +11,10 @@ afterEach(() => { cleanup(); globalThis.fetch = originalFetch; api.setConfig(ori
 test('weekdays are independently selectable chips', () => {
   const query = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(<QueryClientProvider client={query}><TaskForm busy={false} save={() => {}} /></QueryClientProvider>)
-  fireEvent.change(screen.getByLabelText('Wiederholung'), { target: { value: 'custom' } })
-  fireEvent.change(screen.getByLabelText('Rhythmus'), { target: { value: 'WEEKLY' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Wiederholung' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Benutzerdefiniert' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Rhythmus' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Wöchentlich' }))
   const monday = screen.getByRole('button', { name: 'Mo.' })
   const tuesday = screen.getByRole('button', { name: 'Di.' })
   fireEvent.click(monday); fireEvent.click(tuesday)

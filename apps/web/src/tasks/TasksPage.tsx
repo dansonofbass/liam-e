@@ -8,6 +8,7 @@ import { unwrap } from '../api/unwrap'
 import { Button, Notice } from '../ds'
 import { de } from '../i18n/de'
 import { TaskForm } from './TaskForm'
+import { TaskSelect } from './TaskSelect'
 import { localToday, taskWindow } from './window'
 import { reconcileTask } from './reconcile'
 import { SourceMail } from './SourceMail'
@@ -75,7 +76,7 @@ export function TasksPage() {
   const group = (day: string, zone: string | null) => { const today = localToday(zone); return day < today ? t.overdue : day === today ? t.today : t.later }
   return <main className="le-prompts"><h1 className="heading">{t.title}</h1><Button variant="primary" onClick={() => { setError(undefined); setCreating(true) }}>{t.create}</Button>
     <div>{(['open', 'completed', 'archived'] as const).map(value => <Button key={value} variant={status === value ? 'primary' : 'secondary'} aria-pressed={status === value} onClick={() => { setStatus(value); persistFilter('status', value) }}>{value === 'open' ? t.open : value === 'completed' ? t.completed : t.archived}</Button>)}</div>
-    <label className="le-field"><span className="le-label">{t.source}</span><select className="le-input" value={source} onChange={event => { setSource(event.target.value); persistFilter('source', event.target.value) }}><option value="all">{t.allSources}</option><option value="unlinked">{t.unlinked}</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.email_address}</option>)}</select></label>
+    <TaskSelect label={t.source} value={source} onChange={value => { setSource(value); persistFilter('source', value) }} options={[{ value: 'all', label: t.allSources }, { value: 'unlinked', label: t.unlinked }, ...(accounts.data?.map(account => ({ value: account.id, label: account.email_address })) ?? [])]} />
     <p>{t.period}: {window.due_from} – {window.due_to}</p><div><Button variant="secondary" onClick={() => setPeriod(value => value - 1)}>{t.previousPeriod}</Button><Button variant="secondary" onClick={() => setPeriod(value => value + 1)}>{t.nextPeriod}</Button></div>
     {(series.isPending || occurrences.isPending) && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div key={i} className="le-prompt-placeholder" aria-hidden="true" />)}</>}
     {(series.isError || occurrences.isError) && <Notice tone="danger" action={{ label: t.retry, onClick: () => { void series.refetch(); void occurrences.refetch() } }}>{t.error}</Notice>}
