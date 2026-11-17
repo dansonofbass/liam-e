@@ -10,11 +10,13 @@ from db.accessors import task_occurrence
 from db.engine import get_session_maker
 from fastapi import APIRouter, Query
 
-from api.errors import refuse
+from api.errors import quiet_validation_route, refuse
 from api.tasks import state
 from .schemas import OccurrenceOut, OccurrencePage, VersionIn
 
-router = APIRouter()
+router = APIRouter(route_class=quiet_validation_route(
+    'task_invalid', 'Prüfe die Angaben zur Fälligkeit: höchstens 100 Einträge pro Seite.',
+))
 
 
 def encode_cursor(due: str, identifier: str) -> str:

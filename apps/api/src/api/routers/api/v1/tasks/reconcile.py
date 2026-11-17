@@ -5,11 +5,13 @@ import json
 from db.engine import get_session_maker
 from fastapi import APIRouter
 
-from api.errors import refuse
+from api.errors import quiet_validation_route, refuse
 from api.tasks.reconcile import ReconcileConflict, reconcile_current
 from .schemas import ReconcileIn, ReconcileOut
 
-router = APIRouter()
+router = APIRouter(route_class=quiet_validation_route(
+    'task_invalid', 'Prüfe die Angaben zum Abruf: höchstens 100 Einträge pro Seite.',
+))
 
 
 @router.post('', operation_id='tasks_reconcile', summary='Materialize one bounded task page')

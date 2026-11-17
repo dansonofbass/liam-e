@@ -7,7 +7,7 @@ from db.accessors import task_occurrence, task_series
 from db.engine import get_session_maker
 from fastapi import APIRouter, Query, Response
 
-from api.errors import refuse
+from api.errors import quiet_validation_route, refuse
 from api.tasks import lifecycle
 from api.tasks.patch import RevisionConflict, patch
 from api.tasks.state import StateConflict, StateNotFound
@@ -15,7 +15,9 @@ from .occurrences import decode_cursor, encode_cursor
 from .route import checked_window, series_out
 from .schemas import DeleteIn, OccurrenceOut, OccurrencePage, SeriesDetail, SeriesStateOut, SeriesVersionIn, TaskPatch, TaskPatched
 
-router = APIRouter()
+router = APIRouter(route_class=quiet_validation_route(
+    'task_invalid', 'Prüfe die Angaben zur Aufgabe und zur Fälligkeit.',
+))
 
 
 def lifecycle_error(exc: ValueError):

@@ -4,11 +4,13 @@ from datetime import date, datetime
 
 from fastapi import APIRouter
 
-from api.errors import refuse
+from api.errors import quiet_validation_route, refuse
 from api.tasks.preview import preview
 from .schemas import PreviewIn, PreviewOut
 
-router = APIRouter()
+router = APIRouter(route_class=quiet_validation_route(
+    'task_invalid', 'Prüfe die Angaben zur Vorschau: höchstens 100 Einträge pro Seite.',
+))
 
 
 @router.post('', operation_id='tasks_preview', summary='Preview a task schedule without writes')

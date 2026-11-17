@@ -31,6 +31,33 @@ def access(monkeypatch):
     return session, create, listing, change
 
 
+@pytest.mark.parametrize(('method', 'path', 'body', 'secret'), [
+    ('post', '/api/v1/tasks', {
+        'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01',
+        'timezone': 'UTC', 'description': 'Synthetic private description ' * 400,
+    }, 'Synthetic private description'),
+    ('patch', '/api/v1/tasks/s', {
+        'expected_version': 1, 'expected_occurrence_version': 1, 'occurrence_id': 'o',
+        'scope': 'occurrence', 'start': '2024-01-01', 'title': 'Synthetic private title',
+    }, 'Synthetic private title'),
+    ('post', '/api/v1/tasks/preview', {
+        'start': '2024-01-01', 'through': '2024-01-02', 'timezone': 'UTC',
+        'title': 'Synthetic private title',
+    }, 'Synthetic private title'),
+    ('post', '/api/v1/tasks/reconcile', {
+        'series_id': 's', 'title': 'Synthetic private title',
+    }, 'Synthetic private title'),
+    ('post', '/api/v1/tasks/occurrences/o/complete', {
+        'version': 'Synthetic private title',
+    }, 'Synthetic private title'),
+])
+def test_validation_errors_do_not_echo_task_content(client, method, path, body, secret):
+    response = getattr(client, method)(path, json=body)
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'task_invalid'
+    assert secret not in response.text
+
+
 def test_creation_and_conflict(client, access):
     session, create, _, _ = access
     body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01', 'timezone': 'UTC'}

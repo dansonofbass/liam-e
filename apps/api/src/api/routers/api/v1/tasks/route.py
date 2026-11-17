@@ -7,13 +7,15 @@ from db.accessors import task_schedule_revision, task_series
 from db.engine import get_session_maker
 from fastapi import APIRouter, Query
 
-from api.errors import refuse
+from api.errors import quiet_validation_route, refuse
 from api.tasks import create, reconcile
 from api.tasks.recurrence import expand_page
 from api.tasks.reading import complete_in_window, validate_window
 from .schemas import ScheduleOut, SeriesOut, SeriesPage, TaskCreate, TaskCreated, TaskWindow
 
-router = APIRouter()
+router = APIRouter(route_class=quiet_validation_route(
+    'task_invalid', 'Prüfe die Angaben: Titel bis 500 und Beschreibung bis 10.000 Zeichen.',
+))
 
 
 async def series_out(session, row, due_from: date, due_to: date) -> SeriesOut:
