@@ -45,7 +45,20 @@ def test_persistent_interval_pause_manual_throttle_and_bounded_failures(pg_db):
             if count < 2:
                 assert await enqueue(at + timedelta(seconds=30))
                 await finish(at + timedelta(seconds=30))
-        assert not await enqueue(now + timedelta(days=1))
+        last_failure = now + timedelta(hours=2, minutes=2)
+        assert not await enqueue(last_failure + timedelta(minutes=29, seconds=59))
+        assert await enqueue(last_failure + timedelta(minutes=30))
+        await finish(last_failure + timedelta(minutes=30))
+        # Further failures stay on the regular interval, not a new short retry loop.
+        await calendar_feed_sync.failure(source.id, revision=resumed.revision,
+                                         now=last_failure + timedelta(minutes=30),
+                                         code="feed_unavailable", delay_seconds=120)
+        assert not await enqueue(last_failure + timedelta(minutes=32))
+        assert await enqueue(last_failure + timedelta(minutes=60))
+        await finish(last_failure + timedelta(minutes=60))
+        async with get_session_maker()() as session:
+            state = await session.get(CalendarSyncState, source.id)
+            assert state.failure_count == 3
         assert await enqueue(now + timedelta(days=1), True)
         await finish(now + timedelta(days=1))
         await calendar_feed_sync.failure(source.id, revision=resumed.revision, now=now + timedelta(days=1),

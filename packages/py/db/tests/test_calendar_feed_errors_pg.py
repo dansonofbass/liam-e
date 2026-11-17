@@ -49,6 +49,12 @@ def test_http_errors_preserve_generation_and_have_finite_retry_state(pg_db, monk
                 assert state.failure_count == attempt
                 assert state.next_attempt_at == (current + timedelta(seconds=45 * 2 ** (attempt - 1)) if attempt < 3 else None)
             current += timedelta(minutes=5)
+        from db.accessors import calendar_feed_sync
+        last_attempt = current if code == "auth_required" else current - timedelta(minutes=5)
+        assert not await calendar_feed_sync.enqueue(source.id, now=last_attempt + timedelta(minutes=29),
+                                                   interval=30, manual=False)
+        assert await calendar_feed_sync.enqueue(source.id, now=last_attempt + timedelta(minutes=30),
+                                               interval=30, manual=False) is (code != "auth_required")
         assert "calendar.example" not in caplog.text
     asyncio.run(run())
 

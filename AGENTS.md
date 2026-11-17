@@ -335,8 +335,11 @@ Historische Chattexte bleiben bestehen; aktive Quellenscope-Prüfungen sperren e
 aktive ICS-Quellen, unabhängig von der Mailperiodik. Beim Öffnen fragt die Agenda über den
 Verwaltungsendpunkt mit `due_only=true` nur fällige Abrufe an. Manuelles Abrufen hat eine
 persistierte Minute Wartezeit. 429/5xx und Transportfehler erhalten begrenzten exponentiellen
-Backoff mit Jitter; nach drei Fehlern endet automatisches Wiederholen bis zum manuellen Abruf.
-401/403/404 fordern eine Adressprüfung und stoppen automatische Versuche sofort. Pausierte
+Backoff mit Jitter; nach drei Fehlern endet die kurze Wiederholung und die Quelle kehrt zum
+regulären Intervall ab `last_checked_at` zurück. Weitere Fehler starten keine neue kurze
+Wiederholung; ein Erfolg setzt den Fehlerzustand zurück.
+401/403/404 fordern eine Adressprüfung und stoppen automatische Versuche bis zu manuellem
+Abruf, Resume oder Adressersatz. Pausierte
 Quellen und Seeds werden nicht abgerufen; gestoppte Studio-Instanzen garantieren keine Periodik.
 
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der

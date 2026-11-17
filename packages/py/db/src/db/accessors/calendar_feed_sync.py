@@ -40,7 +40,7 @@ async def enqueue(source_id: str, *, now: datetime, interval: int, manual: bool)
                 if state.last_checked_at and now < state.last_checked_at + timedelta(minutes=1):
                     return False
             else:
-                if state.failure_count >= 3 or state.last_error == "address_check":
+                if state.last_error == "address_check":
                     return False
                 due = state.next_attempt_at or (state.last_checked_at + timedelta(minutes=interval) if state.last_checked_at else now)
                 if now < due:
@@ -71,7 +71,8 @@ async def failure(source_id: str, *, revision: int, now: datetime, code: str, de
         state = await session.get(CalendarSyncState, source_id) or CalendarSyncState(source_id=source_id)
         state.last_checked_at = now
         state.last_error = code
-        state.failure_count += 1
+        # Exhausted short retries keep polling at the regular interval until success.
+        state.failure_count = min(state.failure_count + 1, 3)
         state.next_attempt_at = now + timedelta(seconds=delay_seconds) if delay_seconds is not None and state.failure_count < 3 else None
         if delay_seconds is None:
             state.failure_count = 3
