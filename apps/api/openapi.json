@@ -2911,6 +2911,100 @@
         "title": "TaskCreated",
         "type": "object"
       },
+      "TaskPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_occurrence_version": {
+            "minimum": 1.0,
+            "title": "Expected Occurrence Version",
+            "type": "integer"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "occurrence_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Occurrence Id",
+            "type": "string"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only for this_and_following: omitted retains the rule; null creates a single occurrence. Start must match the rule.",
+            "title": "Rrule"
+          },
+          "scope": {
+            "enum": [
+              "occurrence",
+              "this_and_following"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "start": {
+            "description": "New local due value; occurrence edits retain precision and timezone.",
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only for this_and_following; required when the previous revision has no timezone.",
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "expected_version",
+          "scope",
+          "occurrence_id",
+          "expected_occurrence_version",
+          "start"
+        ],
+        "title": "TaskPatch",
+        "type": "object"
+      },
+      "TaskPatched": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "revision_id"
+        ],
+        "title": "TaskPatched",
+        "type": "object"
+      },
       "TaskWindow": {
         "properties": {
           "due_from": {
@@ -5531,6 +5625,53 @@
           }
         },
         "summary": "Read a task series and a page of its occurrences"
+      },
+      "patch": {
+        "operationId": "tasks_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskPatched"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Move an open occurrence or split its schedule"
       }
     },
     "/api/v1/tasks/{series_id}/archive": {

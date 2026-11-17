@@ -44,6 +44,7 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "tasks_delete",
         "tasks_preview",
         "tasks_reconcile",
+        "tasks_update",
         "tasks_occurrence_complete",
         "tasks_occurrence_reopen",
         "tasks_occurrence_skip",

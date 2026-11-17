@@ -594,6 +594,250 @@ def test_archived_future_completion_cannot_be_reopened(pg_db):
     asyncio.run(run())
 
 
+async def _patch_fixture():
+    from datetime import date
+    from api.tasks.create import create
+    from api.tasks.reconcile import reconcile_current
+    from db.accessors import task_occurrence, task_schedule_revision
+    from db.engine import get_session_maker
+
+    async with get_session_maker()() as session:
+        series, _ = await create(session, creation_key='patch', title='Example',
+            start=date(2024, 1, 1), zone='UTC', rule='FREQ=DAILY')
+        await reconcile_current(session, series_id=series.id, now=datetime(2024, 1, 1, tzinfo=UTC))
+        revision = await task_schedule_revision.current(session, series.id)
+        rows = await task_occurrence.list_page(session, scope='app', status=None,
+            due_from=None, due_to=None, after=None, limit=100, series_id=series.id)
+        await session.commit()
+        return series, revision, rows
+
+
+def test_single_patch_preserves_key_and_reconcile_never_recreates_it(pg_db):
+    async def run():
+        from api.tasks.patch import patch
+        from api.tasks.reconcile import reconcile_current
+        from api.tasks.state import StateConflict
+        from db.accessors import task_occurrence
+        from db.engine import get_session_maker
+
+        series, revision, rows = await _patch_fixture()
+        async with get_session_maker()() as session:
+            assert await patch(session, series.id, expected_version=1, occurrence_id=rows[9].id,
+                expected_occurrence_version=1, scope='occurrence', start='2024-01-12') == (2, revision.id)
+            await session.commit()
+        async with get_session_maker()() as session:
+            with pytest.raises(StateConflict):
+                await patch(session, series.id, expected_version=1, occurrence_id=rows[9].id,
+                    expected_occurrence_version=1, scope='occurrence', start='2024-01-13')
+            await session.rollback()
+            with pytest.raises(StateConflict):
+                await patch(session, series.id, expected_version=2, occurrence_id=rows[9].id,
+                    expected_occurrence_version=1, scope='occurrence', start='2024-01-13')
+            await session.rollback()
+            await reconcile_current(session, series_id=series.id, advance=True, cursor=revision.reconcile_cursor,
+                                    now=datetime(2024, 1, 10, tzinfo=UTC))
+            await session.commit()
+        async with get_session_maker()() as session:
+            stored = await task_occurrence.get(session, rows[9].id)
+            assert (stored.occurrence_key, stored.due_local, stored.version) == ('2024-01-10', '2024-01-12', 2)
+            result = await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=100, series_id=series.id)
+            assert sum(row.occurrence_key == '2024-01-10' for row in result) == 1
+
+    asyncio.run(run())
+
+
+def test_split_collision_is_read_only_and_noncolliding_revision_preserves_history(pg_db):
+    async def run():
+        from api.tasks.patch import RevisionConflict, patch
+        from api.tasks.reconcile import ReconcileConflict, reconcile_batch
+        from api.tasks.state import transition
+        from db.accessors import task_occurrence, task_schedule_revision, task_series
+        from db.engine import get_session_maker
+
+        series, revision, rows = await _patch_fixture()
+        now = datetime(2024, 1, 5, tzinfo=UTC)
+        async with get_session_maker()() as session:
+            await transition(session, rows[16].id, version=1, action='complete')
+            old = await task_schedule_revision.get(session, revision.id)
+            old.timezone = None
+            session.add(old)
+            # A previously moved future key that is now past must survive a split.
+            await task_occurrence.move(session, rows[11].id, 1, '2024-01-02', None)
+            await session.commit()
+        args = dict(expected_version=1, occurrence_id=rows[9].id, expected_occurrence_version=1,
+                    scope='this_and_following', start='2024-01-10', timezone='Europe/Berlin', rule_supplied=True, now=now)
+        async with get_session_maker()() as session:
+            with pytest.raises(RevisionConflict):
+                await patch(session, series.id, rrule='FREQ=WEEKLY', **args)
+            assert (await task_series.get(session, 'app', series.id)).version == 1
+            assert (await task_schedule_revision.get(session, revision.id)).end_key is None
+            assert await task_occurrence.get(session, rows[9].id) is not None
+            assert len(await task_schedule_revision.list_for_series(session, series.id)) == 1
+            await session.commit()  # Even committing after the collision must be harmless.
+        async with get_session_maker()() as session:
+            version, new_id = await patch(session, series.id, rrule='FREQ=WEEKLY;INTERVAL=2', **args)
+            assert version == 2 and new_id != revision.id
+            await session.commit()
+        async with get_session_maker()() as session:
+            assert (await task_schedule_revision.get(session, revision.id)).end_key == '2024-01-10'
+            replacement = await task_schedule_revision.current(session, series.id)
+            assert replacement.id == new_id and replacement.timezone == 'Europe/Berlin'
+            for row in rows[:9]:
+                stored = await task_occurrence.get(session, row.id)
+                assert stored.model_dump() == row.model_dump()
+            assert (await task_occurrence.get(session, rows[16].id)).status == 'completed'
+            assert (await task_occurrence.get(session, rows[11].id)).due_local == '2024-01-02'
+            assert await task_occurrence.get(session, rows[9].id) is None
+            result = await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=100, series_id=series.id)
+            assert [row.due_local for row in result if row.revision_id == new_id] == ['2024-01-10', '2024-01-24']
+            with pytest.raises(ReconcileConflict):
+                await reconcile_batch(session, scope='app', series_id=series.id, revision_id=revision.id,
+                    cursor=revision.reconcile_cursor, started_at=datetime(2024, 1, 1, tzinfo=UTC))
+
+    asyncio.run(run())
+
+
+def test_split_detects_completed_collision_beyond_first_horizon(pg_db):
+    async def run():
+        from api.tasks.patch import RevisionConflict, patch
+        from api.tasks.reconcile import reconcile_current
+        from api.tasks.state import transition
+        from db.accessors import task_occurrence, task_schedule_revision, task_series
+        from db.engine import get_session_maker
+
+        series, revision, rows = await _patch_fixture()
+        async with get_session_maker()() as session:
+            await reconcile_current(session, series_id=series.id, advance=True,
+                cursor=revision.reconcile_cursor, now=datetime(2024, 2, 1, tzinfo=UTC))
+            distant = (await task_occurrence.list_page(session, scope='app', status=None,
+                due_from='2024-02-15', due_to='2024-02-16', after=None, limit=1, series_id=series.id))[0]
+            await transition(session, distant.id, version=1, action='complete')
+            await session.commit()
+        async with get_session_maker()() as session:
+            with pytest.raises(RevisionConflict):
+                await patch(session, series.id, expected_version=1, occurrence_id=rows[9].id,
+                    expected_occurrence_version=1, scope='this_and_following', start='2024-01-10',
+                    rrule='FREQ=DAILY', rule_supplied=True, now=datetime(2024, 1, 5, tzinfo=UTC))
+            assert (await task_series.get(session, 'app', series.id)).version == 1
+            assert (await task_schedule_revision.get(session, revision.id)).end_key is None
+            await session.commit()
+
+    asyncio.run(run())
+
+
+def test_timed_occurrence_patch_rejects_gap_and_preserves_original_key(pg_db):
+    async def run():
+        from api.tasks.create import create
+        from api.tasks.patch import patch
+        from api.tasks.reconcile import reconcile_current
+        from db.accessors import task_occurrence
+        from db.engine import get_session_maker
+
+        async with get_session_maker()() as session:
+            series, _ = await create(session, creation_key='timed-patch', title='Example',
+                start=datetime(2024, 3, 30, 2, 30), zone='Europe/Berlin')
+            await reconcile_current(session, series_id=series.id, now=datetime(2024, 3, 1, tzinfo=UTC))
+            row = (await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=1, series_id=series.id))[0]
+            await session.commit()
+        async with get_session_maker()() as session:
+            with pytest.raises(ValueError):
+                await patch(session, series.id, expected_version=1, occurrence_id=row.id,
+                    expected_occurrence_version=1, scope='occurrence', start='2024-03-31T02:30:00')
+            await patch(session, series.id, expected_version=1, occurrence_id=row.id,
+                expected_occurrence_version=1, scope='occurrence', start='2024-03-31T03:30:00')
+            await session.commit()
+        async with get_session_maker()() as session:
+            stored = await task_occurrence.get(session, row.id)
+            assert stored.occurrence_key == '2024-03-30T02:30:00'
+            assert stored.due_at == datetime(2024, 3, 31, 1, 30, tzinfo=UTC)
+
+    asyncio.run(run())
+
+
+def test_split_rolls_back_revision_deletion_and_version_on_materialization_failure(pg_db, monkeypatch):
+    async def run():
+        import importlib
+        domain = importlib.import_module('api.tasks.patch')
+        from db.accessors import task_occurrence, task_schedule_revision, task_series
+        from db.engine import get_session_maker
+
+        series, revision, rows = await _patch_fixture()
+
+        async def fail(*args, **kwargs):
+            raise RuntimeError('synthetic failure')
+
+        monkeypatch.setattr(domain, 'reconcile_batch', fail)
+        async with get_session_maker()() as session:
+            with pytest.raises(RuntimeError, match='synthetic failure'):
+                await domain.patch(session, series.id, expected_version=1, occurrence_id=rows[9].id,
+                    expected_occurrence_version=1, scope='this_and_following', start='2024-01-10',
+                    now=datetime(2024, 1, 5, tzinfo=UTC))
+            await session.rollback()
+        async with get_session_maker()() as session:
+            assert (await task_series.get(session, 'app', series.id)).version == 1
+            assert (await task_schedule_revision.get(session, revision.id)).end_key is None
+            assert len(await task_schedule_revision.list_for_series(session, series.id)) == 1
+            assert await task_occurrence.get(session, rows[9].id) is not None
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('scope', ['occurrence', 'this_and_following'])
+@pytest.mark.parametrize('action', ['complete', 'skip', 'archive', 'reconcile'])
+def test_parallel_patch_serializes_with_state_archive_and_reconcile(pg_db, scope, action):
+    async def run():
+        from api.tasks.patch import patch
+        from api.tasks.lifecycle import archive
+        from api.tasks.reconcile import ReconcileConflict, reconcile_current
+        from api.tasks.state import StateConflict, StateNotFound, transition
+        from db.accessors import task_occurrence, task_schedule_revision, task_series
+        from db.engine import get_session_maker
+
+        series, revision, rows = await _patch_fixture()
+        now = datetime(2024, 1, 5, tzinfo=UTC)
+
+        async def worker(change):
+            async with get_session_maker()() as session:
+                try:
+                    if change:
+                        await patch(session, series.id, expected_version=1, occurrence_id=rows[9].id,
+                            expected_occurrence_version=1, scope=scope, start='2024-01-11', now=now)
+                    elif action == 'archive':
+                        await archive(session, series.id, expected_version=1, now=now)
+                    elif action == 'reconcile':
+                        await reconcile_current(session, series_id=series.id, revision_id=revision.id,
+                            cursor=revision.reconcile_cursor, advance=True, now=now)
+                    else:
+                        await transition(session, rows[9].id, version=1, action=action)
+                    await session.commit()
+                    return True
+                except (StateConflict, StateNotFound, ReconcileConflict):
+                    await session.rollback()
+                    return False
+
+        changed, other = await asyncio.gather(worker(True), worker(False))
+        assert changed or other
+        if action != 'reconcile':
+            assert changed != other
+        async with get_session_maker()() as session:
+            stored = await task_series.get(session, 'app', series.id)
+            if changed:
+                assert stored.version == 2
+                if scope == 'occurrence':
+                    assert (await task_occurrence.get(session, rows[9].id)).due_local == '2024-01-11'
+                else:
+                    assert (await task_schedule_revision.current(session, series.id)).id != revision.id
+                    assert await task_occurrence.get(session, rows[9].id) is None
+            result = await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=100, series_id=series.id)
+            assert len({(row.revision_id, row.occurrence_key) for row in result}) == len(result)
+
+    asyncio.run(run())
+
+
 def test_domain_state_transitions_and_conflicts(pg_db):
     async def run():
         from api.tasks.state import StateConflict, transition

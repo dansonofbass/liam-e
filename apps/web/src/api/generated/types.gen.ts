@@ -1732,6 +1732,64 @@ export type TaskCreated = {
 };
 
 /**
+ * TaskPatch
+ */
+export type TaskPatch = {
+    /**
+     * Expected Occurrence Version
+     */
+    expected_occurrence_version: number;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Occurrence Id
+     */
+    occurrence_id: string;
+    /**
+     * Rrule
+     *
+     * Only for this_and_following: omitted retains the rule; null creates a single occurrence. Start must match the rule.
+     */
+    rrule?: string | null;
+    /**
+     * Scope
+     */
+    scope: 'occurrence' | 'this_and_following';
+    /**
+     * Start
+     *
+     * New local due value; occurrence edits retain precision and timezone.
+     */
+    start: string;
+    /**
+     * Timezone
+     *
+     * Only for this_and_following; required when the previous revision has no timezone.
+     */
+    timezone?: string | null;
+};
+
+/**
+ * TaskPatched
+ */
+export type TaskPatched = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * TaskWindow
  */
 export type TaskWindow = {
@@ -3395,6 +3453,36 @@ export type TasksGetResponses = {
 };
 
 export type TasksGetResponse = TasksGetResponses[keyof TasksGetResponses];
+
+export type TasksUpdateData = {
+    body: TaskPatch;
+    path: {
+        /**
+         * Series Id
+         */
+        series_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/{series_id}';
+};
+
+export type TasksUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksUpdateError = TasksUpdateErrors[keyof TasksUpdateErrors];
+
+export type TasksUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: TaskPatched;
+};
+
+export type TasksUpdateResponse = TasksUpdateResponses[keyof TasksUpdateResponses];
 
 export type TasksArchiveData = {
     body: SeriesVersionIn;

@@ -66,6 +66,21 @@ class SeriesVersionIn(BaseModel):
     expected_version: int = Field(ge=1)
 
 
+class TaskPatch(SeriesVersionIn):
+    scope: Literal['occurrence', 'this_and_following']
+    occurrence_id: str = Field(min_length=1, max_length=200)
+    expected_occurrence_version: int = Field(ge=1)
+    start: str = Field(min_length=10, max_length=26, description='New local due value; occurrence edits retain precision and timezone.')
+    timezone: str | None = Field(default=None, max_length=100, description='Only for this_and_following; required when the previous revision has no timezone.')
+    rrule: str | None = Field(default=None, max_length=500, description='Only for this_and_following: omitted retains the rule; null creates a single occurrence. Start must match the rule.')
+
+
+class TaskPatched(BaseModel):
+    id: str
+    version: int
+    revision_id: str
+
+
 class DeleteIn(SeriesVersionIn):
     confirm_history_loss: bool = Field(default=False, strict=True)
 

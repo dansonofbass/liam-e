@@ -54,6 +54,13 @@ async def list_page(
     return list((await session.execute(query.order_by(TaskSeries.id).limit(limit))).scalars().all())
 
 
+async def bump_version(session: AsyncSession, scope: str, series_id: str, expected_version: int) -> bool:
+    query = update(TaskSeries).where(TaskSeries.scope == scope, TaskSeries.id == series_id,
+        TaskSeries.version == expected_version, TaskSeries.archived.is_(False)).values(
+            version=expected_version + 1, updated_at=utcnow()).returning(TaskSeries.id)
+    return (await session.execute(query)).scalar_one_or_none() is not None
+
+
 async def archive(session: AsyncSession, scope: str, series_id: str, expected_version: int) -> bool:
     query = update(TaskSeries).where(TaskSeries.scope == scope, TaskSeries.id == series_id,
         TaskSeries.version == expected_version, TaskSeries.archived.is_(False)).values(

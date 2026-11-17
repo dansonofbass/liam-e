@@ -122,6 +122,7 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Mail / Abruf | POST | `/api/v1/mail/sync` | `mail_sync_all` |
 | Aufgaben | GET | `/api/v1/tasks` | `tasks_list` |
 | Aufgaben | GET | `/api/v1/tasks/{series_id}` | `tasks_get` |
+| Aufgaben | PATCH | `/api/v1/tasks/{series_id}` | `tasks_update` |
 | Aufgaben | POST | `/api/v1/tasks/{series_id}/archive` | `tasks_archive` |
 | Aufgaben | DELETE | `/api/v1/tasks/{series_id}` | `tasks_delete` |
 | Aufgaben | POST | `/api/v1/tasks` | `tasks_create` |
@@ -137,7 +138,30 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 `api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
 Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite
 in derselben Transaktion. Weitere Seiten werden ausdrücklich über `POST /tasks/reconcile`
-abgerufen. Einzeländerungen und Serienrevision per PATCH sind noch offen.
+abgerufen. PATCH unterstützt Einzeländerungen und neue Zeitplanrevisionen.
+
+`PATCH /tasks/{series_id}` benötigt die Serienversion `expected_version`, die gewählte
+`occurrence_id`, deren `expected_occurrence_version`, `scope` und den neuen lokalen
+Start `start`. Das aktuelle Schema bearbeitet Fälligkeiten, nicht Titel oder Notizen;
+Textfelder werden abgelehnt, damit historische Instanzen nicht implizit umbenannt werden.
+`scope=occurrence` verschiebt nur eine offene Instanz und erhält deren ursprünglichen
+Schlüssel; Genauigkeit (Datum/Uhrzeit), Zeitzone und Regel bleiben gleich. Beide Versionen
+steigen. `scope=this_and_following` wählt eine zukünftige offene Instanz der aktuellen
+Revision; ihre tatsächliche Fälligkeit und ihr ursprünglicher Schlüssel müssen noch in
+der Zukunft liegen. Bereits fällige Instanzen werden nicht als Trennstelle verwendet.
+Vorherige Tage müssen materialisiert sein. Die alte Regel endet exklusiv vor dem
+ursprünglichen Schlüssel; offene zukünftige Instanzen ab dort werden ersetzt. Vergangene,
+erledigte und übersprungene Instanzen bleiben erhalten, auch bereits verschobene
+Vergangenheitsausnahmen. Die neue Revision darf Datum/Uhrzeit und Zeitzone ändern,
+startet aber nicht vor dem lokalen Trenn-Tag; der Start muss zur neuen Regel passen.
+Ohne `rrule` bleibt die alte Regel;
+explizites `rrule: null` erzeugt eine Einzelaufgabe. Eine neue Revision braucht eine
+Zeitzone, auch wenn die alte Datumsrevision noch `null` trägt.
+Kollisionen mit erledigten Instanzen werden mit derselben COUNT-/DST-Auswertung wie bei
+der Materialisierung geprüft, auch außerhalb der ersten Abrufseite; sie liefern
+`409 task_revision_conflict` ohne Aufgabenänderung. Andere Versions-/Zustandskonflikte
+liefern `409 task_version_conflict`. Alle Änderungen und die erste neue Reconcile-Seite
+liegen in der Transaktion des Aufrufers; alte Revisionscursor werden zurückgewiesen.
 
 Archivieren und endgültiges Löschen benötigen `expected_version` der Serie.
 Archivieren sperrt neue Materialisierung und storniert in einem bedingten Update nur

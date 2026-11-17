@@ -77,7 +77,7 @@ async def reconcile_batch(
     target = target_dt.isoformat()
     series = await task_series.get(session, scope, series_id, lock=True)
     revision = await task_schedule_revision.get(session, revision_id, lock=True)
-    if series is None or revision is None or revision.series_id != series_id or series.archived:
+    if series is None or revision is None or revision.series_id != series_id or series.archived or revision.end_key is not None:
         raise ReconcileConflict('series or revision unavailable')
     if revision.reconcile_target is None:
         if cursor is not None:
