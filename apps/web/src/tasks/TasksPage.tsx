@@ -40,6 +40,8 @@ export function TasksPage() {
   const seen = useRef(new Set<string>())
   const [reconciling, setReconciling] = useState(false), [reconcileError, setReconcileError] = useState(false)
   const rows = series.data?.pages.flatMap(p => p.items) ?? []
+  // A finished run does not prove the window is complete; the stored progress decides.
+  const incomplete = rows.some(row => !row.complete)
   const entries = [...(occurrences.data?.pages.flatMap(p => p.items) ?? []), ...(skippedActive ? skipped.data?.pages.flatMap(p => p.items) ?? [] : [])]
     .sort((a, b) => a.due_local.localeCompare(b.due_local) || a.id.localeCompare(b.id))
   useEffect(() => {
@@ -84,13 +86,13 @@ export function TasksPage() {
   const group = (day: string, zone: string | null) => { const today = localToday(zone); return day < today ? t.overdue : day === today ? t.today : t.later }
   return <main className="le-tasks"><h1 className="heading">{t.title}</h1><Button variant="primary" onClick={() => { setError(undefined); setCreating(true) }}>{t.create}</Button>
     <div>{(['open', 'completed', 'archived'] as const).map(value => <Button key={value} variant={status === value ? 'primary' : 'secondary'} aria-pressed={status === value} onClick={() => changeSearch({ status: value === 'open' ? undefined : value })}>{value === 'open' ? t.open : value === 'completed' ? t.completed : t.archived}</Button>)}</div>
-    <TaskSelect label={t.source} value={source} onChange={value => changeSearch(value === 'all' ? { source: undefined, source_account_id: undefined } : value === 'unlinked' ? { source: 'unlinked', source_account_id: undefined } : { source: 'account', source_account_id: value })} options={[{ value: 'all', label: t.allSources }, { value: 'unlinked', label: t.unlinked }, ...(accounts.data?.map(account => ({ value: account.id, label: account.email_address })) ?? [])]} />
+    <TaskSelect label={t.source} value={source} fallback={t.savedAccount} onChange={value => changeSearch(value === 'all' ? { source: undefined, source_account_id: undefined } : value === 'unlinked' ? { source: 'unlinked', source_account_id: undefined } : { source: 'account', source_account_id: value })} options={[{ value: 'all', label: t.allSources }, { value: 'unlinked', label: t.unlinked }, ...(accounts.data?.map(account => ({ value: account.id, label: account.email_address })) ?? [])]} />
     <p>{t.period}: {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p><div><Button variant="secondary" onClick={() => setPeriod(value => value - 1)}>{t.previousPeriod}</Button><Button variant="secondary" onClick={() => setPeriod(value => value + 1)}>{t.nextPeriod}</Button></div>
     {loading && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div key={i} className="le-prompt-placeholder" aria-hidden="true" />)}</>}
     {failed && <Notice tone="danger" action={{ label: t.retry, onClick: () => { void series.refetch(); void occurrences.refetch(); if (skippedActive) void skipped.refetch() } }}>{t.error}</Notice>}
-    {reconciling && <p role="status">{t.incomplete} {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p>}
+    {(reconciling || incomplete) && <p role="status">{t.incomplete} {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p>}
     {reconcileError && <Notice tone="danger" action={{ label: t.retry, onClick: () => { seen.current.clear(); setReconcileError(false); setRetryReconcile(value => value + 1) } }}>{t.error}</Notice>}
-    {!loading && !failed && status !== 'archived' && !joined.length && !hasMore && !reconciling && <p>{status === 'completed' ? t.emptyCompleted : t.empty}</p>}
+    {!loading && !failed && status !== 'archived' && !joined.length && !hasMore && !reconciling && !incomplete && <p>{status === 'completed' ? t.emptyCompleted : t.empty}</p>}
     {status === 'archived' ? <ul>{visible.map(row => <li key={row.id}><Link className="le-link" to="/tasks/$taskId" params={{ taskId: row.id }} search={true}>{row.title}</Link>{row.schedule && <> · {formatTaskDue(row.schedule.start_local)} · {formatTaskRule(row.schedule.rrule)}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul> : groups.map(label => { const items = joined.filter(({ row, item }) => group(item.due_local.slice(0, 10), row.schedule?.timezone ?? null) === label); return items.length ? <section key={label}><h2>{label}</h2><ul>{items.map(({ row, item }) => <li key={item.id}><Link className="le-link" to="/tasks/$taskId" params={{ taskId: row.id }} search={true}>{row.title}</Link> · {formatTaskDue(item.due_local)} · {formatTaskRule(row.schedule?.rrule)}{item.status === 'skipped' && <> · {t.skipped}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul></section> : null })}
     {hasMore && <Button variant="secondary" onClick={() => { if (series.hasNextPage) void series.fetchNextPage(); if (occurrences.hasNextPage) void occurrences.fetchNextPage(); if (skippedActive && skipped.hasNextPage) void skipped.fetchNextPage() }}>{t.more}</Button>}
   </main>

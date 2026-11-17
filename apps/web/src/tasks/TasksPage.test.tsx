@@ -118,6 +118,23 @@ test('completed view merges skipped and completed occurrences in due order', asy
   expect(requests.some(request => request.path.endsWith('/occurrences') && request.search.includes('status=skipped'))).toBe(true)
 })
 
+test('a finished run keeps the notice while the stored progress is incomplete', async () => {
+  setup(false, false, true)
+  await waitFor(() => expect(requests.some(request => request.path.endsWith('/reconcile'))).toBe(true))
+  // The run answers at once; afterwards only the stored progress can keep the notice.
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
+  expect(screen.getByText(/^Fälligkeiten werden ergänzt/)).toBeTruthy()
+  expect(screen.queryByText('Keine offenen Aufgaben.')).toBeNull()
+})
+
+test('a stored account filter without a known account shows a neutral label', async () => {
+  setup(false, false, false, '/tasks?source=account&source_account_id=2e1cab28-3fb5-4f24-9d3c-49b5a3e2c0f1')
+  const chip = await screen.findByRole('button', { name: 'Quelle' })
+  await waitFor(() => expect(requests.some(request => request.path.endsWith('/accounts'))).toBe(true))
+  expect(chip.textContent).toContain('Gespeichertes Konto')
+  expect(chip.textContent).not.toContain('2e1cab28')
+})
+
 test('period and incomplete notices keep date-only days in a western time zone', async () => {
   const oldZone = process.env.TZ
   process.env.TZ = 'America/Los_Angeles'
