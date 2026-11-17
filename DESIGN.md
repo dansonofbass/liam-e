@@ -556,7 +556,7 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 - **Kopf:** Auf `desktop` und `tablet` steht über dem Verlauf eine Leiste mit „Chat“ und, in
   einer Unterhaltung, „/ Titel“. Ein langer Titel endet mit Auslassung, der volle steht im
   Tooltip. Rechts stehen das Modellmenü und „Neue Unterhaltung“ (`plus`). Auf `mobile`
-  tragen die Kopfzeile (§7.3) Titel und Plus; darunter steht nur das Modellmenü.
+  tragen die Kopfzeile (§7.3) Titel und Plus; darunter stehen Modellmenü und Vorlagen-Chip.
 - **Modellmenü:** ein Chip mit dem Namen des Modells und `chevron-down`, Tooltip „Modell
   für diese Unterhaltung wählen“. Die Einträge zeigen „Name · Beschreibung“. In einer
   Unterhaltung wird die Wahl gespeichert und gilt für ihre nächsten Antworten, auf der
@@ -566,6 +566,26 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
   legt fest, in welchen Konten der Assistent sucht.
 - **Mailbezug:** „Im Chat fragen“ öffnet die Startseite mit der Mail als Bezug. Über dem
   Composer steht dann ihre Mail-Karte mit dem Symbol-Button „Bezug entfernen“ (`x`).
+
+### 9.7 Vorlagen und Einstellungen
+
+- „Einstellungen“ ist in Seitenleiste, Symbolleiste und mobiler Schublade erreichbar.
+  `/settings` zeigt die Vorlagenbibliothek, ebenso `/settings/prompts`. Weitere fertige
+  Bereiche können in `settingsSections` ergänzt werden; es gibt keine leeren Zielseiten.
+  Der aktuelle Bereich ist in der Abschnittsnavigation wie der aktuelle Eintrag der
+  Seitenleiste markiert.
+- Die Bibliothek zeigt Name, Kurzvorschau, Version und, sofern bekannt, das Änderungsdatum. Anlegen und Bearbeiten öffnen eigene
+  Ansichten (`/settings/prompts/new`, `/settings/prompts/$promptId`), auch am Desktop.
+- Name und Anweisungen nutzen TextField mit Zählern (80 bzw. 8.000 Zeichen). Speichern
+  geschieht ausdrücklich; Fehler erhalten Eingaben. Ein Versionskonflikt bietet die
+  aktuelle Fassung an, ohne selbst zu überschreiben. Löschen braucht einen Dialog mit
+  Fokusführung und nennt die Folgen einschließlich gespeicherter Versionen.
+- Im Chat steht der Vorlagen-Chip beim Modell, getrennt vom Konto im Composer. Die
+  Kontrollzeile bricht um. Das Menü zeigt den vollständigen Anweisungstext; die Wahl
+  bestehender Unterhaltungen wird erst nach der Serverantwort aktiv. Ältere angeheftete
+  Versionen bieten „Version übernehmen“. Während einer Antwort ist die Wahl gesperrt.
+- Bei einem abgelehnten Kontowechsel führt „Neue Unterhaltung“ ohne bisherigen Verlauf
+  zur Startseite. Kontoauswahl und noch nicht angenommener Composertext bleiben erhalten.
 
 ## 10. Erweitern und pflegen
 

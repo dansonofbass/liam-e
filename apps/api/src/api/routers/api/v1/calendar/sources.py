@@ -25,7 +25,7 @@ async def source_out(source) -> SourceOut:
                      is_active=source.is_active, capabilities=capabilities,
                      coverage_start=state.coverage_start if state else None,
                      coverage_end=state.coverage_end if state else None, last_success_at=last,
-                     stale=last is None or last < datetime.now(UTC) - timedelta(minutes=5),
+                     stale=last is None or state.incomplete,
                      incomplete=state.incomplete if state else True)
 
 

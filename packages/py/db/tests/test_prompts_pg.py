@@ -54,6 +54,47 @@ def test_revisions_concurrent_updates_and_revocation(pg_db):
     asyncio.run(run())
 
 
+def test_legacy_template_has_unknown_updated_at(pg_db):
+    async def run():
+        from sqlalchemy import text
+        from db.engine import get_session_maker
+        from db.accessors import prompt_template as p
+        async with get_session_maker()() as session:
+            await session.execute(text("INSERT INTO prompt_template (id, owner_scope, name, version, revision_id, updated_at) VALUES ('legacy', 'installation', 'Alt', 1, 'revision', NULL)"))
+            await session.commit()
+        assert (await p.get_template('legacy')).updated_at is None
+        assert next(row for row in await p.list_templates() if row.id == 'legacy').updated_at is None
+    asyncio.run(run())
+
+
+def test_context_batch_is_one_query(pg_db):
+    async def run():
+        from sqlalchemy import event
+        from db.engine import get_engine, get_session_maker
+        from db.accessors import chat_context
+        from db.models.chat_context import ChatContext
+        async with get_session_maker()() as session:
+            rows = [ChatContext(conversation_id='c', app_prompt_version='1', account_scope_json='{}', revoked=i == 1) for i in range(8)]
+            session.add_all(rows)
+            await session.commit()
+        queries = []
+        engine = get_engine().sync_engine
+        def before_execute(conn, cursor, statement, parameters, context, executemany):
+            queries.append(statement)
+        event.listen(engine, 'before_cursor_execute', before_execute)
+        try:
+            found = await chat_context.get_contexts({row.id for row in rows} | {'missing'})
+            assert len(queries) == 1
+            assert ' IN ' in queries[0].upper()
+            assert len(found) == 8 and found[rows[1].id].revoked
+            queries.clear()
+            assert await chat_context.get_contexts(set()) == {}
+            assert queries == []
+        finally:
+            event.remove(engine, 'before_cursor_execute', before_execute)
+    asyncio.run(run())
+
+
 def test_account_scope_and_unknown_history(pg_db):
     async def run():
         from db.accessors import mail_account as accounts, chat_context as c
@@ -99,10 +140,16 @@ def test_unchanged_update_keeps_version_and_revision(pg_db):
     async def run():
         from db.accessors import prompt_template as p
         row = await p.create_template('Name', 'Text')
+        assert row.updated_at is not None and row.updated_at.utcoffset() is not None
         for same in (await p.change_template(row.id, 1), await p.change_template(row.id, 1, name='Name', content='Text')):
             assert (same.version, same.revision_id) == (1, row.revision_id)
+            assert same.updated_at == row.updated_at
         with pytest.raises(p.StaleVersion):
             await p.change_template(row.id, 2)
         renamed = await p.change_template(row.id, 1, name='Neu')
         assert renamed.version == 2 and renamed.revision_id != row.revision_id
+        assert renamed.updated_at > row.updated_at
+        with pytest.raises(p.StaleVersion):
+            await p.change_template(row.id, 1, content='Stale')
+        assert (await p.get_template(row.id)).updated_at == renamed.updated_at
     asyncio.run(run())

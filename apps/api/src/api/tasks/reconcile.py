@@ -34,6 +34,33 @@ def _position(token: str | None, revision_id: str, target: str) -> str | None:
         raise ReconcileConflict('invalid cursor') from exc
 
 
+async def reconcile_current(
+    session: AsyncSession, *, series_id: str, revision_id: str | None = None,
+    cursor: str | None = None, advance: bool = False, limit: int = 100,
+    now: datetime | None = None,
+) -> tuple[str, str, bool]:
+    """Resume the current revision; omitted cursor reads persisted progress under lock.
+
+    Explicit cursors use compare-and-swap. Advancing requires the exact completion
+    cursor, so retrying an old advance cannot silently start another run.
+    """
+    series = await task_series.get(session, 'app', series_id, lock=True)
+    if series is None or series.archived:
+        raise ReconcileConflict('series unavailable')
+    revision = await task_schedule_revision.current(session, series_id)
+    if revision is None or revision.end_key is not None or (revision_id is not None and revision.id != revision_id):
+        raise ReconcileConflict('revision unavailable')
+    if advance and (cursor is None or cursor != revision.reconcile_cursor):
+        raise ReconcileConflict('completion cursor required')
+    token = cursor if cursor is not None else revision.reconcile_cursor
+    started = now or datetime.now(UTC)
+    if revision.reconcile_target is not None and not advance:
+        started = datetime.fromisoformat(revision.reconcile_target) - timedelta(days=30)
+    result, done = await reconcile_batch(session, scope='app', series_id=series_id,
+        revision_id=revision.id, started_at=started, cursor=token, limit=limit)
+    return revision.id, result, done
+
+
 async def reconcile_batch(
     session: AsyncSession, *, scope: str, series_id: str, revision_id: str,
     started_at: datetime, cursor: str | None, limit: int = 100,
@@ -41,7 +68,8 @@ async def reconcile_batch(
     """Materialize one page; persist its progress in the caller's transaction.
 
     ``started_at`` is the fixed run start in UTC; the inclusive horizon is 30
-    days later. A completed run cannot yet be advanced to a subsequent horizon.
+    days later. A completed run may advance to a later horizon with its exact
+    completion cursor. Requests within an unfinished run retain its target.
     """
     if started_at.tzinfo is None:
         raise ValueError('run start must be timezone-aware')
@@ -49,22 +77,37 @@ async def reconcile_batch(
     target = target_dt.isoformat()
     series = await task_series.get(session, scope, series_id, lock=True)
     revision = await task_schedule_revision.get(session, revision_id, lock=True)
-    if series is None or revision is None or revision.series_id != series_id or series.archived:
+    if series is None or revision is None or revision.series_id != series_id or series.archived or revision.end_key is not None:
         raise ReconcileConflict('series or revision unavailable')
     if revision.reconcile_target is None:
         if cursor is not None:
             raise ReconcileConflict('unexpected cursor')
         revision.reconcile_target = target
-    if revision.reconcile_target != target or revision.reconcile_cursor != cursor:
-        raise ReconcileConflict('stale target or cursor')
-    position = _position(cursor, revision_id, target)
-    if position == 'done':
+    if revision.reconcile_cursor != cursor:
+        raise ReconcileConflict('stale cursor')
+    position = _position(cursor, revision_id, revision.reconcile_target)
+    completed = position is not None and position.startswith('done')
+    if revision.reconcile_target != target:
+        if not completed or target_dt <= datetime.fromisoformat(revision.reconcile_target):
+            raise ReconcileConflict('stale target')
+        revision.reconcile_target = target
+        # New completion tokens retain the last examined position. Older tokens
+        # replay from DTSTART once, with uniqueness preserving all existing rows.
+        position = position.removeprefix('done:rfc5545:') if position.startswith('done:rfc5545:') else None
+        position = position or None
+    elif position is not None and position.startswith('done:rfc5545'):
         return cursor, True
+    if position == 'done':
+        if 'T' not in revision.start_local.upper() or not any(part.startswith('COUNT=') for part in (revision.rrule or '').split(';')):
+            return cursor, True
+        # Old COUNT runs may have stopped before the valid tail. Replay in bounded
+        # pages; original keys preserve existing occurrences and their state.
+        position = None
 
-    timed = revision.timezone is not None
+    timed = 'T' in revision.start_local.upper()
     parser = datetime.fromisoformat if timed else date.fromisoformat
     start = parser(revision.start_local)
-    end = target_dt.astimezone(ZoneInfo(revision.timezone)).replace(tzinfo=None) if timed else target_dt.date()
+    end = target_dt.astimezone(ZoneInfo(revision.timezone)).replace(tzinfo=None) if timed else target_dt.astimezone(ZoneInfo(revision.timezone or 'UTC')).date()
     after = parser(position) if position is not None else None
     rule = revision.rrule or 'FREQ=DAILY;COUNT=1'
     values, next_position = expand_page(start, rule, end, revision.timezone, cursor=after, limit=limit)
@@ -74,8 +117,9 @@ async def reconcile_batch(
                              occurrence_key=value.isoformat(), due_local=value.isoformat(), due_at=due_at)
         await task_occurrence.insert_once(session, row)
     done = next_position is None
+    last_position = values[-1].isoformat() if values else position or ''
     new_cursor = json.dumps({'revision': revision_id, 'target': target,
-                             'position': 'done' if done else next_position.isoformat()},
+                             'position': f'done:rfc5545:{last_position}' if done else next_position.isoformat()},
                             sort_keys=True, separators=(',', ':'))
     revision.reconcile_cursor = new_cursor
     session.add(revision)

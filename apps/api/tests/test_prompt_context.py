@@ -83,6 +83,40 @@ async def test_paused_stream_keeps_snapshot_or_stops_before_tools(store, monkeyp
     assert 'Vorlage eins' not in caplog.text
 
 
+@pytest.mark.anyio
+async def test_revocation_immediately_before_model_call_sends_no_template(store, monkeypatch):
+    async def resolve(**kw):
+        return await store.create(), NS(id='context', account_scope_json=json.dumps({'account_ids': []})), 'Synthetic template'
+    monkeypatch.setattr(agent, 'resolve_context', resolve)
+    monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=[True, False]))
+    fake = FakeMistral(streams=[['Antwort']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    events = [event async for event in agent.run_turn_events(conversation_id=None, text='Hallo')]
+    assert events[-1].code == 'context_revoked'
+    assert fake.requests == []
+
+
+@pytest.mark.anyio
+async def test_revocation_closes_running_stream_at_bounded_delta(store, monkeypatch):
+    closed = False
+    class Stream:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args):
+            nonlocal closed
+            closed = True
+        def __aiter__(self): return self.generate()
+        async def generate(self):
+            for _ in range(20):
+                yield NS(data=NS(choices=[NS(delta=NS(content='x', tool_calls=None))]))
+    monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=[True, True, False]))
+    monkeypatch.setattr(agent, 'mistral_client', lambda: NS(chat=NS(stream_async=AsyncMock(return_value=Stream()))))
+    events = [event async for event in agent.run_turn_events(conversation_id=None, text='Hallo')]
+    assert events[-1].code == 'context_revoked'
+    assert sum(event.event == 'delta' for event in events) == agent.REVOCATION_DELTA_INTERVAL - 1
+    assert closed
+    assert store.rows[-1].stopped
+
+
 def test_insights_use_the_trace_free_client():
     from api.mail import chat_client, insights
     assert insights.mistral_client is chat_client.mistral_client
@@ -138,6 +172,7 @@ async def test_revoked_hidden_history_is_not_reinjected(store, monkeypatch):
         tool_payload_json=json.dumps({'tool_call_id': 'old'}), content='Hidden synthetic content')
     await chat_message.add_message(conversation_id=c.id, role='assistant', context_id='removed', content='Sichtbar')
     monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=lambda id: id != 'removed'))
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(side_effect=lambda ids: {id: NS(revoked=id == 'removed') for id in ids}))
     fake = FakeMistral(streams=[['Antwort']])
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     events = [event async for event in agent.run_turn_events(conversation_id=c.id, text='Hallo')]
@@ -167,6 +202,7 @@ async def test_proposal_from_a_revoked_turn_is_not_reinjected(store, monkeypatch
     monkeypatch.setattr(agent, 'resolve_context', next_turn)
     monkeypatch.setattr(agent, 'mistral_client', lambda: second)
     monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=lambda id: id != 'test-context'))
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(side_effect=lambda ids: {id: NS(revoked=id == 'test-context') for id in ids}))
     events = [event async for event in agent.run_turn_events(conversation_id=proposal.conversation_id, text='Weiter')]
     assert events[-1].event == 'done'
     sent = json.dumps(second.requests, default=str, ensure_ascii=False)
@@ -174,19 +210,61 @@ async def test_proposal_from_a_revoked_turn_is_not_reinjected(store, monkeypatch
 
 
 @pytest.mark.anyio
-async def test_history_exposes_content_free_revocation_marker(monkeypatch):
+async def test_agent_batches_hidden_history_contexts(store, monkeypatch):
+    from db.models.chat_message import ChatMessage
+    conversation = await store.create()
+    for id in ('live', 'removed', 'live', 'missing'):
+        store.rows.append(ChatMessage(conversation_id=conversation.id, role='tool', context_id=id, content='Hidden'))
+    load = AsyncMock(return_value={'live': NS(revoked=False), 'removed': NS(revoked=True)})
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', load)
+    fake = FakeMistral(streams=[['Antwort']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    events = [event async for event in agent.run_turn_events(conversation_id=conversation.id, text='Hallo')]
+    assert events[-1].event == 'done'
+    load.assert_awaited_once()
+    assert set(load.await_args.args[0]) == {'live', 'removed', 'missing'}
+
+
+def test_history_exposes_content_free_revocation_marker(monkeypatch):
     from db.models.chat_context import ChatContext
     from db.models.chat_message import ChatMessage
-    from db.accessors import chat_context
-    from api.mail.chat_schemas import with_context
+    from api.routers.api.v1.chat import history as history_route
     snapshot = ChatContext(conversation_id='c', prompt_revision_id='removed-revision',
                            app_prompt_version='2', account_scope_json='{}', revoked=True)
-    monkeypatch.setattr(chat_context, 'get_context', AsyncMock(return_value=snapshot))
-    row = ChatMessage(conversation_id='c', role='assistant', content='Sichtbare Antwort', context_id=snapshot.id)
-    output = await with_context(row)
-    assert output.content == row.content
-    assert output.context.revoked and output.context.prompt_hash is None
-    assert output.context.prompt_revision_id == 'removed-revision'
+    visible = ChatMessage(conversation_id='c', role='assistant', content='Sichtbare Antwort',
+                          context_id=snapshot.id)
+    monkeypatch.setattr(history_route.conversation_access, 'get_conversation', AsyncMock(return_value=object()))
+    monkeypatch.setattr(history_route.message_access, 'list_messages', AsyncMock(return_value=[visible]))
+    monkeypatch.setattr(history_route.context_access, 'get_contexts', AsyncMock(return_value={snapshot.id: snapshot}))
+    monkeypatch.setattr(history_route.context_access, 'get_context', AsyncMock(side_effect=AssertionError('per-row query')))
+    response = TestClient(build_app()).get('/api/v1/chat/history', params={'conversation_id': 'c'})
+    assert response.status_code == 200
+    output = response.json()[0]
+    assert output['id'] == visible.id and output['content'] == visible.content
+    assert output['context']['revoked'] is True and output['context']['prompt_hash'] is None
+    assert output['context']['prompt_revision_id'] == 'removed-revision'
+
+
+@pytest.mark.anyio
+async def test_history_loads_contexts_once_for_all_visible_messages(monkeypatch):
+    from db.models.chat_context import ChatContext
+    from db.models.chat_message import ChatMessage
+    from api.routers.api.v1.chat import history as history_route
+    rows = [ChatMessage(conversation_id='c', role='assistant', content='Text', context_id=id)
+            for id in ('live', 'revoked', 'live', 'missing')]
+    contexts = {
+        id: ChatContext(id=id, conversation_id='c', app_prompt_version='1', account_scope_json='{}', revoked=id == 'revoked')
+        for id in ('live', 'revoked')
+    }
+    monkeypatch.setattr(history_route.conversation_access, 'get_conversation', AsyncMock(return_value=object()))
+    monkeypatch.setattr(history_route.message_access, 'list_messages', AsyncMock(return_value=rows))
+    load = AsyncMock(return_value=contexts)
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', load, raising=False)
+    monkeypatch.setattr(agent.chat_context, 'get_context', AsyncMock(side_effect=AssertionError('per-row query')))
+    result = await history_route.history('c')
+    load.assert_awaited_once()
+    assert set(load.await_args.args[0]) == {'live', 'revoked', 'missing'}
+    assert [m.context.revoked if m.context else None for m in result] == [False, True, False, None]
 
 
 @pytest.mark.anyio

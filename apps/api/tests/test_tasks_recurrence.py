@@ -5,9 +5,9 @@ import pytest
 from api.tasks.recurrence import expand, expand_page
 
 
-def test_count_includes_skipped_gap_candidate():
+def test_count_excludes_nonexistent_wall_times():
     values = expand(datetime(2024, 3, 30, 2, 30), 'FREQ=DAILY;COUNT=3', datetime(2024, 4, 4), 'Europe/Berlin')
-    assert [(v.day, v.hour) for v in values] == [(30, 2), (1, 2)]
+    assert [(v.day, v.hour) for v in values] == [(30, 2), (1, 2), (2, 2)]
 
 
 def test_month_end_and_leap_year():
@@ -63,7 +63,7 @@ def test_pages_include_gap_in_cursor_and_match_preview():
         if cursor is None:
             break
     assert result == [v.replace(tzinfo=None) for v in expand(start, rule, end, 'Europe/Berlin')]
-    assert [v.day for v in result] == [30, 1, 2, 3]
+    assert [v.day for v in result] == [30, 1, 2, 3, 4]
 
 
 def test_page_rejects_non_candidate_cursor_and_invalid_limit():
@@ -71,6 +71,24 @@ def test_page_rejects_non_candidate_cursor_and_invalid_limit():
         expand_page(date(2024, 1, 1), 'FREQ=DAILY;INTERVAL=2', date(2024, 2, 1), cursor=date(2024, 1, 2))
     with pytest.raises(ValueError):
         expand_page(date(2024, 1, 1), 'FREQ=DAILY', date(2024, 2, 1), limit=0)
+
+
+def test_date_zone_does_not_change_expansion_and_legacy_boundaries_use_utc():
+    from datetime import UTC
+    from api.tasks.dates import is_future, is_overdue
+
+    start, end = date(2024, 1, 1), date(2024, 1, 3)
+    assert expand(start, 'FREQ=DAILY', end, 'Europe/Berlin') == expand(start, 'FREQ=DAILY', end)
+    now = datetime(2024, 1, 1, 23, 30, tzinfo=UTC)
+    assert not is_overdue('2024-01-01', None, now)
+    assert is_overdue('2024-01-01', 'Europe/Berlin', now)
+    assert is_future('2024-01-02', None, now)
+    assert not is_future('2024-01-02', 'Europe/Berlin', now)
+    with pytest.raises(ValueError):
+        expand(start, 'FREQ=DAILY', end, 'Not/AZone')
+    overlap = datetime(2024, 10, 27, 1, 15, tzinfo=UTC)
+    assert is_overdue('2024-10-27T02:30:00', 'Europe/Berlin', overlap)
+    assert not is_future('2024-10-27T02:30:00', 'Europe/Berlin', overlap)
 
 
 def test_invalid_start_and_zone():

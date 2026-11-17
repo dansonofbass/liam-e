@@ -15,19 +15,20 @@ let signal: AbortSignal
 let history: ChatMessageOut[] = []
 let requestBody: Record<string, unknown>
 let summary: MailSummaryOut = { accounts: [], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
-function setup(path = '/', historyGone = false) {
+function setup(path = '/', historyGone = false, selection: string | null = null) {
   history = []
   summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; requestBody = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start(c) { stream = c } }))) }) as typeof fetch
+  spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [] })) as never)
-  spyOn(sdk, 'chatConversationsList').mockImplementation((async () => ({ data: [{ id: 'c', title: 'Test', model: 'm1', version: 5, prompt_revision_id: null, account_scope_json: null, created_at: '', updated_at: '' }] })) as never)
+  spyOn(sdk, 'chatConversationsList').mockImplementation((async () => ({ data: [{ id: 'c', title: 'Test', model: 'm1', version: 5, prompt_revision_id: null, account_scope_json: JSON.stringify({ account_ids: selection ? [selection] : ['a'], selection }), created_at: '', updated_at: '' }] })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
   const start = createRoute({ getParentRoute: () => root, path: '/', component: StartRoute.options.component })
-  const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: () => <Conversation conversationId="c" /> })
+  const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: function ChatRoute() { const { conversationId } = chat.useParams(); return <Conversation conversationId={conversationId} /> } })
   const mail = createRoute({ getParentRoute: () => root, path: '/mail/$messageId', component: () => <p>Mail</p> })
   const router = createRouter({ routeTree: root.addChildren([start, chat, mail]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
@@ -123,14 +124,29 @@ test('a follow-up suggestion keeps the selected account', async () => {
   expect(requestBody.conversation_id).toBe('c')
 })
 
+test('a history suggestion after reload uses the saved account', async () => {
+  const { client } = setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  act(() => { client.setQueryData(['history', 'c'], [historyRow('answer', 'assistant', { suggestions: ['Weiter fragen'] })]) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
+  expect(requestBody.account_id).toBe('a')
+})
+
+test('reload restores the saved account for the composer', async () => {
+  setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  await send()
+  expect(requestBody.account_id).toBe('a')
+})
+
 test('the pencil on a mail card asks for a reply draft to that mail in the same conversation', async () => {
-  setup('/chat/c'); await send()
+  setup('/chat/c', false, 'a'); await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', snippet: 'Einwände bis Freitag möglich', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   expect(await screen.findByRole('img', { name: 'Dringend' })).toBeTruthy()
   expect(screen.getByText('Einwände bis Freitag möglich').classList.contains('le-mailref-snippet')).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
   expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
-  expect(requestBody.account_id).toBeUndefined()
+  expect(requestBody.account_id).toBe('a')
 })
 
 test('an answer shows at most three follow-up suggestions', async () => {
@@ -201,7 +217,7 @@ test('composer account menu falls back to the address', async () => {
   expect(screen.getByRole('button', { name: 'ich@example.com' })).toBeTruthy()
 })
 
-test('composer scopes a request to the chosen account and clears the field', async () => {
+test('composer scopes a request and clears the field only after acceptance', async () => {
   const { client } = setup('/chat/c')
   act(() => { client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: 'Privat' }] }) })
   fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
@@ -209,6 +225,8 @@ test('composer scopes a request to the chosen account and clears the field', asy
   await send()
   expect(requestBody.account_id).toBe('a')
   expect(requestBody.conversation_id).toBe('c')
+  expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Meine Frage')
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }) })
   expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('')
 })
 
@@ -246,13 +264,17 @@ test('missing conversation in a stream offers a new conversation', async () => {
 })
 
 test('account change in a conversation offers a new conversation instead of a retry', async () => {
-  const { router } = setup('/chat/c')
+  const { router } = setup('/chat/c', false, 'a')
+  fireEvent.click(await screen.findByRole('button', { name: 'Privat' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Alle Konten' }))
   globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'conversation_scope_change_requires_new' } }), { status: 409 }))) as unknown as typeof fetch
   await send()
   const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten/)).closest('[role="alert"]') as HTMLElement
   expect(within(notice).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect((await screen.findByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Meine Frage')
+  expect(screen.getByRole('button', { name: 'Alle Konten' })).toBeTruthy()
 })
 
 test('a template deleted during the answer says so and offers a retry', async () => {
@@ -262,6 +284,65 @@ test('a template deleted during the answer says so and offers a retry', async ()
   await send()
   const notice = (await screen.findByText(/Die Vorlage wurde gelöscht/)).closest('[role="alert"]') as HTMLElement
   expect(within(notice).getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
+})
+
+test('a conversation renders both header menus without a duplicate key', async () => {
+  const error = spyOn(console, 'error').mockImplementation(() => {})
+  setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  const duplicate = error.mock.calls.filter(call => call.some(part => typeof part === 'string' && part.includes('same key')))
+  expect(duplicate).toEqual([])
+})
+
+test('model selection errors do not follow a conversation switch', async () => {
+  spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'model_unknown' } } }) as never)
+  const { client, router } = setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei', is_default: false }]) })
+  fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
+  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei/ }))
+  expect(await screen.findByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeTruthy()
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'b' } }) })
+  expect(screen.queryByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeNull()
+})
+
+test('template selection errors do not follow a conversation switch', async () => {
+  spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'version_conflict' } } }) as never)
+  const { client, router } = setup('/chat/c')
+  await waitFor(() => expect(client.getQueryData(['conversations'])).toBeTruthy())
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Vorlage: Standard' }) as HTMLButtonElement).disabled).toBe(false))
+  const saved = client.getQueryData<Record<string, unknown>[]>(['conversations'])![0]!
+  act(() => { client.setQueryData(['conversations'], [saved, { ...saved, id: 'b' }]) })
+  fireEvent.click(screen.getByRole('button', { name: 'Vorlage: Standard' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Standard' }))
+  await screen.findByRole('button', { name: 'Aktuelle Fassung laden' })
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'b' } }) })
+  expect(screen.queryByRole('button', { name: 'Aktuelle Fassung laden' })).toBeNull()
+})
+
+test('restart after template removal preserves account and unsent text', async () => {
+  const { client, router } = setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  const saved = client.getQueryData<Record<string, unknown>[]>(['conversations'])![0]!
+  act(() => { client.setQueryData(['conversations'], [{ ...saved, prompt_revision_id: 'removed' }]) })
+  const input = screen.getByPlaceholderText('Frag etwas zu deinen Mails …')
+  fireEvent.change(input, { target: { value: 'Noch offen' } })
+  fireEvent.click(await screen.findByRole('button', { name: 'Neue Unterhaltung ohne bisherigen Kontext' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect(await screen.findByRole('button', { name: 'Privat' })).toBeTruthy()
+  expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Noch offen')
+})
+
+test('restart from a revoked answer preserves account and unsent text', async () => {
+  const { client, router } = setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([]))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('revoked', 'assistant'), context: { id: 'ctx', account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: true } }]) })
+  fireEvent.change(screen.getByPlaceholderText('Frag etwas zu deinen Mails …'), { target: { value: 'Noch offen' } })
+  fireEvent.click(await screen.findByRole('button', { name: 'Neue Unterhaltung ohne bisherigen Kontext' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect(await screen.findByRole('button', { name: 'Privat' })).toBeTruthy()
+  expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Noch offen')
 })
 
 test('unknown model refusal renders its explanation', async () => {

@@ -1,6 +1,6 @@
 """Request and response shapes for personal tasks."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,16 +11,84 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     description: str = Field(default='', max_length=10000)
     start: str = Field(min_length=10, max_length=26)
-    timezone: str | None = Field(default=None, max_length=100)
+    timezone: str | None = Field(default=None, max_length=100, description='Required IANA timezone, including for date-only tasks; missing or invalid values return task_invalid.')
     rrule: str | None = Field(default=None, max_length=500)
     source_account_id: str | None = Field(default=None, max_length=200)
     source_message_id: str | None = Field(default=None, max_length=200)
+
+
+class PreviewIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    start: str = Field(min_length=10, max_length=26)
+    through: str = Field(min_length=10, max_length=26)
+    timezone: str = Field(min_length=1, max_length=100)
+    rrule: str | None = Field(default=None, max_length=500)
+    limit: int = Field(default=100, ge=1, le=100)
+
+
+class PreviewException(BaseModel):
+    local: str
+    reason: Literal['invalid_date', 'nonexistent_time']
+    monthday: int | None
+
+
+class PreviewOut(BaseModel):
+    occurrences: list[str]
+    exceptions: list[PreviewException]
+    through: str
+    complete: bool
+
+
+class ReconcileIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    series_id: str = Field(min_length=1, max_length=200)
+    revision_id: str | None = Field(default=None, max_length=200)
+    cursor: str | None = Field(default=None, max_length=1024)
+    advance: bool = False
+    limit: int = Field(default=100, ge=1, le=100)
+
+
+class ReconcileOut(BaseModel):
+    revision_id: str
+    cursor: str
+    target: datetime
+    complete: bool
 
 
 class TaskCreated(BaseModel):
     id: str
     version: int
     created: bool
+
+
+class SeriesVersionIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    expected_version: int = Field(ge=1)
+
+
+class TaskPatch(SeriesVersionIn):
+    scope: Literal['occurrence', 'this_and_following']
+    occurrence_id: str = Field(min_length=1, max_length=200)
+    expected_occurrence_version: int = Field(ge=1)
+    start: str = Field(min_length=10, max_length=26, description='New local due value; occurrence edits retain precision and timezone.')
+    timezone: str | None = Field(default=None, max_length=100, description='Only for this_and_following; required when the previous revision has no timezone.')
+    rrule: str | None = Field(default=None, max_length=500, description='Only for this_and_following: omitted retains the rule; null creates a single occurrence. Start must match the rule.')
+
+
+class TaskPatched(BaseModel):
+    id: str
+    version: int
+    revision_id: str
+
+
+class DeleteIn(SeriesVersionIn):
+    confirm_history_loss: bool = Field(default=False, strict=True)
+
+
+class SeriesStateOut(BaseModel):
+    id: str
+    version: int
+    archived: bool
 
 
 class VersionIn(BaseModel):
@@ -42,3 +110,45 @@ class OccurrenceOut(BaseModel):
 class OccurrencePage(BaseModel):
     items: list[OccurrenceOut]
     next_cursor: str | None
+
+
+class TaskWindow(BaseModel):
+    due_from: date
+    due_to: date
+
+
+class ScheduleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    version: int
+    start_local: str
+    timezone: str | None
+    rrule: str | None
+    end_key: str | None
+    reconcile_target: str | None
+    reconcile_cursor: str | None
+
+
+class SeriesOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    title: str
+    description: str
+    source_account_id: str | None
+    source_message_id: str | None
+    version: int
+    archived: bool
+    schedule: ScheduleOut | None
+    complete: bool
+
+
+class SeriesPage(BaseModel):
+    window: TaskWindow
+    items: list[SeriesOut]
+    next_cursor: str | None
+
+
+class SeriesDetail(BaseModel):
+    window: TaskWindow
+    series: SeriesOut
+    occurrences: OccurrencePage

@@ -10,9 +10,19 @@ from db.accessors import task_occurrence
 from db.engine import get_session_maker
 from fastapi import APIRouter, Query
 
-from api.errors import refuse
+from api.errors import quiet_validation_route, refuse
 from api.tasks import state
 from .schemas import OccurrenceOut, OccurrencePage, VersionIn
+
+# The occurrence list and the state transitions reject different fields, so each keeps its own
+# wording for the quiet 422. The loader mounts one module-level router and FastAPI cannot nest
+# routers at an empty path, so this container collects both groups at the end of the module.
+list_router = APIRouter(route_class=quiet_validation_route(
+    'task_invalid', 'Prüfe die Angaben zur Fälligkeit: Filter, Cursor und Seitengröße 1–100.',
+), responses={422: {'description': 'Invalid fields; user content is not echoed'}})
+transition_router = APIRouter(route_class=quiet_validation_route(
+    'task_invalid', 'Prüfe die Angaben zur Fälligkeit: Die Version muss mindestens 1 sein.',
+), responses={422: {'description': 'Invalid fields; user content is not echoed'}})
 
 router = APIRouter()
 
@@ -37,7 +47,7 @@ def decode_cursor(cursor: str) -> tuple[str, str]:
         raise refuse(422, 'task_cursor_invalid', 'Die Aufgaben konnten nicht geladen werden. Öffne die Liste noch einmal.') from None
 
 
-@router.get('', operation_id='tasks_occurrences_list', summary='List materialized task occurrences')
+@list_router.get('', operation_id='tasks_occurrences_list', summary='List materialized task occurrences')
 async def list_occurrences(
     status: Literal['open', 'completed', 'skipped', 'cancelled'] | None = None,
     due_from: date | None = None, due_to: date | None = None,
@@ -73,16 +83,19 @@ async def _transition(occurrence_id: str, body: VersionIn, action: str) -> Occur
         raise refuse(409, 'task_version_conflict', 'Die Aufgabe wurde geändert. Lade sie noch einmal.') from None
 
 
-@router.post('/{occurrence_id}/complete', operation_id='tasks_occurrence_complete', summary='Complete an occurrence')
+@transition_router.post('/{occurrence_id}/complete', operation_id='tasks_occurrence_complete', summary='Complete an occurrence')
 async def complete(occurrence_id: str, body: VersionIn) -> OccurrenceOut:
     return await _transition(occurrence_id, body, 'complete')
 
 
-@router.post('/{occurrence_id}/skip', operation_id='tasks_occurrence_skip', summary='Skip an occurrence')
+@transition_router.post('/{occurrence_id}/skip', operation_id='tasks_occurrence_skip', summary='Skip an occurrence')
 async def skip(occurrence_id: str, body: VersionIn) -> OccurrenceOut:
     return await _transition(occurrence_id, body, 'skip')
 
 
-@router.post('/{occurrence_id}/reopen', operation_id='tasks_occurrence_reopen', summary='Reopen an occurrence')
+@transition_router.post('/{occurrence_id}/reopen', operation_id='tasks_occurrence_reopen', summary='Reopen an occurrence')
 async def reopen(occurrence_id: str, body: VersionIn) -> OccurrenceOut:
     return await _transition(occurrence_id, body, 'reopen')
+
+
+router.routes.extend([*list_router.routes, *transition_router.routes])

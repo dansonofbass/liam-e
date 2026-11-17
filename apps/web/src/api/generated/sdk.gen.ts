@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CalendarOccurrenceGetData, CalendarOccurrenceGetErrors, CalendarOccurrenceGetResponses, CalendarOccurrencesListData, CalendarOccurrencesListErrors, CalendarOccurrencesListResponses, CalendarSourceDeleteData, CalendarSourceDeleteErrors, CalendarSourceDeleteResponses, CalendarSourcesListData, CalendarSourcesListResponses, CalendarSourceSyncData, CalendarSourceSyncErrors, CalendarSourceSyncResponses, CalendarSourceUpdateData, CalendarSourceUpdateErrors, CalendarSourceUpdateResponses, ChatConversationsListData, ChatConversationsListResponses, ChatConversationUpdateData, ChatConversationUpdateErrors, ChatConversationUpdateResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatModelsListData, ChatModelsListResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatStreamData, ChatStreamErrors, ChatStreamResponse, ChatStreamResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOptionsData, MailAccountOptionsResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailAccountUpdateData, MailAccountUpdateErrors, MailAccountUpdateResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessageOriginalData, MailMessageOriginalErrors, MailMessageOriginalResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses, PromptCreateData, PromptCreateErrors, PromptCreateResponses, PromptDeleteData, PromptDeleteErrors, PromptDeleteResponses, PromptGetData, PromptGetErrors, PromptGetResponses, PromptsListData, PromptsListErrors, PromptsListResponses, PromptUpdateData, PromptUpdateErrors, PromptUpdateResponses, TasksCreateData, TasksCreateErrors, TasksCreateResponses, TasksOccurrenceCompleteData, TasksOccurrenceCompleteErrors, TasksOccurrenceCompleteResponses, TasksOccurrenceReopenData, TasksOccurrenceReopenErrors, TasksOccurrenceReopenResponses, TasksOccurrenceSkipData, TasksOccurrenceSkipErrors, TasksOccurrenceSkipResponses, TasksOccurrencesListData, TasksOccurrencesListErrors, TasksOccurrencesListResponses } from './types.gen';
+import type { CalendarOccurrenceGetData, CalendarOccurrenceGetErrors, CalendarOccurrenceGetResponses, CalendarOccurrencesListData, CalendarOccurrencesListErrors, CalendarOccurrencesListResponses, CalendarSourceDeleteData, CalendarSourceDeleteErrors, CalendarSourceDeleteResponses, CalendarSourcesListData, CalendarSourcesListResponses, CalendarSourceSyncData, CalendarSourceSyncErrors, CalendarSourceSyncResponses, CalendarSourceUpdateData, CalendarSourceUpdateErrors, CalendarSourceUpdateResponses, ChatConversationsListData, ChatConversationsListResponses, ChatConversationUpdateData, ChatConversationUpdateErrors, ChatConversationUpdateResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatModelsListData, ChatModelsListResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatStreamData, ChatStreamErrors, ChatStreamResponse, ChatStreamResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOptionsData, MailAccountOptionsResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailAccountUpdateData, MailAccountUpdateErrors, MailAccountUpdateResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessageOriginalData, MailMessageOriginalErrors, MailMessageOriginalResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses, PromptCreateData, PromptCreateErrors, PromptCreateResponses, PromptDeleteData, PromptDeleteErrors, PromptDeleteResponses, PromptGetData, PromptGetErrors, PromptGetResponses, PromptsListData, PromptsListErrors, PromptsListResponses, PromptUpdateData, PromptUpdateErrors, PromptUpdateResponses, TasksArchiveData, TasksArchiveErrors, TasksArchiveResponses, TasksCreateData, TasksCreateErrors, TasksCreateResponses, TasksDeleteData, TasksDeleteErrors, TasksDeleteResponses, TasksGetData, TasksGetErrors, TasksGetResponses, TasksListData, TasksListErrors, TasksListResponses, TasksOccurrenceCompleteData, TasksOccurrenceCompleteErrors, TasksOccurrenceCompleteResponses, TasksOccurrenceReopenData, TasksOccurrenceReopenErrors, TasksOccurrenceReopenResponses, TasksOccurrenceSkipData, TasksOccurrenceSkipErrors, TasksOccurrenceSkipResponses, TasksOccurrencesListData, TasksOccurrencesListErrors, TasksOccurrencesListResponses, TasksPreviewData, TasksPreviewErrors, TasksPreviewResponses, TasksReconcileData, TasksReconcileErrors, TasksReconcileResponses, TasksUpdateData, TasksUpdateErrors, TasksUpdateResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -384,6 +384,11 @@ export const promptUpdate = <ThrowOnError extends boolean = false>(options: Opti
 });
 
 /**
+ * List task series in a local date window
+ */
+export const tasksList = <ThrowOnError extends boolean = false>(options: Options<TasksListData, ThrowOnError>): RequestResult<TasksListResponses, TasksListErrors, ThrowOnError> => (options.client ?? client).get<TasksListResponses, TasksListErrors, ThrowOnError>({ url: '/api/v1/tasks', ...options });
+
+/**
  * Create a personal task
  */
 export const tasksCreate = <ThrowOnError extends boolean = false>(options: Options<TasksCreateData, ThrowOnError>): RequestResult<TasksCreateResponses, TasksCreateErrors, ThrowOnError> => (options.client ?? client).post<TasksCreateResponses, TasksCreateErrors, ThrowOnError>({
@@ -431,6 +436,71 @@ export const tasksOccurrenceReopen = <ThrowOnError extends boolean = false>(opti
  */
 export const tasksOccurrenceSkip = <ThrowOnError extends boolean = false>(options: Options<TasksOccurrenceSkipData, ThrowOnError>): RequestResult<TasksOccurrenceSkipResponses, TasksOccurrenceSkipErrors, ThrowOnError> => (options.client ?? client).post<TasksOccurrenceSkipResponses, TasksOccurrenceSkipErrors, ThrowOnError>({
     url: '/api/v1/tasks/occurrences/{occurrence_id}/skip',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Preview a task schedule without writes
+ */
+export const tasksPreview = <ThrowOnError extends boolean = false>(options: Options<TasksPreviewData, ThrowOnError>): RequestResult<TasksPreviewResponses, TasksPreviewErrors, ThrowOnError> => (options.client ?? client).post<TasksPreviewResponses, TasksPreviewErrors, ThrowOnError>({
+    url: '/api/v1/tasks/preview',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Materialize one bounded task page
+ */
+export const tasksReconcile = <ThrowOnError extends boolean = false>(options: Options<TasksReconcileData, ThrowOnError>): RequestResult<TasksReconcileResponses, TasksReconcileErrors, ThrowOnError> => (options.client ?? client).post<TasksReconcileResponses, TasksReconcileErrors, ThrowOnError>({
+    url: '/api/v1/tasks/reconcile',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Permanently delete a task and its history
+ */
+export const tasksDelete = <ThrowOnError extends boolean = false>(options: Options<TasksDeleteData, ThrowOnError>): RequestResult<TasksDeleteResponses, TasksDeleteErrors, ThrowOnError> => (options.client ?? client).delete<TasksDeleteResponses, TasksDeleteErrors, ThrowOnError>({
+    url: '/api/v1/tasks/{series_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Read a task series and a page of its occurrences
+ */
+export const tasksGet = <ThrowOnError extends boolean = false>(options: Options<TasksGetData, ThrowOnError>): RequestResult<TasksGetResponses, TasksGetErrors, ThrowOnError> => (options.client ?? client).get<TasksGetResponses, TasksGetErrors, ThrowOnError>({ url: '/api/v1/tasks/{series_id}', ...options });
+
+/**
+ * Move an open occurrence or split its schedule
+ */
+export const tasksUpdate = <ThrowOnError extends boolean = false>(options: Options<TasksUpdateData, ThrowOnError>): RequestResult<TasksUpdateResponses, TasksUpdateErrors, ThrowOnError> => (options.client ?? client).patch<TasksUpdateResponses, TasksUpdateErrors, ThrowOnError>({
+    url: '/api/v1/tasks/{series_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Archive a task and cancel open future occurrences
+ */
+export const tasksArchive = <ThrowOnError extends boolean = false>(options: Options<TasksArchiveData, ThrowOnError>): RequestResult<TasksArchiveResponses, TasksArchiveErrors, ThrowOnError> => (options.client ?? client).post<TasksArchiveResponses, TasksArchiveErrors, ThrowOnError>({
+    url: '/api/v1/tasks/{series_id}/archive',
     ...options,
     headers: {
         'Content-Type': 'application/json',

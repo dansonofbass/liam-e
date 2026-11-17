@@ -1,0 +1,16 @@
+.le-settings { padding: var(--space-5); max-width: var(--chat-width); margin: 0 auto; width: 100%; min-width: 0; overflow-y: auto; height: 100%; }
+.le-settings nav, .le-prompt-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.le-settings nav { margin: var(--space-4) 0 var(--space-5); }
+.le-settings nav .le-btn[aria-current="page"], .le-settings nav .le-btn[aria-current="page"]:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.le-prompts { display: grid; gap: var(--space-4); margin-top: var(--space-5); min-width: 0; }
+.le-prompt-row { display: grid; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-soft); color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
+.le-prompt-row:hover { background: var(--accent-soft); }
+.le-prompt-preview { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink-muted); }
+.le-prompt-placeholder { height: var(--control-height-lg); background: var(--surface-soft); border-radius: var(--radius-sm); }
+/* Portal menu text must wrap independently of the page's containers. */
+.le-menu-title, .le-menu-sub { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.le-settings .le-btn { min-height: var(--control-height-lg); white-space: normal; }
+.le-chat-topbar, .le-chat-header { flex-wrap: wrap; gap: var(--space-2); }
+.le-template-control { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.le-template-control .le-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 639px) { .le-settings { padding: var(--space-3); } }

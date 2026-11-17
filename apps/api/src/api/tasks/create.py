@@ -25,8 +25,8 @@ async def create(
     description: str = '', source_account_id: str | None = None, source_message_id: str | None = None,
 ) -> tuple[TaskSeries, bool]:
     """Create a series once, with a deterministic payload hash and app scope."""
-    if not creation_key or not title:
-        raise ValueError('creation key and title are required')
+    if not creation_key or not title or not zone:
+        raise ValueError('creation key, title and timezone are required')
     if source_message_id and not source_account_id:
         raise ValueError('source message requires an account')
     if source_account_id and await mail_account.get_account(source_account_id, session) is None:

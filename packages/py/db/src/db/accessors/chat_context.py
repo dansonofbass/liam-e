@@ -112,6 +112,14 @@ async def get_context(context_id: str) -> ChatContext | None:
         return await session.get(ChatContext, context_id)
 
 
+async def get_contexts(context_ids: set[str]) -> dict[str, ChatContext]:
+    if not context_ids:
+        return {}
+    async with get_session_maker()() as session:
+        rows = (await session.execute(select(ChatContext).where(ChatContext.id.in_(context_ids)))).scalars().all()
+        return {row.id: row for row in rows}
+
+
 async def is_live(context_id: str) -> bool:
     async with get_session_maker()() as session:
         row = await session.get(ChatContext, context_id)

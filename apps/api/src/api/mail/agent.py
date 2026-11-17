@@ -20,6 +20,9 @@ from api.mail import headers, state
 
 logger = logging.getLogger(__name__)
 
+# Bound revocation checks during a model stream to one per ten deltas.
+REVOCATION_DELTA_INTERVAL = 10
+
 
 def _to_model_messages(history, *, prompt=None):
     """Repair incomplete tool exchanges before sending history to the model."""
@@ -82,9 +85,12 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         account = await mail_account.get_account(account_id) if account_id else None
         ctx = TurnContext(conversation.id, account.id if account else None, datetime.now(BERLIN).date(), account_ids=scope_ids, context_id=snapshot.id)
         history = await message_access.list_messages(conversation.id)
+        context_ids = {row.context_id for row in history if row.context_id and
+                       (row.role in ('tool', 'proposal', 'draft') or row.tool_payload_json)}
+        contexts = await chat_context.get_contexts(context_ids)
         history = [row for row in history if not row.context_id or
                    (row.role not in ('tool', 'proposal', 'draft') and not row.tool_payload_json) or
-                   await chat_context.is_live(row.context_id)]
+                   (row.context_id in contexts and not contexts[row.context_id].revoked)]
         messages = _to_model_messages(history, prompt=system_prompt(today=ctx.today, account_scope=account.email_address if account else None))
         if template_text is not None:
             messages.insert(1, {'role': 'user', 'content': 'Nutzervorlage für diesen Turn:\n' + template_text})
@@ -106,9 +112,19 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                 if last: kwargs['tool_choice'] = 'none'
                 if client is None:
                     client = mistral_client()
+                if not await chat_context.is_live(snapshot.id):
+                    if all_text: await save(True)
+                    yield ErrorEvent(code='context_revoked')
+                    return
                 stream = await client.chat.stream_async(**kwargs)
                 async with stream:
+                    delta_count = 0
                     async for event in stream:
+                        delta_count += 1
+                        if delta_count % REVOCATION_DELTA_INTERVAL == 0 and not await chat_context.is_live(snapshot.id):
+                            if all_text: await save(True)
+                            yield ErrorEvent(code='context_revoked')
+                            return
                         delta = event.data.choices[0].delta
                         content = getattr(delta, 'content', None)
                         if isinstance(content, list): content = ''.join(getattr(c, 'text', '') for c in content if isinstance(getattr(c, 'text', None), str))

@@ -82,11 +82,30 @@ test('notification preserves the undo target until its original deadline', async
   act(() => time.advance(5000)); expect(screen.queryByRole('status')).toBeNull()
 })
 
+test('undo times out, aborts and can be retried even if the request never settles', async () => {
+  success()
+  let signal: AbortSignal | undefined
+  const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation(((options: { signal?: AbortSignal }) => {
+    signal = options.signal
+    return new Promise(() => {})
+  }) as never)
+  const time = setup()
+  fireEvent.click(screen.getByText('archive 1'))
+  fireEvent.click(await screen.findByText('Rückgängig'))
+  expect(signal?.aborted).toBe(false)
+  await act(async () => { time.advance(15_000) })
+  expect(signal?.aborted).toBe(true)
+  expect(screen.getByText('Die Rücknahme dauert zu lange. Ob sie geklappt hat, ist unklar. Versuch es noch mal oder lade den Posteingang neu.')).toBeTruthy()
+  expect(screen.getByText('action-1')).toBeTruthy()
+  fireEvent.click(screen.getByText('action-1'))
+  await waitFor(() => expect(undo).toHaveBeenCalledTimes(2))
+})
+
 test('undo sends the action id and restores the row', async () => {
   success(); const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['action-1'], expired: [], failed: [], skipped: [] }, response: { status: 200 } })) as never)
   setup(); fireEvent.click(screen.getByText('archive 1')); fireEvent.click(await screen.findByText('Rückgängig'))
   await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
-  expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['action-1'] } })
+  expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['action-1'] }, signal: expect.any(AbortSignal) })
   expect(screen.queryByRole('status')).toBeNull()
 })
 
@@ -192,7 +211,7 @@ test('spam removes the row, names the mail and can be undone', async () => {
   expect(await screen.findByText('„Erste“ als Spam markiert.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Rückgängig' }))
   expect(await screen.findByText('Erste:false')).toBeTruthy()
-  expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['action-1'] } })
+  expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['action-1'] }, signal: expect.any(AbortSignal) })
 })
 
 test('spam removes the row before the provider answers and puts it back when the provider fails', async () => {
@@ -382,7 +401,7 @@ test('ten independent actions retain their deadlines and individual targets', as
   for (let i = 0; i < 10; i++) { await act(async () => { await actions.run(String(i), 'archive') }); act(() => time.advance(500)) }
   expect(actions.entries).toHaveLength(10)
   await act(async () => { await actions.undo('a-5') })
-  expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['a-5'] } })
+  expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['a-5'] }, signal: expect.any(AbortSignal) })
   act(() => time.advance(5000)); expect(actions.entries.some(entry => entry.actionId === 'a-0')).toBe(false)
   expect(actions.entries.some(entry => entry.actionId === 'a-1')).toBe(true)
   act(() => time.advance(4500)); expect(actions.entries).toHaveLength(0)

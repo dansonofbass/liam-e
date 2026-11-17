@@ -20,6 +20,8 @@ def _refuse(error: Exception):
         raise refuse(404, "proposal_not_found", "Der Vorschlag ist nicht mehr da. Lade die Unterhaltung neu.")
     if isinstance(error, proposals.ProposalStateError):
         raise refuse(409, "proposal_not_pending", "Dieser Vorschlag ist schon erledigt oder abgebrochen. Lade die Unterhaltung neu, um den Stand zu sehen.")
+    if isinstance(error, proposals.ProposalContextRevokedError):
+        raise refuse(409, "proposal_context_revoked", "Dieser Vorschlag stammt aus einem widerrufenen Kontext. Starte eine neue Unterhaltung.")
     if isinstance(error, proposals.ProposalSelectionError):
         text = "Wähle mindestens einen Eintrag aus." if error.code == "selection_empty" else "Die Auswahl passt nicht zum Vorschlag. Lade die Unterhaltung neu."
         raise refuse(422, error.code, text)
@@ -30,7 +32,7 @@ def _refuse(error: Exception):
 async def confirm(proposal_id: str, body: ProposalConfirmIn) -> ChatMessageOut:
     try:
         return to_message_out(await proposals.confirm(proposal_id, selected_ids=body.selected_ids, body=body.body))
-    except (proposals.ProposalNotFoundError, proposals.ProposalStateError, proposals.ProposalSelectionError) as error:
+    except (proposals.ProposalNotFoundError, proposals.ProposalStateError, proposals.ProposalSelectionError, proposals.ProposalContextRevokedError) as error:
         _refuse(error)
 
 

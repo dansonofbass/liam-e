@@ -3,6 +3,7 @@
 Deployment access is restricted externally to one owner. OWNER_SCOPE is not an
 assertion about gateway authentication and is never derived from request data.
 """
+from datetime import datetime, timezone
 from hashlib import sha256
 from sqlalchemy import select, update
 from db.engine import get_session_maker
@@ -35,7 +36,7 @@ async def get_template(template_id: str) -> PromptTemplate | None:
 
 async def create_template(name: str, content: str) -> PromptTemplate:
     async with get_session_maker()() as session:
-        row = PromptTemplate(name=name, revision_id="")
+        row = PromptTemplate(name=name, revision_id="", updated_at=datetime.now(timezone.utc))
         rev = revision(row.id, 1, content)
         row.revision_id = rev.id
         session.add_all([row, rev])
@@ -67,6 +68,7 @@ async def change_template(template_id: str, expected_version: int, *, name: str 
             if (content is None or content == previous.content) and (name is None or name == row.name):
                 return row  # Nothing changes: no new revision and no version bump.
             row.version += 1
+            row.updated_at = datetime.now(timezone.utc)
             rev = revision(row.id, row.version, content if content is not None else previous.content)
             row.revision_id = rev.id
             if name is not None:

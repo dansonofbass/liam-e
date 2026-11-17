@@ -8,27 +8,31 @@ import { Button, ChatMessage, Chip, Composer, MailReference, Notice } from '../d
 import { providerLabel } from '../ds/providerLabel'
 import { de } from '../i18n/de'
 import { ModelMenu } from './ModelMenu'
+import { TemplateMenu } from '../prompts/TemplateMenu'
 import { ChatHeader } from './ChatHeader'
 import { ProposalCard } from './ProposalCard'
 import { useFollowScroll } from './useFollowScroll'
 import { SafeMarkdown } from './SafeMarkdown'
-import { useChatSession } from './session'
+import { useChatSession, useConversationScope, useRestartConversation } from './session'
 
 type Accounts = AccountSummaryOut[]
 // A retry would send the same request and be refused again.
 const NEEDS_NEW_CONVERSATION = new Set(['conversation_not_found', 'conversation_scope_change_requires_new', 'context_unavailable'])
 
-export function ChatComposer({ conversationId, contextMessageId, model, onSend, autoFocus }: { conversationId?: string; contextMessageId?: string; model?: string; onSend?: () => void; autoFocus?: boolean }) {
+export function ChatComposer({ conversationId, contextMessageId, model, promptRevisionId, onSend, autoFocus }: { conversationId?: string; contextMessageId?: string; model?: string; promptRevisionId?: string | null; onSend?: () => void; autoFocus?: boolean }) {
   const { data: summary } = useQuery(summaryQuery())
-  const { state, send, stop, scope, setScope } = useChatSession()
-  const [value, setValue] = useState('')
+  const { state, send, stop, composerTexts, setComposerText } = useChatSession()
+  const { scope, setScope, ready } = useConversationScope(conversationId)
+  const accounts = (summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name || account.email_address }))
+  if (scope && !accounts.some(account => account.id === scope)) accounts.push({ id: scope, label: de.prompts.scopeUnavailable })
+  const value = composerTexts[conversationId ?? 'new'] ?? ''
+  const setValue = (text: string) => setComposerText(conversationId ?? 'new', text)
   const busy = state.phase === 'working' || state.phase === 'streaming'
   return <Composer value={value} onChange={setValue} onSubmit={() => {
-    if (busy || !value.trim()) return
+    if (busy || !ready || !value.trim()) return
     onSend?.()
-    void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, model })
-    setValue('')
-  }} onStop={stop} busy={busy} scope={scope} accounts={(summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name || account.email_address }))} onScopeChange={setScope} placeholder={de.chat.placeholder} autoFocus={autoFocus} />
+    void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, model, ...(!conversationId ? { prompt_revision_id: promptRevisionId } : {}) })
+  }} onStop={stop} busy={busy} scope={scope} accounts={accounts} onScopeChange={setScope} placeholder={de.chat.placeholder} autoFocus={autoFocus} />
 }
 
 type Draft = { onDraft: (id: string) => void; disabled: boolean }
@@ -62,11 +66,12 @@ export function turnOrder(messages: ChatMessageOut[]): ChatMessageOut[] {
 }
 
 export function Conversation({ conversationId }: { conversationId: string }) {
-  const navigate = useNavigate()
   const history = useQuery(historyQuery(conversationId))
   const { data: summary } = useQuery(summaryQuery())
   const { data: models = [] } = useQuery(modelsQuery())
-  const { state, send, retry, scope } = useChatSession()
+  const { state, send, retry } = useChatSession()
+  const { scope, ready } = useConversationScope(conversationId)
+  const restart = useRestartConversation(conversationId)
   const [selectedModel, setSelectedModel] = useState<{ conversationId: string; id: string }>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const { showEnd, scrollToEnd } = useFollowScroll(scrollRef, [history.data, state, conversationId])
@@ -82,21 +87,21 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const savedPartial = (state.phase === 'stopped' || state.phase === 'error') && userIndex >= 0 && messages.slice(userIndex + 1).some(message => message.role === 'assistant')
   const busy = state.phase === 'working' || state.phase === 'streaming'
   // Follow-ups keep the account the composer shows, like a typed question.
-  const submitSuggestion = (text: string) => { void send({ text, account_id: scope, conversation_id: conversationId }) }
+  const submitSuggestion = (text: string) => { if (!ready) return; void send({ text, account_id: scope, conversation_id: conversationId }) }
   // The pencil on a mail card asks for a reply draft to that mail in this conversation, like the button on the open mail.
-  const draft: Draft = { onDraft: id => { void send({ text: de.mail.draftPrompt, conversation_id: conversationId, context_message_id: id }) }, disabled: state.phase === 'working' || state.phase === 'streaming' }
+  const draft: Draft = { onDraft: id => { if (!ready) return; void send({ text: de.mail.draftPrompt, account_id: scope, conversation_id: conversationId, context_message_id: id }) }, disabled: !ready || busy }
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
   const renderMessage = (message: ChatMessageOut) => {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
     if (message.role === 'proposal' || message.role === 'draft') return <ProposalCard key={message.id} message={message} />
     if (message.role !== 'assistant') return null
-    return <><ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}</>
+    return <>{message.context?.revoked && <Notice tone="info" action={{ label: de.prompts.restart, onClick: restart }}>{de.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}</>
   }
   const status = state.status?.code === 'searching' ? de.status.searching(state.status.count ?? 0) : state.status ? de.status[state.status.code] : null
   const liveModel = modelLabel(selectedModel?.conversationId === conversationId ? selectedModel.id : lastAssistant?.extras.model) ?? models.find(model => model.is_default)?.label
   const historyGone = errorCode(history.error instanceof Error ? history.error.cause : history.error) === 'conversation_not_found'
-  const newConversation = { label: de.shell.newConversation, onClick: () => { void navigate({ to: '/' }) } }
-  return <div className="le-chat-view"><ChatHeader conversationId={conversationId}><ModelMenu key={conversationId} conversationId={conversationId} model={lastAssistant?.extras.model} onChange={id => setSelectedModel({ conversationId, id })} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
+  const newConversation = { label: de.shell.newConversation, onClick: restart }
+  return <div className="le-chat-view"><ChatHeader conversationId={conversationId}><ModelMenu key={`${conversationId}:model`} conversationId={conversationId} model={lastAssistant?.extras.model} onChange={id => setSelectedModel({ conversationId, id })} /><TemplateMenu key={`${conversationId}:template`} conversationId={conversationId} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
     {history.isPending && <p className="le-hint">{de.chat.loadingHistory}</p>}
     {history.isError && <Notice tone="danger" action={historyGone ? newConversation : { label: de.chat.retry, onClick: () => { void history.refetch() } }}>{historyGone ? de.errors.conversation_not_found : de.chat.historyError}</Notice>}
     {ordered.map((message, index) => <div className="le-chat-entry" key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={submitSuggestion} />}</div>)}

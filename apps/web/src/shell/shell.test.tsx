@@ -152,7 +152,7 @@ test('the tablet bar lists the conversations as a navigation entry with its own 
   expect(button.querySelector('.lucide-messages-square')).toBeTruthy()
   expect(button.querySelector('.lucide-message-circle')).toBeNull()
   expect(screen.getByRole('link', { name: 'Chat' }).querySelector('.lucide-message-circle')).toBeTruthy()
-  expect(button.closest('.le-shell-sidebar')?.querySelectorAll('.le-nav-item')).toHaveLength(4)
+  expect(button.closest('.le-shell-sidebar')?.querySelectorAll('.le-nav-item')).toHaveLength(5)
   fireEvent.mouseEnter(button)
   expect((await screen.findByRole('tooltip', {}, { timeout: 2000 })).textContent).toBe('Öffnet die Liste deiner Unterhaltungen')
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })

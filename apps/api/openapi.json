@@ -802,6 +802,26 @@
         "title": "ConversationOut",
         "type": "object"
       },
+      "DeleteIn": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_history_loss": {
+            "default": false,
+            "title": "Confirm History Loss",
+            "type": "boolean"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "DeleteIn",
+        "type": "object"
+      },
       "DeltaEvent": {
         "properties": {
           "event": {
@@ -1605,6 +1625,123 @@
         "title": "OAuthAuthorizeOut",
         "type": "object"
       },
+      "PreviewException": {
+        "properties": {
+          "local": {
+            "title": "Local",
+            "type": "string"
+          },
+          "monthday": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthday"
+          },
+          "reason": {
+            "enum": [
+              "invalid_date",
+              "nonexistent_time"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "local",
+          "reason",
+          "monthday"
+        ],
+        "title": "PreviewException",
+        "type": "object"
+      },
+      "PreviewIn": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 100,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrule"
+          },
+          "start": {
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Start",
+            "type": "string"
+          },
+          "through": {
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Through",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "through",
+          "timezone"
+        ],
+        "title": "PreviewIn",
+        "type": "object"
+      },
+      "PreviewOut": {
+        "properties": {
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "exceptions": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewException"
+            },
+            "title": "Exceptions",
+            "type": "array"
+          },
+          "occurrences": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Occurrences",
+            "type": "array"
+          },
+          "through": {
+            "title": "Through",
+            "type": "string"
+          }
+        },
+        "required": [
+          "occurrences",
+          "exceptions",
+          "through",
+          "complete"
+        ],
+        "title": "PreviewOut",
+        "type": "object"
+      },
       "PromptCreate": {
         "properties": {
           "name": {
@@ -1656,6 +1793,18 @@
             "title": "Text",
             "type": "string"
           },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -1668,6 +1817,7 @@
           "revision_id",
           "text",
           "content_hash",
+          "updated_at",
           "revisions"
         ],
         "title": "PromptDetailOut",
@@ -1695,6 +1845,18 @@
             "title": "Text",
             "type": "string"
           },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -1706,7 +1868,8 @@
           "version",
           "revision_id",
           "text",
-          "content_hash"
+          "content_hash",
+          "updated_at"
         ],
         "title": "PromptOut",
         "type": "object"
@@ -2008,6 +2171,170 @@
         "title": "ProposalResult",
         "type": "object"
       },
+      "ReconcileIn": {
+        "additionalProperties": false,
+        "properties": {
+          "advance": {
+            "default": false,
+            "title": "Advance",
+            "type": "boolean"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "limit": {
+            "default": 100,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "series_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Series Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_id"
+        ],
+        "title": "ReconcileIn",
+        "type": "object"
+      },
+      "ReconcileOut": {
+        "properties": {
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "cursor": {
+            "title": "Cursor",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "target": {
+            "format": "date-time",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id",
+          "cursor",
+          "target",
+          "complete"
+        ],
+        "title": "ReconcileOut",
+        "type": "object"
+      },
+      "ScheduleOut": {
+        "properties": {
+          "end_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Key"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reconcile_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconcile Cursor"
+          },
+          "reconcile_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconcile Target"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrule"
+          },
+          "start_local": {
+            "title": "Start Local",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "start_local",
+          "timezone",
+          "rrule",
+          "end_key",
+          "reconcile_target",
+          "reconcile_cursor"
+        ],
+        "title": "ScheduleOut",
+        "type": "object"
+      },
       "SendDraft": {
         "properties": {
           "account_id": {
@@ -2073,6 +2400,169 @@
           "reply_to_message_id"
         ],
         "title": "SendDraft",
+        "type": "object"
+      },
+      "SeriesDetail": {
+        "properties": {
+          "occurrences": {
+            "$ref": "#/components/schemas/api__routers__api__v1__tasks__schemas__OccurrencePage"
+          },
+          "series": {
+            "$ref": "#/components/schemas/SeriesOut"
+          },
+          "window": {
+            "$ref": "#/components/schemas/TaskWindow"
+          }
+        },
+        "required": [
+          "window",
+          "series",
+          "occurrences"
+        ],
+        "title": "SeriesDetail",
+        "type": "object"
+      },
+      "SeriesOut": {
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "source_account_id",
+          "source_message_id",
+          "version",
+          "archived",
+          "schedule",
+          "complete"
+        ],
+        "title": "SeriesOut",
+        "type": "object"
+      },
+      "SeriesPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "window": {
+            "$ref": "#/components/schemas/TaskWindow"
+          }
+        },
+        "required": [
+          "window",
+          "items",
+          "next_cursor"
+        ],
+        "title": "SeriesPage",
+        "type": "object"
+      },
+      "SeriesStateOut": {
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "archived"
+        ],
+        "title": "SeriesStateOut",
+        "type": "object"
+      },
+      "SeriesVersionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "SeriesVersionIn",
         "type": "object"
       },
       "SourceOut": {
@@ -2380,6 +2870,7 @@
                 "type": "null"
               }
             ],
+            "description": "Required IANA timezone, including for date-only tasks; missing or invalid values return task_invalid.",
             "title": "Timezone"
           },
           "title": {
@@ -2418,6 +2909,120 @@
           "created"
         ],
         "title": "TaskCreated",
+        "type": "object"
+      },
+      "TaskPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_occurrence_version": {
+            "minimum": 1.0,
+            "title": "Expected Occurrence Version",
+            "type": "integer"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "occurrence_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Occurrence Id",
+            "type": "string"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only for this_and_following: omitted retains the rule; null creates a single occurrence. Start must match the rule.",
+            "title": "Rrule"
+          },
+          "scope": {
+            "enum": [
+              "occurrence",
+              "this_and_following"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "start": {
+            "description": "New local due value; occurrence edits retain precision and timezone.",
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only for this_and_following; required when the previous revision has no timezone.",
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "expected_version",
+          "scope",
+          "occurrence_id",
+          "expected_occurrence_version",
+          "start"
+        ],
+        "title": "TaskPatch",
+        "type": "object"
+      },
+      "TaskPatched": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "revision_id"
+        ],
+        "title": "TaskPatched",
+        "type": "object"
+      },
+      "TaskWindow": {
+        "properties": {
+          "due_from": {
+            "format": "date",
+            "title": "Due From",
+            "type": "string"
+          },
+          "due_to": {
+            "format": "date",
+            "title": "Due To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "due_from",
+          "due_to"
+        ],
+        "title": "TaskWindow",
         "type": "object"
       },
       "UndoIn": {
@@ -4380,6 +4985,128 @@
       }
     },
     "/api/v1/tasks": {
+      "get": {
+        "operationId": "tasks_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "due_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Due From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Due To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "archived"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "unlinked",
+                "account"
+              ],
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Account Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "List task series in a local date window"
+      },
       "post": {
         "operationId": "tasks_create",
         "requestBody": {
@@ -4404,14 +5131,7 @@
             "description": "Successful Response"
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "Invalid fields; user content is not echoed"
           }
         },
         "summary": "Create a personal task"
@@ -4513,14 +5233,7 @@
             "description": "Successful Response"
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "Invalid fields; user content is not echoed"
           }
         },
         "summary": "List materialized task occurrences"
@@ -4562,14 +5275,7 @@
             "description": "Successful Response"
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "Invalid fields; user content is not echoed"
           }
         },
         "summary": "Complete an occurrence"
@@ -4611,14 +5317,7 @@
             "description": "Successful Response"
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "Invalid fields; user content is not echoed"
           }
         },
         "summary": "Reopen an occurrence"
@@ -4660,17 +5359,284 @@
             "description": "Successful Response"
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "Invalid fields; user content is not echoed"
           }
         },
         "summary": "Skip an occurrence"
+      }
+    },
+    "/api/v1/tasks/preview": {
+      "post": {
+        "operationId": "tasks_preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Preview a task schedule without writes"
+      }
+    },
+    "/api/v1/tasks/reconcile": {
+      "post": {
+        "operationId": "tasks_reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Materialize one bounded task page"
+      }
+    },
+    "/api/v1/tasks/{series_id}": {
+      "delete": {
+        "operationId": "tasks_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Permanently delete a task and its history"
+      },
+      "get": {
+        "operationId": "tasks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Due From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Due To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open",
+                    "completed",
+                    "skipped",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 1024,
+              "title": "Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Read a task series and a page of its occurrences"
+      },
+      "patch": {
+        "operationId": "tasks_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskPatched"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Move an open occurrence or split its schedule"
+      }
+    },
+    "/api/v1/tasks/{series_id}/archive": {
+      "post": {
+        "operationId": "tasks_archive",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesVersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Archive a task and cancel open future occurrences"
       }
     }
   }

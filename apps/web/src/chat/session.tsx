@@ -1,12 +1,14 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ChatMessageOut, ChatStreamRequest, MailRefOut, StatusEvent } from '../api/generated/types.gen'
 import { ChatStreamError, streamChatTurn, type ChatRefusal } from './transport'
 import { createTypewriter } from './typewriter'
+import { conversationsQuery } from '../api/queries'
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | ChatRefusal
 type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
-type Session = { state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
+type Session = { composerTexts: Record<string, string>; setComposerText: (id: string, text: string) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
 
@@ -14,6 +16,10 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient()
   const [state, setState] = useState<State>(initial)
   const [scope, setScope] = useState<string | null>(null)
+  const [composerTexts, setComposerTexts] = useState<Record<string, string>>({})
+  const setComposerText = (id: string, text: string) => setComposerTexts(previous => ({ ...previous, [id]: text }))
+  const [scopeOverrides, setScopeOverrides] = useState<Record<string, string | null>>({})
+  const setConversationScope = (id: string, value: string | null) => setScopeOverrides(previous => ({ ...previous, [id]: value }))
   const active = useRef<{ controller: AbortController; writer: ReturnType<typeof createTypewriter>; conversationId?: string } | null>(null)
   const last = useRef<ChatStreamRequest | null>(null)
   const conversation = useRef<string | undefined>(undefined)
@@ -45,6 +51,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
         if (active.current !== turn) return
         switch (event.event) {
           case 'start':
+            setComposerTexts(previous => ({ ...previous, [request.conversation_id ?? 'new']: '' }))
             turn.conversationId = conversation.current = event.conversation_id
             setState(s => ({ ...s, conversationId: event.conversation_id, userMessageId: event.user_message_id }))
             void client.invalidateQueries({ queryKey: ['conversations'] }); break
@@ -73,8 +80,39 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [client, invalidate])
   const retry = useCallback(async () => { if (last.current) await send({ ...last.current, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
-  return <Context.Provider value={{ state, scope, setScope, send, stop, retry }}>{children}</Context.Provider>
+  return <Context.Provider value={{ state, scope, setScope, composerTexts, setComposerText, scopeOverrides, setConversationScope, send, stop, retry }}>{children}</Context.Provider>
 }
+// Shared restoration for every entry point; explicit edits are isolated by conversation.
+export function useConversationScope(id?: string) {
+  const session = useChatSession()
+  const conversations = useQuery({ ...conversationsQuery(), enabled: !!id })
+  const saved = conversations.data?.find(item => item.id === id)
+  let selection: string | null | undefined
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved.account_scope_json ?? '{}') as { selection?: unknown }
+      if (typeof parsed.selection === 'string' || parsed.selection === null) selection = parsed.selection
+      else selection = null // Legacy conversations have no pinned selection.
+    } catch { /* Keep sending unavailable for malformed persisted scope. */ }
+  }
+  const live = id && session.state.conversationId === id ? session.state.request : undefined
+  const scope = !id ? session.scope : Object.hasOwn(session.scopeOverrides, id) ? session.scopeOverrides[id]! : live ? live.account_id ?? null : selection
+  return {
+    saved,
+    scope: scope ?? null,
+    ready: scope !== undefined,
+    setScope: (value: string | null) => id ? session.setConversationScope(id, value) : session.setScope(value),
+  }
+}
+
+// Every restart from a conversation carries its account selection and unsent text to the start page.
+export function useRestartConversation(id?: string) {
+  const session = useChatSession()
+  const { scope } = useConversationScope(id)
+  const navigate = useNavigate()
+  return () => { session.setScope(scope); session.setComposerText('new', session.composerTexts[id ?? 'new'] ?? ''); void navigate({ to: '/' }) }
+}
+
 export function useChatSession(): Session {
   const context = useContext(Context)
   if (!context) throw new Error('useChatSession must be used within ChatSessionProvider')

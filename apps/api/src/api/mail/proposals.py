@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Literal
 
 from db.accessors import chat_message as message_access
+from db.accessors import chat_context as context_access
 from db.accessors import mail_account as account_access
 from db.accessors import mail_message as mail_access
 from db.models.chat_message import ChatMessage
@@ -84,6 +85,10 @@ class ProposalNotFoundError(Exception):
 
 
 class ProposalStateError(Exception):
+    pass
+
+
+class ProposalContextRevokedError(Exception):
     pass
 
 
@@ -221,6 +226,9 @@ async def confirm(proposal_id: str, *, selected_ids: list[str], body: str | None
     if proposal.kind != "send" and not selected:
         raise ProposalSelectionError("selection_empty")
     if await message_access.claim_proposal(proposal_id) is None:
+        current = await message_access.get_message(proposal_id)
+        if current and current.proposal_status == "pending" and current.context_id and not await context_access.is_live(current.context_id):
+            raise ProposalContextRevokedError
         raise ProposalStateError
     result = ProposalResult()
     proposal.result = result

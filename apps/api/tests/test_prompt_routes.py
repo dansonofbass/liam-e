@@ -1,4 +1,5 @@
 """HTTP prompt contracts, including shared initial selection and conflict statuses."""
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
@@ -11,7 +12,7 @@ from db.models.prompt_template import PromptTemplate
 def library(monkeypatch):
     rows, revisions = {}, {}
     async def create(name, content):
-        row = PromptTemplate(name=name, revision_id='')
+        row = PromptTemplate(name=name, revision_id='', updated_at=datetime.now(timezone.utc))
         rev = p.revision(row.id, 1, content)
         row.revision_id = rev.id
         rows[row.id], revisions[rev.id] = row, rev
@@ -24,6 +25,7 @@ def library(monkeypatch):
             rows.pop(id)
             return row
         row.version += 1
+        row.updated_at = datetime.now(timezone.utc)
         rev = p.revision(id, row.version, content or revisions[row.revision_id].content)
         row.revision_id = rev.id
         revisions[rev.id] = rev
@@ -44,6 +46,7 @@ def test_crud_revision_and_versions(library):
     response = client.post('/api/v1/prompts', json={'name': 'Test', 'text': 'Erster Text', 'owner_scope': 'untrusted'})
     assert response.status_code == 201
     first = response.json()
+    assert datetime.fromisoformat(first['updated_at']).tzinfo is not None
     path = '/api/v1/prompts/' + first['id']
     detail = client.get(path).json()
     assert detail.pop('revisions')[0]['id'] == first['revision_id']
@@ -51,10 +54,12 @@ def test_crud_revision_and_versions(library):
     assert client.get('/api/v1/prompts').json() == [first]
     second = client.patch(path, json={'expected_version': 1, 'text': 'Zweiter Text'}).json()
     assert second['revision_id'] != first['revision_id'] and second['version'] == 2
+    assert datetime.fromisoformat(second['updated_at']) > datetime.fromisoformat(first['updated_at'])
     assert revisions[first['revision_id']].content == 'Erster Text'
     assert [rev['number'] for rev in client.get(path).json()['revisions']] == [2, 1]
     assert revisions[first['revision_id']].owner_scope == 'installation'
     assert client.patch(path, json={'expected_version': 1, 'text': 'Veraltet'}).status_code == 409
+    assert client.get(path).json()['updated_at'] == second['updated_at']
     assert client.delete(path + '?expected_version=1').status_code == 409
     assert client.delete(path).status_code == 422
     assert client.delete(path + '?expected_version=2').status_code == 204

@@ -1,7 +1,9 @@
+import json
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 
 import pytest
+from conftest import build_app
 from db.models.task_occurrence import TaskOccurrence
 from db.models.task_series import TaskSeries
 
@@ -31,9 +33,64 @@ def access(monkeypatch):
     return session, create, listing, change
 
 
+@pytest.mark.parametrize(('method', 'path', 'body', 'secret'), [
+    ('post', '/api/v1/tasks', {
+        'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01',
+        'timezone': 'UTC', 'description': 'Synthetic private description ' * 400,
+    }, 'Synthetic private description'),
+    ('patch', '/api/v1/tasks/s', {
+        'expected_version': 1, 'expected_occurrence_version': 1, 'occurrence_id': 'o',
+        'scope': 'occurrence', 'start': '2024-01-01', 'title': 'Synthetic private title',
+    }, 'Synthetic private title'),
+    ('post', '/api/v1/tasks/preview', {
+        'start': '2024-01-01', 'through': '2024-01-02', 'timezone': 'UTC',
+        'title': 'Synthetic private title',
+    }, 'Synthetic private title'),
+    ('post', '/api/v1/tasks/reconcile', {
+        'series_id': 's', 'title': 'Synthetic private title',
+    }, 'Synthetic private title'),
+    ('post', '/api/v1/tasks/occurrences/o/complete', {
+        'version': 'Synthetic private title',
+    }, 'Synthetic private title'),
+])
+def test_validation_errors_do_not_echo_task_content(client, method, path, body, secret):
+    response = getattr(client, method)(path, json=body)
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'task_invalid'
+    assert secret not in response.text
+
+
+def test_list_limit_refusal_does_not_talk_about_titles(client):
+    response = client.get('/api/v1/tasks', params={'due_from': '2024-01-01', 'due_to': '2024-01-31', 'limit': 101})
+    assert response.status_code == 422
+    detail = response.json()['detail']
+    assert detail['code'] == 'task_invalid'
+    assert 'Titel' not in detail['message'] and 'Beschreibung' not in detail['message']
+
+
+@pytest.mark.parametrize('action', ['complete', 'skip', 'reopen'])
+def test_transition_refusal_does_not_talk_about_pages(client, action):
+    response = client.post(f'/api/v1/tasks/occurrences/o/{action}', json={'version': 0})
+    assert response.status_code == 422
+    detail = response.json()['detail']
+    assert detail['code'] == 'task_invalid'
+    assert 'Seite' not in detail['message'] and 'Einträge' not in detail['message']
+
+
+def test_task_operations_document_quiet_validation_errors():
+    spec = build_app().openapi()
+    operations = [(method, path, operation)
+                  for path, methods in spec['paths'].items()
+                  for method, operation in methods.items()
+                  if operation.get('operationId', '').startswith('tasks_')]
+    assert len(operations) == 12
+    for method, path, operation in operations:
+        assert 'HTTPValidationError' not in json.dumps(operation['responses']['422']), (method, path)
+
+
 def test_creation_and_conflict(client, access):
     session, create, _, _ = access
-    body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01'}
+    body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01', 'timezone': 'UTC'}
     response = client.post('/api/v1/tasks', json=body)
     assert response.status_code == 200 and response.json()['created'] is True
     session.commit.assert_awaited_once()
@@ -60,7 +117,7 @@ def test_new_task_is_visible_and_retry_does_not_reconcile_again(client, access):
         return None, True
 
     route.reconcile.reconcile_batch.side_effect = materialize
-    body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01'}
+    body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01', 'timezone': 'UTC'}
     assert client.post('/api/v1/tasks', json=body).status_code == 200
     response = client.get('/api/v1/tasks/occurrences')
     assert response.status_code == 200 and response.json()['items'][0]['id'] == 'o'
@@ -74,8 +131,18 @@ def test_reconcile_failure_does_not_commit_creation(client, access):
     session, _, _, _ = access
     route.reconcile.reconcile_batch.side_effect = RuntimeError('synthetic failure')
     with pytest.raises(RuntimeError, match='synthetic failure'):
-        client.post('/api/v1/tasks', json={'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01'})
+        client.post('/api/v1/tasks', json={'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01', 'timezone': 'UTC'})
     session.commit.assert_not_awaited()
+
+
+@pytest.mark.parametrize('zone', [None, '', 'Not/AZone'])
+def test_creation_requires_valid_zone_for_dates(client, access, zone):
+    response = client.post('/api/v1/tasks', json={
+        'creation_key': 'zone', 'title': 'Example', 'start': '2024-01-01', 'timezone': zone,
+    })
+    assert response.status_code == 422
+    assert 'task_invalid' in response.text
+    access[1].assert_not_awaited()
 
 
 def test_list_filters_cursor_and_invalid_input(client, access):

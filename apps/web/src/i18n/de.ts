@@ -7,6 +7,25 @@ const noticeSubject = (subject: string) => {
 }
 
 export const de = {
+  prompts: {
+    settings: 'Einstellungen', settingsTip: 'Vorlagen und persönliche Einstellungen verwalten', title: 'Vorlagen',
+    create: 'Vorlage anlegen', edit: 'Vorlage bearbeiten', save: 'Vorlage speichern', name: 'Name', text: 'Anweisungen',
+    example: 'Fasse offene Fristen mit Datum und zugehöriger Mail zusammen.',
+    safety: 'Gilt für deine nächsten Antworten. Mails werden weiterhin erst nach deiner Bestätigung verändert oder versendet.',
+    empty: 'Noch keine Vorlagen. Lege deine erste Vorlage an.', loading: 'Vorlagen werden geladen …',
+    error: 'Vorlagen konnten nicht geladen werden. Versuch es noch mal.', saveError: 'Die Änderung wurde nicht gespeichert. Deine Eingaben bleiben erhalten. Versuch es noch mal.',
+    conflict: 'Diese Vorlage wurde inzwischen geändert. Lade die aktuelle Fassung, bevor du weiterarbeitest.',
+    loadCurrent: 'Aktuelle Fassung laden', unavailable: 'Diese Vorlage gibt es nicht mehr. Kehre zur Vorlagenliste zurück.',
+    back: 'Zur Vorlagenliste', remove: 'Vorlage löschen', removeTitle: 'Vorlage löschen?',
+    removeDescription: 'Sie wird mit allen gespeicherten Versionen aus deiner Bibliothek entfernt. Betroffene Unterhaltungen verwenden künftig Standard. Bisherige Nachrichten bleiben erhalten. Bereits übermittelte Inhalte lassen sich nicht zurückholen.',
+    removed: 'Vorlage entfernt', standard: 'Standard', chip: (name: string) => `Vorlage: ${name}`,
+    scopeUnavailable: 'Gespeichertes Konto nicht verfügbar',
+    next: 'Gilt ab deiner nächsten Nachricht.', manage: 'Vorlagen verwalten', newer: 'Neue Version verfügbar', adopt: 'Version übernehmen',
+    selectionError: 'Die Vorlage wurde nicht gewechselt. Prüfe die Auswahl und versuch es noch mal.',
+    selectionConflict: 'Die Unterhaltung wurde inzwischen geändert. Lade die aktuelle Fassung und wähle erneut.',
+    restart: 'Neue Unterhaltung ohne bisherigen Kontext', useStandard: 'Standard verwenden', version: (number: number) => `Version ${number}`,
+    count: (count: number, max = 8000) => `${count.toLocaleString('de-DE')} / ${max.toLocaleString('de-DE')} Zeichen`,
+  },
   rootScreens: {
     lang: 'de', missingChunkTitle: 'liam-e wurde aktualisiert',
     missingChunk: 'Lade die Seite neu, um die neue Version zu öffnen.', reload: 'Neu laden',
@@ -151,6 +170,7 @@ export const de = {
     credentials_invalid: 'Die Mail wurde nicht gesendet, weil die Anmeldung für dieses Konto nicht mehr gilt. Melde dich unter Konten erneut an.',
     unsubscribe_failed: 'Der Newsletter ließ sich nicht abbestellen. Öffne die Abmeldeseite im Newsletter.',
     proposal_not_pending: 'Dieser Vorschlag ist schon erledigt oder abgebrochen.',
+    proposal_context_revoked: 'Dieser Vorschlag stammt aus einem widerrufenen Kontext. Starte eine neue Unterhaltung.',
     selection_empty: 'Wähle mindestens einen Eintrag aus.',
   },
   assistant: { name: 'liam-e' },
@@ -164,6 +184,7 @@ export const de = {
     undoExpired: 'Die Frist für diese Rücknahme ist abgelaufen.',
     undoFailed: 'Die Aktion ließ sich beim Anbieter nicht rückgängig machen.',
     undoUncertain: 'Ob die Aktion rückgängig gemacht wurde, ist unklar. Lade den Posteingang neu.',
+    undoTimeout: 'Die Rücknahme dauert zu lange. Ob sie geklappt hat, ist unklar. Versuch es noch mal oder lade den Posteingang neu.',
     select: 'Wähle eine Mail aus.', mails: 'Mails', search: 'Suchen', searchTip: 'In allen Konten suchen', searchPlaceholder: 'In allen Konten suchen …',
     refresh: 'Jetzt abrufen', refreshTip: 'Neue Mails aus allen Konten abrufen', refreshError: 'Die Mails konnten nicht abgerufen werden. Versuch es gleich noch mal.',
     unread: 'Ungelesen', important: 'Wichtig', attachments: 'Mit Anhang',

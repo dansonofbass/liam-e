@@ -481,6 +481,20 @@ export type ConversationOut = {
 };
 
 /**
+ * DeleteIn
+ */
+export type DeleteIn = {
+    /**
+     * Confirm History Loss
+     */
+    confirm_history_loss?: boolean;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+};
+
+/**
  * DeltaEvent
  */
 export type DeltaEvent = {
@@ -996,6 +1010,72 @@ export type OAuthAuthorizeOut = {
 };
 
 /**
+ * PreviewException
+ */
+export type PreviewException = {
+    /**
+     * Local
+     */
+    local: string;
+    /**
+     * Monthday
+     */
+    monthday: number | null;
+    /**
+     * Reason
+     */
+    reason: 'invalid_date' | 'nonexistent_time';
+};
+
+/**
+ * PreviewIn
+ */
+export type PreviewIn = {
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Rrule
+     */
+    rrule?: string | null;
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * Through
+     */
+    through: string;
+    /**
+     * Timezone
+     */
+    timezone: string;
+};
+
+/**
+ * PreviewOut
+ */
+export type PreviewOut = {
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Exceptions
+     */
+    exceptions: Array<PreviewException>;
+    /**
+     * Occurrences
+     */
+    occurrences: Array<string>;
+    /**
+     * Through
+     */
+    through: string;
+};
+
+/**
  * PromptCreate
  */
 export type PromptCreate = {
@@ -1038,6 +1118,10 @@ export type PromptDetailOut = {
      */
     text: string;
     /**
+     * Updated At
+     */
+    updated_at: string | null;
+    /**
      * Version
      */
     version: number;
@@ -1067,6 +1151,10 @@ export type PromptOut = {
      * Text
      */
     text: string;
+    /**
+     * Updated At
+     */
+    updated_at: string | null;
     /**
      * Version
      */
@@ -1231,6 +1319,92 @@ export type ProposalResult = {
 };
 
 /**
+ * ReconcileIn
+ */
+export type ReconcileIn = {
+    /**
+     * Advance
+     */
+    advance?: boolean;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Revision Id
+     */
+    revision_id?: string | null;
+    /**
+     * Series Id
+     */
+    series_id: string;
+};
+
+/**
+ * ReconcileOut
+ */
+export type ReconcileOut = {
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Cursor
+     */
+    cursor: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Target
+     */
+    target: string;
+};
+
+/**
+ * ScheduleOut
+ */
+export type ScheduleOut = {
+    /**
+     * End Key
+     */
+    end_key: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Reconcile Cursor
+     */
+    reconcile_cursor: string | null;
+    /**
+     * Reconcile Target
+     */
+    reconcile_target: string | null;
+    /**
+     * Rrule
+     */
+    rrule: string | null;
+    /**
+     * Start Local
+     */
+    start_local: string;
+    /**
+     * Timezone
+     */
+    timezone: string | null;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * SendDraft
  */
 export type SendDraft = {
@@ -1266,6 +1440,97 @@ export type SendDraft = {
      * To
      */
     to: Array<string>;
+};
+
+/**
+ * SeriesDetail
+ */
+export type SeriesDetail = {
+    occurrences: ApiRoutersApiV1TasksSchemasOccurrencePage;
+    series: SeriesOut;
+    window: TaskWindow;
+};
+
+/**
+ * SeriesOut
+ */
+export type SeriesOut = {
+    /**
+     * Archived
+     */
+    archived: boolean;
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    schedule: ScheduleOut | null;
+    /**
+     * Source Account Id
+     */
+    source_account_id: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id: string | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * SeriesPage
+ */
+export type SeriesPage = {
+    /**
+     * Items
+     */
+    items: Array<SeriesOut>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+    window: TaskWindow;
+};
+
+/**
+ * SeriesStateOut
+ */
+export type SeriesStateOut = {
+    /**
+     * Archived
+     */
+    archived: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * SeriesVersionIn
+ */
+export type SeriesVersionIn = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
 };
 
 /**
@@ -1438,6 +1703,8 @@ export type TaskCreate = {
     start: string;
     /**
      * Timezone
+     *
+     * Required IANA timezone, including for date-only tasks; missing or invalid values return task_invalid.
      */
     timezone?: string | null;
     /**
@@ -1462,6 +1729,78 @@ export type TaskCreated = {
      * Version
      */
     version: number;
+};
+
+/**
+ * TaskPatch
+ */
+export type TaskPatch = {
+    /**
+     * Expected Occurrence Version
+     */
+    expected_occurrence_version: number;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Occurrence Id
+     */
+    occurrence_id: string;
+    /**
+     * Rrule
+     *
+     * Only for this_and_following: omitted retains the rule; null creates a single occurrence. Start must match the rule.
+     */
+    rrule?: string | null;
+    /**
+     * Scope
+     */
+    scope: 'occurrence' | 'this_and_following';
+    /**
+     * Start
+     *
+     * New local due value; occurrence edits retain precision and timezone.
+     */
+    start: string;
+    /**
+     * Timezone
+     *
+     * Only for this_and_following; required when the previous revision has no timezone.
+     */
+    timezone?: string | null;
+};
+
+/**
+ * TaskPatched
+ */
+export type TaskPatched = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * TaskWindow
+ */
+export type TaskWindow = {
+    /**
+     * Due From
+     */
+    due_from: string;
+    /**
+     * Due To
+     */
+    due_to: string;
 };
 
 /**
@@ -2769,6 +3108,58 @@ export type PromptUpdateResponses = {
 
 export type PromptUpdateResponse = PromptUpdateResponses[keyof PromptUpdateResponses];
 
+export type TasksListData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Due From
+         */
+        due_from: string;
+        /**
+         * Due To
+         */
+        due_to: string;
+        /**
+         * Status
+         */
+        status?: 'active' | 'archived' | null;
+        /**
+         * Source
+         */
+        source?: 'all' | 'unlinked' | 'account';
+        /**
+         * Source Account Id
+         */
+        source_account_id?: string | null;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tasks';
+};
+
+export type TasksListErrors = {
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type TasksListResponses = {
+    /**
+     * Successful Response
+     */
+    200: SeriesPage;
+};
+
+export type TasksListResponse = TasksListResponses[keyof TasksListResponses];
+
 export type TasksCreateData = {
     body: TaskCreate;
     path?: never;
@@ -2778,12 +3169,10 @@ export type TasksCreateData = {
 
 export type TasksCreateErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksCreateError = TasksCreateErrors[keyof TasksCreateErrors];
 
 export type TasksCreateResponses = {
     /**
@@ -2824,12 +3213,10 @@ export type TasksOccurrencesListData = {
 
 export type TasksOccurrencesListErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksOccurrencesListError = TasksOccurrencesListErrors[keyof TasksOccurrencesListErrors];
 
 export type TasksOccurrencesListResponses = {
     /**
@@ -2854,12 +3241,10 @@ export type TasksOccurrenceCompleteData = {
 
 export type TasksOccurrenceCompleteErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksOccurrenceCompleteError = TasksOccurrenceCompleteErrors[keyof TasksOccurrenceCompleteErrors];
 
 export type TasksOccurrenceCompleteResponses = {
     /**
@@ -2884,12 +3269,10 @@ export type TasksOccurrenceReopenData = {
 
 export type TasksOccurrenceReopenErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksOccurrenceReopenError = TasksOccurrenceReopenErrors[keyof TasksOccurrenceReopenErrors];
 
 export type TasksOccurrenceReopenResponses = {
     /**
@@ -2914,12 +3297,10 @@ export type TasksOccurrenceSkipData = {
 
 export type TasksOccurrenceSkipErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksOccurrenceSkipError = TasksOccurrenceSkipErrors[keyof TasksOccurrenceSkipErrors];
 
 export type TasksOccurrenceSkipResponses = {
     /**
@@ -2929,3 +3310,182 @@ export type TasksOccurrenceSkipResponses = {
 };
 
 export type TasksOccurrenceSkipResponse = TasksOccurrenceSkipResponses[keyof TasksOccurrenceSkipResponses];
+
+export type TasksPreviewData = {
+    body: PreviewIn;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tasks/preview';
+};
+
+export type TasksPreviewErrors = {
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type TasksPreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: PreviewOut;
+};
+
+export type TasksPreviewResponse = TasksPreviewResponses[keyof TasksPreviewResponses];
+
+export type TasksReconcileData = {
+    body: ReconcileIn;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tasks/reconcile';
+};
+
+export type TasksReconcileErrors = {
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type TasksReconcileResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReconcileOut;
+};
+
+export type TasksReconcileResponse = TasksReconcileResponses[keyof TasksReconcileResponses];
+
+export type TasksDeleteData = {
+    body: DeleteIn;
+    path: {
+        /**
+         * Series Id
+         */
+        series_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/{series_id}';
+};
+
+export type TasksDeleteErrors = {
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type TasksDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type TasksDeleteResponse = TasksDeleteResponses[keyof TasksDeleteResponses];
+
+export type TasksGetData = {
+    body?: never;
+    path: {
+        /**
+         * Series Id
+         */
+        series_id: string;
+    };
+    query: {
+        /**
+         * Due From
+         */
+        due_from: string;
+        /**
+         * Due To
+         */
+        due_to: string;
+        /**
+         * Status
+         */
+        status?: 'open' | 'completed' | 'skipped' | 'cancelled' | null;
+        /**
+         * Cursor
+         */
+        cursor?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tasks/{series_id}';
+};
+
+export type TasksGetErrors = {
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type TasksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SeriesDetail;
+};
+
+export type TasksGetResponse = TasksGetResponses[keyof TasksGetResponses];
+
+export type TasksUpdateData = {
+    body: TaskPatch;
+    path: {
+        /**
+         * Series Id
+         */
+        series_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/{series_id}';
+};
+
+export type TasksUpdateErrors = {
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type TasksUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: TaskPatched;
+};
+
+export type TasksUpdateResponse = TasksUpdateResponses[keyof TasksUpdateResponses];
+
+export type TasksArchiveData = {
+    body: SeriesVersionIn;
+    path: {
+        /**
+         * Series Id
+         */
+        series_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/{series_id}/archive';
+};
+
+export type TasksArchiveErrors = {
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type TasksArchiveResponses = {
+    /**
+     * Successful Response
+     */
+    200: SeriesStateOut;
+};
+
+export type TasksArchiveResponse = TasksArchiveResponses[keyof TasksArchiveResponses];

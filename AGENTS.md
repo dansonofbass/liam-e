@@ -34,6 +34,8 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `/chat/$conversationId` — Unterhaltung mit Verlauf, Antworten und Vorschlagskarten.
 - `/mail` — Posteingang mit Liste und Filtern; `/mail/$messageId` — geöffnete Mail mit Lesebereich.
 - `/accounts` — Kontenübersicht, Verbinden, erneutes Anmelden und Entfernen.
+- `/settings` und `/settings/prompts` — Einstellungen mit Vorlagenbibliothek; `settingsSections` ist der Navigationseinstieg für weitere implementierte Bereiche.
+- `/settings/prompts/new` und `/settings/prompts/$promptId` — Vorlage anlegen oder bearbeiten, auf allen Bildschirmgrößen als eigene Ansicht.
 
 ### Mail-Domäne (`apps/api/src/api/mail/`)
 
@@ -118,7 +120,14 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}/original` | `mail_message_original` |
 | Mail / Übersicht | GET | `/api/v1/mail/summary` | `mail_summary` |
 | Mail / Abruf | POST | `/api/v1/mail/sync` | `mail_sync_all` |
+| Aufgaben | GET | `/api/v1/tasks` | `tasks_list` |
+| Aufgaben | GET | `/api/v1/tasks/{series_id}` | `tasks_get` |
+| Aufgaben | PATCH | `/api/v1/tasks/{series_id}` | `tasks_update` |
+| Aufgaben | POST | `/api/v1/tasks/{series_id}/archive` | `tasks_archive` |
+| Aufgaben | DELETE | `/api/v1/tasks/{series_id}` | `tasks_delete` |
 | Aufgaben | POST | `/api/v1/tasks` | `tasks_create` |
+| Aufgaben | POST | `/api/v1/tasks/preview` | `tasks_preview` |
+| Aufgaben | POST | `/api/v1/tasks/reconcile` | `tasks_reconcile` |
 | Aufgaben | GET | `/api/v1/tasks/occurrences` | `tasks_occurrences_list` |
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/complete` | `tasks_occurrence_complete` |
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/skip` | `tasks_occurrence_skip` |
@@ -128,8 +137,85 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 
 `api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
 Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite
-in derselben Transaktion. Weitere Seiten werden nicht automatisch abgerufen. Serienrevision,
-Archivieren und Löschen sind noch offen.
+in derselben Transaktion. Weitere Seiten werden ausdrücklich über `POST /tasks/reconcile`
+abgerufen. PATCH unterstützt Einzeländerungen und neue Zeitplanrevisionen.
+
+`PATCH /tasks/{series_id}` benötigt die Serienversion `expected_version`, die gewählte
+`occurrence_id`, deren `expected_occurrence_version`, `scope` und den neuen lokalen
+Start `start`. Das aktuelle Schema bearbeitet Fälligkeiten, nicht Titel oder Notizen;
+Textfelder werden abgelehnt, damit historische Instanzen nicht implizit umbenannt werden.
+`scope=occurrence` verschiebt nur eine offene Instanz und erhält deren ursprünglichen
+Schlüssel; Genauigkeit (Datum/Uhrzeit), Zeitzone und Regel bleiben gleich. Beide Versionen
+steigen. `scope=this_and_following` wählt eine zukünftige offene Instanz der aktuellen
+Revision; ihre tatsächliche Fälligkeit und ihr ursprünglicher Schlüssel müssen noch in
+der Zukunft liegen. Bereits fällige Instanzen werden nicht als Trennstelle verwendet.
+Der gespeicherte Abruffortschritt muss die Vollständigkeit der alten Revision bis zur
+exklusiven Trennstelle belegen; sonst wird die Teilung mit `409 task_version_conflict`
+abgelehnt und muss nach weiterem Reconcile erneut versucht werden. Die alte Regel endet exklusiv vor dem
+ursprünglichen Schlüssel; offene zukünftige Instanzen ab dort werden ersetzt. Vergangene,
+erledigte und übersprungene Instanzen bleiben erhalten, auch bereits verschobene
+Vergangenheitsausnahmen. Die neue Revision darf Datum/Uhrzeit und Zeitzone ändern,
+startet aber nicht vor dem lokalen Trenn-Tag; der Start muss zur neuen Regel passen.
+Ohne `rrule` bleibt die alte Regel;
+explizites `rrule: null` erzeugt eine Einzelaufgabe. Eine neue Revision braucht eine
+Zeitzone, auch wenn die alte Datumsrevision noch `null` trägt.
+Kollisionen mit erledigten Instanzen werden mit derselben COUNT-/DST-Auswertung wie bei
+der Materialisierung geprüft, auch außerhalb der ersten Abrufseite; sie liefern
+`409 task_revision_conflict` ohne Aufgabenänderung. Andere Versions-/Zustandskonflikte
+liefern `409 task_version_conflict`. Alle Änderungen und die erste neue Reconcile-Seite
+liegen in der Transaktion des Aufrufers; alte Revisionscursor werden zurückgewiesen.
+
+Archivieren und endgültiges Löschen benötigen `expected_version` der Serie.
+Archivieren sperrt neue Materialisierung und storniert in einem bedingten Update nur
+offene zukünftige Instanzen; heute fällige Datumsaufgaben sowie bereits fällige und
+abgeschlossene Instanzen bleiben erhalten. Wiederöffnen zukünftiger Instanzen einer
+archivierten Serie ist gesperrt. DELETE benötigt zusätzlich ausdrücklich
+`confirm_history_loss: true` im JSON-Body und entfernt Serie, Revisionen und Instanzen
+in derselben Transaktion. Beide Dienste nehmen eine Session und committen nicht selbst.
+Seriensperren serialisieren diese Aktionen mit Reconcile und Zustandswechseln;
+veraltete Versionen ergeben 409, fehlende Serien 404.
+
+`GET /tasks` und `GET /tasks/{series_id}` lesen ausschließlich gespeicherte Daten im
+serverseitigen Scope `app`. Beide benötigen das inklusive lokale Datumsfenster
+`due_from`/`due_to` (höchstens 366 Tage). Die Liste ist nach Serien-ID paginiert
+(`limit` 1–100, `cursor`) und filtert `status=active|archived` sowie
+`source=all|unlinked|account`; `account` braucht `source_account_id`, `unlinked`
+bedeutet ohne Quellmail. Quellreferenzen werden nicht mit lebenden Mail-/Kontenzeilen
+verknüpft: Entfernte Quellen lassen Aufgaben und ihre Filterzuordnung bestehen.
+Die Liste enthält Serien mit überlappender Regelgültigkeit oder gespeicherter Fälligkeit
+im Fenster; eine passende Serie muss nicht an jedem Tag eine Fälligkeit haben.
+Das Detail liefert die aktuelle Revision und eine eigene paginierte Instanzliste,
+optional mit Instanzstatus. `complete` gilt je Serie ausschließlich für das ausgewiesene
+Fenster, unabhängig von der Instanz-Pagination oder dem Statusfilter. Es wird konservativ
+aus gespeichertem Fortschritt abgeleitet; ein zeitgebundener Tag gilt erst vollständig,
+wenn der ganze lokale Tag abgedeckt ist. GET materialisiert nichts und ruft kein Modell auf.
+
+Reconcile nimmt eine Serien-ID, optional Revisions-ID und Cursor, `limit` (1–100) und
+`advance`. Ohne Cursor setzt der Aufruf unter Sperre den gespeicherten Fortschritt fort;
+ein mitgelieferter veralteter Cursor ergibt 409. Die Antwort nennt Revisions-ID, Cursor,
+Zielzeitpunkt und `complete` (nur für das feste Fenster ab Serienbeginn bis zum Ziel).
+`advance: true` startet erst nach Abschluss mit dessen exaktem Cursor einen neuen Lauf
+bis Serverzeit plus 30 Tage. Die letzte geprüfte Position bleibt im Abschlusscursor;
+Fortschritt und Einfügen erfolgen gemeinsam in der Transaktion des Aufrufers.
+
+`POST /tasks/preview` schreibt nichts und benötigt Start, Ende und Zeitzone. Das Fenster
+ist auf 366 Tage und die Seite auf 100 Kandidaten begrenzt; `complete: false` bedeutet,
+dass die Vorschau nicht das ganze Fenster zeigt. Sie nennt entfallene lokale Uhrzeiten
+und unmögliche Monatstage monatlicher Regeln. Auch dieser lesende POST bleibt gemäß
+der MCP-Inventur außerhalb freigegebener Agentenoberflächen.
+
+`COUNT` zählt nach RFC 5545 nur existierende Fälligkeiten: Nicht existierende lokale
+Uhrzeiten verbrauchen keinen Zählerplatz. Vorschau und Persistenz verwenden denselben
+Parser. Bereits abgeschlossene Abrufläufe zeitgebundener COUNT-Serien mit altem
+Abschlussmarker werden beim nächsten Reconcile seitenweise erneut ausgewertet;
+die ursprünglichen Instanzschlüssel verhindern Duplikate und erhalten den Zustand.
+So werden fehlende Endinstanzen ergänzt, ohne Datenmigration.
+
+Neue Aufgaben brauchen auch ohne Uhrzeit eine gültige IANA-Zeitzone; fehlt sie,
+antwortet die Anlage mit `422 task_invalid`. Das Datum bleibt ein Datum. Alte
+Datumsrevisionen mit `timezone: null` verwenden für Tagesgrenzen UTC, ohne die
+Daten umzuschreiben. Heute gilt als bereits fällig, überfällig erst ab dem nächsten
+lokalen Tag. Eine neue Serienrevision kann die Zeitzone ausdrücklich setzen.
 
 ## Kalenderdomäne
 
@@ -139,6 +225,60 @@ vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich 
 `GET /api/v1/calendar/occurrences` nimmt ein Fenster von höchstens 90 Tagen und beliebig viele
 `source_ids` (höchstens 50) und liefert die Instanzen zeitlich geordnet; Ganztägiges zählt ab
 Mitternacht UTC seines ersten Tages. Der Cursor trägt Startzeit und ID der letzten Instanz.
+Vollständige Snapshot-Fenster erweitern die Abdeckung nur, wenn sie die bisherige Abdeckung
+überlappen oder berühren; sonst ersetzen sie sie. Jede gespeicherte Instanz überlappt die
+Abdeckung (auch wenn sie über deren Rand hinausreicht); andere Instanzen werden entfernt.
+Ereignisse werden nur entfernt, wenn sie im aktuellen Snapshot fehlen und keine verbliebene
+Instanz sie referenziert; enthaltene Ereignisse bleiben auch ohne Instanzen erhalten. `stale` bedeutet, dass noch kein erfolgreicher
+Snapshot vorliegt oder der Index unvollständig ist; ohne periodischen Abruf sagt das Alter des
+letzten Erfolgs allein nichts über die Aktualität beim Anbieter aus.
+
+`ics_fetch.py` provides the unregistered HTTPS acquisition layer for ICS. It shares the
+numeric-pinned streaming transport in `mail/netguard.py`, rejects non-public/mixed DNS
+answers and mapped/transition addresses, and permits only HTTPS:443 with three same-origin
+redirects within one 15-second deadline. Wire and decoded bodies each have a 5 MiB limit;
+only identity/gzip and calendar MIME types are accepted. `normalize_url` explicitly returns
+the HTTPS spelling (including private path/query data) for owner confirmation; never log it.
+Fetch results hide body and validators from repr, and task-local filtering suppresses
+httpcore traces that could expose headers or protocol content.
+
+`ics.py` combines acquisition and isolated parsing in `ICSAdapter` (not registered). It
+accepts an explicit fallback IANA zone and UTC-midnight window; `default_window` supplies
+today −30 to +180 days. A 304 requires previously normalized events and re-expands them for
+the requested window; it never treats an old window as fresh coverage. `ics_parse.py` uses
+exactly pinned `icalendar==7.3.0` for folded/escaped properties, typed values and VTIMEZONE,
+and the existing `python-dateutil==4.0.0` for lazy RRULE iteration. The hand-written fixture
+corpus tests this combination; avoiding an eager recurrence wrapper lets the app enforce
+its own exception, completeness and resource rules. Schema 1 in `Event.recurrence` stores
+masters, exceptions, canonical rule fields, typed dates/local/UTC times, nominal/exact
+durations and structured custom-zone observances, not raw ICS. Re-expansion needs only
+these JSON-compatible events. Identities hash UID plus the original normalized recurrence
+ID (or the non-null master sentinel), so moving an occurrence does not change its identity.
+Custom VTIMEZONE instants use UTC in the shared occurrence contract while retaining the
+original definition in recurrence data. Floating times never use the server's local zone.
+
+Each parse/re-expansion uses a fresh exec subprocess (`ics_worker.py`), limited to 256 MiB
+address space, 5 CPU seconds and 8 wall seconds. Timeout/cancellation kills, drains and
+reaps the process before returning. IPC is capped at 16 MiB input and 32 MiB output, feed
+input at 5 MiB; limits may be lowered per call, not raised. The component ceiling is 10,000
+(including ignored components); the expansion/work ceiling is 50,000 candidates per feed,
+including historical candidates needed for COUNT and exception validation, plus a 50,000
+output ceiling. These are per-call budgets, not a global concurrency policy. Missing POSIX
+resource support fails closed. Worker diagnostics are discarded, logging and networking
+are disabled, and errors contain fixed codes only. Tests prove process reaping on timeout,
+CPU/memory exhaustion and caller cancellation, while the API loop continues running.
+
+VEVENT supports UID, DTSTART, DTEND/DURATION, SUMMARY/DESCRIPTION/LOCATION/STATUS,
+RRULE, date/date-time RDATE/EXDATE and individual RECURRENCE-ID replacements/cancellations.
+All-day ends are exclusive; DURATION P1D is nominal, PT24H and DTEND-derived durations are
+exact. Local DST recurrence skips nonexistent generated candidates before applying COUNT;
+ambiguous times choose the first offset. Explicit nonexistent times fail. Unsupported
+scheduling METHODs other than PUBLISH, non-Gregorian CALSCALE, RANGE/THISANDFUTURE,
+EXRULE, RSCALE, leap seconds, period-valued RDATE and instantaneous
+(zero-duration) timed events fail explicitly rather than producing partial coverage.
+Duplicate masters/exceptions/supported properties, orphan exceptions, unresolved zones and an RRULE
+whose DTSTART does not match also fail. VTODO, VALARM, attachments and external URLs are
+never executed or loaded; instructions in descriptions remain plain data.
 
 ## Domänenmodell (Tabellen in Postgres)
 
@@ -157,7 +297,7 @@ Mitternacht UTC seines ersten Tages. Der Cursor trägt Startzeit und ID der letz
 
 Vorlagen gehören dem festen serverseitigen Scope `installation`; der Zugriff auf die
 Single-Owner-App wird vom Deployment beschränkt, nicht durch eine neue App-Identität.
-`prompt_template` hält Name, Version und aktuelle Revision; Bearbeiten erzeugt eine neue
+`prompt_template` hält Name, Version, aktuelle Revision und das Änderungsdatum `updated_at` (bei Altbeständen unbekannt und `null`); Bearbeiten erzeugt eine neue
 `prompt_revision`. Auswahlen in `chat_conversation.prompt_revision_id` bleiben angeheftet.
 Conversation-PATCH benötigt `expected_version`; `null` als Revision wählt den Standard.
 Vorlagen-POST nimmt `name` und `text`, PATCH zusätzlich `expected_version`, DELETE
@@ -171,7 +311,15 @@ und bei unbelegtem Altverlauf `legacy_mixed: true`.
 Nutzerinhalt an das Modell gegeben, nie als App-Regel oder Chat-Extra gespeichert.
 Löschen entfernt Vorlageninhalt und Revisionsinhalt, hinterlässt `removed`-Markierungen,
 widerruft Kontexte und setzt aktive Auswahlen zurück. Bereits gesendete Modellanfragen
-lassen sich nicht zurückholen. Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
+lassen sich nicht zurückholen. Vorschläge widerrufener Kontexte bleiben offen und können abgebrochen,
+aber nicht bestätigt werden (`409 proposal_context_revoked`). Entscheidend ist der atomare Claim:
+Ein danach wirksamer Widerruf macht eine bereits angenommene Bestätigung nicht rückgängig.
+Der Agent prüft den Widerruf unmittelbar vor jedem Modellaufruf und Werkzeug sowie während des
+Streams nach jeweils zehn Deltas; ein widerrufener Stream wird geschlossen und meldet `context_revoked`.
+Für einen Verlauf werden die zugehörigen Kontexte jeweils in einer Datenbankabfrage geladen.
+Rückgängig-Anfragen im Posteingang werden nach 15 Sekunden abgebrochen; bei unklarem Ergebnis
+bleibt die Aktion für einen erneuten Versuch noch zehn Sekunden verfügbar.
+Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
 
 ## Worker und periodischer Abruf
 
@@ -244,9 +392,9 @@ in der Probe HTTP 401.
 - OAuth-Client-Secrets und `MAIL_TOKEN_ENCRYPTION_KEY` sind **Workspace-Secrets** (`WorkspaceSecret`), nie im Code; lokal nur in `.env`. **Secret-Namen in Mistral Studio sind lowercase** — die Auflösung ist case-insensitiv: Secret `mail_token_encryption_key` füllt `MAIL_TOKEN_ENCRYPTION_KEY` (siehe Docstring von `env/_mistral_secrets.py`).
 - **Pro IMAP-Konto (iCloud, Yahoo, …) genau ein eigenes Workspace-Secret** mit dem App-Passwort, z.B. `yahoo-app-password`, `icloud-app-password` (lowercase). Beim Connect wird statt des Passworts der Secret-Name übergeben (`password_secret`); die App löst ihn zur Laufzeit über `GET /v1/secrets/values` auf (`api/mail/secrets.py`) und speichert in `mail_credential` nur die **Referenz** (verschlüsselt), nie den Wert — Rotation in Studio wirkt ohne Reconnect.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
-- Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus. `.../cancel` verwirft sie.
+- Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus, sofern der Turn-Kontext beim Claim nicht widerrufen ist. `.../cancel` verwirft sie auch nach Widerruf.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
-- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `tasks_occurrences_list`
+- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
   `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
   `mail_message_original` ruft die Mail beim Anbieter ab (lesend, ohne sie als gelesen zu markieren) und speichert nichts.
   Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.
