@@ -83,6 +83,10 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Routergruppe | Methode | Pfad | `operation_id` |
 | --- | --- | --- | --- |
 | Health | GET | `/api/health` | `health` |
+| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/accounts` | `liam_mail_accounts` |
+| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages` | `liam_mail_search` |
+| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages/{message_id}` | `liam_mail_read` |
+| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/summary` | `liam_mail_summary` |
 | Kalender | GET | `/api/v1/calendar/sources` | `calendar_sources_list` |
 | Kalender | PATCH | `/api/v1/calendar/sources/{source_id}` | `calendar_source_update` |
 | Kalender | DELETE | `/api/v1/calendar/sources/{source_id}` | `calendar_source_delete` |
@@ -135,6 +139,22 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/complete` | `tasks_occurrence_complete` |
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/skip` | `tasks_occurrence_skip` |
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/reopen` | `tasks_occurrence_reopen` |
+
+## Agent-Lesefassade
+
+`api/mcp/registry.py` zählt die vier ausdrücklich freigegebenen Mail-Leseoperationen auf;
+`api/mcp/mail.py` liest ausschließlich den vorhandenen INBOX-Index über Accessors. Der Scope
+stammt aus einem `ReadGrant`, nie aus Requestparametern. Der Standard-Verifier in
+`api/mcp/access.py` lehnt alle Anfragen mit 401 ab. Ein späterer nativer Transport muss nach
+positivem Zugriffsnachweis einen eigenen `ReadAccessVerifier` an `get_read_access_verifier`
+anbinden und dieselben Services mit dessen geprüftem Grant aufrufen. Grants sind auf 100
+Konto-IDs begrenzt; fremde Auswahlen ergeben 403, unbekannte und fremde Mail-IDs jeweils 404.
+Relative Links `/mail/<uuid>` vermeiden eine unkonfigurierte externe Origin. Maildaten sind
+fremder Inhalt, keine Anweisungen. Der Indexstand wird ausgewiesen, Provideraktualität bleibt
+unbekannt. Die reduzierte Spec ist keine Runtime-Autorisierung; produktive Exposition bleibt
+bis zum Zugriffsnachweis gesperrt. Der Uvicorn-Access-Log entfernt Querystrings dieser
+Routen; Gateway- und Proxy-Logs müssen vor einer Freischaltung unabhängig ebenso geschützt werden.
+Der Export wird mit `bunx nx run api:gen-agent-openapi` reproduziert.
 
 ## Aufgabendomäne
 
@@ -403,7 +423,7 @@ in der Probe HTTP 401.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
 - Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus, sofern der Turn-Kontext beim Claim nicht widerrufen ist. `.../cancel` verwirft sie auch nach Widerruf.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
-- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `settings_ui_get`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
+- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `liam_mail_accounts`, `liam_mail_read`, `liam_mail_search`, `liam_mail_summary`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `settings_ui_get`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
   `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
   `mail_message_original` ruft die Mail beim Anbieter ab (lesend, ohne sie als gelesen zu markieren) und speichert nichts.
   `settings_ui_get` legt beim allerersten Lesen einmalig die Standardbelegung in `ui_settings` an; eine bestehende Belegung ändert es nie.
