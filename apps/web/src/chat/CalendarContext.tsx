@@ -31,7 +31,12 @@ export function CalendarReference({ occurrenceId, sourceId }: { occurrenceId: st
   const detail = useQuery({ ...calendarDetailQuery(occurrenceId), enabled: !!permitted && sources.isSuccess, retry: false })
   const row = detail.data
   const source = sources.data?.find(item => item.id === row?.source_id && item.is_active)
-  if (sources.isError || detail.isError || !permitted || (detail.isSuccess && (!source || (sourceId && row?.source_id !== sourceId)))) return <Notice tone="info">{de.calendar.missing}</Notice>
+  if (sources.isError || detail.isError) return <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => {
+    if (sources.isError) void sources.refetch()
+    else if (sources.isSuccess && permitted) void detail.refetch()
+  } }}>{de.calendar.error}</Notice>
+  if (!sources.isSuccess) return <p role="status">{de.calendar.referenceLoading}</p>
+  if (!permitted || (detail.isSuccess && (!source || (sourceId && row?.source_id !== sourceId)))) return <Notice tone="info">{de.calendar.missing}</Notice>
   if (!row || !source) return <p role="status">{de.calendar.referenceLoading}</p>
   return <article className="le-calendar-status">
     <Link className="le-link" to="/calendar/$occurrenceId" params={{ occurrenceId: row.id }}>{row.title}</Link>

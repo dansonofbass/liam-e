@@ -10,15 +10,16 @@ import { de } from '../i18n/de'
 
 afterEach(() => { cleanup(); mock.restore() })
 const source: SourceOut = { id: 'test-only-a', name: 'Verein', provider: 'ics', timezone: 'UTC', is_active: true, capabilities: ['read'], coverage_start: null, coverage_end: null, last_success_at: null, stale: true, incomplete: true }
-function setup(sources = [source], sourceId = source.id) {
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
+function setup(sources = [source], sourceId = source.id, loadSources?: () => Promise<never>) {
+  const list = spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
+  if (loadSources) list.mockImplementation(loadSources)
   const detail = spyOn(sdk, 'calendarOccurrenceGet').mockResolvedValue({ data: { id: 'test-only-occurrence', source_id: source.id, event_id: 'test-only', title: 'Planung', start_date: '2026-11-13', end_date: '2026-11-14', start_at: null, end_at: null, timezone: null } } as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><CalendarReference occurrenceId="test-only-occurrence" sourceId={sourceId} /></QueryClientProvider> })
   const page = createRoute({ getParentRoute: () => root, path: '/' })
   const router = createRouter({ routeTree: root.addChildren([page]), history: createMemoryHistory({ initialEntries: ['/'] }) })
   render(<RouterProvider router={router} />)
-  return { client, detail }
+  return { client, detail, list }
 }
 test('asking from an instance opens a fresh chat with an explicit source and structured identity', async () => {
   const client = new QueryClient()
@@ -32,6 +33,36 @@ test('asking from an instance opens a fresh chat with an explicit source and str
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   expect(router.state.location.search).toEqual({ calendarAbout: 'test-only-occurrence' })
   expect(screen.getByText('["test-only-source"]')).toBeTruthy()
+})
+
+test('calendar evidence waits for sources before requesting the instance', async () => {
+  let resolve!: (value: never) => void
+  const pending = new Promise<never>(done => { resolve = done })
+  const { detail } = setup([source], source.id, () => pending)
+  expect(await screen.findByText(de.calendar.referenceLoading)).toBeTruthy()
+  expect(screen.queryByText(de.calendar.missing)).toBeNull()
+  expect(detail).not.toHaveBeenCalled()
+  await act(async () => { resolve({ data: [source] } as never) })
+  expect(await screen.findByRole('link', { name: 'Planung' })).toBeTruthy()
+})
+
+test('a failed sources request offers retry without reading the instance', async () => {
+  const { detail, list } = setup([source], source.id, async () => { throw new Error('test-only') })
+  expect(await screen.findByText(de.calendar.error)).toBeTruthy()
+  expect(screen.queryByText(de.calendar.missing)).toBeNull()
+  expect(detail).not.toHaveBeenCalled()
+  list.mockResolvedValue({ data: [source] } as never)
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.retry }))
+  expect(await screen.findByRole('link', { name: 'Planung' })).toBeTruthy()
+  expect(list).toHaveBeenCalledTimes(2)
+})
+
+test('a failed instance request offers retry', async () => {
+  const { detail } = setup()
+  detail.mockRejectedValueOnce(new Error('test-only'))
+  expect(await screen.findByText(de.calendar.error)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.retry }))
+  expect(await screen.findByRole('link', { name: 'Planung' })).toBeTruthy()
 })
 
 test('calendar evidence links the exact instance with source and incomplete status', async () => {
