@@ -7,7 +7,7 @@ export type SwipeAssignment = { left: SwipeAction; right: SwipeAction }
 
 /** The server-confirmed swipe assignment, for surfaces that gesture over a mail row. */
 export interface SwipeSettings {
-  /** ``ready`` once the server confirmed an assignment, ``error`` while none is confirmed. */
+  /** ``ready`` once the server confirmed an assignment, ``error`` after any failed load or refetch. */
   status: 'loading' | 'error' | 'ready'
   /**
    * The confirmed assignment. It stays undefined until the server answered, so an unloaded or
@@ -23,12 +23,13 @@ export interface SwipeSettings {
 
 export function useSwipeSettings(): SwipeSettings {
   const query = useQuery(uiSettingsQuery())
+  // A failed refetch turns gestures off as well: the last answer may no longer be what another
+  // device saved, and an error must never keep actions running the owner may have switched off.
+  const data = query.isError ? undefined : query.data
   return {
-    // A failed background refetch keeps the last confirmed assignment: it is still what the
-    // server last accepted, and gestures may keep following it.
-    status: query.data ? 'ready' : query.isPending ? 'loading' : 'error',
-    assignment: query.data && { left: query.data.swipe_left, right: query.data.swipe_right },
-    revision: query.data?.revision,
+    status: data ? 'ready' : query.isError ? 'error' : 'loading',
+    assignment: data && { left: data.swipe_left, right: data.swipe_right },
+    revision: data?.revision,
     retry: () => { void query.refetch() },
   }
 }

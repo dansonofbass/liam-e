@@ -92,6 +92,101 @@ test('a conflict keeps the inputs, names the competing change and never retries 
   expect(requests.filter(item => item.method === 'PATCH')[1]?.body).toEqual({ expected_revision: 2, swipe_left: 'none', swipe_right: 'trash' })
 })
 
+test('saving again after a conflict consciously replaces the assignment the notice named', async () => {
+  let stored = confirmed
+  setup('/settings/controls', async request => {
+    if (request.method === 'PATCH') {
+      const body = await request.clone().json() as { expected_revision: number }
+      if (body.expected_revision !== stored.revision) return Response.json({ detail: { code: 'ui_settings_conflict', message: 'Konflikt' } }, { status: 409 })
+      return Response.json({ ...stored, swipe_left: 'none', revision: stored.revision + 1 })
+    }
+    if (request.url.endsWith('/settings/ui')) {
+      const current = stored
+      stored = { swipe_left: 'trash', swipe_right: 'none', revision: 2, updated_at: '2026-01-02T00:00:00Z' }
+      return Response.json(current)
+    }
+    return undefined
+  })
+  fireEvent.click(await screen.findByRole('button', { name: 'Nach links wischen' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Keine Aktion' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('„In den Papierkorb“ nach links und „Keine Aktion“ nach rechts')
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  await waitFor(() => expect(requests.filter(item => item.method === 'PATCH')).toHaveLength(2))
+  expect(requests.filter(item => item.method === 'PATCH')[1]?.body).toEqual({ expected_revision: 2, swipe_left: 'none', swipe_right: 'toggle_read' })
+  expect(await screen.findByText('Gespeichert.')).toBeTruthy()
+})
+
+test('a further change while a conflict is shown ends in another conflict, never an unseen overwrite', async () => {
+  let stored = confirmed
+  const { query } = setup('/settings/controls', async request => {
+    if (request.method === 'PATCH') {
+      // Another device saved just before the first attempt.
+      if (stored.revision === 1) stored = { ...confirmed, swipe_right: 'none', revision: 2 }
+      const body = await request.clone().json() as { expected_revision: number }
+      if (body.expected_revision === stored.revision) return Response.json({ ...stored, revision: stored.revision + 1 })
+      return Response.json({ detail: { code: 'ui_settings_conflict', message: 'Konflikt' } }, { status: 409 })
+    }
+    return request.url.endsWith('/settings/ui') ? Response.json(stored) : undefined
+  })
+  fireEvent.click(await screen.findByRole('button', { name: 'Nach links wischen' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'In den Papierkorb' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('„Archivieren“ nach links und „Keine Aktion“ nach rechts')
+  stored = { ...confirmed, swipe_left: 'none', swipe_right: 'trash', revision: 3 }
+  await act(async () => { await query.refetchQueries({ queryKey: ['ui-settings'] }) })
+  expect(screen.getByRole('alert').textContent).toContain('„Archivieren“ nach links und „Keine Aktion“ nach rechts')
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('„Keine Aktion“ nach links und „In den Papierkorb“ nach rechts'))
+  expect(requests.filter(item => item.method === 'PATCH').map(item => item.body.expected_revision)).toEqual([1, 2])
+})
+
+test('a background refetch never moves the revision an edit was based on', async () => {
+  let stored = confirmed
+  const { query } = setup('/settings/controls', async request => {
+    if (request.method === 'PATCH') {
+      const body = await request.clone().json() as { expected_revision: number }
+      return body.expected_revision === stored.revision ? Response.json({ ...stored, revision: stored.revision + 1 })
+        : Response.json({ detail: { code: 'ui_settings_conflict', message: 'Konflikt' } }, { status: 409 })
+    }
+    return request.url.endsWith('/settings/ui') ? Response.json(stored) : undefined
+  })
+  fireEvent.click(await screen.findByRole('button', { name: 'Nach links wischen' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'In den Papierkorb' }))
+  stored = { ...confirmed, swipe_right: 'none', revision: 2 }
+  await act(async () => { await query.refetchQueries({ queryKey: ['ui-settings'] }) })
+  expect(screen.getByRole('button', { name: 'Nach links wischen' }).textContent).toContain('In den Papierkorb')
+  expect(screen.getByRole('button', { name: 'Nach rechts wischen' }).textContent).toContain('Gelesen/Ungelesen')
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('„Archivieren“ nach links und „Keine Aktion“ nach rechts')
+  expect(requests.filter(item => item.method === 'PATCH').map(item => item.body.expected_revision)).toEqual([1])
+})
+
+test('an untouched form follows a newer assignment from another device', async () => {
+  let stored = confirmed
+  const { query } = setup('/settings/controls', async request => request.method === 'GET' && request.url.endsWith('/settings/ui') ? Response.json(stored) : undefined)
+  expect((await screen.findByRole('button', { name: 'Nach rechts wischen' })).textContent).toContain('Gelesen/Ungelesen')
+  stored = { ...confirmed, swipe_right: 'none', revision: 2 }
+  await act(async () => { await query.refetchQueries({ queryKey: ['ui-settings'] }) })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Nach rechts wischen' }).textContent).toContain('Keine Aktion'))
+  fireEvent.click(screen.getByRole('button', { name: 'Standard wiederherstellen' }))
+  await waitFor(() => expect(requests.find(item => item.method === 'PATCH')?.body).toEqual({ expected_revision: 2, swipe_left: 'archive', swipe_right: 'toggle_read' }))
+})
+
+test('the choices stay locked while a save is pending', async () => {
+  let answer!: (value: Response) => void
+  setup('/settings/controls', async request => request.method === 'PATCH' ? await new Promise<Response>(resolve => { answer = resolve }) : undefined)
+  fireEvent.click(await screen.findByRole('button', { name: 'Nach links wischen' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'In den Papierkorb' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Nach rechts wischen' }) as HTMLButtonElement).disabled).toBe(true))
+  expect((screen.getByRole('button', { name: 'Nach links wischen' }) as HTMLButtonElement).disabled).toBe(true)
+  await act(async () => { answer(Response.json({ ...confirmed, swipe_left: 'trash', revision: 2 })) })
+  expect(await screen.findByText('Gespeichert.')).toBeTruthy()
+  expect((screen.getByRole('button', { name: 'Nach links wischen' }) as HTMLButtonElement).disabled).toBe(false)
+  expect(screen.getByRole('button', { name: 'Nach links wischen' }).textContent).toContain('In den Papierkorb')
+})
+
 test('a failed save keeps the selection editable', async () => {
   setup('/settings/controls', async request => request.method === 'PATCH'
     ? Response.json({ detail: { code: 'settings_unavailable', message: 'Nicht erreichbar' } }, { status: 503 }) : undefined)
@@ -140,6 +235,18 @@ test('the hook keeps gestures off until the server confirmed an assignment', asy
 test('the hook reports a load failure with a retry that recovers', async () => {
   let failing = true
   setupHook(async () => failing ? Response.json({}, { status: 503 }) : undefined)
+  expect(await screen.findByText('error|||')).toBeTruthy()
+  failing = false
+  fireEvent.click(screen.getByRole('button', { name: 'Wiederholen' }))
+  expect(await screen.findByText('ready|archive|toggle_read|1')).toBeTruthy()
+})
+
+test('a failed refetch after a confirmed assignment turns gestures off until a retry succeeds', async () => {
+  let failing = false
+  const query = setupHook(async () => failing ? Response.json({}, { status: 503 }) : undefined)
+  expect(await screen.findByText('ready|archive|toggle_read|1')).toBeTruthy()
+  failing = true
+  await act(async () => { await query.refetchQueries({ queryKey: ['ui-settings'] }) })
   expect(await screen.findByText('error|||')).toBeTruthy()
   failing = false
   fireEvent.click(screen.getByRole('button', { name: 'Wiederholen' }))

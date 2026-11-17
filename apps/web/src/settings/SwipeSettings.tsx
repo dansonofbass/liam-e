@@ -24,32 +24,42 @@ export function SwipeSettings() {
   </section>
   return <SwipeSettingsForm settings={query.data} reload={async () => {
     const result = await query.refetch()
-    if (result.isError) throw result.error
+    if (result.isError || !result.data) throw result.error
+    return result.data
   }} />
 }
 
-/** Edited form values and the confirmed assignment stay separate until the server accepts a save. */
-function SwipeSettingsForm({ settings, reload }: { settings: UiSettingsOut; reload: () => Promise<void> }) {
+/**
+ * Edited form values and the confirmed assignment stay separate until the server accepts a save.
+ * A save expects the revision of the assignment the form is based on. A background refetch never
+ * moves that base under an edit, so a change from another device ends in a conflict instead of
+ * being overwritten unseen; an untouched form simply follows the newer assignment.
+ */
+function SwipeSettingsForm({ settings, reload }: { settings: UiSettingsOut; reload: () => Promise<UiSettingsOut> }) {
   const client = useQueryClient()
+  const [base, setBase] = useState<UiSettingsOut>(settings)
   const [left, setLeft] = useState<SwipeAction>(settings.swipe_left)
   const [right, setRight] = useState<SwipeAction>(settings.swipe_right)
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<'saved' | 'error' | 'conflict'>()
   const lock = useRef(false)
+  if (settings.revision > base.revision && left === base.swipe_left && right === base.swipe_right && !busy && outcome !== 'conflict') {
+    setBase(settings); setLeft(settings.swipe_left); setRight(settings.swipe_right); setOutcome(undefined)
+  }
   const select = (setter: (value: SwipeAction) => void, value: SwipeAction) => { setter(value); setOutcome(undefined) }
   const save = async (assignment: { left: SwipeAction; right: SwipeAction }) => {
     if (lock.current) return
     lock.current = true; setBusy(true); setOutcome(undefined)
     try {
-      const saved = await unwrap(settingsUiUpdate({ body: { expected_revision: settings.revision, swipe_left: assignment.left, swipe_right: assignment.right }, throwOnError: true }))
+      const saved = await unwrap(settingsUiUpdate({ body: { expected_revision: base.revision, swipe_left: assignment.left, swipe_right: assignment.right }, throwOnError: true }))
+      setBase(saved); setLeft(saved.swipe_left); setRight(saved.swipe_right)
       client.setQueryData(uiSettingsQuery().queryKey, saved)
-      setLeft(assignment.left); setRight(assignment.right)
       setOutcome('saved')
     } catch (cause) {
       if (codeOf(cause) === 'ui_settings_conflict') {
-        // Show the competing change, but never retry on our own: the next save is a conscious one.
-        setOutcome('conflict')
-        await reload().catch(() => setOutcome('error'))
+        // Show the competing change, but never retry on our own. The shown assignment becomes the
+        // base, so saving again consciously replaces exactly what the notice names.
+        try { setBase(await reload()); setOutcome('conflict') } catch { setOutcome('error') }
       } else setOutcome('error')
     } finally { lock.current = false; setBusy(false) }
   }
@@ -57,13 +67,13 @@ function SwipeSettingsForm({ settings, reload }: { settings: UiSettingsOut; relo
     <h2 className="heading">{de.settingsUi.title}</h2>
     <p className="le-swipe-intro">{de.settingsUi.intro}</p>
     <div className="le-swipe-fields">
-      <SwipeSelect id="le-swipe-left" label={de.settingsUi.left} action={left} onSelect={value => select(setLeft, value)} />
-      <SwipeSelect id="le-swipe-right" label={de.settingsUi.right} action={right} onSelect={value => select(setRight, value)} />
+      <SwipeSelect id="le-swipe-left" label={de.settingsUi.left} action={left} disabled={busy} onSelect={value => select(setLeft, value)} />
+      <SwipeSelect id="le-swipe-right" label={de.settingsUi.right} action={right} disabled={busy} onSelect={value => select(setRight, value)} />
     </div>
     {outcome === 'saved' && <Notice tone="success">{de.settingsUi.saved}</Notice>}
     {outcome === 'error' && <Notice tone="danger">{de.settingsUi.saveError}</Notice>}
-    {outcome === 'conflict' && <Notice tone="danger" action={{ label: de.settingsUi.reload, onClick: () => { setLeft(settings.swipe_left); setRight(settings.swipe_right); setOutcome(undefined) } }}>
-      {de.settingsUi.conflict(de.settingsUi.actions[settings.swipe_left], de.settingsUi.actions[settings.swipe_right])}</Notice>}
+    {outcome === 'conflict' && <Notice tone="danger" action={{ label: de.settingsUi.reload, onClick: () => { setLeft(base.swipe_left); setRight(base.swipe_right); setOutcome(undefined) } }}>
+      {de.settingsUi.conflict(de.settingsUi.actions[base.swipe_left], de.settingsUi.actions[base.swipe_right])}</Notice>}
     <div className="le-swipe-actions">
       <Button type="submit" variant="primary" disabled={busy}>{de.settingsUi.save}</Button>
       <Tooltip content={de.settingsUi.restoreTip}><Button variant="secondary" disabled={busy} onClick={() => { void save(DEFAULTS) }}>{de.settingsUi.restore}</Button></Tooltip>
@@ -71,10 +81,10 @@ function SwipeSettingsForm({ settings, reload }: { settings: UiSettingsOut; relo
   </form>
 }
 
-function SwipeSelect({ id, label, action, onSelect }: { id: string; label: string; action: SwipeAction; onSelect: (action: SwipeAction) => void }) {
+function SwipeSelect({ id, label, action, disabled, onSelect }: { id: string; label: string; action: SwipeAction; disabled: boolean; onSelect: (action: SwipeAction) => void }) {
   return <div className="le-swipe-field">
     <span className="le-swipe-label" id={`${id}-label`}>{label}</span>
-    <Menu trigger={props => <Chip {...props} quiet aria-labelledby={`${id}-label`}>{de.settingsUi.actions[action]}<Icon name="chevron-down" size="sm" /></Chip>}
+    <Menu trigger={props => <Chip {...props} quiet disabled={disabled} aria-labelledby={`${id}-label`}>{de.settingsUi.actions[action]}<Icon name="chevron-down" size="sm" /></Chip>}
       items={ACTIONS.map(value => ({ label: de.settingsUi.actions[value], checked: value === action, onSelect: () => onSelect(value) }))} />
     <SwipePreview action={action} />
   </div>
