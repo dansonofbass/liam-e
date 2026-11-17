@@ -6,26 +6,41 @@ import { useState, type ReactNode } from 'react'
 import * as sdk from '../api/generated/sdk.gen'
 import type { ChatMessageOut, ProposalResult } from '../api/generated/types.gen'
 import { ProposalCard } from './ProposalCard'
+import { ChatSessionProvider, useChatSession } from './session'
 
 const cardRoot = createRootRoute()
 function TestRouter({ children }: { children: ReactNode }) {
   const [router] = useState(() => createRouter({ routeTree: cardRoot, history: createMemoryHistory({ initialEntries: ['/'] }) }))
-  return <RouterContextProvider router={router}>{children}</RouterContextProvider>
+  return <RouterContextProvider router={router}><ChatSessionProvider>{children}</ChatSessionProvider></RouterContextProvider>
+}
+// Every card restarts from its conversation, so the scope comes from the cached conversation list.
+function testClient() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(['conversations'], [{ id: 'c', title: 'Test', account_scope_json: JSON.stringify({ account_ids: ['a'], selection: 'a' }) }])
+  return client
 }
 
 function message(status = 'pending', result?: ProposalResult): ChatMessageOut {
   return { id: 'p', conversation_id: 'c', role: 'proposal', content: '', tool_name: '', created_at: '', extras: {}, stopped: false, proposal_status: status, proposal: { kind: 'unsubscribe', reason: 'Nicht mehr gelesen.', items: [{ id: 'a', kind: 'sender', title: 'Alpha', subtitle: '12 Mails', method: 'post' }, { id: 'b', kind: 'sender', title: 'Beta', subtitle: '2 Mails', method: 'manual' }], result } }
 }
+function StartProbe() {
+  const { scope, composerTexts } = useChatSession()
+  return <div data-testid="start" data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} />
+}
+function TypeDraft() {
+  const { setComposerText } = useChatSession()
+  return <button onClick={() => setComposerText('c', 'Noch offen')}>type</button>
+}
 function setup(initial: ChatMessageOut, clock?: { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }, loadHistory?: () => Promise<ChatMessageOut[]>) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  const client = testClient()
   client.setQueryData(['history', 'c'], [initial])
   function Page() {
     const { data } = useQuery({ queryKey: ['history', 'c'], queryFn: loadHistory ?? (async () => client.getQueryData<ChatMessageOut[]>(['history', 'c']) ?? []), staleTime: Infinity })
-    return <ProposalCard message={data![0]!} clock={clock} />
+    return <><ProposalCard message={data![0]!} clock={clock} /><TypeDraft /><StartProbe /></>
   }
-  const root = createRootRoute({ component: Page })
+  const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Page /></ChatSessionProvider></QueryClientProvider> })
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) })
-  render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
+  render(<RouterProvider router={router} />)
   return client
 }
 afterEach(() => { cleanup(); mock.restore() })
@@ -58,7 +73,7 @@ test('confirmation submits selected ids and replaces the card in history', async
 test('selection survives a card remount and confirmation', async () => {
   const initial = message()
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: message('done', { done: 1 }) })) as never)
-  const client = new QueryClient()
+  const client = testClient()
   const card = () => <QueryClientProvider client={client}><TestRouter><ProposalCard message={initial} /></TestRouter></QueryClientProvider>
   const view = render(card())
   fireEvent.click(screen.getByRole('checkbox', { name: /Beta/ }))
@@ -73,7 +88,7 @@ test('edited draft survives a card remount and confirmation', async () => {
   const initial = message()
   initial.proposal = { kind: 'send', reason: 'Antwort.', items: [], draft: { account_id: 'a', body: 'Erster Text', cc: [], mode: 'new', quote: '', reply_to_message_id: null, subject: 'Hallo', to: ['anna@example.org'] } }
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: { ...initial, proposal_status: 'done' } })) as never)
-  const client = new QueryClient()
+  const client = testClient()
   const card = () => <QueryClientProvider client={client}><TestRouter><ProposalCard message={initial} /></TestRouter></QueryClientProvider>
   const view = render(card())
   fireEvent.change(screen.getByLabelText('Entwurf'), { target: { value: 'Neuer Text' } })
@@ -88,7 +103,7 @@ test('running proposal refreshes history at most twenty times and clears its tim
   let next = 0
   const timers = new Map<number, () => void>()
   const clock = { now: () => 0, setTimeout: (fn: () => void, ms: number) => { expect(ms).toBe(3000); const id = ++next; timers.set(id, fn); return id as unknown as ReturnType<typeof setTimeout> }, clearTimeout: (id: ReturnType<typeof setTimeout>) => { timers.delete(id as unknown as number) } }
-  const client = new QueryClient()
+  const client = testClient()
   const invalidate = spyOn(client, 'invalidateQueries')
   const card = (row: ChatMessageOut) => <QueryClientProvider client={client}><TestRouter><ProposalCard message={row} clock={clock} /></TestRouter></QueryClientProvider>
   const view = render(card(message('running')))
@@ -114,7 +129,7 @@ test('running confirmation yields to the completed history row and stops polling
   const timers = new Map<number, number>()
   const clock = { now: () => 0, setTimeout: (_fn: () => void, ms: number) => { const id = ++next; timers.set(id, ms); return id as unknown as ReturnType<typeof setTimeout> }, clearTimeout: (id: ReturnType<typeof setTimeout>) => { timers.delete(id as unknown as number) } }
   spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: message('running') })) as never)
-  const client = new QueryClient()
+  const client = testClient()
   const card = (row: ChatMessageOut) => <QueryClientProvider client={client}><TestRouter><ProposalCard message={row} clock={clock} /></TestRouter></QueryClientProvider>
   const view = render(card(message()))
   fireEvent.click(screen.getByRole('button', { name: '2 abbestellen und archivieren' }))
@@ -195,7 +210,7 @@ test('remounting a confirmed result does not extend the undo deadline', async ()
   const clock = { now: () => now, setTimeout: (_fn: () => void, ms: number) => { delay = ms; return 1 as unknown as ReturnType<typeof setTimeout> }, clearTimeout: () => {} }
   const done = message('done', { done: 1, undo_action_ids: ['u'] })
   spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)
-  const client = new QueryClient()
+  const client = testClient()
   const card = (row: ChatMessageOut) => <QueryClientProvider client={client}><TestRouter><ProposalCard message={row} clock={clock} /></TestRouter></QueryClientProvider>
   const view = render(card(message()))
   fireEvent.click(screen.getByRole('button', { name: '2 abbestellen und archivieren' }))
@@ -240,6 +255,16 @@ test('revoked proposal offers a new conversation', async () => {
   fireEvent.click(await screen.findByRole('button', { name: '2 abbestellen und archivieren' }))
   expect(await screen.findByText('Dieser Vorschlag stammt aus einem widerrufenen Kontext. Starte eine neue Unterhaltung.')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Neue Unterhaltung' })).toBeTruthy()
+})
+
+test('restart from a revoked proposal carries the account and unsent text', async () => {
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => { throw { detail: { code: 'proposal_context_revoked' } } }) as never)
+  setup(message())
+  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
+  fireEvent.click(await screen.findByRole('button', { name: '2 abbestellen und archivieren' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(screen.getByTestId('start').dataset.scope).toBe('a'))
+  expect(screen.getByTestId('start').dataset.draft).toBe('Noch offen')
 })
 
 test.each(['proposal_not_pending', 'selection_empty'])('confirmation refusal %s shows its cause', async code => {
@@ -385,7 +410,7 @@ test('after undoing, the focus stays on the result', async () => {
 function liveThenHistory() {
   const done = message('done', { done: 2, undo_action_ids: ['u'] })
   spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)
-  const client = new QueryClient()
+  const client = testClient()
   // The live card and the history row sit in different places, so React mounts a new card.
   const view = (inHistory: boolean) => <QueryClientProvider client={client}><TestRouter>{inHistory ? <section key="history"><ProposalCard message={done} /></section> : <div key="live"><ProposalCard message={message()} /><input aria-label="Frage" /></div>}</TestRouter></QueryClientProvider>
   return { view, ...render(view(false)) }
@@ -411,14 +436,14 @@ test('a replaced card hands the focus on only when it holds it', async () => {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
   expect(document.activeElement).toBe(document.body)
   cleanup()
-  render(<QueryClientProvider client={new QueryClient()}><TestRouter><ProposalCard message={message('done', { done: 2 })} /></TestRouter></QueryClientProvider>)
+  render(<QueryClientProvider client={testClient()}><TestRouter><ProposalCard message={message('done', { done: 2 })} /></TestRouter></QueryClientProvider>)
   expect(document.activeElement).toBe(document.body)
 })
 
 test('a confirmation that finishes after the card is gone does not take the focus later', async () => {
   let resolve: (value: { data: ChatMessageOut }) => void = () => {}
   spyOn(sdk, 'chatProposalConfirm').mockImplementation((() => new Promise(done => { resolve = done })) as never)
-  const client = new QueryClient()
+  const client = testClient()
   const view = render(<QueryClientProvider client={client}><TestRouter><ProposalCard message={message()} /></TestRouter></QueryClientProvider>)
   const button = screen.getByRole('button', { name: '2 abbestellen und archivieren' })
   button.focus(); fireEvent.click(button)
@@ -432,7 +457,7 @@ test('a confirmation that finishes after the card is gone does not take the focu
 test('a confirmation that finishes after the card shows another proposal does not take the focus later', async () => {
   let resolve: (value: { data: ChatMessageOut }) => void = () => {}
   spyOn(sdk, 'chatProposalConfirm').mockImplementation((() => new Promise(done => { resolve = done })) as never)
-  const client = new QueryClient()
+  const client = testClient()
   const card = (row: ChatMessageOut) => <QueryClientProvider client={client}><TestRouter><ProposalCard message={row} /></TestRouter></QueryClientProvider>
   const view = render(card(message()))
   const button = screen.getByRole('button', { name: '2 abbestellen und archivieren' })

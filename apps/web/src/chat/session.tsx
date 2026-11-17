@@ -110,7 +110,14 @@ export function useRestartConversation(id?: string) {
   const session = useChatSession()
   const { scope } = useConversationScope(id)
   const navigate = useNavigate()
-  return () => { session.setScope(scope); session.setComposerText('new', session.composerTexts[id ?? 'new'] ?? ''); void navigate({ to: '/' }) }
+  return () => {
+    if (id) {
+      session.setScope(scope)
+      const text = session.composerTexts[id]
+      if (text) session.setComposerText('new', text)
+    }
+    void navigate({ to: '/' })
+  }
 }
 
 export function useChatSession(): Session {

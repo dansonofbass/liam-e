@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { de } from '../i18n/de'
-import { ChatSessionProvider, useChatSession } from './session'
+import { ChatSessionProvider, useChatSession, useRestartConversation } from './session'
 
 const originalFetch = globalThis.fetch, originalMatchMedia = window.matchMedia
 let controller: ReadableStreamDefaultController<Uint8Array>, signal: AbortSignal
@@ -27,3 +28,44 @@ test('buffers cards until done and text', async () => {
 })
 test('stop aborts and displays notice', async () => { setup(); await act(async () => { frame({ event: 'delta', text: 'Hallo' }) }); fireEvent.click(screen.getByText('stop')); expect(signal.aborted).toBe(true); expect(screen.getByText(de.chat.stopped)).toBeTruthy(); expect(screen.getByTestId('phase').textContent).toBe('stopped') })
 test('network break reports aborted', async () => { setup(); await act(async () => { frame({ event: 'delta', text: 'Hallo' }) }); await act(async () => { controller.error(new TypeError('network')) }); await waitFor(() => expect(screen.getByText(de.errors.aborted)).toBeTruthy()); expect(screen.getByTestId('phase').textContent).toBe('error') })
+
+// Restarting is the only place that hands a conversation's unsent text to the start page.
+function restartHarness(id?: string) {
+  const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
+  client.setQueryData(['conversations'], [{ id: 'c', title: 'Test', account_scope_json: JSON.stringify({ account_ids: ['b'], selection: 'b' }) }])
+  function Start() {
+    const { scope, composerTexts, setScope, setComposerText } = useChatSession()
+    return <><div data-testid="start" data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} /><button onClick={() => { setScope('a'); setComposerText('new', 'Bleibt') }}>draft</button></>
+  }
+  function Chat() {
+    const restart = useRestartConversation(id)
+    return <button onClick={restart}>restart</button>
+  }
+  const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
+  const index = createRoute({ getParentRoute: () => root, path: '/', component: Start })
+  const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: Chat })
+  const router = createRouter({ routeTree: root.addChildren([index, chat]), history: createMemoryHistory({ initialEntries: ['/'] }) })
+  render(<RouterProvider router={router} />)
+  return router
+}
+
+async function restart(router: ReturnType<typeof restartHarness>) {
+  fireEvent.click(await screen.findByText('draft'))
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'c' } }) })
+  fireEvent.click(await screen.findByText('restart'))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+}
+
+test('restart without unsent text keeps the start draft and takes the account', async () => {
+  const router = restartHarness('c')
+  await restart(router)
+  expect((await screen.findByTestId('start')).dataset.scope).toBe('b')
+  expect(screen.getByTestId('start').dataset.draft).toBe('Bleibt')
+})
+
+test('restart without a conversation only navigates', async () => {
+  const router = restartHarness()
+  await restart(router)
+  expect((await screen.findByTestId('start')).dataset.scope).toBe('a')
+  expect(screen.getByTestId('start').dataset.draft).toBe('Bleibt')
+})
