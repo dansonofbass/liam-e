@@ -51,6 +51,19 @@ def test_preview_rejects_invalid_input(client, change):
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize('start,through,status', [
+    ('2024-01-01', '2024-12-31', 200),
+    ('2024-01-01', '2025-01-01', 422),
+    ('2024-01-01T07:00:00', '2024-12-31T23:00:00', 200),
+    ('2024-01-01T07:00:00', '2025-01-01T01:00:00', 422),
+])
+def test_preview_inclusive_window_limit(client, start, through, status):
+    response = client.post('/api/v1/tasks/preview', json={
+        'start': start, 'through': through, 'timezone': 'Europe/Berlin',
+    })
+    assert response.status_code == status
+
+
 def test_preview_marks_bounded_page_incomplete(client):
     response = client.post('/api/v1/tasks/preview', json={
         'start': '2024-01-01', 'through': '2024-02-01',

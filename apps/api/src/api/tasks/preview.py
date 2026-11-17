@@ -9,7 +9,9 @@ from api.tasks.recurrence import _counted_candidates, _parse, _valid_wall, expan
 
 def preview(start: date | datetime, rule: str | None, through: date | datetime,
             zone: str, *, limit: int = 100) -> dict:
-    if not zone or through < start or (through - start).days > 366:
+    start_day = start.date() if isinstance(start, datetime) else start
+    through_day = through.date() if isinstance(through, datetime) else through
+    if not zone or through < start or (through_day - start_day).days > 365:
         raise ValueError('invalid preview window')
     rule = rule or 'FREQ=DAILY;COUNT=1'
     values, cursor = expand_page(start, rule, through, zone, limit=limit)
