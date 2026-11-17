@@ -9,6 +9,7 @@ import { Button, Chip, Notice, TextField } from '../ds'
 import { de } from '../i18n/de'
 import { addDays, browserZone, calendarDate, calendarTime, covers, inLocalWindow, occurrenceDay, oldSource, todayLocal, validWindow } from './state'
 import './calendar.css'
+import { AskAboutCalendar } from '../chat/CalendarContext'
 
 export function SourceStatus({ source, from, to }: { source: SourceOut; from?: string; to?: string }) {
   return <div className="le-calendar-status">
@@ -32,7 +33,7 @@ export function CalendarDetail({ id }: { id: string }) {
     {row && !detail.isError && !sources.isError && source?.is_active && <><h1 className="title">{row.title}</h1><p>{calendarDate(occurrenceDay(row))} · {row.start_date ? de.calendar.allDay : calendarTime(row.start_at!)}</p>
       {row.end_date && <p>{de.calendar.to}: {calendarDate(row.end_date)}</p>}
       {row.end_at && <p>{calendarDate(row.end_at)} · {calendarTime(row.end_at)}</p>}
-      {source && <SourceStatus source={source} />}
+      {source && <><SourceStatus source={source} /><AskAboutCalendar occurrenceId={row.id} sourceId={source.id} /></>}
     </>}
   </article>
 }

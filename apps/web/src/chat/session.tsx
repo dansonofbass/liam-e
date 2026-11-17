@@ -1,14 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import type { ChatMessageOut, ChatStreamRequest, ConversationOut, MailRefOut, StatusEvent } from '../api/generated/types.gen'
+import type { ChatMessageOut, ChatStreamRequest, ConversationOut, MailRefOut, StatusEvent, CalendarRefOut, SourceOut } from '../api/generated/types.gen'
 import { ChatStreamError, streamChatTurn, type ChatRefusal } from './transport'
 import { createTypewriter } from './typewriter'
-import { conversationsQuery } from '../api/queries'
+import { conversationsQuery, historyQuery } from '../api/queries'
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | ChatRefusal
-type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
-type Session = { composerTexts: Record<string, string>; setComposerText: (id: string, text: string) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
+type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
+type Session = { calendarScopes: Record<string, string[]>; setCalendarScope: (id: string, ids: string[]) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
 
@@ -34,6 +34,8 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient()
   const [state, setState] = useState<State>(initial)
   const [scope, setScope] = useState<string | null>(null)
+  const [calendarScopes, setCalendarScopes] = useState<Record<string, string[]>>({})
+  const setCalendarScope = (id: string, ids: string[]) => setCalendarScopes(previous => ({ ...previous, [id]: ids }))
   const [composerTexts, setComposerTexts] = useState<Record<string, string>>({})
   const setComposerText = (id: string, text: string) => setComposerTexts(previous => ({ ...previous, [id]: text }))
   const [scopeOverrides, setScopeOverrides] = useState<Record<string, string | null>>({})
@@ -56,6 +58,8 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => { const turn = active.current; active.current = null; turn?.controller.abort(); turn?.writer.cancel() }, [])
   const send = useCallback(async (request: ChatStreamRequest) => {
     if (active.current) return
+    const calendarIds = request.calendar_source_ids ?? calendarScopes[request.conversation_id ?? 'new'] ?? savedCalendarScope(request.conversation_id ? client.getQueryData(historyQuery(request.conversation_id).queryKey) : undefined)
+    request = { ...request, calendar_source_ids: calendarIds, calendar_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }
     last.current = request
     conversation.current = request.conversation_id ?? undefined
     setState({ ...initial(), phase: 'working', request, conversationId: request.conversation_id ?? undefined })
@@ -63,6 +67,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     const writer = createTypewriter({ reducedMotion: typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches, onText: text => setState(s => ({ ...s, text, phase: 'streaming', status: undefined })) })
     const turn = { controller, writer, conversationId: conversation.current }
     active.current = turn
+    let calendars: CalendarRefOut[] = []
     let mails: MailRefOut[] = [], proposal: ChatMessageOut | null = null, suggestions: string[] = []
     try {
       for await (const event of streamChatTurn(request, controller.signal)) {
@@ -76,13 +81,14 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
           case 'status': setState(s => ({ ...s, status: event })); break
           case 'delta': writer.push(event.text); break
           case 'mails': mails = event.mails; break
+          case 'calendars': calendars = event.calendars; break
           case 'proposal': proposal = event.message; break
           case 'suggestions': suggestions = event.items; break
           case 'done':
             await writer.finish()
             if (active.current !== turn) return
             active.current = null
-            setState(s => ({ ...s, phase: event.stopped ? 'stopped' : 'done', status: undefined, mails: event.stopped ? [] : mails, proposal: event.stopped ? null : proposal, suggestions: event.stopped ? [] : suggestions, conversationId: event.conversation_id, messageId: event.message_id }))
+            setState(s => ({ ...s, phase: event.stopped ? 'stopped' : 'done', status: undefined, mails: event.stopped ? [] : mails, calendars: event.stopped ? [] : calendars, proposal: event.stopped ? null : proposal, suggestions: event.stopped ? [] : suggestions, conversationId: event.conversation_id, messageId: event.message_id }))
             invalidate(event.conversation_id); return
           case 'error':
             writer.flushNow(); writer.cancel(); active.current = null
@@ -96,9 +102,9 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
       setState(s => ({ ...s, phase: 'error', status: undefined, errorCode: error instanceof ChatStreamError ? error.code : 'aborted' }))
       invalidate(turn.conversationId)
     }
-  }, [client, invalidate])
+  }, [client, invalidate, calendarScopes])
   const retry = useCallback(async () => { if (last.current) await send({ ...last.current, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
-  return <Context.Provider value={{ state, scope, setScope, composerTexts, setComposerText, scopeOverrides, setConversationScope, send, stop, retry }}>{children}</Context.Provider>
+  return <Context.Provider value={{ state, scope, setScope, calendarScopes, setCalendarScope, composerTexts, setComposerText, scopeOverrides, setConversationScope, send, stop, retry }}>{children}</Context.Provider>
 }
 // Shared restoration for every entry point; explicit edits are isolated by conversation.
 export function useConversationScope(id?: string) {
@@ -134,6 +140,11 @@ export function useRestartConversation(id?: string) {
       const now = latest.current
       const text = now.id ? now.session.composerTexts[now.id] : undefined
       if (now.id && selection !== undefined) now.session.setScope(selection)
+      if (now.id) {
+        const activeIds = new Set((client.getQueryData<SourceOut[]>(['calendar', 'sources']) ?? []).filter(source => source.is_active).map(source => source.id))
+        const ids = now.session.calendarScopes[now.id] ?? (now.session.state.conversationId === now.id ? now.session.state.request?.calendar_source_ids : undefined) ?? savedCalendarScope(client.getQueryData(historyQuery(now.id).queryKey))
+        now.session.setCalendarScope('new', ids.filter(sourceId => activeIds.has(sourceId)))
+      }
       if (text) now.session.setComposerText('new', text)
       void navigate({ to: '/' })
     }
@@ -145,6 +156,25 @@ export function useRestartConversation(id?: string) {
       // Without the list only an explicit or live account is known; otherwise the start page keeps its selection.
       () => { transfer(resolveScope(latest.current.session, id)) },
     )
+  }
+}
+
+function savedCalendarScope(messages?: ChatMessageOut[]): string[] {
+  try {
+    const raw: unknown = JSON.parse(messages?.findLast(message => message.context)?.context?.calendar_scope_json ?? '[]')
+    return Array.isArray(raw) && raw.every(id => typeof id === 'string') ? raw : []
+  } catch { return [] }
+}
+
+export function useCalendarScope(id?: string) {
+  const session = useChatSession()
+  const history = useQuery({ ...historyQuery(id ?? ''), enabled: !!id })
+  const key = id ?? 'new'
+  const live = session.state.conversationId === id ? session.state.request?.calendar_source_ids : undefined
+  return {
+    ids: session.calendarScopes[key] ?? live ?? savedCalendarScope(history.data),
+    ready: !id || session.calendarScopes[key] !== undefined || live !== undefined || history.isSuccess,
+    set: (ids: string[]) => session.setCalendarScope(key, ids),
   }
 }
 

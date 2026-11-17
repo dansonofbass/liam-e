@@ -20,6 +20,7 @@ function setup(path = '/', historyGone = false, selection: string | null = null)
   summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; requestBody = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start(c) { stream = c } }))) }) as typeof fetch
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
   spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
@@ -277,13 +278,34 @@ test('account change in a conversation offers a new conversation instead of a re
   expect(screen.getByRole('button', { name: 'Alle Konten' })).toBeTruthy()
 })
 
-test('a template deleted during the answer says so and offers a retry', async () => {
+test('calendar selection is separate from mail and survives a scope-conflict restart', async () => {
+  const { client, router } = setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  const sources = [{ id: 'work', name: 'Arbeitskalender', provider: 'google', is_active: true }]
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
+  act(() => client.setQueryData(['calendar', 'sources'], sources))
+  fireEvent.click(await screen.findByRole('button', { name: 'Arbeitskalender' }))
+  globalThis.fetch = ((_url: unknown, init: RequestInit) => {
+    requestBody = JSON.parse(String(init.body))
+    return Promise.resolve(Response.json({ detail: { code: 'conversation_scope_change_requires_new' } }, { status: 409 }))
+  }) as typeof fetch
+  await send()
+  const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten oder Kalender/)).closest('[role="alert"]') as HTMLElement
+  expect(requestBody.calendar_source_ids).toEqual(['work'])
+  expect(requestBody.account_id).toBe('a')
+  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect((await screen.findByRole('button', { name: 'Arbeitskalender' })).getAttribute('aria-pressed')).toBe('true')
+  expect(screen.getByRole('button', { name: 'Privat' })).toBeTruthy()
+})
+
+test('revoked context during an answer offers a fresh conversation', async () => {
   setup('/chat/c')
   const frames = ['event: start\ndata: {"event":"start","conversation_id":"c","user_message_id":"u"}\n\n', 'event: error\ndata: {"event":"error","code":"context_revoked"}\n\n']
   globalThis.fetch = (() => Promise.resolve(new Response(frames.join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))) as unknown as typeof fetch
   await send()
-  const notice = (await screen.findByText(/Die Vorlage wurde gelöscht/)).closest('[role="alert"]') as HTMLElement
-  expect(within(notice).getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
+  const notice = (await screen.findByText(/Die Vorlage oder Kalenderfreigabe ist nicht mehr gültig/)).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).getByRole('button', { name: 'Neue Unterhaltung' })).toBeTruthy()
 })
 
 test('a conversation renders both header menus without a duplicate key', async () => {

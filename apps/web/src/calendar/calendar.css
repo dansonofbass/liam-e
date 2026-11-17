@@ -3,6 +3,8 @@
 .le-calendar-agenda > *, .le-calendar-detail > * { margin-bottom: var(--space-4); }
 .le-calendar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .le-calendar-controls .le-field { flex: 1; min-width: 0; }
+.le-calendar-controls .le-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.le-calendar-status > .le-link { display: flex; align-items: center; min-height: var(--control-height-lg); }
 .le-calendar-controls .le-btn, .le-calendar-controls .le-chip, .le-calendar .le-link { min-height: var(--control-height-lg); }
 .le-calendar-row { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-sm); color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
 .le-calendar-row:hover { background: var(--surface-soft); }
