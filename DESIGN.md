@@ -572,6 +572,8 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 - „Einstellungen“ ist in Seitenleiste, Symbolleiste und mobiler Schublade erreichbar.
   `/settings` zeigt die Vorlagenbibliothek, ebenso `/settings/prompts`. Weitere fertige
   Bereiche können in `settingsSections` ergänzt werden; es gibt keine leeren Zielseiten.
+  Der aktuelle Bereich ist in der Abschnittsnavigation wie der aktuelle Eintrag der
+  Seitenleiste markiert.
 - Die Bibliothek zeigt Name, Kurzvorschau, Version und, sofern bekannt, das Änderungsdatum. Anlegen und Bearbeiten öffnen eigene
   Ansichten (`/settings/prompts/new`, `/settings/prompts/$promptId`), auch am Desktop.
 - Name und Anweisungen nutzen TextField mit Zählern (80 bzw. 8.000 Zeichen). Speichern

@@ -7,6 +7,7 @@ import { client as api } from '../api/generated/client.gen'
 import { ChatSessionProvider } from '../chat/session'
 import { Editor } from './Editor'
 import { Library } from './Library'
+import { Settings } from './Settings'
 import { TemplateMenu } from './TemplateMenu'
 
 const originalFetch = globalThis.fetch
@@ -29,15 +30,21 @@ function setup(path: string, respond?: (request: Request) => Promise<Response | 
   }) as typeof fetch
   const query = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={query}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
-  const list = createRoute({ getParentRoute: () => root, path: '/settings/prompts', component: Library })
-  const fresh = createRoute({ getParentRoute: () => root, path: '/settings/prompts/new', component: () => <Editor /> })
-  const edit = createRoute({ getParentRoute: () => root, path: '/settings/prompts/$promptId', component: () => <Editor id="p" /> })
+  const settings = createRoute({ getParentRoute: () => root, path: '/settings', component: Settings })
+  const list = createRoute({ getParentRoute: () => settings, path: '/prompts', component: Library })
+  const fresh = createRoute({ getParentRoute: () => settings, path: '/prompts/new', component: () => <Editor /> })
+  const edit = createRoute({ getParentRoute: () => settings, path: '/prompts/$promptId', component: () => <Editor id="p" /> })
   const chat = createRoute({ getParentRoute: () => root, path: '/chat', component: () => <TemplateMenu conversationId="c" /> })
-  const router = createRouter({ routeTree: root.addChildren([list, fresh, edit, chat]), history: createMemoryHistory({ initialEntries: [path] }) })
+  const router = createRouter({ routeTree: root.addChildren([settings.addChildren([list, fresh, edit]), chat]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
   return { query, router }
 }
 afterEach(() => { cleanup(); globalThis.fetch = originalFetch; api.setConfig(originalConfig) })
+
+test('the current settings section link is marked as the current page', async () => {
+  setup('/settings/prompts')
+  expect((await screen.findByRole('link', { name: 'Vorlagen' })).getAttribute('aria-current')).toBe('page')
+})
 
 test('library displays a date only when it is known', async () => {
   setup('/settings/prompts', async request => request.url.endsWith('/prompts')

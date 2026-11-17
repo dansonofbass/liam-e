@@ -1,5 +1,7 @@
 .le-settings { padding: var(--space-5); max-width: var(--chat-width); margin: 0 auto; width: 100%; min-width: 0; overflow-y: auto; height: 100%; }
 .le-settings nav, .le-prompt-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.le-settings nav { margin: var(--space-4) 0 var(--space-5); }
+.le-settings nav .le-btn[aria-current="page"], .le-settings nav .le-btn[aria-current="page"]:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .le-prompts { display: grid; gap: var(--space-4); margin-top: var(--space-5); min-width: 0; }
 .le-prompt-row { display: grid; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-soft); color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
 .le-prompt-row:hover { background: var(--accent-soft); }
