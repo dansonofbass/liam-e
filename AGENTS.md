@@ -34,6 +34,8 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `/chat/$conversationId` — Unterhaltung mit Verlauf, Antworten und Vorschlagskarten.
 - `/mail` — Posteingang mit Liste und Filtern; `/mail/$messageId` — geöffnete Mail mit Lesebereich.
 - `/accounts` — Kontenübersicht, Verbinden, erneutes Anmelden und Entfernen.
+- `/settings` und `/settings/prompts` — Einstellungen mit Vorlagenbibliothek; `settingsSections` ist der Navigationseinstieg für weitere implementierte Bereiche.
+- `/settings/prompts/new` und `/settings/prompts/$promptId` — Vorlage anlegen oder bearbeiten, auf allen Bildschirmgrößen als eigene Ansicht.
 
 ### Mail-Domäne (`apps/api/src/api/mail/`)
 

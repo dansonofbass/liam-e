@@ -567,6 +567,25 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 - **Mailbezug:** „Im Chat fragen“ öffnet die Startseite mit der Mail als Bezug. Über dem
   Composer steht dann ihre Mail-Karte mit dem Symbol-Button „Bezug entfernen“ (`x`).
 
+### 9.7 Vorlagen und Einstellungen
+
+- „Einstellungen“ ist in Seitenleiste, Symbolleiste und mobiler Schublade erreichbar.
+  `/settings` zeigt die Vorlagenbibliothek, ebenso `/settings/prompts`. Weitere fertige
+  Bereiche können in `settingsSections` ergänzt werden; es gibt keine leeren Zielseiten.
+- Die Bibliothek zeigt Name, Kurzvorschau und Version. Ein Änderungsdatum kann erst
+  erscheinen, wenn die Vorlagen-API es liefert. Anlegen und Bearbeiten öffnen eigene
+  Ansichten (`/settings/prompts/new`, `/settings/prompts/$promptId`), auch am Desktop.
+- Name und Anweisungen nutzen TextField mit Zählern (80 bzw. 8.000 Zeichen). Speichern
+  geschieht ausdrücklich; Fehler erhalten Eingaben. Ein Versionskonflikt bietet die
+  aktuelle Fassung an, ohne selbst zu überschreiben. Löschen braucht einen Dialog mit
+  Fokusführung und nennt die Folgen einschließlich gespeicherter Versionen.
+- Im Chat steht der Vorlagen-Chip beim Modell, getrennt vom Konto im Composer. Die
+  Kontrollzeile bricht um. Das Menü zeigt den vollständigen Anweisungstext; die Wahl
+  bestehender Unterhaltungen wird erst nach der Serverantwort aktiv. Ältere angeheftete
+  Versionen bieten „Version übernehmen“. Während einer Antwort ist die Wahl gesperrt.
+- Bei einem abgelehnten Kontowechsel führt „Neue Unterhaltung“ ohne bisherigen Verlauf
+  zur Startseite. Kontoauswahl und noch nicht angenommener Composertext bleiben erhalten.
+
 ## 10. Erweitern und pflegen
 
 - Neue Bausteine erst aus vorhandenen zusammensetzen; Tokens nie umgehen.

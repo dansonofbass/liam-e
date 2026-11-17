@@ -20,6 +20,7 @@ export function Sidebar({ collapsed = false, hideBrand = false, onConversations,
     <NavItem to="/" icon="message-circle" label={de.shell.chat} tip={de.shell.chatTip} collapsed={collapsed} current={path === '/' || path.startsWith('/chat/')} />
     <NavItem to="/mail" icon="inbox" label={de.shell.inbox} tip={de.shell.inboxTip} badge={data?.unread_total || undefined} badgeLabel={data?.unread_total ? de.shell.unread(data.unread_total) : undefined} collapsed={collapsed} />
     <NavItem to="/accounts" icon="at-sign" label={de.shell.accounts} tip={de.shell.accountsTip} collapsed={collapsed} />
+    <NavItem to="/settings" icon="pencil" label={de.prompts.settings} tip={de.prompts.settingsTip} collapsed={collapsed} current={path.startsWith('/settings')} />
     {collapsed ? <NavButton icon="messages-square" label={de.shell.conversations} tip={de.shell.conversationsTip} collapsed onClick={onConversations} /> :<div className="le-shell-conversations"><Conversations onNavigate={onNavigate} /></div>}
     <div className={`le-shell-status${collapsed ? ' le-shell-status--collapsed' : ''}`}>{!collapsed && data && <small className="le-muted le-shell-stand"><span className="le-dot le-dot--accent" aria-hidden="true" />{data.last_sync_at ? formatStand(count, new Date(data.last_sync_at)) : de.shell.accountCount(count)}</small>}<ThemeMenu placement={collapsed ? 'up-start' : 'up-end'} /></div>
   </div>

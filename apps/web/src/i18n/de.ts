@@ -7,6 +7,25 @@ const noticeSubject = (subject: string) => {
 }
 
 export const de = {
+  prompts: {
+    settings: 'Einstellungen', settingsTip: 'Vorlagen und persönliche Einstellungen verwalten', title: 'Vorlagen',
+    create: 'Vorlage anlegen', edit: 'Vorlage bearbeiten', save: 'Vorlage speichern', name: 'Name', text: 'Anweisungen',
+    example: 'Fasse offene Fristen mit Datum und zugehöriger Mail zusammen.',
+    safety: 'Gilt für deine nächsten Antworten. Mails werden weiterhin erst nach deiner Bestätigung verändert oder versendet.',
+    empty: 'Noch keine Vorlagen. Lege deine erste Vorlage an.', loading: 'Vorlagen werden geladen …',
+    error: 'Vorlagen konnten nicht geladen werden. Versuch es noch mal.', saveError: 'Die Änderung wurde nicht gespeichert. Deine Eingaben bleiben erhalten. Versuch es noch mal.',
+    conflict: 'Diese Vorlage wurde inzwischen geändert. Lade die aktuelle Fassung, bevor du weiterarbeitest.',
+    loadCurrent: 'Aktuelle Fassung laden', unavailable: 'Diese Vorlage gibt es nicht mehr. Kehre zur Vorlagenliste zurück.',
+    back: 'Zur Vorlagenliste', remove: 'Vorlage löschen', removeTitle: 'Vorlage löschen?',
+    removeDescription: 'Sie wird mit allen gespeicherten Versionen aus deiner Bibliothek entfernt. Betroffene Unterhaltungen verwenden künftig Standard. Bisherige Nachrichten bleiben erhalten. Bereits übermittelte Inhalte lassen sich nicht zurückholen.',
+    removed: 'Vorlage entfernt', standard: 'Standard', chip: (name: string) => `Vorlage: ${name}`,
+    scopeUnavailable: 'Gespeichertes Konto nicht verfügbar',
+    next: 'Gilt ab deiner nächsten Nachricht.', manage: 'Vorlagen verwalten', newer: 'Neue Version verfügbar', adopt: 'Version übernehmen',
+    selectionError: 'Die Vorlage wurde nicht gewechselt. Prüfe die Auswahl und versuch es noch mal.',
+    selectionConflict: 'Die Unterhaltung wurde inzwischen geändert. Lade die aktuelle Fassung und wähle erneut.',
+    restart: 'Neue Unterhaltung ohne bisherigen Kontext', version: (number: number) => `Version ${number}`,
+    count: (count: number, max = 8000) => `${count.toLocaleString('de-DE')} / ${max.toLocaleString('de-DE')} Zeichen`,
+  },
   rootScreens: {
     lang: 'de', missingChunkTitle: 'liam-e wurde aktualisiert',
     missingChunk: 'Lade die Seite neu, um die neue Version zu öffnen.', reload: 'Neu laden',

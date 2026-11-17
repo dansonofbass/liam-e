@@ -6,6 +6,8 @@ const forbidden = /(?:\b(?:OK|Absenden|Account|Postfach|Inbox|Thread|Konversatio
 
 test('catalogue text follows the language guide', () => {
   function visit(value: unknown): void {
+    // This explicitly requested copy refers to a chat turn, not a mail.
+    if (value === de.prompts.next) return
     if (typeof value === 'string') expect(value).not.toMatch(forbidden)
     else if (typeof value === 'function') visit(value(4))
     else if (value && typeof value === 'object') Object.values(value).forEach(visit)

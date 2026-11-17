@@ -20,6 +20,7 @@ function setup(path = '/', historyGone = false, selection: string | null = null)
   summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; requestBody = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start(c) { stream = c } }))) }) as typeof fetch
+  spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [] })) as never)
@@ -216,7 +217,7 @@ test('composer account menu falls back to the address', async () => {
   expect(screen.getByRole('button', { name: 'ich@example.com' })).toBeTruthy()
 })
 
-test('composer scopes a request to the chosen account and clears the field', async () => {
+test('composer scopes a request and clears the field only after acceptance', async () => {
   const { client } = setup('/chat/c')
   act(() => { client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: 'Privat' }] }) })
   fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
@@ -224,6 +225,8 @@ test('composer scopes a request to the chosen account and clears the field', asy
   await send()
   expect(requestBody.account_id).toBe('a')
   expect(requestBody.conversation_id).toBe('c')
+  expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Meine Frage')
+  await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }) })
   expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('')
 })
 
@@ -270,6 +273,8 @@ test('account change in a conversation offers a new conversation instead of a re
   expect(within(notice).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect((await screen.findByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Meine Frage')
+  expect(screen.getByRole('button', { name: 'Alle Konten' })).toBeTruthy()
 })
 
 test('a template deleted during the answer says so and offers a retry', async () => {
