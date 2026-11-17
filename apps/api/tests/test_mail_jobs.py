@@ -78,7 +78,8 @@ async def test_poll_keeps_the_configured_interval(fake_store, monkeypatch):
             assert len(fake_store.jobs) == 1
             job = next(iter(fake_store.jobs.values()))
             assert job.dedupe_key == f"sync:{a.id}"
-            await fake_store.job_finish(job.id)
+            claimed = await fake_store.job_claim_next(t0 + timedelta(seconds=1), stale_after=timedelta(minutes=10))
+            await fake_store.job_finish(job.id, claimed.attempts)
             await fake_store.save_state(account_id=a.id, last_sync_at=t0 + timedelta(seconds=20))
             b = account(fake_store, "b")
             await fake_store.save_state(account_id=b.id, last_sync_at=t0 + timedelta(minutes=4))

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Schwachstelle vertraulich melden
+    url: https://github.com/plagor44-ux/liam-e/security/advisories/new
+    about: Vermutete Schwachstellen nie in einem öffentlichen Issue melden (siehe SECURITY.md).

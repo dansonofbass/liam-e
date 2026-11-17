@@ -15,6 +15,8 @@ import { SafeMarkdown } from './SafeMarkdown'
 import { useChatSession } from './session'
 
 type Accounts = AccountSummaryOut[]
+// A retry would send the same request and be refused again.
+const NEEDS_NEW_CONVERSATION = new Set(['conversation_not_found', 'conversation_scope_change_requires_new', 'context_unavailable'])
 
 export function ChatComposer({ conversationId, contextMessageId, model, onSend, autoFocus }: { conversationId?: string; contextMessageId?: string; model?: string; onSend?: () => void; autoFocus?: boolean }) {
   const { data: summary } = useQuery(summaryQuery())
@@ -100,7 +102,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     {ordered.map((message, index) => <div className="le-chat-entry" key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={submitSuggestion} />}</div>)}
     {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={liveModel} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{de.chat.askAgain}</Button></div>}
-      {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'conversation_not_found' ? newConversation : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
+      {state.phase === 'error' && <Notice tone="danger" action={state.errorCode && NEEDS_NEW_CONVERSATION.has(state.errorCode) ? newConversation : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
       {state.phase === 'done' && <>{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}
     </div>}
     <div className="le-sr" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>

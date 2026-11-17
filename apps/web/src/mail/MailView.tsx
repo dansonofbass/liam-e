@@ -23,7 +23,7 @@ export function MailView({ id }: { id: string }) {
   const split = breakpoint === 'desktop' || breakpoint === 'wide'
   const message = useQuery({ ...messageQuery(id), retry: (count, error) => !(error instanceof MessageNotFoundError) && count < 2 })
   const summary = useQuery(summaryQuery())
-  const { run } = useMailActionsContext()
+  const { run, checkCapacity } = useMailActionsContext()
   const { state, send, retry } = useChatSession()
   const [started, setStarted] = useState(false)
   const [original, setOriginal] = useState<string | null>(null)
@@ -50,6 +50,7 @@ export function MailView({ id }: { id: string }) {
     void send({ text, context_message_id: id })
   }
   const remove = (kind: 'archive' | 'trash' | 'spam') => {
+    if (!checkCapacity()) return
     const list = client.getQueryData<InfiniteData<MessagePageOut>>(messagesInfiniteQuery(toMessageFilters(search)).queryKey)
     const items = list?.pages.flatMap(page => page.items) ?? []
     const index = items.findIndex(item => item.id === id)

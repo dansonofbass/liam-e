@@ -25,7 +25,7 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const breakpoint = useBreakpoint(), coarse = useCoarsePointer()
   const summary = useQuery(summaryQuery())
   const messages = useInfiniteQuery(messagesInfiniteQuery(toMessageFilters(search)))
-  const { run, notify } = useMailActionsContext()
+  const { run, notify, checkCapacity } = useMailActionsContext()
   const [localSelected, setLocalSelected] = useState<string | undefined>()
   const [searchOpen, setSearchOpen] = useState(Boolean(search.q))
   const [value, setValue] = useState(search.q ?? '')
@@ -67,6 +67,7 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   }, [messages.hasNextPage, messages.isFetchingNextPage, messages.fetchNextPage])
 
   const remove = (mail: MessageListItemOut, kind: 'archive' | 'trash') => {
+    if (!checkCapacity()) return
     const active = typeof document === 'undefined' ? null : document.activeElement
     if (active && rowRefs.current.get(mail.id)?.contains(active)) {
       const index = items.findIndex(item => item.id === mail.id)

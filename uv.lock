@@ -82,6 +82,7 @@ dependencies = [
     { name = "httpx" },
     { name = "mistralai" },
     { name = "pydantic" },
+    { name = "python-dateutil" },
     { name = "utils" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -100,6 +101,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mistralai", specifier = ">=3.6.0" },
     { name = "pydantic", specifier = ">=2.14.1" },
+    { name = "python-dateutil", specifier = "==4.0.0" },
     { name = "utils", editable = "packages/py/utils" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54" },
 ]

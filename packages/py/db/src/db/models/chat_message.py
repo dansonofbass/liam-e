@@ -25,6 +25,7 @@ class ChatMessage(SQLModel, table=True):
     id: str = Field(default_factory=new_id, primary_key=True)
     conversation_id: str = Field(index=True)
     role: str
+    context_id: str | None = None
     content: str = ""
     tool_name: str = ""
     tool_payload_json: str = ""

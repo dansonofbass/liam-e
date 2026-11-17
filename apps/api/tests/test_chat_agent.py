@@ -36,6 +36,11 @@ async def store(fake_store, monkeypatch):
     monkeypatch.setattr(mail_message, 'list_page', AsyncMock(return_value=[]))
     monkeypatch.setattr(mail_insight, 'get_for_messages', AsyncMock(return_value={}))
     account = await fake_store.create_account(provider='imap', auth_type='imap_password', email_address='mira@example.org')
+    async def resolve(**kw):
+        c = await get(kw['conversation_id']) if kw.get('conversation_id') else await create(model=kw.get('model') or '')
+        return c, NS(id='test-context', account_scope_json=json.dumps({'account_ids': [account.id]})), None
+    monkeypatch.setattr(agent, 'resolve_context', resolve)
+    monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(return_value=True))
     return NS(conversations=conversations, rows=rows, mail=fake_store, account=account, create=create)
 
 

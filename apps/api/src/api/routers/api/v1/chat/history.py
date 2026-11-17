@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query
 from api.errors import refuse
 
 from api.mail.agent import visible_messages
+from api.mail.chat_schemas import with_context
 
 from . import schemas
 
@@ -31,4 +32,4 @@ async def history(
     if conversation is None:
         raise refuse(404, "conversation_not_found", "Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.")
     messages = await message_access.list_messages(conversation_id)
-    return [schemas.to_message_out(m) for m in visible_messages(messages)]
+    return [await with_context(m) for m in visible_messages(messages)]

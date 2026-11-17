@@ -21,10 +21,12 @@ async def add_message(
     proposal_status: str = "",
     stopped: bool = False,
     extras_json: str = "",
+    context_id: str | None = None,
 ) -> ChatMessage:
     async with get_session_maker()() as session:
         message = ChatMessage(
             conversation_id=conversation_id,
+            context_id=context_id,
             role=role,
             content=content,
             tool_name=tool_name,

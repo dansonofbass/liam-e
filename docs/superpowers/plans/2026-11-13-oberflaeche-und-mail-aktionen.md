@@ -30,10 +30,10 @@ Die Sicherheitslücken S1 bis S6 werden geschlossen.
 
 - `DESIGN.md`: Texte, Tokens, Bausteine, Responsive-Verhalten.
 - `AGENTS.md`: Konventionen.
-- Screens: https://claude.ai/artifact/PdW36jpJZ5beBAgTh27yDC (Seite „Screens“; die Boards
+- Screens: Design-Canvas „liam-e Oberfläche“, Artefakt des Owners (Seite „Screens“; die Boards
   `Chat-Start`, `Chat-Antwort`, `Chat-Bestaetigen`, `Posteingang`, `Konten` und `Mobil-*` sind
   die Vorlage für Aufbau und Texte).
-- Design-System: https://claude.ai/artifact/MJRNJYUPnK6ciYFc2U2KAz (Dateien
+- Design-System „liam-e“, Artefakt des Owners (Dateien
   `project/tokens.css`, `project/components/bundle.css`, `project/components/<Name>/README.md`
   und `preview.html`).
 
@@ -271,7 +271,7 @@ eine eigene Test-App freigegeben (2026-11-13).
   - Eine Web-Seite `/`, die `/api/v1/probe/sse` per `fetch` liest und die Ankunftszeit jedes
     Ereignisses anzeigt.
 - [ ] **Step 3: Test-App deployen.**
-  `mistral deploy --from-disk --name liam-e-probe --organization ed70bb4c-f5a4-48f1-bd24-d0c67e5dffaa --workspace a831098a-6d9f-4a72-be3c-4d7aedcfc0b9 --json`.
+  `mistral deploy --from-disk --name liam-e-probe --organization <organization-id> --workspace <workspace-id> --json`.
   Kein `--yes` (das würde pushen). Erwartet: JSON mit der URL der App.
 - [ ] **Step 4: SSE messen.**
   - Die Probe-Seite über das Gateway öffnen: Playwright, oder der Owner, falls eine Anmeldung
@@ -1481,8 +1481,8 @@ Variante nach dem Proben-Dokument. Beide Varianten liefern dieselben `ChatEvent`
     `Intl.DateTimeFormat("de-DE", { timeZone })`.
 
 - [ ] **Step 1: Design-System-Dateien holen.** Über das Artifact-Werkzeug `read` mit `path`
-  `project/tokens.css` und `project/components/bundle.css` von
-  https://claude.ai/artifact/MJRNJYUPnK6ciYFc2U2KAz.
+  `project/tokens.css` und `project/components/bundle.css` aus dem Design-System „liam-e“
+  (Artefakt des Owners, über die Artefaktliste nach Namen zu finden).
 - [ ] **Step 2: Failing Tests schreiben.**
   - `contrast.test.ts`: liest die hellen und dunklen Werte aus `tokens.css` und prüft jede
     Zeile der Tabelle in DESIGN.md §3 in beiden Themes. Die Tabelle steht im Test als Daten,

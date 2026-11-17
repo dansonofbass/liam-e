@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
@@ -11,10 +12,16 @@ from env.mail import env as mail_env
 from api.mail import insights, sync
 
 _handlers: dict[str, Callable[[dict[str, Any]], Awaitable[None]]] = {}
+_claim_handlers: dict[str, Callable[[dict[str, Any], str, int], Awaitable[None]]] = {}
+_logger = logging.getLogger(__name__)
 
 
 def register_handler(kind: str, handler: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
     _handlers[kind] = handler
+
+
+def register_claim_handler(kind: str, handler: Callable[[dict[str, Any], str, int], Awaitable[None]]) -> None:
+    _claim_handlers[kind] = handler
 
 
 async def enqueue_sync(account_id: str) -> bool:
@@ -44,14 +51,21 @@ async def run_once(now: datetime | None = None) -> bool:
     job = await mail_job.claim_next(now, stale_after=timedelta(minutes=mail_env.mail_sync_stale_minutes))
     if job is None:
         return False
+    attempt = job.attempts
     try:
-        await _handlers[job.kind](json.loads(job.payload_json))
+        payload = json.loads(job.payload_json)
+        if job.kind in _claim_handlers:
+            await _claim_handlers[job.kind](payload, job.id, attempt)
+        else:
+            await _handlers[job.kind](payload)
     except Exception as error:
-        retry_at = None if isinstance(error, LookupError) or job.attempts >= 3 else now + timedelta(seconds=30 * job.attempts)
-        await mail_job.fail(job.id, type(error).__name__, retry_at=retry_at)
+        retry_at = None if isinstance(error, LookupError) or attempt >= 3 else now + timedelta(seconds=30 * attempt)
+        applied = await mail_job.fail(job.id, attempt, type(error).__name__, retry_at=retry_at)
     else:
-        await mail_job.finish(job.id)
-    return True
+        applied = await mail_job.finish(job.id, attempt)
+    if not applied:
+        _logger.warning("Job claim was lost before completion")
+    return applied
 
 
 async def enqueue_due_syncs(now: datetime, *, older_than_minutes: float | None, skip_auth_expired: bool) -> list[str]:

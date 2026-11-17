@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChatConversationsListData, ChatConversationsListResponses, ChatConversationUpdateData, ChatConversationUpdateErrors, ChatConversationUpdateResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatModelsListData, ChatModelsListResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatStreamData, ChatStreamErrors, ChatStreamResponse, ChatStreamResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOptionsData, MailAccountOptionsResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailAccountUpdateData, MailAccountUpdateErrors, MailAccountUpdateResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessageOriginalData, MailMessageOriginalErrors, MailMessageOriginalResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses } from './types.gen';
+import type { CalendarOccurrenceGetData, CalendarOccurrenceGetErrors, CalendarOccurrenceGetResponses, CalendarOccurrencesListData, CalendarOccurrencesListErrors, CalendarOccurrencesListResponses, CalendarSourceDeleteData, CalendarSourceDeleteErrors, CalendarSourceDeleteResponses, CalendarSourcesListData, CalendarSourcesListResponses, CalendarSourceSyncData, CalendarSourceSyncErrors, CalendarSourceSyncResponses, CalendarSourceUpdateData, CalendarSourceUpdateErrors, CalendarSourceUpdateResponses, ChatConversationsListData, ChatConversationsListResponses, ChatConversationUpdateData, ChatConversationUpdateErrors, ChatConversationUpdateResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatModelsListData, ChatModelsListResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatStreamData, ChatStreamErrors, ChatStreamResponse, ChatStreamResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOptionsData, MailAccountOptionsResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailAccountUpdateData, MailAccountUpdateErrors, MailAccountUpdateResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessageOriginalData, MailMessageOriginalErrors, MailMessageOriginalResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses, PromptCreateData, PromptCreateErrors, PromptCreateResponses, PromptDeleteData, PromptDeleteErrors, PromptDeleteResponses, PromptGetData, PromptGetErrors, PromptGetResponses, PromptsListData, PromptsListErrors, PromptsListResponses, PromptUpdateData, PromptUpdateErrors, PromptUpdateResponses, TasksCreateData, TasksCreateErrors, TasksCreateResponses, TasksOccurrenceCompleteData, TasksOccurrenceCompleteErrors, TasksOccurrenceCompleteResponses, TasksOccurrenceReopenData, TasksOccurrenceReopenErrors, TasksOccurrenceReopenResponses, TasksOccurrenceSkipData, TasksOccurrenceSkipErrors, TasksOccurrenceSkipResponses, TasksOccurrencesListData, TasksOccurrencesListErrors, TasksOccurrencesListResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -25,6 +25,43 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * service answers. ``degraded`` when one does not; the response is 200 either way.
  */
 export const health = <ThrowOnError extends boolean = false>(options?: Options<HealthData, ThrowOnError>): RequestResult<HealthResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
+
+/**
+ * Occurrences
+ */
+export const calendarOccurrencesList = <ThrowOnError extends boolean = false>(options: Options<CalendarOccurrencesListData, ThrowOnError>): RequestResult<CalendarOccurrencesListResponses, CalendarOccurrencesListErrors, ThrowOnError> => (options.client ?? client).get<CalendarOccurrencesListResponses, CalendarOccurrencesListErrors, ThrowOnError>({ url: '/api/v1/calendar/occurrences', ...options });
+
+/**
+ * Occurrence
+ */
+export const calendarOccurrenceGet = <ThrowOnError extends boolean = false>(options: Options<CalendarOccurrenceGetData, ThrowOnError>): RequestResult<CalendarOccurrenceGetResponses, CalendarOccurrenceGetErrors, ThrowOnError> => (options.client ?? client).get<CalendarOccurrenceGetResponses, CalendarOccurrenceGetErrors, ThrowOnError>({ url: '/api/v1/calendar/occurrences/{occurrence_id}', ...options });
+
+/**
+ * Sources
+ */
+export const calendarSourcesList = <ThrowOnError extends boolean = false>(options?: Options<CalendarSourcesListData, ThrowOnError>): RequestResult<CalendarSourcesListResponses, unknown, ThrowOnError> => (options?.client ?? client).get<CalendarSourcesListResponses, unknown, ThrowOnError>({ url: '/api/v1/calendar/sources', ...options });
+
+/**
+ * Remove
+ */
+export const calendarSourceDelete = <ThrowOnError extends boolean = false>(options: Options<CalendarSourceDeleteData, ThrowOnError>): RequestResult<CalendarSourceDeleteResponses, CalendarSourceDeleteErrors, ThrowOnError> => (options.client ?? client).delete<CalendarSourceDeleteResponses, CalendarSourceDeleteErrors, ThrowOnError>({ url: '/api/v1/calendar/sources/{source_id}', ...options });
+
+/**
+ * Update
+ */
+export const calendarSourceUpdate = <ThrowOnError extends boolean = false>(options: Options<CalendarSourceUpdateData, ThrowOnError>): RequestResult<CalendarSourceUpdateResponses, CalendarSourceUpdateErrors, ThrowOnError> => (options.client ?? client).patch<CalendarSourceUpdateResponses, CalendarSourceUpdateErrors, ThrowOnError>({
+    url: '/api/v1/calendar/sources/{source_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Refresh
+ */
+export const calendarSourceSync = <ThrowOnError extends boolean = false>(options: Options<CalendarSourceSyncData, ThrowOnError>): RequestResult<CalendarSourceSyncResponses, CalendarSourceSyncErrors, ThrowOnError> => (options.client ?? client).post<CalendarSourceSyncResponses, CalendarSourceSyncErrors, ThrowOnError>({ url: '/api/v1/calendar/sources/{source_id}/sync', ...options });
 
 /**
  * Send a message to the mail agent
@@ -300,6 +337,100 @@ export const mailSummary = <ThrowOnError extends boolean = false>(options?: Opti
  */
 export const mailSyncAll = <ThrowOnError extends boolean = false>(options: Options<MailSyncAllData, ThrowOnError>): RequestResult<MailSyncAllResponses, MailSyncAllErrors, ThrowOnError> => (options.client ?? client).post<MailSyncAllResponses, MailSyncAllErrors, ThrowOnError>({
     url: '/api/v1/mail/sync',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Prompts
+ */
+export const promptsList = <ThrowOnError extends boolean = false>(options?: Options<PromptsListData, ThrowOnError>): RequestResult<PromptsListResponses, PromptsListErrors, ThrowOnError> => (options?.client ?? client).get<PromptsListResponses, PromptsListErrors, ThrowOnError>({ url: '/api/v1/prompts', ...options });
+
+/**
+ * Create Prompt
+ */
+export const promptCreate = <ThrowOnError extends boolean = false>(options: Options<PromptCreateData, ThrowOnError>): RequestResult<PromptCreateResponses, PromptCreateErrors, ThrowOnError> => (options.client ?? client).post<PromptCreateResponses, PromptCreateErrors, ThrowOnError>({
+    url: '/api/v1/prompts',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete Prompt
+ */
+export const promptDelete = <ThrowOnError extends boolean = false>(options: Options<PromptDeleteData, ThrowOnError>): RequestResult<PromptDeleteResponses, PromptDeleteErrors, ThrowOnError> => (options.client ?? client).delete<PromptDeleteResponses, PromptDeleteErrors, ThrowOnError>({ url: '/api/v1/prompts/{id}', ...options });
+
+/**
+ * Get Prompt
+ */
+export const promptGet = <ThrowOnError extends boolean = false>(options: Options<PromptGetData, ThrowOnError>): RequestResult<PromptGetResponses, PromptGetErrors, ThrowOnError> => (options.client ?? client).get<PromptGetResponses, PromptGetErrors, ThrowOnError>({ url: '/api/v1/prompts/{id}', ...options });
+
+/**
+ * Update Prompt
+ */
+export const promptUpdate = <ThrowOnError extends boolean = false>(options: Options<PromptUpdateData, ThrowOnError>): RequestResult<PromptUpdateResponses, PromptUpdateErrors, ThrowOnError> => (options.client ?? client).patch<PromptUpdateResponses, PromptUpdateErrors, ThrowOnError>({
+    url: '/api/v1/prompts/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Create a personal task
+ */
+export const tasksCreate = <ThrowOnError extends boolean = false>(options: Options<TasksCreateData, ThrowOnError>): RequestResult<TasksCreateResponses, TasksCreateErrors, ThrowOnError> => (options.client ?? client).post<TasksCreateResponses, TasksCreateErrors, ThrowOnError>({
+    url: '/api/v1/tasks',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List materialized task occurrences
+ *
+ * Filter by inclusive local calendar dates; reading does not materialize.
+ */
+export const tasksOccurrencesList = <ThrowOnError extends boolean = false>(options?: Options<TasksOccurrencesListData, ThrowOnError>): RequestResult<TasksOccurrencesListResponses, TasksOccurrencesListErrors, ThrowOnError> => (options?.client ?? client).get<TasksOccurrencesListResponses, TasksOccurrencesListErrors, ThrowOnError>({ url: '/api/v1/tasks/occurrences', ...options });
+
+/**
+ * Complete an occurrence
+ */
+export const tasksOccurrenceComplete = <ThrowOnError extends boolean = false>(options: Options<TasksOccurrenceCompleteData, ThrowOnError>): RequestResult<TasksOccurrenceCompleteResponses, TasksOccurrenceCompleteErrors, ThrowOnError> => (options.client ?? client).post<TasksOccurrenceCompleteResponses, TasksOccurrenceCompleteErrors, ThrowOnError>({
+    url: '/api/v1/tasks/occurrences/{occurrence_id}/complete',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Reopen an occurrence
+ */
+export const tasksOccurrenceReopen = <ThrowOnError extends boolean = false>(options: Options<TasksOccurrenceReopenData, ThrowOnError>): RequestResult<TasksOccurrenceReopenResponses, TasksOccurrenceReopenErrors, ThrowOnError> => (options.client ?? client).post<TasksOccurrenceReopenResponses, TasksOccurrenceReopenErrors, ThrowOnError>({
+    url: '/api/v1/tasks/occurrences/{occurrence_id}/reopen',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Skip an occurrence
+ */
+export const tasksOccurrenceSkip = <ThrowOnError extends boolean = false>(options: Options<TasksOccurrenceSkipData, ThrowOnError>): RequestResult<TasksOccurrenceSkipResponses, TasksOccurrenceSkipErrors, ThrowOnError> => (options.client ?? client).post<TasksOccurrenceSkipResponses, TasksOccurrenceSkipErrors, ThrowOnError>({
+    url: '/api/v1/tasks/occurrences/{occurrence_id}/skip',
     ...options,
     headers: {
         'Content-Type': 'application/json',

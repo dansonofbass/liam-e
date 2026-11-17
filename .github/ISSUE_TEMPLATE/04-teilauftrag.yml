@@ -1,0 +1,61 @@
+name: Teilauftrag
+description: Ein abgegrenztes Arbeitspaket eines Parent-Issues, umsetzbar von einer Person oder einem Coding-Agent.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ein Teilauftrag nennt Scope, konkrete Arbeit, Abnahme, Nachweise und Stopbedingungen. Keine Zugangsdaten,
+        echten Daten, Mistral-IDs oder lokalen Pfade.
+  - type: input
+    id: parent
+    attributes:
+      label: Parent
+      description: z. B. "#10"
+    validations:
+      required: true
+  - type: textarea
+    id: prerequisites
+    attributes:
+      label: Voraussetzungen
+      description: Vorher zu integrierende Teilaufträge und nötige Fähigkeitsnachweise, als Issue-Verweise; sonst "keine".
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Auftrag und Ziel
+    validations:
+      required: true
+  - type: textarea
+    id: work
+    attributes:
+      label: Konkrete Arbeit
+      description: Dateien und Verzeichnisse, Tabellen, Routen und Verträge.
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Nicht enthalten
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Abnahmekriterien
+      description: Prüfbare Aussagen mit mindestens einem Negativfall.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Validierung und Lieferung
+      description: Auszuführende Befehle und Suiten, Live-Nachweise getrennt von Tests mit Fakes.
+    validations:
+      required: true
+  - type: textarea
+    id: stop
+    attributes:
+      label: Stopbedingungen
+      description: Wann die Arbeit mit einem Befund statt einer Lösung endet.

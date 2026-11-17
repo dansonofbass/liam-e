@@ -7,9 +7,10 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 
 from db.accessors import chat_conversation as conversation_access, chat_message as message_access
-from db.accessors import mail_account, mail_insight, mail_message
+from db.accessors import mail_account, mail_insight, mail_message, chat_context
+from api.mail.context_resolver import resolve_context
 from env.mail import env as mail_env
-from utils.mistral import mistral_client
+from api.mail.chat_client import mistral_client
 from api.mail.agent_prompt import system_prompt
 from api.mail.agent_tools import TOOLS, TurnContext, execute_tool, tool_status
 from api.mail.chat_events import ChatEvent, StartEvent, StatusEvent, DeltaEvent, MailsEvent, MailRefOut, ProposalEvent, SuggestionsEvent, DoneEvent, ErrorEvent
@@ -55,14 +56,13 @@ def visible_messages(rows):
     return [r for r in rows if r.role != 'tool' and not (r.role == 'assistant' and r.tool_payload_json)]
 
 
-async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, context_message_id: str | None = None, model: str | None = None) -> AsyncIterator[ChatEvent]:
-    """Run one turn; `model` only sets the model of a conversation this turn creates."""
-    if conversation_id:
-        conversation = await conversation_access.get_conversation(conversation_id)
-        if conversation is None: raise LookupError('conversation not found')
-    else:
-        conversation = await conversation_access.create_conversation(title=' '.join(text.split())[:60], model=model or '')
-    user = await message_access.add_message(conversation_id=conversation.id, role='user', content=text)
+async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, context_message_id: str | None = None, model: str | None = None, prompt_revision_id: str | None = None, resolved_context=None) -> AsyncIterator[ChatEvent]:
+    """All rounds share one persisted snapshot; revocation is checked at each boundary."""
+    conversation, snapshot, template_text = resolved_context or await resolve_context(
+        conversation_id=conversation_id, text=text, account_id=account_id,
+        model=model, prompt_revision_id=prompt_revision_id)
+    scope_ids = json.loads(snapshot.account_scope_json)['account_ids']
+    user = await message_access.add_message(conversation_id=conversation.id, role='user', content=text, context_id=snapshot.id)
     model = conversation.model or mail_env.mail_chat_model
     all_text = ''
     mails, suggestions = [], []
@@ -72,7 +72,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
     async def save(stopped):
         nonlocal saved
         if saved: return None
-        row = await message_access.add_message(conversation_id=conversation.id, role='assistant', content=all_text, stopped=stopped, extras_json=ChatExtrasOut(mails=mails, suggestions=suggestions, model=model).model_dump_json())
+        row = await message_access.add_message(conversation_id=conversation.id, role='assistant', content=all_text, stopped=stopped, context_id=snapshot.id, extras_json=ChatExtrasOut(mails=mails, suggestions=suggestions, model=model).model_dump_json())
         saved = True
         return row
 
@@ -80,13 +80,23 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         yield StartEvent(conversation_id=conversation.id, user_message_id=user.id)
         yield StatusEvent(code='thinking')
         account = await mail_account.get_account(account_id) if account_id else None
-        ctx = TurnContext(conversation.id, account.id if account else None, datetime.now(BERLIN).date())
+        ctx = TurnContext(conversation.id, account.id if account else None, datetime.now(BERLIN).date(), account_ids=scope_ids, context_id=snapshot.id)
         history = await message_access.list_messages(conversation.id)
+        history = [row for row in history if not row.context_id or
+                   (row.role not in ('tool', 'proposal', 'draft') and not row.tool_payload_json) or
+                   await chat_context.is_live(row.context_id)]
         messages = _to_model_messages(history, prompt=system_prompt(today=ctx.today, account_scope=account.email_address if account else None))
-        if context_message_id and await mail_message.get_message(context_message_id):
+        if template_text is not None:
+            messages.insert(1, {'role': 'user', 'content': 'Nutzervorlage für diesen Turn:\n' + template_text})
+        context_mail = await mail_message.get_message(context_message_id) if context_message_id else None
+        if context_mail and context_mail.account_id in scope_ids:
             messages.insert(1, {'role':'system', 'content':f'Die Bitte bezieht sich auf die Mail mit der ID {context_message_id}. Lies sie mit get_message, bevor du antwortest.'})
         client = None
         for round_index in range(max(1, mail_env.mail_chat_max_tool_rounds)):
+            if not await chat_context.is_live(snapshot.id):
+                if all_text: await save(True)
+                yield ErrorEvent(code='context_revoked')
+                return
             calls = []
             calls_by_index = {}
             round_text = ''
@@ -162,9 +172,13 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                     while id in used_ids: id = f'call_{uuid.uuid4().hex}'
                     call['id'] = id
                     used_ids.add(id)
-            await message_access.add_message(conversation_id=conversation.id, role='assistant', content='', tool_payload_json=json.dumps(payload))
+            await message_access.add_message(conversation_id=conversation.id, role='assistant', content='', tool_payload_json=json.dumps(payload), context_id=snapshot.id)
             messages.append({'role':'assistant', 'content':round_text, 'tool_calls':payload})
             for call in payload:
+                if not await chat_context.is_live(snapshot.id):
+                    if all_text: await save(True)
+                    yield ErrorEvent(code='context_revoked')
+                    return
                 name = call['function']['name']
                 try:
                     args = json.loads(call['function']['arguments'] or '{}')
@@ -177,6 +191,10 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                     try:
                         status = await tool_status(name, args, ctx)
                         if status: yield status
+                        if not await chat_context.is_live(snapshot.id):
+                            if all_text: await save(True)
+                            yield ErrorEvent(code='context_revoked')
+                            return
                         outcome = await execute_tool(name, args, ctx)
                         content = outcome.content
                         for id in outcome.mails:
@@ -187,7 +205,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                     except Exception as error:
                         logger.warning('%s', type(error).__name__)
                         content = json.dumps({'error':'tool_failed'})
-                await message_access.add_message(conversation_id=conversation.id, role='tool', tool_name=name, tool_payload_json=json.dumps({'tool_call_id':call['id']}), content=content)
+                await message_access.add_message(conversation_id=conversation.id, role='tool', context_id=snapshot.id, tool_name=name, tool_payload_json=json.dumps({'tool_call_id':call['id']}), content=content)
                 messages.append({'role':'tool', 'name':name, 'tool_call_id':call['id'], 'content':content})
             yield StatusEvent(code='thinking')
     except (asyncio.CancelledError, GeneratorExit):

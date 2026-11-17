@@ -38,24 +38,24 @@ async def test_patch_model_and_title(monkeypatch):
     from api.mail.models_catalog import ChatModelOut
     row = ChatConversation(title='Alt', model='old')
     async def get(id): return row if id == row.id else None
-    async def update(id, *, model=None, title=None):
+    async def update(id, expected_version, *, model=None, title=None, **kw):
         if model is not None: row.model = model
         if title is not None: row.title = title
         return row
     async def models(): return [ChatModelOut(id='valid', label='Valid', description='', is_default=False)]
     monkeypatch.setattr(conversations.conversation_access, 'get_conversation', get)
-    monkeypatch.setattr(conversations.conversation_access, 'update_conversation', update)
+    monkeypatch.setattr(conversations.chat_context, 'configure', update)
     monkeypatch.setattr(conversations, 'list_chat_models', models)
-    updated = await conversations.update_conversation(row.id, conversations.ChatConversationUpdateIn(model='valid', title='  Neu  '))
+    updated = await conversations.update_conversation(row.id, conversations.ChatConversationUpdateIn(expected_version=1, model='valid', title='  Neu  '))
     assert (updated.model, updated.title) == ('valid', 'Neu')
-    updated = await conversations.update_conversation(row.id, conversations.ChatConversationUpdateIn(model=None))
+    updated = await conversations.update_conversation(row.id, conversations.ChatConversationUpdateIn(expected_version=1, model=None))
     assert (updated.model, updated.title) == ('', 'Neu')
     from fastapi import HTTPException
     with pytest.raises(HTTPException) as exc:
-        await conversations.update_conversation(row.id, conversations.ChatConversationUpdateIn(model='unknown'))
+        await conversations.update_conversation(row.id, conversations.ChatConversationUpdateIn(expected_version=1, model='unknown'))
     assert exc.value.status_code == 422 and exc.value.detail['code'] == 'model_unknown'
     with pytest.raises(HTTPException) as exc:
-        await conversations.update_conversation(row.id, conversations.ChatConversationUpdateIn(model=''))
+        await conversations.update_conversation(row.id, conversations.ChatConversationUpdateIn(expected_version=1, model=''))
     assert exc.value.detail['code'] == 'model_unknown'
 
 

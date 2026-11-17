@@ -23,6 +23,7 @@ function setup(path = '/', historyGone = false) {
   spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [] })) as never)
+  spyOn(sdk, 'chatConversationsList').mockImplementation((async () => ({ data: [{ id: 'c', title: 'Test', model: 'm1', version: 5, prompt_revision_id: null, account_scope_json: null, created_at: '', updated_at: '' }] })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
   const start = createRoute({ getParentRoute: () => root, path: '/', component: StartRoute.options.component })
@@ -244,6 +245,25 @@ test('missing conversation in a stream offers a new conversation', async () => {
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
 })
 
+test('account change in a conversation offers a new conversation instead of a retry', async () => {
+  const { router } = setup('/chat/c')
+  globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'conversation_scope_change_requires_new' } }), { status: 409 }))) as unknown as typeof fetch
+  await send()
+  const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten/)).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
+  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+})
+
+test('a template deleted during the answer says so and offers a retry', async () => {
+  setup('/chat/c')
+  const frames = ['event: start\ndata: {"event":"start","conversation_id":"c","user_message_id":"u"}\n\n', 'event: error\ndata: {"event":"error","code":"context_revoked"}\n\n']
+  globalThis.fetch = (() => Promise.resolve(new Response(frames.join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))) as unknown as typeof fetch
+  await send()
+  const notice = (await screen.findByText(/Die Vorlage wurde gelöscht/)).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
+})
+
 test('unknown model refusal renders its explanation', async () => {
   spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'model_unknown' } } }) as never)
   const { client } = setup('/chat/c')
@@ -262,8 +282,31 @@ test('model menu updates the conversation', async () => {
   act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', description: 'Schnell', is_default: true }, { id: 'm2', label: 'Modell Zwei', description: 'Genau', is_default: false }]) })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
   fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei · Genau/ }))
-  await waitFor(() => expect(update).toHaveBeenCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2' }, throwOnError: true }))
+  await waitFor(() => expect(update).toHaveBeenCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2', expected_version: 5 }, throwOnError: true }))
   await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['history', 'c'] }))
+})
+
+test('a model conflict reloads the conversation and only an explicit retry uses its new version', async () => {
+  const { client } = setup('/chat/c')
+  let reads = 0
+  let conflicted = false
+  const refreshed = { id: 'c', title: 'Test', model: 'm3', version: 6, prompt_revision_id: null, account_scope_json: null, created_at: '', updated_at: '' }
+  spyOn(sdk, 'chatConversationsList').mockImplementation((async () => { reads++; return { data: [conflicted ? refreshed : { ...refreshed, model: 'm1', version: 5 }] } }) as never)
+  const update = spyOn(sdk, 'chatConversationUpdate').mockImplementationOnce((async () => { conflicted = true; throw { detail: { code: 'version_conflict' }, status: 409 } }) as never)
+    .mockImplementation((async () => ({ data: { ...refreshed, model: 'm2', version: 7 } })) as never)
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei' }, { id: 'm3', label: 'Modell Drei' }]) })
+  fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
+  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei/ }))
+  expect(await screen.findByText('Die Unterhaltung wurde inzwischen geändert. Der aktuelle Stand ist geladen. Prüfe das Modell und wähle bei Bedarf erneut.')).toBeTruthy()
+  expect(client.getQueryData(['conversations'])).toEqual([refreshed])
+  expect(update).toHaveBeenCalledTimes(1)
+  expect(reads).toBeGreaterThanOrEqual(2)
+  expect(update).toHaveBeenCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2', expected_version: 5 }, throwOnError: true })
+  fireEvent.click(await screen.findByRole('button', { name: /Modell Drei/ }))
+  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei/ }))
+  await waitFor(() => expect(update).toHaveBeenLastCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2', expected_version: 6 }, throwOnError: true }))
+  expect(await screen.findByRole('button', { name: /Modell Zwei/ })).toBeTruthy()
 })
 
 test('a missing history mail reference is requested only once', async () => {

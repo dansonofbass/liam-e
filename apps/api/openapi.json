@@ -260,6 +260,11 @@
       },
       "ChatConversationUpdateIn": {
         "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
           "model": {
             "anyOf": [
               {
@@ -270,6 +275,17 @@
               }
             ],
             "title": "Model"
+          },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
           },
           "title": {
             "anyOf": [
@@ -283,6 +299,9 @@
             "title": "Title"
           }
         },
+        "required": [
+          "expected_version"
+        ],
         "title": "ChatConversationUpdateIn",
         "type": "object"
       },
@@ -359,6 +378,16 @@
           "content": {
             "title": "Content",
             "type": "string"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContextOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "conversation_id": {
             "title": "Conversation Id",
@@ -493,6 +522,17 @@
             "description": "Model for a new conversation; ignored when conversation_id is set (use PATCH on the conversation).",
             "title": "Model"
           },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
+          },
           "text": {
             "maxLength": 8000,
             "minLength": 1,
@@ -508,6 +548,28 @@
       },
       "ChatTurnRequest": {
         "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "context_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Message Id"
+          },
           "conversation_id": {
             "default": "",
             "description": "Leer lassen f\u00fcr eine neue Unterhaltung",
@@ -519,6 +581,28 @@
             "minLength": 1,
             "title": "Message",
             "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
           }
         },
         "required": [
@@ -590,8 +674,83 @@
         "title": "ConnectorToolOut",
         "type": "object"
       },
+      "ContextOut": {
+        "properties": {
+          "account_scope_json": {
+            "title": "Account Scope Json",
+            "type": "string"
+          },
+          "app_prompt_version": {
+            "title": "App Prompt Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "preference_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preference Revision Id"
+          },
+          "prompt_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Hash"
+          },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
+          },
+          "revoked": {
+            "title": "Revoked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "prompt_revision_id",
+          "prompt_hash",
+          "app_prompt_version",
+          "account_scope_json",
+          "preference_revision_id",
+          "revoked"
+        ],
+        "title": "ContextOut",
+        "type": "object"
+      },
       "ConversationOut": {
         "properties": {
+          "account_scope_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Scope Json"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -605,6 +764,17 @@
             "title": "Model",
             "type": "string"
           },
+          "prompt_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision Id"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -613,12 +783,19 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
           "id",
           "title",
           "model",
+          "prompt_revision_id",
+          "version",
+          "account_scope_json",
           "created_at",
           "updated_at"
         ],
@@ -709,7 +886,8 @@
             "enum": [
               "model_unavailable",
               "aborted",
-              "internal"
+              "internal",
+              "context_revoked"
             ],
             "title": "Code",
             "type": "string"
@@ -1427,6 +1605,180 @@
         "title": "OAuthAuthorizeOut",
         "type": "object"
       },
+      "PromptCreate": {
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "text"
+        ],
+        "title": "PromptCreate",
+        "type": "object"
+      },
+      "PromptDetailOut": {
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/PromptRevisionOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "revision_id",
+          "text",
+          "content_hash",
+          "revisions"
+        ],
+        "title": "PromptDetailOut",
+        "type": "object"
+      },
+      "PromptOut": {
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "revision_id",
+          "text",
+          "content_hash"
+        ],
+        "title": "PromptOut",
+        "type": "object"
+      },
+      "PromptRevisionOut": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "content",
+          "content_hash"
+        ],
+        "title": "PromptRevisionOut",
+        "type": "object"
+      },
+      "PromptUpdate": {
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "PromptUpdate",
+        "type": "object"
+      },
       "Proposal": {
         "properties": {
           "draft": {
@@ -1723,6 +2075,109 @@
         "title": "SendDraft",
         "type": "object"
       },
+      "SourceOut": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "coverage_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage End"
+          },
+          "coverage_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Start"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "incomplete": {
+            "title": "Incomplete",
+            "type": "boolean"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "name",
+          "timezone",
+          "is_active",
+          "capabilities",
+          "coverage_start",
+          "coverage_end",
+          "last_success_at",
+          "stale",
+          "incomplete"
+        ],
+        "title": "SourceOut",
+        "type": "object"
+      },
+      "SourcePatch": {
+        "properties": {
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_active"
+        ],
+        "title": "SourcePatch",
+        "type": "object"
+      },
       "StartEvent": {
         "properties": {
           "conversation_id": {
@@ -1846,6 +2301,125 @@
         "title": "SyncAllRequest",
         "type": "object"
       },
+      "SyncOut": {
+        "properties": {
+          "queued": {
+            "title": "Queued",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued"
+        ],
+        "title": "SyncOut",
+        "type": "object"
+      },
+      "TaskCreate": {
+        "properties": {
+          "creation_key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Creation Key",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Description",
+            "type": "string"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrule"
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "start": {
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "creation_key",
+          "title",
+          "start"
+        ],
+        "title": "TaskCreate",
+        "type": "object"
+      },
+      "TaskCreated": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "created"
+        ],
+        "title": "TaskCreated",
+        "type": "object"
+      },
       "UndoIn": {
         "properties": {
           "action_ids": {
@@ -1943,6 +2517,230 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "VersionIn": {
+        "properties": {
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "VersionIn",
+        "type": "object"
+      },
+      "api__routers__api__v1__calendar__schemas__OccurrenceOut": {
+        "properties": {
+          "end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "start_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start At"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "event_id",
+          "title",
+          "start_date",
+          "end_date",
+          "start_at",
+          "end_at",
+          "timezone"
+        ],
+        "title": "OccurrenceOut",
+        "type": "object"
+      },
+      "api__routers__api__v1__calendar__schemas__OccurrencePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/api__routers__api__v1__calendar__schemas__OccurrenceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "OccurrencePage",
+        "type": "object"
+      },
+      "api__routers__api__v1__tasks__schemas__OccurrenceOut": {
+        "properties": {
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "due_local": {
+            "title": "Due Local",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "occurrence_key": {
+            "title": "Occurrence Key",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "series_id": {
+            "title": "Series Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "completed",
+              "skipped",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "series_id",
+          "revision_id",
+          "occurrence_key",
+          "due_local",
+          "due_at",
+          "status",
+          "version"
+        ],
+        "title": "OccurrenceOut",
+        "type": "object"
+      },
+      "api__routers__api__v1__tasks__schemas__OccurrencePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/api__routers__api__v1__tasks__schemas__OccurrenceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "OccurrencePage",
+        "type": "object"
       }
     }
   },
@@ -1969,6 +2767,277 @@
           }
         },
         "summary": "Report dependency status; always answers 200"
+      }
+    },
+    "/api/v1/calendar/occurrences": {
+      "get": {
+        "operationId": "calendar_occurrences_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Ids"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__routers__api__v1__calendar__schemas__OccurrencePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Occurrences"
+      }
+    },
+    "/api/v1/calendar/occurrences/{occurrence_id}": {
+      "get": {
+        "operationId": "calendar_occurrence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "title": "Occurrence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__routers__api__v1__calendar__schemas__OccurrenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Occurrence"
+      }
+    },
+    "/api/v1/calendar/sources": {
+      "get": {
+        "operationId": "calendar_sources_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceOut"
+                  },
+                  "title": "Response Calendar Sources List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sources"
+      }
+    },
+    "/api/v1/calendar/sources/{source_id}": {
+      "delete": {
+        "operationId": "calendar_source_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove"
+      },
+      "patch": {
+        "operationId": "calendar_source_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update"
+      }
+    },
+    "/api/v1/calendar/sources/{source_id}/sync": {
+      "post": {
+        "operationId": "calendar_source_sync",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh"
       }
     },
     "/api/v1/chat": {
@@ -3119,6 +4188,489 @@
           }
         },
         "summary": "Mail Sync All"
+      }
+    },
+    "/api/v1/prompts": {
+      "get": {
+        "operationId": "prompts_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PromptOut"
+                  },
+                  "title": "Response Prompts List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "List Prompts"
+      },
+      "post": {
+        "operationId": "prompt_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Create Prompt"
+      }
+    },
+    "/api/v1/prompts/{id}": {
+      "delete": {
+        "operationId": "prompt_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Delete Prompt"
+      },
+      "get": {
+        "operationId": "prompt_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Get Prompt"
+      },
+      "patch": {
+        "operationId": "prompt_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Template unavailable"
+          },
+          "409": {
+            "description": "Expected version is stale"
+          },
+          "422": {
+            "description": "Invalid fields; user content is not echoed"
+          }
+        },
+        "summary": "Update Prompt"
+      }
+    },
+    "/api/v1/tasks": {
+      "post": {
+        "operationId": "tasks_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create a personal task"
+      }
+    },
+    "/api/v1/tasks/occurrences": {
+      "get": {
+        "description": "Filter by inclusive local calendar dates; reading does not materialize.",
+        "operationId": "tasks_occurrences_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open",
+                    "completed",
+                    "skipped",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Due From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Due To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__routers__api__v1__tasks__schemas__OccurrencePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List materialized task occurrences"
+      }
+    },
+    "/api/v1/tasks/occurrences/{occurrence_id}/complete": {
+      "post": {
+        "operationId": "tasks_occurrence_complete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "title": "Occurrence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__routers__api__v1__tasks__schemas__OccurrenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete an occurrence"
+      }
+    },
+    "/api/v1/tasks/occurrences/{occurrence_id}/reopen": {
+      "post": {
+        "operationId": "tasks_occurrence_reopen",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "title": "Occurrence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__routers__api__v1__tasks__schemas__OccurrenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reopen an occurrence"
+      }
+    },
+    "/api/v1/tasks/occurrences/{occurrence_id}/skip": {
+      "post": {
+        "operationId": "tasks_occurrence_skip",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "title": "Occurrence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__routers__api__v1__tasks__schemas__OccurrenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Skip an occurrence"
       }
     }
   }

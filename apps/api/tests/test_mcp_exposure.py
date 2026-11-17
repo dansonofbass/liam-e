@@ -20,6 +20,12 @@ from conftest import build_app
 # deciding that it must not be reachable from a Studio agent.
 MUTATING_OPERATIONS: frozenset[str] = frozenset(
     {
+        "calendar_source_delete",
+        "calendar_source_sync",
+        "calendar_source_update",
+        "prompt_create",
+        "prompt_update",
+        "prompt_delete",
         "chat_conversation_update",
         "chat_proposal_cancel",
         "chat_proposal_confirm",
@@ -33,6 +39,10 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "mail_actions_undo",
         "mail_message_action",
         "mail_sync_all",
+        "tasks_create",
+        "tasks_occurrence_complete",
+        "tasks_occurrence_reopen",
+        "tasks_occurrence_skip",
     }
 )
 

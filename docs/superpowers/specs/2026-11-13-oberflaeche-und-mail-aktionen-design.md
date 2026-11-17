@@ -6,9 +6,9 @@ Quellen, die dieses Dokument nicht wiederholt:
 
 - `DESIGN.md`: Tokens, Bausteine, Texte, Responsive-Verhalten, Chat-Regeln. Was dort
   steht, gilt.
-- Design-System „liam-e“: https://claude.ai/artifact/MJRNJYUPnK6ciYFc2U2KAz
+- Design-System „liam-e“ (Claude-Design-Artefakt des Owners, nicht öffentlich)
   (`tokens.json`, `tokens.css`, `components/bundle.css`, 17 Bausteine mit Vorschau).
-- Abgenommene Screens: https://claude.ai/artifact/PdW36jpJZ5beBAgTh27yDC, Seite „Screens“.
+- Abgenommene Screens: Design-Canvas „liam-e Oberfläche“ (Artefakt des Owners), Seite „Screens“.
   Die Ansichten dort sind die Vorlage für Aufbau, Texte und Zustände.
 - `AGENTS.md`: Architektur, Konventionen, Sicherheitsregeln.
 

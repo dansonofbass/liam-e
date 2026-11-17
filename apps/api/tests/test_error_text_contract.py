@@ -111,7 +111,7 @@ async def test_unknown_model_and_reconnect(monkeypatch):
     monkeypatch.setattr(conversations.conversation_access, "get_conversation", AsyncMock(return_value=SimpleNamespace()))
     monkeypatch.setattr(conversations, "list_chat_models", AsyncMock(return_value=[]))
     with pytest.raises(HTTPException) as error:
-        await conversations.update_conversation("c", conversations.ChatConversationUpdateIn(model="missing"))
+        await conversations.update_conversation("c", conversations.ChatConversationUpdateIn(expected_version=1, model="missing"))
     assert_detail(error, "model_unknown", "Dieses Modell gibt es nicht mehr. Wähle ein anderes.")
     monkeypatch.setattr(accounts.account_access, "get_account", AsyncMock(return_value=SimpleNamespace(auth_type="imap_password", provider="imap")))
     with pytest.raises(HTTPException) as error:

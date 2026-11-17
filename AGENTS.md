@@ -80,6 +80,17 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Routergruppe | Methode | Pfad | `operation_id` |
 | --- | --- | --- | --- |
 | Health | GET | `/api/health` | `health` |
+| Kalender | GET | `/api/v1/calendar/sources` | `calendar_sources_list` |
+| Kalender | PATCH | `/api/v1/calendar/sources/{source_id}` | `calendar_source_update` |
+| Kalender | DELETE | `/api/v1/calendar/sources/{source_id}` | `calendar_source_delete` |
+| Kalender | POST | `/api/v1/calendar/sources/{source_id}/sync` | `calendar_source_sync` |
+| Kalender | GET | `/api/v1/calendar/occurrences` | `calendar_occurrences_list` |
+| Kalender | GET | `/api/v1/calendar/occurrences/{occurrence_id}` | `calendar_occurrence_get` |
+| Vorlagen | GET | `/api/v1/prompts` | `prompts_list` |
+| Vorlagen | POST | `/api/v1/prompts` | `prompt_create` |
+| Vorlagen | GET | `/api/v1/prompts/{id}` | `prompt_get` |
+| Vorlagen | PATCH | `/api/v1/prompts/{id}` | `prompt_update` |
+| Vorlagen | DELETE | `/api/v1/prompts/{id}` | `prompt_delete` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
 | Chat | POST | `/api/v1/chat/stream` | `chat_stream` |
 | Chat | GET | `/api/v1/chat/conversations` | `chat_conversations_list` |
@@ -107,9 +118,32 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}/original` | `mail_message_original` |
 | Mail / Übersicht | GET | `/api/v1/mail/summary` | `mail_summary` |
 | Mail / Abruf | POST | `/api/v1/mail/sync` | `mail_sync_all` |
+| Aufgaben | POST | `/api/v1/tasks` | `tasks_create` |
+| Aufgaben | GET | `/api/v1/tasks/occurrences` | `tasks_occurrences_list` |
+| Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/complete` | `tasks_occurrence_complete` |
+| Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/skip` | `tasks_occurrence_skip` |
+| Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/reopen` | `tasks_occurrence_reopen` |
+
+## Aufgabendomäne
+
+`api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
+Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite
+in derselben Transaktion. Weitere Seiten werden nicht automatisch abgerufen. Serienrevision,
+Archivieren und Löschen sind noch offen.
+
+## Kalenderdomäne
+
+`api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
+Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen
+vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich auf den Index zu.
+`GET /api/v1/calendar/occurrences` nimmt ein Fenster von höchstens 90 Tagen und beliebig viele
+`source_ids` (höchstens 50) und liefert die Instanzen zeitlich geordnet; Ganztägiges zählt ab
+Mitternacht UTC seines ersten Tages. Der Cursor trägt Startzeit und ID der letzten Instanz.
 
 ## Domänenmodell (Tabellen in Postgres)
 
+- `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — Kalenderquelle mit Verbindungsreferenz und Freigabe (`is_active`), Serienstamm je Quelle, Instanz als halboffenes Intervall (ganztägig als Datum, sonst UTC mit Zeitzone; eindeutig je Quelle und `external_id`) sowie Abdeckung, letzter Erfolg und Unvollständigkeit je Quelle.
+- `task_series`, `task_schedule_revision`, `task_occurrence` — Aufgabenserie, Zeitplanrevision und materialisierte Fälligkeit; Erstellungskennung und Instanzschlüssel sind eindeutig.
 - `mail_account` — verbundenes Konto: `provider` z.B. `google`, `microsoft`, `imap` oder Connector-Name wie `gmail`; `auth_type` ist `oauth2`, `imap_password` oder `mistral_connector`.
 - `mail_credential` — verschlüsseltes Payload pro Konto+Art (`oauth2_tokens` | `imap_password`), unique (`account_id`, `kind`).
 - `mail_message` — Mail-Index mit `folder`, `provider_uid`, `thread_id`, `subject`, `sender`, `sender_address`, `recipients_json`, `cc_json`, `reply_to_json` (Reply-To-Adressen; Antworten gehen daran statt an den Absender, der Gmail-Connector liefert sie nicht), `snippet`, `body_text`, `body_version` (Version der Textfassung, 0 = vor der Versionierung), `internal_date`, Lese-/Prioritätsflags, `labels_json`, `attachments_json`, `list_unsubscribe` und `list_unsubscribe_post`; unique (`account_id`, `folder`, `provider_uid`), Volltextindex `search_tsv`.
@@ -118,6 +152,26 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 - `mail_insight` — Kurzfassung (`points_json`), Frist, Antwortbedarf, Folgevorschläge und Modell je Mail.
 - `mail_job` — dauerhafte Sync-/Insight-Warteschlange mit Status, Deduplizierung, Versuchen und Sperrzeit.
 - `chat_conversation`, `chat_message` — Verlauf; Vorschläge in `proposal_json` mit `proposal_status`, Mailreferenzen/Vorschläge/Modell in `extras_json`; ältere Entwürfe tragen `draft_json`.
+
+## Vorlagen und Turn-Kontext
+
+Vorlagen gehören dem festen serverseitigen Scope `installation`; der Zugriff auf die
+Single-Owner-App wird vom Deployment beschränkt, nicht durch eine neue App-Identität.
+`prompt_template` hält Name, Version und aktuelle Revision; Bearbeiten erzeugt eine neue
+`prompt_revision`. Auswahlen in `chat_conversation.prompt_revision_id` bleiben angeheftet.
+Conversation-PATCH benötigt `expected_version`; `null` als Revision wählt den Standard.
+Vorlagen-POST nimmt `name` und `text`, PATCH zusätzlich `expected_version`, DELETE
+`expected_version` als Queryparameter. GET einer Vorlage liefert auch `revisions`
+(neueste zuerst), damit ältere Revisionen ausdrücklich gewählt werden können.
+Neue Turns speichern Revisionsreferenz/Hash, App-Prompt-Version und den aufgelösten
+Kontoumfang in `chat_context`; `chat_message.context_id` verbindet den Verlauf damit.
+Der JSON-Kontoumfang enthält `account_ids`, `selection` (Konto-ID oder `null` für alle)
+und bei unbelegtem Altverlauf `legacy_mixed: true`.
+`preference_revision_id` bleibt als Erweiterungspunkt leer. Text wird nur als
+Nutzerinhalt an das Modell gegeben, nie als App-Regel oder Chat-Extra gespeichert.
+Löschen entfernt Vorlageninhalt und Revisionsinhalt, hinterlässt `removed`-Markierungen,
+widerruft Kontexte und setzt aktive Auswahlen zurück. Bereits gesendete Modellanfragen
+lassen sich nicht zurückholen. Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
 
 ## Worker und periodischer Abruf
 
@@ -192,15 +246,61 @@ in der Probe HTTP 401.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
 - Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus. `.../cancel` verwirft sie.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
-- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`
+- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `tasks_occurrences_list`
   `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
   `mail_message_original` ruft die Mail beim Anbieter ab (lesend, ohne sie als gelesen zu markieren) und speichert nichts.
   Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.
   Neue verändernde Operationen gehören bewusst in `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, sonst scheitert der Inventur-Test.
+
+## Veröffentlichung und private Daten
+
+liam-e soll veröffentlicht werden können. Alles, was in Git landet (Dateien und
+Commit-Nachrichten), und alles auf GitHub (Issues, PRs, Reviews, Kommentare) gilt deshalb schon
+jetzt als öffentlich.
+
+- **Nichts über den Owner oder seine Umgebung:** keine echten Namen, Mailadressen, Mail- oder
+  Kalenderinhalte, Kontakte, Hostnamen, internen Domains, IP-Adressen, absoluten lokalen Pfade,
+  Benutzer- oder Gerätenamen und keine Namen der eigenen Infrastruktur oder Werkzeuge. Pfade
+  relativ zum Repo angeben.
+- **Mistral-Tenant:** Organisations-, Workspace- und App-ID stehen nur in `mistral.json`, weil
+  `mistral deploy` sie dort braucht. Überall sonst `<organization-id>`, `<workspace-id>` und
+  `<app-id>`; App- und Gateway-URLs des Deployments nicht aufschreiben.
+- **Keine Links auf private Ressourcen:** Claude-Artefakte, Sitzungen und private Dokumente beim
+  Namen nennen statt verlinken (etwa Design-System „liam-e“). Ausgenommen ist nur die
+  Attributionszeile `Claude-Session` in Commits und PR-Beschreibungen.
+- **Testdaten sind synthetisch:** Adressen unter `example.org`, `example.com`, `example.net`,
+  `*.example` oder `*.test`, erfundene Namen und Inhalte. Provider-Voreinstellungen (`gmail.com`,
+  `icloud.com` …) sind Konfiguration; Tests dazu nehmen Platzhalter wie `me@` oder `x@`. Nie eine
+  echte Mail, einen echten Termin oder echte Kopfzeilen als Fixture übernehmen, auch nicht
+  gekürzt. Screenshots nur mit den Seed-Daten aus `api.mail.dev_seed`.
+- **Credentials nie im Klartext:** keine Passwörter, App-Passwörter, Tokens, API-Keys,
+  OAuth-Codes, Cookies oder Fernet-Schlüssel, weder in Code, Tests, Doku, `.env.example`,
+  Issues, PRs, Commit-Nachrichten und Logs noch in Aufträgen an andere Modelle. Werte gibt es nur
+  als Workspace-Secret in Studio oder lokal in `.env` (gitignored). Agents lesen `.env` nicht und
+  geben keine Werte daraus aus; Secret-*Namen* wie `yahoo-app-password` sind unkritisch. Tests
+  nehmen sichtbare Wegwerfwerte (`test-only`) oder zur Laufzeit erzeugte Schlüssel.
+- **Ein committetes Geheimnis gilt als verbrannt:** zuerst rotieren, dann entfernen; die
+  Historie behält es. Nie über eine Allowlist in `.gitleaks.toml`, über `.gitleaksignore` oder
+  einen Kommentar `gitleaks:allow` „lösen“ (die CI ignoriert solche Kommentare).
+- **Logs und Fehlertexte** enthalten keine Mailinhalte, Adressen, Vorlagentexte, Tokens oder
+  Secret-Werte.
+- **Lokaler Agent-Zustand** (`.superpowers/`, `.codegraph/`, `.remember/`,
+  `.claude/settings.local.json`, `.claude/worktrees/`, Playwright-Ausgaben) bleibt ungetrackt;
+  `.gitignore` deckt ihn ab.
+- **Durchsetzung:** CI-Job `secrets` (gitleaks über die ganze Historie mit `.gitleaks.toml`) und
+  `tests/test_public_repo_hygiene.py` (Tenant-IDs außerhalb von `mistral.json`, private Links,
+  Home-Pfade, echt wirkende Mailadressen). Die Allowlist ist leer; eine Ausnahme braucht einen
+  geprüften Fehlalarm, gilt nur für die Regel, die Datei und den konkreten Wert und nennt die
+  Begründung im Eintrag. CI-Actions sind auf Commit-SHAs gepinnt.
+- Was vor einer Veröffentlichung noch zu tun ist, steht in
+  [docs/veroeffentlichung.md](docs/veroeffentlichung.md).
 
 ## Arbeitsweise für Agents
 - Vor jeder Arbeit an der Oberfläche (`apps/web`, Texte, auch Antworttexte des Assistenten) `DESIGN.md` lesen; sie regelt Tokens, Bausteine, Responsive-Verhalten und wie Texte klingen.
 - Minimale Diffs, bestehende Patterns kopieren (siehe Modul-Docstrings — sie dokumentieren die Konventionen jeweils lokal).
 - Nach API-Änderungen immer `gen-types` laufen lassen und `apps/api/openapi.json` + `apps/web/src/api/generated` mit committen.
 - Änderungen an Tabellen immer mit Migration (`db:revision` + `db:migrate`), nie von Hand editierte `versions/`-Dateien.
-- Vor dem Commit: `bun run check` (baut alles und prüft den generierten Client) und die betroffenen Test-Suiten laufen lassen.
+- Vor dem Commit: `bun run check` (baut alles, prüft die Typen der Oberfläche mit `tsc` und den generierten Client) und die betroffenen Test-Suiten laufen lassen.
+- Issues und PRs über die Vorlagen in `.github/` (`ISSUE_TEMPLATE/`, `pull_request_template.md`). Eine Aufgabe ergibt
+  genau einen Branch und einen PR, auch wenn sie mehrere Issues umfasst; jedes Issue bekommt eigene Commits und ein
+  eigenes Schließwort (`Closes #12. Closes #13.`). Was nicht geprüft wurde, steht im PR ausdrücklich als nicht geprüft.

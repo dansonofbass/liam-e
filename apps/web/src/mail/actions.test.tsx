@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import * as sdk from '../api/generated/sdk.gen'
 import type { MessageListItemOut, MessagePageOut } from '../api/generated/types.gen'
 import { MailActionsProvider, useMailActions, useMailActionsContext, type Clock } from './useMailActions'
+import { ActionToast } from './ActionToast'
 
 const originalMatchMedia = window.matchMedia
 const rows = ['Erste', 'Zweite'].map((subject, i) => ({ id: String(i + 1), subject, is_read: false }) as MessageListItemOut)
@@ -21,10 +22,11 @@ function setup(mobile = false) {
   const time = makeClock()
   function Harness() {
     const { data } = useQuery<InfiniteData<MessagePageOut>>({ queryKey: key, queryFn: async () => client.getQueryData<InfiniteData<MessagePageOut>>(key)!, enabled: false })
-    const { run, undo, notify, toast } = useMailActions({ clock: time.clock })
+    const { run, undo, notify, toast, entries, capacityAvailable } = useMailActions({ clock: time.clock })
     return <><div>{data?.pages.flatMap(page => page.items).map(row => <div key={row.id}>{row.subject}:{String(row.is_read)}</div>)}</div>
-      <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'archive') }}>archive 2</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'spam') }}>spam 1</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button>
+      <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'archive') }}>archive 2</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'spam') }}>spam 1</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button><button onClick={() => { void run('1', 'mark_unread') }}>unread 1</button>
       <button onClick={() => { void run('2', 'mark_read', { silent: true }) }}>silent read 2</button><button onClick={() => { void run('1', 'mark_read', { silent: true }) }}>silent read 1</button><button onClick={() => notify('refresh failed')}>notify</button><button onClick={() => { void undo() }}>force undo</button>
+      <div data-testid="capacity">{String(capacityAvailable)}</div><div data-testid="entries">{entries.map(entry => <button key={entry.actionId} onClick={() => { void undo(entry.actionId) }}>{entry.actionId}</button>)}</div>
       {toast && <div role="status" data-tone={toast.tone}>{toast.text}{toast.undoable && <button onClick={() => { void undo() }}>Rückgängig</button>}</div>}</>
   }
   render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
@@ -54,16 +56,17 @@ test.each(['other status', 'other code', 'network'])('uncertain action failure: 
   expect(screen.getByText('Erste:false')).toBeTruthy()
 })
 
-test('second action replaces toast and its timer', async () => {
+test('second action keeps its own deadline without extending the first', async () => {
   success(); const time = setup()
   fireEvent.click(screen.getByText('archive 1')); await screen.findByText('„Erste“ archiviert.')
   act(() => time.advance(5000))
   fireEvent.click(screen.getByText('trash 2')); await screen.findByText('„Zweite“ in den Papierkorb gelegt.')
-  act(() => time.advance(5000)); expect(screen.getByRole('status')).toBeTruthy()
+  expect(screen.getByText('action-1')).toBeTruthy(); expect(screen.getByText('action-2')).toBeTruthy()
+  act(() => time.advance(5000)); expect(screen.queryByText('action-1')).toBeNull(); expect(screen.getByText('action-2')).toBeTruthy()
   act(() => time.advance(5000)); expect(screen.queryByRole('status')).toBeNull()
 })
 
-test('notification replaces the undo target and expires after ten seconds', async () => {
+test('notification preserves the undo target until its original deadline', async () => {
   success()
   const undo = spyOn(sdk, 'mailActionsUndo')
   const time = setup()
@@ -73,9 +76,10 @@ test('notification replaces the undo target and expires after ten seconds', asyn
   expect(screen.getByRole('status').getAttribute('data-tone')).toBe('danger')
   expect(screen.getByText('refresh failed')).toBeTruthy()
   expect(screen.queryByText('Rückgängig')).toBeNull()
+  expect(screen.getByText('action-1')).toBeTruthy()
+  act(() => time.advance(5000)); expect(screen.queryByText('action-1')).toBeNull()
   fireEvent.click(screen.getByText('force undo')); expect(undo).not.toHaveBeenCalled()
-  act(() => time.advance(9999)); expect(screen.getByRole('status')).toBeTruthy()
-  act(() => time.advance(1)); expect(screen.queryByRole('status')).toBeNull()
+  act(() => time.advance(5000)); expect(screen.queryByRole('status')).toBeNull()
 })
 
 test('undo sends the action id and restores the row', async () => {
@@ -99,7 +103,7 @@ for (const replacement of ['new action', 'timeout']) {
       await screen.findByText('„Zweite“ archiviert.')
     } else {
       act(() => advance(10_000))
-      expect(screen.queryByRole('status')).toBeNull()
+      expect(screen.getByRole('status')).toBeTruthy()
     }
     const invalidate = spyOn(client, 'invalidateQueries')
     await act(async () => { finishUndo({ data: { restored: ['action-1'] }, response: { status: 200 } }) })
@@ -138,7 +142,8 @@ for (const first of ['archive 1', 'read 1']) {
     await act(async () => { failFirst({ response: { status: 502 } }) })
     await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
     expect(screen.queryByText('Zweite:false')).toBeNull()
-    expect(screen.getByText('„Zweite“ archiviert.')).toBeTruthy()
+    expect(screen.getByText('Das hat nicht geklappt. Lade den Posteingang neu, um zu sehen, wo die Mail jetzt liegt.')).toBeTruthy()
+    expect(screen.getByText('action-2')).toBeTruthy()
     expect(client.getQueryState(key)?.isInvalidated).toBe(true)
   })
 }
@@ -225,7 +230,7 @@ test('failed undo shows a danger notice without restoring the row', async () => 
   success()
   spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: [], expired: ['action-1'], failed: [], skipped: [] }, response: { status: 200 } })) as never)
   setup(); fireEvent.click(screen.getByText('archive 1')); fireEvent.click(await screen.findByText('Rückgängig'))
-  expect(await screen.findByText('Das hat nicht geklappt. Versuch es gleich noch mal.')).toBeTruthy()
+  expect(await screen.findByText('Die Frist für diese Rücknahme ist abgelaufen.')).toBeTruthy()
   expect(screen.getByRole('status').getAttribute('data-tone')).toBe('danger')
   expect(screen.queryByText('Erste:false')).toBeNull()
 })
@@ -250,10 +255,10 @@ for (const outcome of ['success', 'failure'] as const) test(`runs on the same me
   })
 })
 
-test('mark_read updates the row in place without a toast', async () => {
+test('mark_read updates the row in place and offers undo', async () => {
   success(); setup(); fireEvent.click(screen.getByText('read 1'))
   await waitFor(() => expect(screen.getByText('Erste:true')).toBeTruthy())
-  expect(screen.queryByRole('status')).toBeNull()
+  expect(await screen.findByText('„Erste“ als gelesen markiert.')).toBeTruthy()
 })
 
 
@@ -285,6 +290,166 @@ test('read flip updates detail cache and rolls it back on failure', async () => 
   await waitFor(() => expect(client.getQueryData(['message', '1'])).toEqual({ id: '1', is_read: true }))
   await act(async () => { finish({ response: { status: 502 } }) })
   expect(client.getQueryData(['message', '1'])).toEqual({ id: '1', is_read: false })
+})
+
+test('read undo restores list and detail without inserting a filtered-out row', async () => {
+  success()
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['action-1'], expired: [], failed: [], skipped: [] } })) as never)
+  const { client } = setup()
+  const filtered = ['messages', { unread: true }]
+  client.setQueryData(filtered, { pages: [{ items: [rows[0]], next_cursor: null }], pageParams: [undefined] })
+  client.setQueryData(['message', '1'], { id: '1', is_read: false })
+  const invalidate = spyOn(client, 'invalidateQueries')
+  fireEvent.click(screen.getByText('read 1')); await screen.findByText('Rückgängig')
+  client.setQueryData(filtered, { pages: [{ items: [], next_cursor: null }], pageParams: [undefined] })
+  fireEvent.click(screen.getByText('Rückgängig'))
+  await waitFor(() => expect(client.getQueryData(['message', '1'])).toEqual({ id: '1', is_read: false }))
+  expect(client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items).toHaveLength(2)
+  expect(client.getQueryData<InfiniteData<MessagePageOut>>(filtered)?.pages[0]?.items).toHaveLength(0)
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['messages'] })
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['message', '1'] })
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['summary'] })
+})
+
+test('mark unread can be undone in the list and detail', async () => {
+  success()
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['action-1'], expired: [], failed: [], skipped: [] } })) as never)
+  const { client } = setup()
+  client.setQueryData<InfiniteData<MessagePageOut>>(key, { pages: [{ items: [{ ...rows[0]!, is_read: true }, rows[1]!], next_cursor: null }], pageParams: [undefined] })
+  client.setQueryData(['message', '1'], { id: '1', is_read: true })
+  fireEvent.click(screen.getByText('unread 1')); await screen.findByText('Rückgängig')
+  expect(client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items[0]?.is_read).toBe(false)
+  fireEvent.click(screen.getByText('Rückgängig'))
+  await waitFor(() => expect(client.getQueryData(['message', '1'])).toEqual({ id: '1', is_read: true }))
+  expect(client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items[0]?.is_read).toBe(true)
+})
+
+test('an in-flight list fetch cannot overwrite an optimistic removal', async () => {
+  success(); const { client } = setup()
+  let finish!: (value: unknown) => void
+  const fetching = client.fetchQuery({ queryKey: key, queryFn: () => new Promise(resolve => { finish = resolve }) }).catch(() => {})
+  await waitFor(() => expect(finish).toBeDefined())
+  fireEvent.click(screen.getByText('archive 1')); await screen.findByText('Rückgängig')
+  await act(async () => { finish({ pages: [{ items: rows, next_cursor: null }], pageParams: [undefined] }); await fetching })
+  expect(client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items.some(row => row.id === '1')).toBe(false)
+})
+
+test.each(['skipped', 'expired', 'failed'] as const)('undo result %s never applies an old snapshot', async outcome => {
+  success()
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: [], expired: [], failed: [], skipped: [], [outcome]: ['action-1'] } })) as never)
+  const { client } = setup(); fireEvent.click(screen.getByText('archive 1')); await screen.findByText('Rückgängig')
+  fireEvent.click(screen.getByText('Rückgängig'))
+  await waitFor(() => expect(screen.getByRole('status').getAttribute('data-tone')).toBe('danger'))
+  expect(client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items.some(row => row.id === '1')).toBe(false)
+  expect(screen.queryByText('action-1')).toBeNull()
+})
+
+test('a newer action on the same mail finishes before the older undo and a skip keeps its state', async () => {
+  let finish!: (value: unknown) => void
+  let calls = 0
+  spyOn(sdk, 'mailMessageAction').mockImplementation((() => ++calls === 1
+    ? Promise.resolve({ data: { action_id: 'action-1', message: rows[0] }, response: { status: 200 } })
+    : new Promise(resolve => { finish = resolve })) as never)
+  const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: [], expired: [], failed: [], skipped: ['action-1'] } })) as never)
+  const { client } = setup()
+  fireEvent.click(screen.getByText('read 1')); await screen.findByText('action-1')
+  fireEvent.click(screen.getByText('archive 1')); await waitFor(() => expect(finish).toBeDefined())
+  fireEvent.click(screen.getByText('action-1')); expect(undo).not.toHaveBeenCalled()
+  await act(async () => finish({ data: { action_id: 'action-new', message: rows[0] }, response: { status: 200 } }))
+  await waitFor(() => expect(undo).toHaveBeenCalledTimes(1))
+  expect(screen.getByText('Diese Aktion lässt sich nicht mehr rückgängig machen. Die Mail wurde inzwischen geändert.')).toBeTruthy()
+  expect(client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items.some(row => row.id === '1')).toBe(false)
+})
+
+test('undo prevents duplicate requests and does not duplicate a row fetched during undo', async () => {
+  success(); let finish!: (value: unknown) => void
+  const request = spyOn(sdk, 'mailActionsUndo').mockImplementation((() => new Promise(resolve => { finish = resolve })) as never)
+  const { client } = setup(); fireEvent.click(screen.getByText('archive 1')); await screen.findByText('Rückgängig')
+  fireEvent.click(screen.getByText('action-1')); fireEvent.click(screen.getByText('action-1'))
+  expect(request).toHaveBeenCalledTimes(1)
+  client.setQueryData(key, { pages: [{ items: [rows[1]], next_cursor: 'next' }, { items: [rows[0]], next_cursor: null }], pageParams: [undefined, 'next'] })
+  await act(async () => finish({ data: { restored: ['action-1'], expired: [], failed: [], skipped: [] } }))
+  expect(client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages.flatMap(page => page.items).filter(row => row.id === '1')).toHaveLength(1)
+})
+
+test('ten independent actions retain their deadlines and individual targets', async () => {
+  let actions!: ReturnType<typeof useMailActions>
+  const time = makeClock(), client = new QueryClient()
+  spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => ({ data: { action_id: `a-${options.path.message_id}`, message: { subject: `Mail ${options.path.message_id}` } }, response: { status: 200 } })) as never)
+  const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async (options: { body: { action_ids: string[] } }) => ({ data: { restored: options.body.action_ids, expired: [], failed: [], skipped: [] } })) as never)
+  function Harness() { actions = useMailActions({ clock: time.clock }); return null }
+  render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
+  for (let i = 0; i < 10; i++) { await act(async () => { await actions.run(String(i), 'archive') }); act(() => time.advance(500)) }
+  expect(actions.entries).toHaveLength(10)
+  await act(async () => { await actions.undo('a-5') })
+  expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['a-5'] } })
+  act(() => time.advance(5000)); expect(actions.entries.some(entry => entry.actionId === 'a-0')).toBe(false)
+  expect(actions.entries.some(entry => entry.actionId === 'a-1')).toBe(true)
+  act(() => time.advance(4500)); expect(actions.entries).toHaveLength(0)
+})
+
+test('capacity reserves slots for in-flight actions and becomes available on expiry', async () => {
+  let actions!: ReturnType<typeof useMailActions>
+  const time = makeClock(), client = new QueryClient()
+  const finishes: Array<(value: unknown) => void> = []
+  const request = spyOn(sdk, 'mailMessageAction').mockImplementation((() => new Promise(resolve => finishes.push(resolve))) as never)
+  function Harness() { actions = useMailActions({ clock: time.clock }); return null }
+  render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
+  act(() => { for (let i = 0; i < 20; i++) void actions.run(String(i), 'archive') })
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(20))
+  expect(actions.capacityAvailable).toBe(false)
+  let refused: boolean | undefined
+  await act(async () => { refused = await actions.run('extra', 'archive') })
+  expect(refused).toBe(false)
+  expect(request).toHaveBeenCalledTimes(20)
+  await act(async () => { finishes.forEach((finish, i) => finish({ data: { action_id: `a-${i}`, message: { subject: `Mail ${i}` } }, response: { status: 200 } })) })
+  expect(actions.entries).toHaveLength(20); expect(actions.capacityAvailable).toBe(false)
+  act(() => time.advance(10_000))
+  expect(actions.entries).toHaveLength(0); expect(actions.capacityAvailable).toBe(true)
+})
+
+test('multiple actions use a portal menu with separate undo items and keyboard focus', async () => {
+  window.matchMedia = ((query: string) => ({ matches: query.includes('1024px'), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+  success(); const client = new QueryClient()
+  function Trigger() { const { run } = useMailActionsContext(); return <><button onClick={() => { void run('1', 'archive') }}>one</button><button onClick={() => { void run('2', 'trash') }}>two</button></> }
+  render(<QueryClientProvider client={client}><MailActionsProvider><Trigger /><ActionToast /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('one')); await screen.findByText('Rückgängig')
+  fireEvent.click(screen.getByText('two')); const trigger = await screen.findByText('Letzte Aktionen (2)')
+  fireEvent.click(trigger); const menu = screen.getByRole('menu')
+  expect(menu.parentElement).toBe(document.body)
+  expect(screen.getAllByRole('menuitem')).toHaveLength(2)
+  expect(screen.getAllByRole('menuitem')[0]?.textContent).toBe('Rückgängig: „Erste“ archiviert')
+  await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('menuitem')[0] ?? null))
+  fireEvent.keyDown(menu, { key: 'Escape' }); expect(document.activeElement).toBe(trigger)
+})
+
+test('a menu item whose undo is running stays focusable and says why', async () => {
+  window.matchMedia = ((query: string) => ({ matches: query.includes('1024px'), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+  success()
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((() => new Promise(() => {})) as never)
+  const client = new QueryClient()
+  function Trigger() { const { run } = useMailActionsContext(); return <><button onClick={() => { void run('1', 'archive') }}>one</button><button onClick={() => { void run('2', 'trash') }}>two</button></> }
+  render(<QueryClientProvider client={client}><MailActionsProvider><Trigger /><ActionToast /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('one')); await screen.findByText('Rückgängig')
+  fireEvent.click(screen.getByText('two')); fireEvent.click(await screen.findByText('Letzte Aktionen (2)'))
+  fireEvent.click(screen.getAllByRole('menuitem')[0]!)
+  fireEvent.click(await screen.findByText('Letzte Aktionen (2)'))
+  const item = screen.getAllByRole('menuitem')[0]!
+  expect(item.getAttribute('aria-disabled')).toBe('true')
+  expect(item.textContent).toContain('Wird zurückgenommen …')
+})
+
+test('focus moves to the remaining undo when a menu item completes', async () => {
+  window.matchMedia = ((query: string) => ({ matches: query.includes('1024px'), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+  success()
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['action-1'], expired: [], failed: [], skipped: [] } })) as never)
+  const client = new QueryClient()
+  function Trigger() { const { run } = useMailActionsContext(); return <><button onClick={() => { void run('1', 'archive') }}>one</button><button onClick={() => { void run('2', 'trash') }}>two</button></> }
+  render(<QueryClientProvider client={client}><MailActionsProvider><Trigger /><ActionToast /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('one')); await screen.findByText('Rückgängig')
+  fireEvent.click(screen.getByText('two')); fireEvent.click(await screen.findByText('Letzte Aktionen (2)'))
+  fireEvent.click(screen.getAllByRole('menuitem')[0]!)
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByText('Rückgängig')))
 })
 
 test('two provider consumers share a single toast', async () => {

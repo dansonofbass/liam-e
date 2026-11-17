@@ -175,9 +175,17 @@ export type AttachmentOut = {
  */
 export type ChatConversationUpdateIn = {
     /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
      * Model
      */
     model?: string | null;
+    /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id?: string | null;
     /**
      * Title
      */
@@ -233,6 +241,7 @@ export type ChatMessageOut = {
      * Content
      */
     content: string;
+    context?: ContextOut | null;
     /**
      * Conversation Id
      */
@@ -310,6 +319,10 @@ export type ChatStreamRequest = {
      */
     model?: string | null;
     /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id?: string | null;
+    /**
      * Text
      */
     text: string;
@@ -320,6 +333,14 @@ export type ChatStreamRequest = {
  */
 export type ChatTurnRequest = {
     /**
+     * Account Id
+     */
+    account_id?: string | null;
+    /**
+     * Context Message Id
+     */
+    context_message_id?: string | null;
+    /**
      * Conversation Id
      *
      * Leer lassen für eine neue Unterhaltung
@@ -329,6 +350,14 @@ export type ChatTurnRequest = {
      * Message
      */
     message: string;
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id?: string | null;
 };
 
 /**
@@ -380,9 +409,47 @@ export type ConnectorToolOut = {
 };
 
 /**
+ * ContextOut
+ */
+export type ContextOut = {
+    /**
+     * Account Scope Json
+     */
+    account_scope_json: string;
+    /**
+     * App Prompt Version
+     */
+    app_prompt_version: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Preference Revision Id
+     */
+    preference_revision_id: string | null;
+    /**
+     * Prompt Hash
+     */
+    prompt_hash: string | null;
+    /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id: string | null;
+    /**
+     * Revoked
+     */
+    revoked: boolean;
+};
+
+/**
  * ConversationOut
  */
 export type ConversationOut = {
+    /**
+     * Account Scope Json
+     */
+    account_scope_json: string | null;
     /**
      * Created At
      */
@@ -396,6 +463,10 @@ export type ConversationOut = {
      */
     model: string;
     /**
+     * Prompt Revision Id
+     */
+    prompt_revision_id: string | null;
+    /**
      * Title
      */
     title: string;
@@ -403,6 +474,10 @@ export type ConversationOut = {
      * Updated At
      */
     updated_at: string;
+    /**
+     * Version
+     */
+    version: number;
 };
 
 /**
@@ -462,7 +537,7 @@ export type ErrorEvent = {
     /**
      * Code
      */
-    code: 'model_unavailable' | 'aborted' | 'internal';
+    code: 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked';
     /**
      * Event
      */
@@ -921,6 +996,124 @@ export type OAuthAuthorizeOut = {
 };
 
 /**
+ * PromptCreate
+ */
+export type PromptCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * PromptDetailOut
+ */
+export type PromptDetailOut = {
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Revisions
+     */
+    revisions: Array<PromptRevisionOut>;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * PromptOut
+ */
+export type PromptOut = {
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * PromptRevisionOut
+ */
+export type PromptRevisionOut = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Number
+     */
+    number: number;
+};
+
+/**
+ * PromptUpdate
+ */
+export type PromptUpdate = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Text
+     */
+    text?: string | null;
+};
+
+/**
  * Proposal
  */
 export type Proposal = {
@@ -1076,6 +1269,66 @@ export type SendDraft = {
 };
 
 /**
+ * SourceOut
+ */
+export type SourceOut = {
+    /**
+     * Capabilities
+     */
+    capabilities: Array<string>;
+    /**
+     * Coverage End
+     */
+    coverage_end: string | null;
+    /**
+     * Coverage Start
+     */
+    coverage_start: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Incomplete
+     */
+    incomplete: boolean;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Last Success At
+     */
+    last_success_at: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Stale
+     */
+    stale: boolean;
+    /**
+     * Timezone
+     */
+    timezone: string;
+};
+
+/**
+ * SourcePatch
+ */
+export type SourcePatch = {
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+};
+
+/**
  * StartEvent
  */
 export type StartEvent = {
@@ -1146,6 +1399,72 @@ export type SyncAllRequest = {
 };
 
 /**
+ * SyncOut
+ */
+export type SyncOut = {
+    /**
+     * Queued
+     */
+    queued: boolean;
+};
+
+/**
+ * TaskCreate
+ */
+export type TaskCreate = {
+    /**
+     * Creation Key
+     */
+    creation_key: string;
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Rrule
+     */
+    rrule?: string | null;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * TaskCreated
+ */
+export type TaskCreated = {
+    /**
+     * Created
+     */
+    created: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * UndoIn
  */
 export type UndoIn = {
@@ -1205,6 +1524,124 @@ export type ValidationError = {
     type: string;
 };
 
+/**
+ * VersionIn
+ */
+export type VersionIn = {
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * OccurrenceOut
+ */
+export type ApiRoutersApiV1CalendarSchemasOccurrenceOut = {
+    /**
+     * End At
+     */
+    end_at: string | null;
+    /**
+     * End Date
+     */
+    end_date: string | null;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Start At
+     */
+    start_at: string | null;
+    /**
+     * Start Date
+     */
+    start_date: string | null;
+    /**
+     * Timezone
+     */
+    timezone: string | null;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * OccurrencePage
+ */
+export type ApiRoutersApiV1CalendarSchemasOccurrencePage = {
+    /**
+     * Items
+     */
+    items: Array<ApiRoutersApiV1CalendarSchemasOccurrenceOut>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * OccurrenceOut
+ */
+export type ApiRoutersApiV1TasksSchemasOccurrenceOut = {
+    /**
+     * Due At
+     */
+    due_at: string | null;
+    /**
+     * Due Local
+     */
+    due_local: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Occurrence Key
+     */
+    occurrence_key: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Series Id
+     */
+    series_id: string;
+    /**
+     * Status
+     */
+    status: 'open' | 'completed' | 'skipped' | 'cancelled';
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * OccurrencePage
+ */
+export type ApiRoutersApiV1TasksSchemasOccurrencePage = {
+    /**
+     * Items
+     */
+    items: Array<ApiRoutersApiV1TasksSchemasOccurrenceOut>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
 export type HealthData = {
     body?: never;
     path?: never;
@@ -1220,6 +1657,190 @@ export type HealthResponses = {
 };
 
 export type HealthResponse2 = HealthResponses[keyof HealthResponses];
+
+export type CalendarOccurrencesListData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * From
+         */
+        from: string;
+        /**
+         * To
+         */
+        to: string;
+        /**
+         * Source Ids
+         */
+        source_ids?: Array<string> | null;
+        /**
+         * Cursor
+         */
+        cursor?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/calendar/occurrences';
+};
+
+export type CalendarOccurrencesListErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarOccurrencesListError = CalendarOccurrencesListErrors[keyof CalendarOccurrencesListErrors];
+
+export type CalendarOccurrencesListResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1CalendarSchemasOccurrencePage;
+};
+
+export type CalendarOccurrencesListResponse = CalendarOccurrencesListResponses[keyof CalendarOccurrencesListResponses];
+
+export type CalendarOccurrenceGetData = {
+    body?: never;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/occurrences/{occurrence_id}';
+};
+
+export type CalendarOccurrenceGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarOccurrenceGetError = CalendarOccurrenceGetErrors[keyof CalendarOccurrenceGetErrors];
+
+export type CalendarOccurrenceGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1CalendarSchemasOccurrenceOut;
+};
+
+export type CalendarOccurrenceGetResponse = CalendarOccurrenceGetResponses[keyof CalendarOccurrenceGetResponses];
+
+export type CalendarSourcesListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/sources';
+};
+
+export type CalendarSourcesListResponses = {
+    /**
+     * Response Calendar Sources List
+     *
+     * Successful Response
+     */
+    200: Array<SourceOut>;
+};
+
+export type CalendarSourcesListResponse = CalendarSourcesListResponses[keyof CalendarSourcesListResponses];
+
+export type CalendarSourceDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Source Id
+         */
+        source_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/sources/{source_id}';
+};
+
+export type CalendarSourceDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarSourceDeleteError = CalendarSourceDeleteErrors[keyof CalendarSourceDeleteErrors];
+
+export type CalendarSourceDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CalendarSourceDeleteResponse = CalendarSourceDeleteResponses[keyof CalendarSourceDeleteResponses];
+
+export type CalendarSourceUpdateData = {
+    body: SourcePatch;
+    path: {
+        /**
+         * Source Id
+         */
+        source_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/sources/{source_id}';
+};
+
+export type CalendarSourceUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarSourceUpdateError = CalendarSourceUpdateErrors[keyof CalendarSourceUpdateErrors];
+
+export type CalendarSourceUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourceOut;
+};
+
+export type CalendarSourceUpdateResponse = CalendarSourceUpdateResponses[keyof CalendarSourceUpdateResponses];
+
+export type CalendarSourceSyncData = {
+    body?: never;
+    path: {
+        /**
+         * Source Id
+         */
+        source_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/sources/{source_id}/sync';
+};
+
+export type CalendarSourceSyncErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarSourceSyncError = CalendarSourceSyncErrors[keyof CalendarSourceSyncErrors];
+
+export type CalendarSourceSyncResponses = {
+    /**
+     * Successful Response
+     */
+    200: SyncOut;
+};
+
+export type CalendarSourceSyncResponse = CalendarSourceSyncResponses[keyof CalendarSourceSyncResponses];
 
 export type ChatTurnData = {
     body: ChatTurnRequest;
@@ -1970,3 +2591,341 @@ export type MailSyncAllResponses = {
 };
 
 export type MailSyncAllResponse = MailSyncAllResponses[keyof MailSyncAllResponses];
+
+export type PromptsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/prompts';
+};
+
+export type PromptsListErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptsListResponses = {
+    /**
+     * Response Prompts List
+     *
+     * Successful Response
+     */
+    200: Array<PromptOut>;
+};
+
+export type PromptsListResponse = PromptsListResponses[keyof PromptsListResponses];
+
+export type PromptCreateData = {
+    body: PromptCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/prompts';
+};
+
+export type PromptCreateErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: PromptOut;
+};
+
+export type PromptCreateResponse = PromptCreateResponses[keyof PromptCreateResponses];
+
+export type PromptDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query: {
+        /**
+         * Expected Version
+         */
+        expected_version: number;
+    };
+    url: '/api/v1/prompts/{id}';
+};
+
+export type PromptDeleteErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type PromptDeleteResponse = PromptDeleteResponses[keyof PromptDeleteResponses];
+
+export type PromptGetData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/prompts/{id}';
+};
+
+export type PromptGetErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PromptDetailOut;
+};
+
+export type PromptGetResponse = PromptGetResponses[keyof PromptGetResponses];
+
+export type PromptUpdateData = {
+    body: PromptUpdate;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/prompts/{id}';
+};
+
+export type PromptUpdateErrors = {
+    /**
+     * Template unavailable
+     */
+    404: unknown;
+    /**
+     * Expected version is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; user content is not echoed
+     */
+    422: unknown;
+};
+
+export type PromptUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: PromptOut;
+};
+
+export type PromptUpdateResponse = PromptUpdateResponses[keyof PromptUpdateResponses];
+
+export type TasksCreateData = {
+    body: TaskCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tasks';
+};
+
+export type TasksCreateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksCreateError = TasksCreateErrors[keyof TasksCreateErrors];
+
+export type TasksCreateResponses = {
+    /**
+     * Successful Response
+     */
+    200: TaskCreated;
+};
+
+export type TasksCreateResponse = TasksCreateResponses[keyof TasksCreateResponses];
+
+export type TasksOccurrencesListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Status
+         */
+        status?: 'open' | 'completed' | 'skipped' | 'cancelled' | null;
+        /**
+         * Due From
+         */
+        due_from?: string | null;
+        /**
+         * Due To
+         */
+        due_to?: string | null;
+        /**
+         * Cursor
+         */
+        cursor?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tasks/occurrences';
+};
+
+export type TasksOccurrencesListErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksOccurrencesListError = TasksOccurrencesListErrors[keyof TasksOccurrencesListErrors];
+
+export type TasksOccurrencesListResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1TasksSchemasOccurrencePage;
+};
+
+export type TasksOccurrencesListResponse = TasksOccurrencesListResponses[keyof TasksOccurrencesListResponses];
+
+export type TasksOccurrenceCompleteData = {
+    body: VersionIn;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/occurrences/{occurrence_id}/complete';
+};
+
+export type TasksOccurrenceCompleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksOccurrenceCompleteError = TasksOccurrenceCompleteErrors[keyof TasksOccurrenceCompleteErrors];
+
+export type TasksOccurrenceCompleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1TasksSchemasOccurrenceOut;
+};
+
+export type TasksOccurrenceCompleteResponse = TasksOccurrenceCompleteResponses[keyof TasksOccurrenceCompleteResponses];
+
+export type TasksOccurrenceReopenData = {
+    body: VersionIn;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/occurrences/{occurrence_id}/reopen';
+};
+
+export type TasksOccurrenceReopenErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksOccurrenceReopenError = TasksOccurrenceReopenErrors[keyof TasksOccurrenceReopenErrors];
+
+export type TasksOccurrenceReopenResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1TasksSchemasOccurrenceOut;
+};
+
+export type TasksOccurrenceReopenResponse = TasksOccurrenceReopenResponses[keyof TasksOccurrenceReopenResponses];
+
+export type TasksOccurrenceSkipData = {
+    body: VersionIn;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/occurrences/{occurrence_id}/skip';
+};
+
+export type TasksOccurrenceSkipErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksOccurrenceSkipError = TasksOccurrenceSkipErrors[keyof TasksOccurrenceSkipErrors];
+
+export type TasksOccurrenceSkipResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApiRoutersApiV1TasksSchemasOccurrenceOut;
+};
+
+export type TasksOccurrenceSkipResponse = TasksOccurrenceSkipResponses[keyof TasksOccurrenceSkipResponses];

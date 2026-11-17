@@ -71,3 +71,12 @@ coverage.xml
 .sisyphus/
 .scratch/
 .playwright-cli/
+
+# Local agent state: session buffers, code indexes, local Claude settings and worktrees. Never
+# committed (AGENTS.md, "Veröffentlichung und private Daten").
+.superpowers/
+.codegraph/
+.remember/
+.claude/settings.local.json
+.claude/worktrees/
+.playwright-mcp/

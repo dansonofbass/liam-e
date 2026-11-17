@@ -1,7 +1,7 @@
 name: CI
 
 # The checks that otherwise only run locally: `bun run check`, the web tests, pytest and the live
-# Postgres contract suite. The Bun and uv versions follow package.json `packageManager`
+# Postgres contract suite, plus a secret scan of the whole history (job `secrets`). The Bun and uv versions follow package.json `packageManager`
 # (bun@1.4.0), deploy/docker/Dockerfile.web (oven/bun:1.4.0, node:24) and
 # deploy/docker/Dockerfile.api (uv 0.11.17). Python comes from .python-version (3.14), which uv
 # downloads on demand.
@@ -9,6 +9,8 @@ name: CI
 # Dependencies are installed with the frozen lockfiles instead of `bun run install-all`:
 # tools/install.sh regenerates the API client, which would make the drift gate of
 # `bun run check` (tools/gen-types.sh --check) pass on a stale client.
+#
+# Actions are pinned to full commit SHAs (tag in the comment): a moved tag cannot run other code.
 
 on:
   pull_request:
@@ -33,16 +35,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: oven-sh/setup-bun@v2.2.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
@@ -58,13 +60,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: oven-sh/setup-bun@v2.2.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - name: Install JS dependencies
@@ -77,10 +79,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
@@ -114,10 +116,10 @@ jobs:
       RUN_PG_CONTRACT: "1"
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
@@ -128,3 +130,31 @@ jobs:
       # needs CREATEDB; the image's superuser has it.
       - name: Run Postgres contract suites
         run: bash tools/db.sh test-pg-contract
+
+  # gitleaks over the whole history, every branch and tag, with the rules in .gitleaks.toml.
+  # The binary is downloaded from the release page and checked against its SHA-256 before it runs.
+  # .gitleaksignore must stay empty and `gitleaks:allow` comments do not count: a real finding is
+  # rotated, never silenced by fingerprint or inline comment.
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install checksum-verified gitleaks and scan the history
+        env:
+          GITLEAKS_VERSION: 8.30.0
+          GITLEAKS_SHA256: 79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e
+        run: |
+          set -euo pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}" \
+            --output "${RUNNER_TEMP}/${archive}"
+          printf '%s  %s\n' "$GITLEAKS_SHA256" "${RUNNER_TEMP}/${archive}" | sha256sum --check --strict
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "$RUNNER_TEMP" gitleaks
+          test ! -s .gitleaksignore
+          "${RUNNER_TEMP}/gitleaks" git --redact --no-banner --ignore-gitleaks-allow --log-opts="--all" --config .gitleaks.toml .

@@ -22,6 +22,7 @@ dependencies = [
     # Mirrors the toolkit's `[fastapi]` extra: the CLI installs toolkits without extras.
     "pydantic>=2.14.1",
     "uvicorn[standard]>=0.54",
+    "python-dateutil==4.0.0",
 ]
 
 [build-system]

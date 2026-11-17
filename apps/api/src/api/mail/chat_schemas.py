@@ -15,6 +15,16 @@ class ChatExtrasOut(BaseModel):
     model: str = ""
 
 
+class ContextOut(BaseModel):
+    id: str
+    prompt_revision_id: str | None
+    prompt_hash: str | None
+    app_prompt_version: str
+    account_scope_json: str
+    preference_revision_id: str | None
+    revoked: bool
+
+
 class ChatMessageOut(BaseModel):
     id: str
     conversation_id: str
@@ -26,6 +36,17 @@ class ChatMessageOut(BaseModel):
     proposal_status: str
     stopped: bool
     extras: ChatExtrasOut
+    context: ContextOut | None = None
+
+
+async def with_context(message: ChatMessage) -> ChatMessageOut:
+    from db.accessors.chat_context import get_context
+    result = to_message_out(message)
+    if message.context_id:
+        context = await get_context(message.context_id)
+        if context:
+            result.context = ContextOut.model_validate(context, from_attributes=True)
+    return result
 
 
 def to_message_out(message: ChatMessage) -> ChatMessageOut:

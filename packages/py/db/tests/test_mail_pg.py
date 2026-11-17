@@ -9,6 +9,24 @@ import pytest
 pytestmark = pytest.mark.skipif(not os.getenv("RUN_PG_CONTRACT"), reason="RUN_PG_CONTRACT is not set")
 
 
+def test_reclaimed_job_fences_old_completion(pg_db):
+    async def run():
+        from db.accessors import mail_job
+
+        now = datetime.now(UTC) + timedelta(seconds=1)
+        job = await mail_job.enqueue("fence-test", {}, dedupe_key="fence-test")
+        first = await mail_job.claim_next(now, stale_after=timedelta(minutes=1))
+        assert first.id == job.id
+        second = await mail_job.claim_next(now + timedelta(minutes=2), stale_after=timedelta(minutes=1))
+        assert second.id == job.id and second.attempts == first.attempts + 1
+        assert not await mail_job.finish(job.id, first.attempts)
+        assert not await mail_job.fail(job.id, first.attempts, "Error", retry_at=None)
+        assert await mail_job.finish(job.id, second.attempts)
+        assert not await mail_job.fail(job.id, second.attempts, "Error", retry_at=None)
+
+    asyncio.run(run())
+
+
 def test_account_lookup_ignores_case_and_selects_first_deterministically(pg_db):
     async def run():
         from db.accessors import mail_account as a
@@ -206,7 +224,8 @@ def test_enqueue_dedupes_open_jobs(pg_db):
         from db.accessors import mail_job as j
         job = await j.enqueue("sync", {}, dedupe_key="a")
         assert await j.enqueue("sync", {}, dedupe_key="a") is None
-        await j.finish(job.id)
+        claim = await j.claim_next(datetime.now(UTC) + timedelta(seconds=1), stale_after=timedelta(minutes=5))
+        assert await j.finish(job.id, claim.attempts)
         assert await j.enqueue("sync", {}, dedupe_key="a") is not None
     asyncio.run(run())
 

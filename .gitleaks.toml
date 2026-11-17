@@ -1,0 +1,13 @@
+# gitleaks configuration for the CI job `secrets` (.github/workflows/ci.yml), which scans the
+# whole history. The default rules stay active and nothing is allowlisted.
+#
+# An allowlist entry is added only for a reviewed false positive, as narrow as it can be: one
+# rule, the file it occurs in AND a regex for the exact synthetic value (`condition = "AND"`),
+# with a description of why it is harmless. .gitleaksignore stays empty and `gitleaks:allow`
+# comments are ignored. A real secret is never allowlisted: rotate it, then remove it (AGENTS.md,
+# "Veröffentlichung und private Daten").
+
+title = "liam-e"
+
+[extend]
+useDefault = true

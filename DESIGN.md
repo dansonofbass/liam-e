@@ -7,7 +7,7 @@
 
 **Status:** gültig, Stand 2026-11-14. Quelle der Werte sind `apps/web/src/styles/tokens.css`
 (Tokens) und `apps/web/src/ds/` (Bausteine). Das Design-System „liam-e“ in Claude Design
-(https://claude.ai/artifact/MJRNJYUPnK6ciYFc2U2KAz, Stilrichtung C „Weich“), aus dem sie
+(Artefakt des Owners, nicht öffentlich, Stilrichtung C „Weich“), aus dem sie
 entstanden sind, wird ihnen nachgeführt (§10).
 
 ## Konflikt-Hierarchie
@@ -578,20 +578,20 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 
 ---
 
-## Abweichungen von smartpaper-ng
+## Abweichungen von der Vorlage
 
-DESIGN.md folgt dem Aufbau und den Regeln von smartpaper-ng. Bewusst anders:
+DESIGN.md folgt dem Aufbau und den Regeln einer älteren Design-Vorgabe des Owners. Bewusst anders:
 
-- **Ich-Form des Assistenten** ist erlaubt (Owner-Beispiel 2026-11-13); smartpaper-ng
+- **Ich-Form des Assistenten** ist erlaubt (Owner-Beispiel 2026-11-13); die Vorlage
   verbietet sie. Floskeln und Gefühle bleiben verboten (§2.2).
 - **Weiche Form:** Pillen-Buttons, Radien bis 24 px, farbige Blase für eigene Nachrichten
-  und Schatten für schwebende Flächen; smartpaper-ng ist flacher und trennt ohne Schatten.
+  und Schatten für schwebende Flächen; die Vorlage ist flacher und trennt ohne Schatten.
 - **Keine Mono-Schrift:** Zahlen sind tabellarisch statt in einer zweiten Familie.
 - **Deutsch als einzige Sprache der Oberfläche**; es gibt keine englische Fassung.
 
 ## Entschieden (2026-11-13, Owner)
 
-1. **Neues Design-System**, Stilrichtung C „Weich“; OMP Control wird nicht verwendet.
+1. **Neues Design-System**, Stilrichtung C „Weich“; ein bestehendes Design-System wird nicht übernommen.
 2. **Startseite ist der Chat** mit Schnellaktionen: Ungelesenes zusammenfassen,
    Priorisieren, Newsletter aufräumen, Heute fällig.
 3. **Vorschlagen und mit einem Klick bestätigen**, nichts ohne Bestätigung (§9.2). Regeln,
@@ -606,7 +606,7 @@ DESIGN.md folgt dem Aufbau und den Regeln von smartpaper-ng. Bewusst anders:
 8. **Schrift selbst gehostet** über Fontsource, keine Übertragung an Google (§4).
 9. **Textkatalog** `apps/web/src/i18n/de.ts` für alle Texte der Oberfläche (§2.8).
 10. **Screens abgenommen** auf dem Design-Canvas „liam-e Oberfläche“, Seite „Screens“
-    (https://claude.ai/artifact/PdW36jpJZ5beBAgTh27yDC): Chat-Start, Antwort mit
+    (Artefakt des Owners, nicht öffentlich): Chat-Start, Antwort mit
     Streaming, Vorschlag bestätigen, Posteingang, Konten, dazu Handy mit Chat, Schublade,
     Posteingang und Mail. Darin entschieden: „Kurz gefasst“ über jeder Mail, kein direktes
     Antworten (§9.4), Einzelaktionen sofort mit „Rückgängig“ (§9.2), Aktionsleisten am

@@ -13,15 +13,19 @@ type Kind = Removal | 'mark_read' | 'mark_unread'
 const removes = (kind: Kind | 'remove'): kind is Removal => kind === 'archive' || kind === 'trash' || kind === 'spam'
 type Toast = { tone: 'success' | 'danger'; text: string; undoable: boolean }
 type Change = { key: QueryKey; page: number; index: number; row: MessageListItemOut }
+export type UndoEntry = { actionId: string; messageId: string; kind: Kind; changes: Change[]; previousRead?: boolean; text: string; label: string; deadline: number; pending: boolean }
+const LIMIT = 20
 
 export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) {
   const client = useQueryClient()
   const breakpoint = useBreakpoint()
-  const [toast, setToast] = useState<Toast | null>(null)
+  const [entries, setEntries] = useState<UndoEntry[]>([])
+  const entriesRef = useRef<UndoEntry[]>([])
+  const [notice, setNotice] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const target = useRef<{ actionId: string; changes: Change[]; deadline: number } | null>(null)
-  const sequence = useRef(0)
-  const undoPending = useRef(false)
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const reservations = useRef(0)
+  const [reserved, setReserved] = useState(0)
   const pending = useRef(0)
   const queues = useRef(new Map<string, Promise<unknown>>())
   const reconcile = useRef(false)
@@ -31,20 +35,29 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       void client.invalidateQueries({ queryKey: ['messages'] })
     }
   }
-
-  const clear = () => {
+  const schedule = (next: UndoEntry[]) => {
     if (timer.current !== undefined) clock.clearTimeout(timer.current)
     timer.current = undefined
-    target.current = null
-    setToast(null)
+    const deadlines = next.filter(entry => !entry.pending).map(entry => entry.deadline)
+    if (deadlines.length) timer.current = clock.setTimeout(() => {
+      timer.current = undefined
+      publish(entriesRef.current.filter(entry => entry.pending || entry.deadline > clock.now()))
+    }, Math.max(0, Math.min(...deadlines) - clock.now()))
   }
-  const show = (value: Toast, undoTarget?: { actionId: string; changes: Change[] }) => {
-    clear()
-    if (undoTarget) target.current = { ...undoTarget, deadline: clock.now() + 10_000 }
-    setToast(value)
-    timer.current = clock.setTimeout(() => { timer.current = undefined; target.current = null; setToast(null) }, 10_000)
+  const publish = (next: UndoEntry[]) => {
+    entriesRef.current = next
+    setEntries(next)
+    schedule(next)
   }
-  useEffect(() => () => { if (timer.current !== undefined) clock.clearTimeout(timer.current) }, [clock])
+  const notify = (text: string) => {
+    setNotice(text)
+    if (noticeTimer.current !== undefined) clock.clearTimeout(noticeTimer.current)
+    noticeTimer.current = clock.setTimeout(() => { noticeTimer.current = undefined; setNotice(null) }, 10_000)
+  }
+  useEffect(() => () => {
+    if (timer.current !== undefined) clock.clearTimeout(timer.current)
+    if (noticeTimer.current !== undefined) clock.clearTimeout(noticeTimer.current)
+  }, [clock])
   const restore = (changes: Change[], removal: boolean) => {
     for (const { key, page, index, row } of changes) {
       client.setQueryData<InfiniteData<MessagePageOut>>(key, data => {
@@ -68,16 +81,28 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         : page.items.map(item => item.id === id ? { ...item, is_read: kind === 'mark_read' } : item) })),
     }))
   }
-  const run = (id: string, kind: Kind, options?: { silent?: boolean }) => {
-    const current = options?.silent ? sequence.current : ++sequence.current
-    if (!options?.silent) clear()
+  // Both mutations and undo share the per-message queue. Reserve capacity before enqueueing.
+  const enqueue = <T,>(id: string, execute: () => Promise<T>): Promise<T> => {
     const previous = queues.current.get(id)
-    const work = previous ? previous.catch(() => {}).then(() => execute(id, kind, options, current)) : execute(id, kind, options, current)
+    const work = previous ? previous.catch(() => {}).then(execute) : execute()
     queues.current.set(id, work)
     void work.then(() => { if (queues.current.get(id) === work) queues.current.delete(id) }, () => { if (queues.current.get(id) === work) queues.current.delete(id) })
     return work
   }
-  const execute = async (id: string, kind: Kind, options: { silent?: boolean } | undefined, current: number) => {
+  const checkCapacity = () => {
+    const active = entriesRef.current.filter(entry => entry.pending || entry.deadline > clock.now())
+    if (active.length !== entriesRef.current.length) publish(active)
+    if (active.length + reservations.current < LIMIT) return true
+    notify(de.inbox.undoCapacity)
+    return false
+  }
+  const run = (id: string, kind: Kind, options?: { silent?: boolean }) => {
+    // Refused before anything changed: nothing was removed, so nothing came back.
+    if (!options?.silent && !checkCapacity()) return Promise.resolve(false)
+    if (!options?.silent) { reservations.current++; setReserved(reservations.current) }
+    return enqueue(id, () => execute(id, kind, options))
+  }
+  const execute = async (id: string, kind: Kind, options?: { silent?: boolean }) => {
     ++pending.current
     const changes: Change[] = []
     const removal = removes(kind)
@@ -103,53 +128,63 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       const result = await mailMessageAction({ path: { message_id: id }, body: { kind } })
       if (result.response?.status === 404) {
         update(id, 'remove')
-        if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.proposalErrors.item_gone, undoable: false })
+        if (!options?.silent) notify(de.proposalErrors.item_gone)
       } else if (result.response?.status === 409) {
         rollback()
-        if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.proposalErrors.action_unsupported, undoable: false })
+        if (!options?.silent) notify(de.proposalErrors.action_unsupported)
         return changes.length > 0
       } else if (!result.data || result.response?.status !== 200) {
         rollback()
-        if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: result.response?.status === 502 && errorCode(result.error) === 'provider_failed' ? de.errors.provider_failed : de.errors.action_uncertain, undoable: false })
+        if (!options?.silent) notify(result.response?.status === 502 && errorCode(result.error) === 'provider_failed' ? de.errors.provider_failed : de.errors.action_uncertain)
         return changes.length > 0
       } else {
         if (removal) reconcile.current = true
-        if (!options?.silent && removes(kind) && current === sequence.current) {
+        if (!options?.silent) {
           const text = breakpoint === 'mobile' ? de.inbox.doneShort[kind] : de.inbox.done[kind](result.data.message.subject)
-          show({ tone: 'success', text, undoable: true }, { actionId: result.data.action_id, changes })
+          setNotice(null)
+          publish([...entriesRef.current, { actionId: result.data.action_id, messageId: id, kind, changes, previousRead, text, label: de.inbox.done[kind](result.data.message.subject), deadline: clock.now() + 10_000, pending: false }])
         }
         void client.invalidateQueries({ queryKey: ['summary'] })
         void client.invalidateQueries({ queryKey: ['message', id] })
       }
     } catch {
       rollback()
-      if (!options?.silent && current === sequence.current) show({ tone: 'danger', text: de.errors.action_uncertain, undoable: false })
+      if (!options?.silent) notify(de.errors.action_uncertain)
       return changes.length > 0
-    } finally { settle() }
+    } finally {
+      if (!options?.silent) { reservations.current--; setReserved(reservations.current) }
+      settle()
+    }
   }
-  const undo = async () => {
-    const selected = target.current
-    if (!selected || undoPending.current) return
-    if (clock.now() >= selected.deadline) { clear(); return }
-    undoPending.current = true
-    ++pending.current
-    try {
-      const result = await mailActionsUndo({ body: { action_ids: [selected.actionId] } })
-      if (result.data?.restored.includes(selected.actionId)) {
-        restore(selected.changes, true)
-        if (target.current === selected) clear()
+  const undo = (actionId?: string) => {
+    const selected = actionId ? entriesRef.current.find(entry => entry.actionId === actionId) : entriesRef.current.at(-1)
+    if (!selected || selected.pending) return Promise.resolve()
+    if (clock.now() >= selected.deadline) { publish(entriesRef.current.filter(entry => entry !== selected)); return Promise.resolve() }
+    publish(entriesRef.current.map(entry => entry === selected ? { ...entry, pending: true } : entry))
+    return enqueue(selected.messageId, async () => {
+      ++pending.current
+      try {
+        const result = await mailActionsUndo({ body: { action_ids: [selected.actionId] } })
+        if (result.data?.restored.includes(selected.actionId)) {
+          restore(selected.changes, removes(selected.kind))
+          if (!removes(selected.kind) && selected.previousRead !== undefined) client.setQueryData<MessageDetailOut>(['message', selected.messageId], data => data && { ...data, is_read: selected.previousRead! })
+        } else if (result.data?.skipped.includes(selected.actionId)) notify(de.inbox.undoSkipped)
+        else if (result.data?.expired.includes(selected.actionId)) notify(de.inbox.undoExpired)
+        else if (result.data?.failed.includes(selected.actionId)) notify(de.inbox.undoFailed)
+        else notify(de.inbox.undoUncertain)
+      } catch { notify(de.inbox.undoUncertain) }
+      finally {
+        publish(entriesRef.current.filter(entry => entry.actionId !== selected.actionId))
         reconcile.current = true
         void client.invalidateQueries({ queryKey: ['summary'] })
-      } else if (target.current === selected) show({ tone: 'danger', text: de.proposal.requestError, undoable: false })
-    } catch {
-      if (target.current === selected) show({ tone: 'danger', text: de.proposal.requestError, undoable: false })
-    } finally { undoPending.current = false; settle() }
+        void client.invalidateQueries({ queryKey: ['message', selected.messageId] })
+        settle()
+      }
+    })
   }
-  const notify = (text: string) => {
-    ++sequence.current
-    show({ tone: 'danger', text, undoable: false })
-  }
-  return { run, undo, notify, toast }
+  const latest = entries.at(-1)
+  const toast: Toast | null = notice ? { tone: 'danger', text: notice, undoable: false } : latest ? { tone: 'success', text: latest.text, undoable: true } : null
+  return { run, undo, notify, toast, entries, checkCapacity, capacityAvailable: entries.filter(entry => entry.pending || entry.deadline > clock.now()).length + reserved < LIMIT }
 }
 
 const MailActionsContext = createContext<ReturnType<typeof useMailActions> | null>(null)
