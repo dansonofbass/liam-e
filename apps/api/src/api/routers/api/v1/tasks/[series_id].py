@@ -16,8 +16,8 @@ from .route import checked_window, series_out
 from .schemas import DeleteIn, OccurrenceOut, OccurrencePage, SeriesDetail, SeriesStateOut, SeriesVersionIn, TaskPatch, TaskPatched
 
 router = APIRouter(route_class=quiet_validation_route(
-    'task_invalid', 'Prüfe die Angaben zur Aufgabe und zur Fälligkeit.',
-))
+    'task_invalid', 'Prüfe die Angaben zur Aufgabe: erwartete Version, Zeitraum, Seitengröße und Fälligkeit.',
+), responses={422: {'description': 'Invalid fields; user content is not echoed'}})
 
 
 def lifecycle_error(exc: ValueError):

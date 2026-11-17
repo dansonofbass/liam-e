@@ -1,7 +1,9 @@
+import json
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 
 import pytest
+from conftest import build_app
 from db.models.task_occurrence import TaskOccurrence
 from db.models.task_series import TaskSeries
 
@@ -56,6 +58,34 @@ def test_validation_errors_do_not_echo_task_content(client, method, path, body, 
     assert response.status_code == 422
     assert response.json()['detail']['code'] == 'task_invalid'
     assert secret not in response.text
+
+
+def test_list_limit_refusal_does_not_talk_about_titles(client):
+    response = client.get('/api/v1/tasks', params={'due_from': '2024-01-01', 'due_to': '2024-01-31', 'limit': 101})
+    assert response.status_code == 422
+    detail = response.json()['detail']
+    assert detail['code'] == 'task_invalid'
+    assert 'Titel' not in detail['message'] and 'Beschreibung' not in detail['message']
+
+
+@pytest.mark.parametrize('action', ['complete', 'skip', 'reopen'])
+def test_transition_refusal_does_not_talk_about_pages(client, action):
+    response = client.post(f'/api/v1/tasks/occurrences/o/{action}', json={'version': 0})
+    assert response.status_code == 422
+    detail = response.json()['detail']
+    assert detail['code'] == 'task_invalid'
+    assert 'Seite' not in detail['message'] and 'Einträge' not in detail['message']
+
+
+def test_task_operations_document_quiet_validation_errors():
+    spec = build_app().openapi()
+    operations = [(method, path, operation)
+                  for path, methods in spec['paths'].items()
+                  for method, operation in methods.items()
+                  if operation.get('operationId', '').startswith('tasks_')]
+    assert len(operations) == 12
+    for method, path, operation in operations:
+        assert 'HTTPValidationError' not in json.dumps(operation['responses']['422']), (method, path)
 
 
 def test_creation_and_conflict(client, access):

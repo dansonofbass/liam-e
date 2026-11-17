@@ -1,4 +1,4 @@
-"""Create personal task series."""
+"""Create and list personal task series."""
 
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
@@ -13,9 +13,19 @@ from api.tasks.recurrence import expand_page
 from api.tasks.reading import complete_in_window, validate_window
 from .schemas import ScheduleOut, SeriesOut, SeriesPage, TaskCreate, TaskCreated, TaskWindow
 
-router = APIRouter(route_class=quiet_validation_route(
-    'task_invalid', 'Prüfe die Angaben: Titel bis 500 und Beschreibung bis 10.000 Zeichen.',
-))
+# The list and the create route reject different fields, so each keeps its own wording for the
+# quiet 422. FastAPI cannot nest routers at an empty path, so both groups share one container.
+list_router = APIRouter(route_class=quiet_validation_route(
+    'task_invalid', 'Prüfe die Angaben: Zeitraum bis 366 Tage, Filter, Cursor und Seitengröße 1–100.',
+), responses={422: {'description': 'Invalid fields; user content is not echoed'}})
+create_router = APIRouter(route_class=quiet_validation_route(
+    'task_invalid',
+    'Prüfe die Angaben: Titel 1–500 Zeichen, Beschreibung bis 10.000 Zeichen, Start, Zeitzone und Wiederholung.',
+), responses={422: {'description': 'Invalid fields; user content is not echoed'}})
+
+# The loader mounts one module-level router and FastAPI cannot nest routers at an empty path, so
+# this container collects both groups once their routes are declared at the end of the module.
+router = APIRouter()
 
 
 async def series_out(session, row, due_from: date, due_to: date) -> SeriesOut:
@@ -32,7 +42,7 @@ def checked_window(due_from: date, due_to: date) -> TaskWindow:
     return TaskWindow(due_from=due_from, due_to=due_to)
 
 
-@router.get('', operation_id='tasks_list', summary='List task series in a local date window')
+@list_router.get('', operation_id='tasks_list', summary='List task series in a local date window')
 async def list_tasks(
     due_from: date, due_to: date,
     status: Literal['active', 'archived'] | None = None,
@@ -52,7 +62,7 @@ async def list_tasks(
         return SeriesPage(window=window, items=items, next_cursor=rows[limit - 1].id if len(rows) > limit else None)
 
 
-@router.post('', operation_id='tasks_create', summary='Create a personal task')
+@create_router.post('', operation_id='tasks_create', summary='Create a personal task')
 async def create_task(body: TaskCreate) -> TaskCreated:
     try:
         # ISO 8601 allows a lowercase separator; a date has neither.
@@ -78,3 +88,6 @@ async def create_task(body: TaskCreate) -> TaskCreated:
         raise refuse(409, 'task_creation_conflict', 'Diese Erstellungskennung gehört zu einer anderen Aufgabe.') from None
     except ValueError:
         raise refuse(422, 'task_invalid', 'Die Aufgabe konnte nicht angelegt werden. Prüfe ihre Angaben.') from None
+
+
+router.routes.extend([*list_router.routes, *create_router.routes])

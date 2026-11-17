@@ -3146,12 +3146,10 @@ export type TasksListData = {
 
 export type TasksListErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksListError = TasksListErrors[keyof TasksListErrors];
 
 export type TasksListResponses = {
     /**
@@ -3171,12 +3169,10 @@ export type TasksCreateData = {
 
 export type TasksCreateErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksCreateError = TasksCreateErrors[keyof TasksCreateErrors];
 
 export type TasksCreateResponses = {
     /**
@@ -3217,12 +3213,10 @@ export type TasksOccurrencesListData = {
 
 export type TasksOccurrencesListErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksOccurrencesListError = TasksOccurrencesListErrors[keyof TasksOccurrencesListErrors];
 
 export type TasksOccurrencesListResponses = {
     /**
@@ -3247,12 +3241,10 @@ export type TasksOccurrenceCompleteData = {
 
 export type TasksOccurrenceCompleteErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksOccurrenceCompleteError = TasksOccurrenceCompleteErrors[keyof TasksOccurrenceCompleteErrors];
 
 export type TasksOccurrenceCompleteResponses = {
     /**
@@ -3277,12 +3269,10 @@ export type TasksOccurrenceReopenData = {
 
 export type TasksOccurrenceReopenErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksOccurrenceReopenError = TasksOccurrenceReopenErrors[keyof TasksOccurrenceReopenErrors];
 
 export type TasksOccurrenceReopenResponses = {
     /**
@@ -3307,12 +3297,10 @@ export type TasksOccurrenceSkipData = {
 
 export type TasksOccurrenceSkipErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksOccurrenceSkipError = TasksOccurrenceSkipErrors[keyof TasksOccurrenceSkipErrors];
 
 export type TasksOccurrenceSkipResponses = {
     /**
@@ -3332,12 +3320,10 @@ export type TasksPreviewData = {
 
 export type TasksPreviewErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksPreviewError = TasksPreviewErrors[keyof TasksPreviewErrors];
 
 export type TasksPreviewResponses = {
     /**
@@ -3357,12 +3343,10 @@ export type TasksReconcileData = {
 
 export type TasksReconcileErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksReconcileError = TasksReconcileErrors[keyof TasksReconcileErrors];
 
 export type TasksReconcileResponses = {
     /**
@@ -3387,12 +3371,10 @@ export type TasksDeleteData = {
 
 export type TasksDeleteErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksDeleteError = TasksDeleteErrors[keyof TasksDeleteErrors];
 
 export type TasksDeleteResponses = {
     /**
@@ -3438,12 +3420,10 @@ export type TasksGetData = {
 
 export type TasksGetErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksGetError = TasksGetErrors[keyof TasksGetErrors];
 
 export type TasksGetResponses = {
     /**
@@ -3468,12 +3448,10 @@ export type TasksUpdateData = {
 
 export type TasksUpdateErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksUpdateError = TasksUpdateErrors[keyof TasksUpdateErrors];
 
 export type TasksUpdateResponses = {
     /**
@@ -3498,12 +3476,10 @@ export type TasksArchiveData = {
 
 export type TasksArchiveErrors = {
     /**
-     * Validation Error
+     * Invalid fields; user content is not echoed
      */
-    422: HttpValidationError;
+    422: unknown;
 };
-
-export type TasksArchiveError = TasksArchiveErrors[keyof TasksArchiveErrors];
 
 export type TasksArchiveResponses = {
     /**

@@ -10,8 +10,8 @@ from api.tasks.reconcile import ReconcileConflict, reconcile_current
 from .schemas import ReconcileIn, ReconcileOut
 
 router = APIRouter(route_class=quiet_validation_route(
-    'task_invalid', 'Prüfe die Angaben zum Abruf: höchstens 100 Einträge pro Seite.',
-))
+    'task_invalid', 'Prüfe die Angaben zum Abruf: Serie, Cursor und höchstens 100 Einträge pro Seite.',
+), responses={422: {'description': 'Invalid fields; user content is not echoed'}})
 
 
 @router.post('', operation_id='tasks_reconcile', summary='Materialize one bounded task page')

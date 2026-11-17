@@ -9,8 +9,8 @@ from api.tasks.preview import preview
 from .schemas import PreviewIn, PreviewOut
 
 router = APIRouter(route_class=quiet_validation_route(
-    'task_invalid', 'Prüfe die Angaben zur Vorschau: höchstens 100 Einträge pro Seite.',
-))
+    'task_invalid', 'Prüfe die Angaben zur Vorschau: Zeitraum, Zeitzone, Wiederholung und höchstens 100 Einträge.',
+), responses={422: {'description': 'Invalid fields; user content is not echoed'}})
 
 
 @router.post('', operation_id='tasks_preview', summary='Preview a task schedule without writes')
