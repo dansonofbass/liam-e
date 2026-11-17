@@ -34,6 +34,7 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `/chat/$conversationId` — Unterhaltung mit Verlauf, Antworten und Vorschlagskarten.
 - `/mail` — Posteingang mit Liste und Filtern; `/mail/$messageId` — geöffnete Mail mit Lesebereich.
 - `/accounts` — Kontenübersicht, Verbinden, erneutes Anmelden und Entfernen.
+- `/tasks` und `/tasks/$taskId` — Aufgabenliste, manuelle Anlage und Fälligkeiten mit Verlauf.
 - `/settings` und `/settings/prompts` — Einstellungen mit Vorlagenbibliothek; `settingsSections` ist der Navigationseinstieg für weitere implementierte Bereiche.
 - `/settings/prompts/new` und `/settings/prompts/$promptId` — Vorlage anlegen oder bearbeiten, auf allen Bildschirmgrößen als eigene Ansicht.
 
@@ -136,6 +137,10 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/reopen` | `tasks_occurrence_reopen` |
 
 ## Aufgabendomäne
+
+Die Oberfläche unter `apps/web/src/tasks/` verwendet die generierten Task-Endpunkte. Die
+Anlage zeigt eine serverseitige Vorschau; `reconcile.ts` begrenzt jeden Abruf auf einen
+festen Horizont und setzt den gespeicherten Fortschritt beim nächsten Öffnen fort.
 
 `api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
 Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite

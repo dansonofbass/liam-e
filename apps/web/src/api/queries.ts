@@ -1,6 +1,6 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
-import { promptsList, promptGet, mailSummary, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet } from './generated/sdk.gen'
-import type { MailMessagesListData } from './generated/types.gen'
+import { promptsList, promptGet, mailSummary, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList } from './generated/sdk.gen'
+import type { MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData } from './generated/types.gen'
 import { dataOr404, unwrap } from './unwrap'
 
 export class MessageNotFoundError extends Error {}
@@ -26,3 +26,8 @@ export const modelsQuery = () => queryOptions({ queryKey: ['models'], queryFn: (
 
 // The confirmed device-independent swipe assignment; a second device reads the same row.
 export const uiSettingsQuery = () => queryOptions({ queryKey: ['ui-settings'], refetchOnWindowFocus: 'always', queryFn: () => unwrap(settingsUiGet({ throwOnError: true })) })
+
+// Task queries use their own scope; inbox filters never affect this data.
+export const taskListQuery = (query: Omit<TasksListData['query'], 'cursor'>) => infiniteQueryOptions({ queryKey: ['tasks', 'list', query], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(tasksList({ query: { ...query, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.next_cursor ?? undefined })
+export const taskOccurrencesQuery = (query: Omit<NonNullable<TasksOccurrencesListData['query']>, 'cursor'>) => infiniteQueryOptions({ queryKey: ['tasks', 'occurrences', query], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(tasksOccurrencesList({ query: { ...query, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.next_cursor ?? undefined })
+export const taskDetailQuery = (id: string, query: Omit<TasksGetData['query'], 'cursor'>) => infiniteQueryOptions({ queryKey: ['tasks', 'detail', id, query], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(tasksGet({ path: { series_id: id }, query: { ...query, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.occurrences.next_cursor ?? undefined })
