@@ -26,6 +26,10 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "calendar_source_delete",
         "calendar_source_sync",
         "calendar_source_update",
+        "preference_create",
+        "preference_update",
+        "preference_delete",
+        "settings_update",
         "prompt_create",
         "prompt_update",
         "prompt_delete",
@@ -55,11 +59,15 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
     }
 )
 
-# GETs that change state as well: the OAuth flow belongs to the owner's browser, and the callback
+# Private preference/settings reads also stay browser-only: read-only does not mean safe
+# to expose personal values to an agent. GETs that change state: OAuth belongs to the browser; its callback
 # stores credentials and enqueues a sync. They are part of the OpenAPI, so they are named here
 # rather than left out of the read-only list silently.
 BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
     {
+        "preferences_list",
+        "preference_context_get",
+        "settings_get",
         "mail_account_oauth_authorize",
         "mail_account_oauth_callback",
     }
