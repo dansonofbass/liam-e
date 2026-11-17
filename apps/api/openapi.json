@@ -802,6 +802,26 @@
         "title": "ConversationOut",
         "type": "object"
       },
+      "DeleteIn": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_history_loss": {
+            "default": false,
+            "title": "Confirm History Loss",
+            "type": "boolean"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "DeleteIn",
+        "type": "object"
+      },
       "DeltaEvent": {
         "properties": {
           "event": {
@@ -2505,6 +2525,44 @@
           "next_cursor"
         ],
         "title": "SeriesPage",
+        "type": "object"
+      },
+      "SeriesStateOut": {
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "archived"
+        ],
+        "title": "SeriesStateOut",
+        "type": "object"
+      },
+      "SeriesVersionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "SeriesVersionIn",
         "type": "object"
       },
       "SourceOut": {
@@ -5332,6 +5390,46 @@
       }
     },
     "/api/v1/tasks/{series_id}": {
+      "delete": {
+        "operationId": "tasks_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Permanently delete a task and its history"
+      },
       "get": {
         "operationId": "tasks_get",
         "parameters": [
@@ -5433,6 +5531,55 @@
           }
         },
         "summary": "Read a task series and a page of its occurrences"
+      }
+    },
+    "/api/v1/tasks/{series_id}/archive": {
+      "post": {
+        "operationId": "tasks_archive",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesVersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive a task and cancel open future occurrences"
       }
     }
   }

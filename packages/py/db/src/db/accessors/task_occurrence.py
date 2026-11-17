@@ -1,12 +1,15 @@
 """Transactional access to materialized task occurrences."""
 
-from sqlalchemy import select, tuple_, update
+from datetime import datetime
+
+from sqlalchemy import and_, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.models._common import utcnow
 from db.models.task_occurrence import TaskOccurrence
 from db.models.task_series import TaskSeries
+from db.models.task_schedule_revision import TaskScheduleRevision
 
 
 async def insert_once(session: AsyncSession, row: TaskOccurrence) -> bool:
@@ -37,7 +40,19 @@ async def list_page(session: AsyncSession, *, scope: str, status: str | None, du
 
 
 async def get(session: AsyncSession, occurrence_id: str) -> TaskOccurrence | None:
-    return (await session.execute(select(TaskOccurrence).where(TaskOccurrence.id == occurrence_id))).scalar_one_or_none()
+    return (await session.execute(select(TaskOccurrence).where(TaskOccurrence.id == occurrence_id).execution_options(populate_existing=True))).scalar_one_or_none()
+
+
+async def cancel_future(session: AsyncSession, series_id: str, now: datetime) -> int:
+    """One conditional update, using each revision's local date boundary."""
+    zone = select(TaskScheduleRevision.timezone).where(
+        TaskScheduleRevision.id == TaskOccurrence.revision_id).scalar_subquery()
+    today = func.to_char(func.timezone(func.coalesce(zone, 'UTC'), now), 'YYYY-MM-DD')
+    query = update(TaskOccurrence).where(TaskOccurrence.series_id == series_id,
+        TaskOccurrence.status == 'open', or_(TaskOccurrence.due_at > now,
+            and_(TaskOccurrence.due_at.is_(None), TaskOccurrence.due_local > today))).values(
+                status='cancelled', version=TaskOccurrence.version + 1, updated_at=utcnow()).returning(TaskOccurrence.id)
+    return len((await session.execute(query.execution_options(synchronize_session=False))).scalars().all())
 
 
 async def transition(session: AsyncSession, occurrence_id: str, *, version: int, expected: str, target: str) -> bool:

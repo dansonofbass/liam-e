@@ -442,6 +442,156 @@ def test_series_reads_are_scoped_paginated_and_never_write_even_after_source_rem
             assert statements
         finally:
             event.remove(Engine, 'before_cursor_execute', read_only)
+        assert client.post(f'/api/v1/tasks/{linked}/archive', json={'expected_version': 1}).status_code == 200
+        assert client.request('DELETE', f'/api/v1/tasks/{linked}', json={
+            'expected_version': 2, 'confirm_history_loss': True,
+        }).status_code == 204
+
+
+def test_archive_boundaries_rollback_and_confirmed_delete(pg_db):
+    async def run():
+        from datetime import date
+        from api.tasks.create import create
+        from api.tasks.lifecycle import DeleteConfirmationRequired, archive, delete
+        from api.tasks.reconcile import ReconcileConflict, reconcile_current
+        from api.tasks.state import StateConflict, transition
+        from db.accessors import task_occurrence, task_schedule_revision, task_series
+        from db.engine import get_session_maker
+
+        async with get_session_maker()() as session:
+            series, _ = await create(session, creation_key='lifecycle', title='Example',
+                start=date(2024, 1, 1), zone='UTC', rule='FREQ=DAILY')
+            await reconcile_current(session, series_id=series.id, now=datetime(2024, 1, 1, tzinfo=UTC))
+            revision = await task_schedule_revision.current(session, series.id)
+            revision.timezone = None  # Legacy date-only rows retain null and use UTC.
+            session.add(revision)
+            rows = await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=100, series_id=series.id)
+            await transition(session, rows[11].id, version=1, action='complete')
+            await session.commit()
+        async with get_session_maker()() as session:
+            await archive(session, series.id, expected_version=1, now=datetime(2024, 1, 10, 23, 30, tzinfo=UTC))
+            await session.rollback()
+        async with get_session_maker()() as session:
+            assert not (await task_series.get(session, 'app', series.id)).archived
+            assert (await task_occurrence.get(session, rows[10].id)).status == 'open'
+            archived = await archive(session, series.id, expected_version=1, now=datetime(2024, 1, 10, 23, 30, tzinfo=UTC))
+            assert archived.archived and archived.version == 2
+            await session.commit()
+        async with get_session_maker()() as session:
+            current = await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=100, series_id=series.id)
+            assert all(row.status == 'open' and row.version == 1 for row in current[:10])
+            assert current[10].status == 'cancelled' and current[10].version == 2
+            assert current[11].status == 'completed' and current[11].version == 2
+            assert all(row.status == 'cancelled' for row in current[12:])
+            assert (await task_schedule_revision.current(session, series.id)).timezone is None
+            with pytest.raises(ReconcileConflict):
+                await reconcile_current(session, series_id=series.id)
+            with pytest.raises(StateConflict):
+                await archive(session, series.id, expected_version=1)
+            with pytest.raises(DeleteConfirmationRequired):
+                await delete(session, series.id, expected_version=2, confirm_history_loss=False)
+            with pytest.raises(StateConflict):
+                await delete(session, series.id, expected_version=1, confirm_history_loss=True)
+            await delete(session, series.id, expected_version=2, confirm_history_loss=True)
+            await session.rollback()
+        async with get_session_maker()() as session:
+            assert await task_series.get(session, 'app', series.id) is not None
+            await delete(session, series.id, expected_version=2, confirm_history_loss=True)
+            await session.commit()
+        async with get_session_maker()() as session:
+            assert await task_series.get(session, 'app', series.id) is None
+            assert await task_schedule_revision.list_for_series(session, series.id) == []
+            assert all([await task_occurrence.get(session, row.id) is None for row in rows])
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('start,zone,now,open_count', [
+    ('2024-01-01', 'UTC', datetime(2024, 1, 1, 23, 30, tzinfo=UTC), 1),
+    ('2024-01-01', 'Europe/Berlin', datetime(2024, 1, 1, 23, 30, tzinfo=UTC), 2),
+    ('2024-10-27T02:30:00', 'Europe/Berlin', datetime(2024, 10, 27, 1, 15, tzinfo=UTC), 1),
+])
+def test_archive_uses_local_dates_and_utc_instants(pg_db, start, zone, now, open_count):
+    async def run():
+        from datetime import date
+        from api.tasks.create import create
+        from api.tasks.lifecycle import archive
+        from api.tasks.reconcile import reconcile_current
+        from db.accessors import task_occurrence
+        from db.engine import get_session_maker
+
+        local = datetime.fromisoformat(start) if 'T' in start else date.fromisoformat(start)
+        async with get_session_maker()() as session:
+            series, _ = await create(session, creation_key='boundary', title='Example', start=local,
+                                     zone=zone, rule='FREQ=DAILY;COUNT=3')
+            await reconcile_current(session, series_id=series.id, now=now)
+            await archive(session, series.id, expected_version=1, now=now)
+            await session.commit()
+        async with get_session_maker()() as session:
+            rows = await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=100, series_id=series.id)
+            assert [row.status for row in rows] == ['open'] * open_count + ['cancelled'] * (3 - open_count)
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('actions', [('archive', 'archive'), ('delete', 'delete'), ('archive', 'delete')])
+def test_parallel_lifecycle_version_has_one_winner(pg_db, actions):
+    async def run():
+        from datetime import date
+        from api.tasks.create import create
+        from api.tasks import lifecycle
+        from api.tasks.state import StateConflict, StateNotFound
+        from db.engine import get_session_maker
+
+        async with get_session_maker()() as session:
+            series, _ = await create(session, creation_key='race', title='Example', start=date(2024, 1, 1), zone='UTC')
+            await session.commit()
+
+        async def attempt(action):
+            async with get_session_maker()() as session:
+                try:
+                    if action == 'archive':
+                        await lifecycle.archive(session, series.id, expected_version=1)
+                    else:
+                        await lifecycle.delete(session, series.id, expected_version=1, confirm_history_loss=True)
+                    await session.commit()
+                    return True
+                except (StateConflict, StateNotFound):
+                    await session.rollback()
+                    return False
+
+        assert sum(await asyncio.gather(*(attempt(action) for action in actions))) == 1
+
+    asyncio.run(run())
+
+
+def test_archived_future_completion_cannot_be_reopened(pg_db):
+    async def run():
+        from datetime import timedelta
+        from api.tasks.create import create
+        from api.tasks.lifecycle import archive
+        from api.tasks.reconcile import reconcile_current
+        from api.tasks.state import StateConflict, transition
+        from db.accessors import task_occurrence
+        from db.engine import get_session_maker
+
+        now = datetime.now(UTC)
+        async with get_session_maker()() as session:
+            series, _ = await create(session, creation_key='future-reopen', title='Example',
+                                     start=(now + timedelta(days=2)).date(), zone='UTC')
+            await reconcile_current(session, series_id=series.id, now=now)
+            row = (await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=1, series_id=series.id))[0]
+            await transition(session, row.id, version=1, action='complete')
+            await archive(session, series.id, expected_version=1, now=now)
+            with pytest.raises(StateConflict):
+                await transition(session, row.id, version=2, action='reopen')
+            await session.commit()
+
+    asyncio.run(run())
 
 
 def test_domain_state_transitions_and_conflicts(pg_db):

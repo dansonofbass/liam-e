@@ -1,8 +1,12 @@
 """Transactional state changes for personal task occurrences."""
 
-from db.accessors import task_occurrence, task_series
+from datetime import UTC, datetime
+
+from db.accessors import task_occurrence, task_schedule_revision, task_series
 from db.models.task_occurrence import TaskOccurrence
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from api.tasks.dates import is_future
 
 
 class StateNotFound(ValueError):
@@ -18,8 +22,20 @@ async def transition(session: AsyncSession, occurrence_id: str, *, version: int,
     if action not in {'complete', 'skip', 'reopen'}:
         raise ValueError('unsupported action')
     occurrence = await task_occurrence.get(session, occurrence_id)
-    if occurrence is None or await task_series.get(session, 'app', occurrence.series_id) is None:
+    if occurrence is None:
         raise StateNotFound('occurrence not found')
+    series = await task_series.get(session, 'app', occurrence.series_id, lock=True)
+    if series is None:
+        raise StateNotFound('occurrence not found')
+    # Archive/delete/revision changes take this same lock. Refresh the instance
+    # after waiting so an earlier read cannot overwrite their decisions.
+    occurrence = await task_occurrence.get(session, occurrence_id)
+    if occurrence is None:
+        raise StateNotFound('occurrence not found')
+    if action == 'reopen' and series.archived:
+        revision = await task_schedule_revision.get(session, occurrence.revision_id)
+        if is_future(occurrence.due_local, revision.timezone if revision else None, datetime.now(UTC)):
+            raise StateConflict('archived future occurrence cannot reopen')
     if action == 'complete' and occurrence.status == 'completed':
         return occurrence
     expected = occurrence.status if action == 'reopen' else 'open'

@@ -122,6 +122,8 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Mail / Abruf | POST | `/api/v1/mail/sync` | `mail_sync_all` |
 | Aufgaben | GET | `/api/v1/tasks` | `tasks_list` |
 | Aufgaben | GET | `/api/v1/tasks/{series_id}` | `tasks_get` |
+| Aufgaben | POST | `/api/v1/tasks/{series_id}/archive` | `tasks_archive` |
+| Aufgaben | DELETE | `/api/v1/tasks/{series_id}` | `tasks_delete` |
 | Aufgaben | POST | `/api/v1/tasks` | `tasks_create` |
 | Aufgaben | POST | `/api/v1/tasks/preview` | `tasks_preview` |
 | Aufgaben | POST | `/api/v1/tasks/reconcile` | `tasks_reconcile` |
@@ -135,7 +137,17 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 `api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
 Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite
 in derselben Transaktion. Weitere Seiten werden ausdrücklich über `POST /tasks/reconcile`
-abgerufen. Serienrevision, Archivieren und Löschen sind noch offen.
+abgerufen. Einzeländerungen und Serienrevision per PATCH sind noch offen.
+
+Archivieren und endgültiges Löschen benötigen `expected_version` der Serie.
+Archivieren sperrt neue Materialisierung und storniert in einem bedingten Update nur
+offene zukünftige Instanzen; heute fällige Datumsaufgaben sowie bereits fällige und
+abgeschlossene Instanzen bleiben erhalten. Wiederöffnen zukünftiger Instanzen einer
+archivierten Serie ist gesperrt. DELETE benötigt zusätzlich ausdrücklich
+`confirm_history_loss: true` im JSON-Body und entfernt Serie, Revisionen und Instanzen
+in derselben Transaktion. Beide Dienste nehmen eine Session und committen nicht selbst.
+Seriensperren serialisieren diese Aktionen mit Reconcile und Zustandswechseln;
+veraltete Versionen ergeben 409, fehlende Serien 404.
 
 `GET /tasks` und `GET /tasks/{series_id}` lesen ausschließlich gespeicherte Daten im
 serverseitigen Scope `app`. Beide benötigen das inklusive lokale Datumsfenster

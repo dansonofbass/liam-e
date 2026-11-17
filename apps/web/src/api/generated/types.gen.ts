@@ -481,6 +481,20 @@ export type ConversationOut = {
 };
 
 /**
+ * DeleteIn
+ */
+export type DeleteIn = {
+    /**
+     * Confirm History Loss
+     */
+    confirm_history_loss?: boolean;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+};
+
+/**
  * DeltaEvent
  */
 export type DeltaEvent = {
@@ -1489,6 +1503,34 @@ export type SeriesPage = {
      */
     next_cursor: string | null;
     window: TaskWindow;
+};
+
+/**
+ * SeriesStateOut
+ */
+export type SeriesStateOut = {
+    /**
+     * Archived
+     */
+    archived: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * SeriesVersionIn
+ */
+export type SeriesVersionIn = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
 };
 
 /**
@@ -3273,6 +3315,36 @@ export type TasksReconcileResponses = {
 
 export type TasksReconcileResponse = TasksReconcileResponses[keyof TasksReconcileResponses];
 
+export type TasksDeleteData = {
+    body: DeleteIn;
+    path: {
+        /**
+         * Series Id
+         */
+        series_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/{series_id}';
+};
+
+export type TasksDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksDeleteError = TasksDeleteErrors[keyof TasksDeleteErrors];
+
+export type TasksDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type TasksDeleteResponse = TasksDeleteResponses[keyof TasksDeleteResponses];
+
 export type TasksGetData = {
     body?: never;
     path: {
@@ -3323,3 +3395,33 @@ export type TasksGetResponses = {
 };
 
 export type TasksGetResponse = TasksGetResponses[keyof TasksGetResponses];
+
+export type TasksArchiveData = {
+    body: SeriesVersionIn;
+    path: {
+        /**
+         * Series Id
+         */
+        series_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tasks/{series_id}/archive';
+};
+
+export type TasksArchiveErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksArchiveError = TasksArchiveErrors[keyof TasksArchiveErrors];
+
+export type TasksArchiveResponses = {
+    /**
+     * Successful Response
+     */
+    200: SeriesStateOut;
+};
+
+export type TasksArchiveResponse = TasksArchiveResponses[keyof TasksArchiveResponses];

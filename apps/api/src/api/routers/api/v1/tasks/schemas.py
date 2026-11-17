@@ -61,6 +61,21 @@ class TaskCreated(BaseModel):
     created: bool
 
 
+class SeriesVersionIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    expected_version: int = Field(ge=1)
+
+
+class DeleteIn(SeriesVersionIn):
+    confirm_history_loss: bool = Field(default=False, strict=True)
+
+
+class SeriesStateOut(BaseModel):
+    id: str
+    version: int
+    archived: bool
+
+
 class VersionIn(BaseModel):
     version: int = Field(ge=1)
 
