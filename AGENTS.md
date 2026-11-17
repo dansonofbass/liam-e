@@ -93,6 +93,8 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Vorlagen | GET | `/api/v1/prompts/{id}` | `prompt_get` |
 | Vorlagen | PATCH | `/api/v1/prompts/{id}` | `prompt_update` |
 | Vorlagen | DELETE | `/api/v1/prompts/{id}` | `prompt_delete` |
+| Einstellungen | GET | `/api/v1/settings/ui` | `settings_ui_get` |
+| Einstellungen | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
 | Chat | POST | `/api/v1/chat/stream` | `chat_stream` |
 | Chat | GET | `/api/v1/chat/conversations` | `chat_conversations_list` |
@@ -293,6 +295,7 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `mail_insight` — Kurzfassung (`points_json`), Frist, Antwortbedarf, Folgevorschläge und Modell je Mail.
 - `mail_job` — dauerhafte Sync-/Insight-Warteschlange mit Status, Deduplizierung, Versuchen und Sperrzeit.
 - `chat_conversation`, `chat_message` — Verlauf; Vorschläge in `proposal_json` mit `proposal_status`, Mailreferenzen/Vorschläge/Modell in `extras_json`; ältere Entwürfe tragen `draft_json`.
+- `ui_settings` — die eine geräteübergreifende Bedienungskonfiguration mit festem serverseitigem Scope (`installation`, unique): `swipe_left`/`swipe_right` aus der Allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` für bedingte Updates und `updated_at`; Erstinitialisierung mit links `archive`, rechts `toggle_read`.
 
 ## Vorlagen und Turn-Kontext
 
@@ -395,7 +398,7 @@ in der Probe HTTP 401.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
 - Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus, sofern der Turn-Kontext beim Claim nicht widerrufen ist. `.../cancel` verwirft sie auch nach Widerruf.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
-- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
+- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `settings_ui_get`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
   `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
   `mail_message_original` ruft die Mail beim Anbieter ab (lesend, ohne sie als gelesen zu markieren) und speichert nichts.
   Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.
