@@ -179,7 +179,13 @@ und bei unbelegtem Altverlauf `legacy_mixed: true`.
 Nutzerinhalt an das Modell gegeben, nie als App-Regel oder Chat-Extra gespeichert.
 Löschen entfernt Vorlageninhalt und Revisionsinhalt, hinterlässt `removed`-Markierungen,
 widerruft Kontexte und setzt aktive Auswahlen zurück. Bereits gesendete Modellanfragen
-lassen sich nicht zurückholen. Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
+lassen sich nicht zurückholen. Vorschläge widerrufener Kontexte bleiben offen und können abgebrochen,
+aber nicht bestätigt werden (`409 proposal_context_revoked`). Entscheidend ist der atomare Claim:
+Ein danach wirksamer Widerruf macht eine bereits angenommene Bestätigung nicht rückgängig.
+Offen (#47): Ein Widerruf zwischen Prüfung und Modellaufruf oder während des Streams wird nicht
+sofort erkannt; die Prüfung des Verlaufs benötigt je Kontext eigene Datenbankabfragen. Ebenso kann
+eine unbeantwortete Rückgängig-Anfrage in der Oberfläche dauerhaft hängen bleiben.
+Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
 
 ## Worker und periodischer Abruf
 
@@ -252,7 +258,7 @@ in der Probe HTTP 401.
 - OAuth-Client-Secrets und `MAIL_TOKEN_ENCRYPTION_KEY` sind **Workspace-Secrets** (`WorkspaceSecret`), nie im Code; lokal nur in `.env`. **Secret-Namen in Mistral Studio sind lowercase** — die Auflösung ist case-insensitiv: Secret `mail_token_encryption_key` füllt `MAIL_TOKEN_ENCRYPTION_KEY` (siehe Docstring von `env/_mistral_secrets.py`).
 - **Pro IMAP-Konto (iCloud, Yahoo, …) genau ein eigenes Workspace-Secret** mit dem App-Passwort, z.B. `yahoo-app-password`, `icloud-app-password` (lowercase). Beim Connect wird statt des Passworts der Secret-Name übergeben (`password_secret`); die App löst ihn zur Laufzeit über `GET /v1/secrets/values` auf (`api/mail/secrets.py`) und speichert in `mail_credential` nur die **Referenz** (verschlüsselt), nie den Wert — Rotation in Studio wirkt ohne Reconnect.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
-- Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus. `.../cancel` verwirft sie.
+- Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus, sofern der Turn-Kontext beim Claim nicht widerrufen ist. `.../cancel` verwirft sie auch nach Widerruf.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
 - liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `tasks_occurrences_list`
   `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).

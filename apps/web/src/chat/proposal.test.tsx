@@ -227,6 +227,14 @@ test('a failed mail item names a missing mail', async () => {
   expect(await screen.findByText('Die Mail ist nicht mehr da.')).toBeTruthy()
 })
 
+test('revoked proposal offers a new conversation', async () => {
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => { throw { detail: { code: 'proposal_context_revoked' } } }) as never)
+  setup(message())
+  fireEvent.click(await screen.findByRole('button', { name: '2 abbestellen und archivieren' }))
+  expect(await screen.findByText('Dieser Vorschlag stammt aus einem widerrufenen Kontext. Starte eine neue Unterhaltung.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Neue Unterhaltung' })).toBeTruthy()
+})
+
 test.each(['proposal_not_pending', 'selection_empty'])('confirmation refusal %s shows its cause', async code => {
   spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => { throw { detail: { code } } }) as never)
   setup(message())

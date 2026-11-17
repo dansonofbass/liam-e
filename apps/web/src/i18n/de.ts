@@ -170,6 +170,7 @@ export const de = {
     credentials_invalid: 'Die Mail wurde nicht gesendet, weil die Anmeldung für dieses Konto nicht mehr gilt. Melde dich unter Konten erneut an.',
     unsubscribe_failed: 'Der Newsletter ließ sich nicht abbestellen. Öffne die Abmeldeseite im Newsletter.',
     proposal_not_pending: 'Dieser Vorschlag ist schon erledigt oder abgebrochen.',
+    proposal_context_revoked: 'Dieser Vorschlag stammt aus einem widerrufenen Kontext. Starte eine neue Unterhaltung.',
     selection_empty: 'Wähle mindestens einen Eintrag aus.',
   },
   assistant: { name: 'liam-e' },

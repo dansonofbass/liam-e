@@ -1,4 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { chatProposalCancel, chatProposalConfirm, mailActionsUndo } from '../api/generated/sdk.gen'
 import type { ChatMessageOut, Proposal } from '../api/generated/types.gen'
@@ -54,6 +55,7 @@ function failureText(code: string | undefined, kind: Proposal['kind']): string {
     case 'account_gone': return de.proposalErrors.account_gone
     case 'unsubscribe_rejected': case 'unsubscribe_blocked': case 'unsubscribe_unreachable': case 'unsubscribe_invalid': case 'unsubscribe_send_failed': return de.proposalErrors.unsubscribe_failed
     case 'proposal_not_pending': return de.proposalErrors.proposal_not_pending
+    case 'proposal_context_revoked': return de.proposalErrors.proposal_context_revoked
     case 'selection_empty': return de.proposalErrors.selection_empty
     case 'host_not_allowed': return de.errors.host_not_allowed
     default: return de.proposal.requestError
@@ -100,6 +102,7 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
 
 export function ProposalCard({ message, clock = systemClock }: { message: ChatMessageOut; clock?: Clock }) {
   const client = useQueryClient()
+  const navigate = useNavigate()
   const [updated, setUpdated] = useState<ChatMessageOut | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
@@ -168,5 +171,5 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   const saved = cardState(client, current.id)
   const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${de.proposal.manualSubtitle}` } : item)
   const irreversibleNote = proposal.irreversible ? proposal.kind === 'unsubscribe' ? de.proposal.irreversibleUnsubscribe : proposal.kind === 'send' ? de.proposal.irreversibleSend : undefined : undefined
-  return <><ConfirmCard key={current.id} title={de.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={de.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} deselected={saved.deselected ?? new Set<string>()} onDeselectedChange={value => { saved.deselected = value; refresh(n => n + 1) }} body={saved.body ?? proposal.draft?.body ?? ''} onBodyChange={value => { saved.body = value; refresh(n => n + 1) }} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true })), true) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger">{failureText(error, proposal.kind)}</Notice>}</>
+  return <><ConfirmCard key={current.id} title={de.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={de.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} deselected={saved.deselected ?? new Set<string>()} onDeselectedChange={value => { saved.deselected = value; refresh(n => n + 1) }} body={saved.body ?? proposal.draft?.body ?? ''} onBodyChange={value => { saved.body = value; refresh(n => n + 1) }} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true })), true) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' ? { label: de.shell.newConversation, onClick: () => { void navigate({ to: '/' }) } } : undefined}>{failureText(error, proposal.kind)}</Notice>}</>
 }

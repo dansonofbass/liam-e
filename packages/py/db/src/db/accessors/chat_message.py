@@ -7,6 +7,7 @@ from sqlalchemy import select, update
 
 from db.engine import get_session_maker
 from db.models.chat_message import ChatMessage
+from db.models.chat_context import ChatContext
 
 
 async def add_message(
@@ -45,7 +46,12 @@ async def add_message(
 async def claim_proposal(message_id: str) -> ChatMessage | None:
     async with get_session_maker()() as session:
         result = await session.execute(
-            update(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.proposal_status == "pending")
+            update(ChatMessage).where(
+                ChatMessage.id == message_id, ChatMessage.proposal_status == "pending",
+                (ChatMessage.context_id.is_(None) | select(ChatContext.id).where(
+                    ChatContext.id == ChatMessage.context_id, ChatContext.revoked.is_(False)
+                ).exists()),
+            )
             .values(proposal_status="running").returning(ChatMessage)
         )
         message = result.scalar_one_or_none()

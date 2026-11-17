@@ -85,6 +85,23 @@ async def test_confirm_executes_only_selected_items(store, monkeypatch):
     assert [i.selected for i in proposals.proposal_view(result).items] == [False, True, False]
 
 
+async def test_revoked_context_confirm_is_rejected_and_cancel_allowed(store, monkeypatch):
+    row = await proposals.create_proposal("chat", draft(store), context_id="revoked")
+    monkeypatch.setattr(proposals.message_access, "claim_proposal", AsyncMock(return_value=None))
+    monkeypatch.setattr(proposals, "context_access", SimpleNamespace(is_live=AsyncMock(return_value=False)), raising=False)
+    send = AsyncMock()
+    monkeypatch.setattr(proposals.send, "send_message", send)
+    app = FastAPI()
+    app.include_router(router, prefix="/proposals")
+    client = TestClient(app)
+    response = client.post(f"/proposals/{row.id}/confirm", json={"selected_ids": []})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "proposal_context_revoked"
+    assert row.proposal_status == "pending"
+    send.assert_not_awaited()
+    assert client.post(f"/proposals/{row.id}/cancel").status_code == 200
+
+
 async def test_confirm_twice_runs_once(store, monkeypatch):
     send = AsyncMock()
     monkeypatch.setattr(proposals.send, "send_message", send)
