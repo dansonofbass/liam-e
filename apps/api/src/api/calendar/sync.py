@@ -72,4 +72,5 @@ async def run_sync(payload: dict, job_id: str, attempt: int) -> None:
                                                start_date=row.start_date, end_date=row.end_date,
                                                start_at=row.start_at, end_at=row.end_at, timezone=row.timezone))
     await replace_window(source_id=source.id, job_id=job_id, attempt=attempt, start=start, end=end,
-                         start_date=start.date(), end_date=end.date(), events=events, occurrences=occurrences)
+                         start_date=start.date(), end_date=end.date(), events=events, occurrences=occurrences,
+                         expected_revision=source.revision)

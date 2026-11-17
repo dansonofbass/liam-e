@@ -22,7 +22,8 @@ class LostClaim(Exception):
 
 async def replace_window(*, source_id: str, job_id: str, attempt: int,
                          start: datetime, end: datetime, start_date: date, end_date: date,
-                         events: list[CalendarEvent], occurrences: list[CalendarOccurrence]) -> None:
+                         events: list[CalendarEvent], occurrences: list[CalendarOccurrence],
+                         expected_revision: int | None = None) -> None:
     """Replace a fully processed window; inputs are prepared before the transaction.
 
     Callers must validate adapter completeness and interval normalization before calling.
@@ -46,7 +47,9 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
                 or json.loads(job.payload_json).get("source_id") != source_id):
             raise LostClaim()
         source = (await session.execute(select(CalendarSource).where(CalendarSource.id == source_id).with_for_update())).scalar_one_or_none()
-        if source is None or not source.is_active:
+        if (source is None or not source.is_active
+                or (expected_revision is not None and source.revision != expected_revision)
+                or (source.provider == "ics" and expected_revision is None)):
             raise LostClaim()
         state = await session.get(CalendarSyncState, source_id)
         coverage_start, coverage_end = start, end
@@ -95,8 +98,11 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
             delete_events = delete_events.where(~select(1).select_from(retained_events).where(
                 retained_events.c.id == CalendarEvent.external_id).exists())
         await session.execute(delete_events)
-        state = CalendarSyncState(source_id=source_id, coverage_start=coverage_start, coverage_end=coverage_end,
-                                  last_success_at=utcnow(), incomplete=False)
+        state = state or CalendarSyncState(source_id=source_id)
+        state.coverage_start, state.coverage_end = coverage_start, coverage_end
+        state.last_success_at = utcnow()
+        state.incomplete = False
+        state.data_revision += 1
         values = state.model_dump()
         await session.execute(insert(CalendarSyncState).values(**values).on_conflict_do_update(
             index_elements=[CalendarSyncState.source_id], set_={k: v for k, v in values.items() if k != "source_id"},

@@ -300,6 +300,15 @@ Termindaten. Ort und Beschreibung fehlen im Indexvertrag und werden nicht vorget
 Die autogenerierte Migration ergänzt die Spalte mit Serverstandard und führt die bestehenden
 Migrationsköpfe zusammen; sie wurde nicht von Hand geändert.
 
+Für ICS-Abonnements stehen die privaten Tabellen `calendar_feed_config` und
+`calendar_feed_validation` bereit. Prüfungen werden in der Transaktion der späteren
+Anlage per `DELETE RETURNING` einmalig verbraucht, an Kontext, Konfiguration und Ablauf
+gebunden. `feed_secrets.py` verwendet den bestehenden Fernet-Schlüssel; nur ein Hash
+zufälliger Prüftokens wird gespeichert, Konfigurationsprüfsummen sind mit dem Token
+gekeyt. Diese Speicherbausteine geben noch keine Abonnement-Endpunkte frei.
+Quellenrevisionen sperren veraltete Snapshot-Commits auch nach Pausieren und erneutem
+Aktivieren. Entfernen löscht die private Konfiguration in derselben Transaktion.
+
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
 Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen
 vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich auf den Index zu.
@@ -365,6 +374,7 @@ never executed or loaded; instructions in descriptions remain plain data.
 ## Domänenmodell (Tabellen in Postgres)
 
 - `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — Kalenderquelle mit Verbindungsreferenz und Freigabe (`is_active`), Serienstamm je Quelle, Instanz als halboffenes Intervall oder Zeitpunkt ohne Dauer (ganztägig als Datum mit positivem Intervall, sonst UTC mit Zeitzone; eindeutig je Quelle und `external_id`) sowie Abdeckung, letzter Erfolg und Unvollständigkeit je Quelle.
+- `calendar_feed_config`, `calendar_feed_validation` — verschlüsselte Feedkonfiguration und kurzlebige, einmalig verbrauchbare Prüfungen; keine öffentlichen Ausgabemodelle.
 - `task_series`, `task_schedule_revision`, `task_occurrence` — Aufgabenserie, Zeitplanrevision und materialisierte Fälligkeit; Erstellungskennung und Instanzschlüssel sind eindeutig.
 - `mail_account` — verbundenes Konto: `provider` z.B. `google`, `microsoft`, `imap` oder Connector-Name wie `gmail`; `auth_type` ist `oauth2`, `imap_password` oder `mistral_connector`.
 - `mail_credential` — verschlüsseltes Payload pro Konto+Art (`oauth2_tokens` | `imap_password`), unique (`account_id`, `kind`).
