@@ -238,9 +238,45 @@ redirects within one 15-second deadline. Wire and decoded bodies each have a 5 M
 only identity/gzip and calendar MIME types are accepted. `normalize_url` explicitly returns
 the HTTPS spelling (including private path/query data) for owner confirmation; never log it.
 Fetch results hide body and validators from repr, and task-local filtering suppresses
-httpcore traces that could expose headers or protocol content. Envelope validation is not
-RFC 5545 parsing: no fetch result may activate a snapshot before the isolated parser and
-recurrence layer are implemented. No adapter is registered yet.
+httpcore traces that could expose headers or protocol content.
+
+`ics.py` combines acquisition and isolated parsing in `ICSAdapter` (not registered). It
+accepts an explicit fallback IANA zone and UTC-midnight window; `default_window` supplies
+today −30 to +180 days. A 304 requires previously normalized events and re-expands them for
+the requested window; it never treats an old window as fresh coverage. `ics_parse.py` uses
+exactly pinned `icalendar==7.3.0` for folded/escaped properties, typed values and VTIMEZONE,
+and the existing `python-dateutil==4.0.0` for lazy RRULE iteration. The hand-written fixture
+corpus tests this combination; avoiding an eager recurrence wrapper lets the app enforce
+its own exception, completeness and resource rules. Schema 1 in `Event.recurrence` stores
+masters, exceptions, canonical rule fields, typed dates/local/UTC times, nominal/exact
+durations and structured custom-zone observances, not raw ICS. Re-expansion needs only
+these JSON-compatible events. Identities hash UID plus the original normalized recurrence
+ID (or the non-null master sentinel), so moving an occurrence does not change its identity.
+Custom VTIMEZONE instants use UTC in the shared occurrence contract while retaining the
+original definition in recurrence data. Floating times never use the server's local zone.
+
+Each parse/re-expansion uses a fresh exec subprocess (`ics_worker.py`), limited to 256 MiB
+address space, 5 CPU seconds and 8 wall seconds. Timeout/cancellation kills, drains and
+reaps the process before returning. IPC is capped at 16 MiB input and 32 MiB output, feed
+input at 5 MiB; limits may be lowered per call, not raised. The component ceiling is 10,000
+(including ignored components); the expansion/work ceiling is 50,000 candidates per feed,
+including historical candidates needed for COUNT and exception validation, plus a 50,000
+output ceiling. These are per-call budgets, not a global concurrency policy. Missing POSIX
+resource support fails closed. Worker diagnostics are discarded, logging and networking
+are disabled, and errors contain fixed codes only. Tests prove process reaping on timeout,
+CPU/memory exhaustion and caller cancellation, while the API loop continues running.
+
+VEVENT supports UID, DTSTART, DTEND/DURATION, SUMMARY/DESCRIPTION/LOCATION/STATUS,
+RRULE, date/date-time RDATE/EXDATE and individual RECURRENCE-ID replacements/cancellations.
+All-day ends are exclusive; DURATION P1D is nominal, PT24H and DTEND-derived durations are
+exact. Local DST recurrence skips nonexistent generated candidates before applying COUNT;
+ambiguous times choose the first offset. Explicit nonexistent times fail. Unsupported
+scheduling METHODs other than PUBLISH, non-Gregorian CALSCALE, RANGE/THISANDFUTURE,
+EXRULE, RSCALE, leap seconds, period-valued RDATE and instantaneous
+(zero-duration) timed events fail explicitly rather than producing partial coverage.
+Duplicate masters/exceptions/supported properties, orphan exceptions, unresolved zones and an RRULE
+whose DTSTART does not match also fail. VTODO, VALARM, attachments and external URLs are
+never executed or loaded; instructions in descriptions remain plain data.
 
 ## Domänenmodell (Tabellen in Postgres)
 
