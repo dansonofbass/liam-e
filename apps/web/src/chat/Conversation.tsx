@@ -13,7 +13,7 @@ import { ChatHeader } from './ChatHeader'
 import { ProposalCard } from './ProposalCard'
 import { useFollowScroll } from './useFollowScroll'
 import { SafeMarkdown } from './SafeMarkdown'
-import { useChatSession, useConversationScope } from './session'
+import { useChatSession, useConversationScope, useRestartConversation } from './session'
 
 type Accounts = AccountSummaryOut[]
 // A retry would send the same request and be refused again.
@@ -66,12 +66,12 @@ export function turnOrder(messages: ChatMessageOut[]): ChatMessageOut[] {
 }
 
 export function Conversation({ conversationId }: { conversationId: string }) {
-  const navigate = useNavigate()
   const history = useQuery(historyQuery(conversationId))
   const { data: summary } = useQuery(summaryQuery())
   const { data: models = [] } = useQuery(modelsQuery())
-  const { state, send, retry, setScope, composerTexts, setComposerText } = useChatSession()
+  const { state, send, retry } = useChatSession()
   const { scope, ready } = useConversationScope(conversationId)
+  const restart = useRestartConversation(conversationId)
   const [selectedModel, setSelectedModel] = useState<{ conversationId: string; id: string }>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const { showEnd, scrollToEnd } = useFollowScroll(scrollRef, [history.data, state, conversationId])
@@ -91,7 +91,6 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   // The pencil on a mail card asks for a reply draft to that mail in this conversation, like the button on the open mail.
   const draft: Draft = { onDraft: id => { if (!ready) return; void send({ text: de.mail.draftPrompt, account_id: scope, conversation_id: conversationId, context_message_id: id }) }, disabled: !ready || busy }
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
-  const restart = () => { setScope(scope); setComposerText('new', composerTexts[conversationId] ?? ''); void navigate({ to: '/' }) }
   const renderMessage = (message: ChatMessageOut) => {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
     if (message.role === 'proposal' || message.role === 'draft') return <ProposalCard key={message.id} message={message} />

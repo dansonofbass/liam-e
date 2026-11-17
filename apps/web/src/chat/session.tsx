@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ChatMessageOut, ChatStreamRequest, MailRefOut, StatusEvent } from '../api/generated/types.gen'
 import { ChatStreamError, streamChatTurn, type ChatRefusal } from './transport'
@@ -102,6 +103,14 @@ export function useConversationScope(id?: string) {
     ready: scope !== undefined,
     setScope: (value: string | null) => id ? session.setConversationScope(id, value) : session.setScope(value),
   }
+}
+
+// Every restart from a conversation carries its account selection and unsent text to the start page.
+export function useRestartConversation(id?: string) {
+  const session = useChatSession()
+  const { scope } = useConversationScope(id)
+  const navigate = useNavigate()
+  return () => { session.setScope(scope); session.setComposerText('new', session.composerTexts[id ?? 'new'] ?? ''); void navigate({ to: '/' }) }
 }
 
 export function useChatSession(): Session {

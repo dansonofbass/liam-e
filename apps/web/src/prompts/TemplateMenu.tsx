@@ -6,14 +6,15 @@ import { chatConversationUpdate } from '../api/generated/sdk.gen'
 import type { ConversationOut } from '../api/generated/types.gen'
 import { conversationsQuery, promptQuery, promptsQuery } from '../api/queries'
 import { errorCode, unwrap } from '../api/unwrap'
-import { useChatSession, useConversationScope } from '../chat/session'
+import { useChatSession, useConversationScope, useRestartConversation } from '../chat/session'
 import { Chip, Icon, Menu, Notice } from '../ds'
 import { de } from '../i18n/de'
 import './prompts.css'
 
 export function TemplateMenu({ conversationId, revision = null, onChange }: { conversationId?: string; revision?: string | null; onChange?: (id: string | null) => void }) {
-  const { saved, scope } = useConversationScope(conversationId)
-  const { state, setScope, composerTexts, setComposerText } = useChatSession()
+  const { saved } = useConversationScope(conversationId)
+  const { state } = useChatSession()
+  const restart = useRestartConversation(conversationId)
   const list = useQuery(promptsQuery()), client = useQueryClient(), navigate = useNavigate()
   const details = useQueries({ queries: (list.data ?? []).map(item => promptQuery(item.id)) })
   const selected = conversationId ? saved?.prompt_revision_id ?? null : revision
@@ -48,6 +49,6 @@ export function TemplateMenu({ conversationId, revision = null, onChange }: { co
     {(list.isError || details.some(item => item.isError)) && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void client.invalidateQueries({ queryKey: ['prompts'] }) } }}>{de.prompts.error}</Notice>}
     {owner && owner.revision_id !== selected && <Notice tone="info" action={busy ? undefined : { label: de.prompts.adopt, onClick: () => { void choose(owner.revision_id) } }}>{de.prompts.newer}</Notice>}
     {error && <Notice tone="danger" action={{ label: de.prompts.loadCurrent, onClick: () => { void reload().catch(() => setError(de.prompts.selectionError)) } }}>{error}</Notice>}
-    {selected && !current && resolved && <Notice tone="info" action={{ label: conversationId ? de.prompts.restart : de.prompts.useStandard, onClick: () => { if (!conversationId) { onChange?.(null); return }; setScope(scope); setComposerText('new', composerTexts[conversationId] ?? ''); void navigate({ to: '/' }) } }}>{de.prompts.removed}</Notice>}
+    {selected && !current && resolved && <Notice tone="info" action={{ label: conversationId ? de.prompts.restart : de.prompts.useStandard, onClick: () => { if (conversationId) restart(); else onChange?.(null) } }}>{de.prompts.removed}</Notice>}
   </div>
 }
