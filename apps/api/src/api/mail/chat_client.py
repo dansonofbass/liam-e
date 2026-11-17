@@ -1,4 +1,4 @@
-"""Build chat clients without content-bearing SDK spans or HTTP debug logging."""
+"""Build Mistral clients for mail and chat content without content-bearing SDK spans or HTTP debug logging."""
 import logging
 from opentelemetry.trace import NoOpTracerProvider
 from mistralai.extra.observability.telemetry import configure_telemetry

@@ -10,7 +10,7 @@ from db.models.mail_insight import MailInsight
 from db.models.mail_message import MailMessage
 from env.mail import env as mail_env
 from pydantic import BaseModel, ValidationError, field_validator
-from utils.mistral import mistral_client
+from api.mail.chat_client import mistral_client
 
 from api.mail.agent_prompt import TERMS_AND_FORMATS
 from api.mail.seed_ids import SEED_ACCOUNT_IDS, is_seed_account

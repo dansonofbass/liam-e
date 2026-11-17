@@ -83,6 +83,11 @@ async def test_paused_stream_keeps_snapshot_or_stops_before_tools(store, monkeyp
     assert 'Vorlage eins' not in caplog.text
 
 
+def test_insights_use_the_trace_free_client():
+    from api.mail import chat_client, insights
+    assert insights.mistral_client is chat_client.mistral_client
+
+
 def test_chat_client_disables_content_traces(monkeypatch):
     from api.mail import chat_client
     from mistralai.client import Mistral
