@@ -1074,6 +1074,22 @@
         "title": "DependencyStatus",
         "type": "object"
       },
+      "DiscardInput": {
+        "additionalProperties": false,
+        "properties": {
+          "validation_id": {
+            "maxLength": 100,
+            "minLength": 40,
+            "title": "Validation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "validation_id"
+        ],
+        "title": "DiscardInput",
+        "type": "object"
+      },
       "DoneEvent": {
         "properties": {
           "conversation_id": {
@@ -1146,8 +1162,6 @@
             "title": "Expected Revision"
           },
           "name": {
-            "maxLength": 80,
-            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -3348,8 +3362,6 @@
             "title": "Expected Revision"
           },
           "name": {
-            "maxLength": 80,
-            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -4586,20 +4598,19 @@
         "summary": "Validate"
       }
     },
-    "/api/v1/calendar/feeds/validations/{validation_id}": {
-      "delete": {
+    "/api/v1/calendar/feeds/validations/discard": {
+      "post": {
         "operationId": "calendar_feed_validation_discard",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "validation_id",
-            "required": true,
-            "schema": {
-              "title": "Validation Id",
-              "type": "string"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscardInput"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "204": {
             "description": "Successful Response"

@@ -653,6 +653,16 @@ export type DependencyStatus = {
 };
 
 /**
+ * DiscardInput
+ */
+export type DiscardInput = {
+    /**
+     * Validation Id
+     */
+    validation_id: string;
+};
+
+/**
  * DoneEvent
  */
 export type DoneEvent = {
@@ -2713,15 +2723,10 @@ export type CalendarFeedValidateResponses = {
 export type CalendarFeedValidateResponse = CalendarFeedValidateResponses[keyof CalendarFeedValidateResponses];
 
 export type CalendarFeedValidationDiscardData = {
-    body?: never;
-    path: {
-        /**
-         * Validation Id
-         */
-        validation_id: string;
-    };
+    body: DiscardInput;
+    path?: never;
     query?: never;
-    url: '/api/v1/calendar/feeds/validations/{validation_id}';
+    url: '/api/v1/calendar/feeds/validations/discard';
 };
 
 export type CalendarFeedValidationDiscardErrors = {

@@ -81,7 +81,14 @@ export const calendarFeedValidate = <ThrowOnError extends boolean = false>(optio
 /**
  * Discard
  */
-export const calendarFeedValidationDiscard = <ThrowOnError extends boolean = false>(options: Options<CalendarFeedValidationDiscardData, ThrowOnError>): RequestResult<CalendarFeedValidationDiscardResponses, CalendarFeedValidationDiscardErrors, ThrowOnError> => (options.client ?? client).delete<CalendarFeedValidationDiscardResponses, CalendarFeedValidationDiscardErrors, ThrowOnError>({ url: '/api/v1/calendar/feeds/validations/{validation_id}', ...options });
+export const calendarFeedValidationDiscard = <ThrowOnError extends boolean = false>(options: Options<CalendarFeedValidationDiscardData, ThrowOnError>): RequestResult<CalendarFeedValidationDiscardResponses, CalendarFeedValidationDiscardErrors, ThrowOnError> => (options.client ?? client).post<CalendarFeedValidationDiscardResponses, CalendarFeedValidationDiscardErrors, ThrowOnError>({
+    url: '/api/v1/calendar/feeds/validations/discard',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Occurrences
