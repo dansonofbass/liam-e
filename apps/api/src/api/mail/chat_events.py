@@ -3,7 +3,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from api.mail.chat_schemas import ChatMessageOut
+from api.mail.chat_schemas import ChatMessageOut, CalendarRefOut
 
 
 class EventModel(BaseModel):
@@ -44,6 +44,11 @@ class MailsEvent(EventModel):
     mails: list[MailRefOut]
 
 
+class CalendarsEvent(EventModel):
+    event: Literal['calendars'] = 'calendars'
+    calendars: list[CalendarRefOut]
+
+
 class ProposalEvent(EventModel):
     event: Literal['proposal'] = 'proposal'
     message: ChatMessageOut
@@ -66,4 +71,4 @@ class ErrorEvent(EventModel):
     code: Literal['model_unavailable', 'aborted', 'internal', 'context_revoked']
 
 
-ChatEvent = Annotated[StartEvent | StatusEvent | DeltaEvent | MailsEvent | ProposalEvent | SuggestionsEvent | DoneEvent | ErrorEvent, Field(discriminator='event')]
+ChatEvent = Annotated[StartEvent | StatusEvent | DeltaEvent | MailsEvent | CalendarsEvent | ProposalEvent | SuggestionsEvent | DoneEvent | ErrorEvent, Field(discriminator='event')]

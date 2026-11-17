@@ -115,7 +115,8 @@ def test_stream_schema_exports_chat_event():
     assert set(response) == {'text/event-stream'}
     assert response['text/event-stream']['schema'] == {'$ref': '#/components/schemas/ChatEvent'}
     components = schema['components']['schemas']
-    assert len(components['ChatEvent']['oneOf']) == 8
+    assert len(components['ChatEvent']['oneOf']) == 9
+    assert 'CalendarsEvent' in components
     assert components['ChatEvent']['discriminator']['propertyName'] == 'event'
     for name in ('StartEvent', 'StatusEvent', 'DeltaEvent', 'MailsEvent', 'ProposalEvent', 'SuggestionsEvent', 'DoneEvent', 'ErrorEvent'):
         assert set(components[name]['properties']) == set(components[name]['required'])

@@ -274,6 +274,32 @@ Aktualität beim Anbieter. `seed_calendars` ergänzt fünf synthetische Quellen 
 Darstellung, Ganztag, langen Titel, alten Stand, fehlende Abdeckung und Pause. Ihre festen
 IDs werden vor dem Einreihen und vor der Adapterausführung übersprungen.
 
+„Im Chat fragen“ öffnet eine neue Unterhaltung mit `context_occurrence_id` und ausdrücklich
+gewählter Quelle. Der Kalenderumfang (`calendar_source_ids`, maximal 50) steht getrennt vom
+Mailkonto im Composer und wird als JSON-Liste in `chat_context.calendar_scope_json` gespeichert.
+Der Datenbankstandard `[]` gibt Altverlauf keinen Kalenderzugriff. Jede Änderung der Auswahl,
+auch eine Erweiterung, benötigt bei vorhandenem Verlauf eine neue Unterhaltung (409
+`conversation_scope_change_requires_new`); historische Texte bleiben erhalten. Diese konservative
+Regel vermeidet eine unbelegte Neuzuordnung alter Nutzer-, Werkzeug- oder Assistententexte.
+Der Resolver prüft alle historischen Nachrichtenkontexte; der Agent prüft dieselbe Herkunft
+nochmals vor dem Aufbau der Modellnachrichten. Pausieren/Entfernen macht einen Turn mit dieser
+Quelle bei der nächsten Live-Prüfung ungültig, auch vor weiteren Modell- und Werkzeugaufrufen.
+Bereits übertragene Modellanfragen können nicht zurückgeholt werden. Beim Neustart übernimmt die
+Oberfläche nur Kalender, die sie noch als aktiv kennt; ohne belegte Auswahl bleibt der Umfang leer.
+
+`api/mail/calendar_tools.py` stellt `search_calendar` und `get_calendar_occurrence` bereit:
+Indexzugriff ohne Provider, lokale Datumsfenster bis 90 Tage und Cursorseiten bis 50 Instanzen;
+Werkzeugparameter können den Turn-Umfang nur einschränken. Kalendertexte und Quellennamen stehen
+in `untrusted_calendar_data`, einschließlich Stand und Abdeckung. Kalender-Schreibwerkzeuge fehlen;
+der Prompt untersagt auch Ersatzaktionen als Mailvorschlag, Kalenderkopie oder Aufgabe.
+`calendar_timezone` kommt aus dem Browser; ältere Clients ohne Angabe behalten Europe/Berlin.
+Chat-Extras und das SSE-Ereignis `calendars` enthalten nur `source_id`/`occurrence_id`, keine Titel
+oder privaten Verbindungsreferenzen. Belege lesen ihre Darstellung erneut über die freigegebene
+Quelle und stabile Instanzroute; pausierte, entfernte oder nicht passende Quellen zeigen keine
+Termindaten. Ort und Beschreibung fehlen im Indexvertrag und werden nicht vorgetäuscht.
+Die autogenerierte Migration ergänzt die Spalte mit Serverstandard und führt die bestehenden
+Migrationsköpfe zusammen; sie wurde nicht von Hand geändert.
+
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
 Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen
 vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich auf den Index zu.

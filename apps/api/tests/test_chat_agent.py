@@ -338,6 +338,32 @@ async def test_chat_turn_rejects_message_outside_length_bounds(message):
     assert response.status_code == 422
 
 
+async def test_calendar_history_guard_blocks_foreign_assistant_and_user_text_before_model(store, monkeypatch):
+    conversation = await store.create()
+    for role in ('user', 'assistant', 'tool'):
+        store.rows.append(ChatMessage(conversation_id=conversation.id, role=role, content='foreign-calendar-test-only', context_id='old'))
+    snapshot = NS(id='new', account_scope_json=json.dumps({'account_ids': []}), calendar_scope_json='["work"]')
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(return_value={
+        'old': NS(revoked=False, calendar_scope_json='["private"]'),
+        'new': NS(revoked=False, calendar_scope_json='["work"]')}))
+    fake = FakeMistral(streams=[['Must not run']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    events = [e async for e in agent.run_turn_events(conversation_id=conversation.id, text='Weiter', resolved_context=(conversation, snapshot, None))]
+    assert events[-1].code == 'context_revoked'
+    assert fake.requests == []
+    assert all(row.content == 'foreign-calendar-test-only' for row in store.rows[:3])
+
+
+async def test_calendar_cards_stream_and_persist_identity_only(store, monkeypatch):
+    from api.mail.agent_tools import ToolOutcome
+    ref = {'source_id': 'work', 'occurrence_id': 'test-only'}
+    monkeypatch.setattr(agent, 'execute_tool', AsyncMock(return_value=ToolOutcome(content='{}', calendars=[ref])))
+    events, _ = await run(store, monkeypatch, [[chunk('get_calendar_occurrence', {'occurrence_id': 'test-only'})], ['Antwort']])
+    card = next(e for e in events if e.event == 'calendars')
+    assert card.calendars[0].model_dump() == ref
+    assert json.loads(store.rows[-1].extras_json)['calendars'] == [ref]
+
+
 async def test_chat_turn_still_returns_messages(store, monkeypatch):
     from api.routers.api.v1.chat.route import chat_turn, ChatTurnRequest
     fake = FakeMistral(streams=[['Antwort']]); monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
