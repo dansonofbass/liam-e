@@ -10,6 +10,79 @@ from sqlalchemy.exc import IntegrityError
 pytestmark = pytest.mark.skipif(not os.getenv("RUN_PG_CONTRACT"), reason="RUN_PG_CONTRACT is not set")
 
 
+def test_large_snapshot_and_unknown_event(pg_db):
+    async def run():
+        from db.accessors import mail_job
+        from db.accessors.calendar_snapshot import replace_window
+        from db.engine import get_session_maker
+        from db.models.calendar_event import CalendarEvent
+        from db.models.calendar_occurrence import CalendarOccurrence
+        from db.models.calendar_source import CalendarSource
+
+        source = CalendarSource(provider="synthetic", connection_ref="local", external_id="large", name="Example", timezone="UTC")
+        async with get_session_maker()() as session:
+            session.add(source)
+            await session.commit()
+        job = await mail_job.enqueue("calendar", {"source_id": source.id}, dedupe_key="large-calendar")
+        claim = await mail_job.claim_next(datetime.now(UTC) + timedelta(seconds=1), stale_after=timedelta(minutes=5))
+        event = CalendarEvent(source_id=source.id, external_id="event")
+        rows = [CalendarOccurrence(source_id=source.id, event_id=event.id, external_id=str(i),
+                                   start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)) for i in range(40000)]
+        args = dict(source_id=source.id, job_id=job.id, attempt=claim.attempts,
+                    start=datetime(2026, 1, 1, tzinfo=UTC), end=datetime(2026, 1, 2, tzinfo=UTC),
+                    start_date=date(2026, 1, 1), end_date=date(2026, 1, 2), events=[event])
+        bad = rows[0].model_copy(update={"event_id": "unknown"})
+        with pytest.raises(ValueError, match="unknown event"):
+            await replace_window(**args, occurrences=[bad])
+        await replace_window(**args, occurrences=rows)
+        await replace_window(**args, occurrences=rows)
+
+    asyncio.run(run())
+
+
+def test_snapshot_coverage_pruning_and_orphans(pg_db):
+    async def run():
+        from sqlalchemy import select
+        from db.accessors import mail_job
+        from db.accessors.calendar_snapshot import replace_window
+        from db.engine import get_session_maker
+        from db.models.calendar_event import CalendarEvent
+        from db.models.calendar_occurrence import CalendarOccurrence
+        from db.models.calendar_source import CalendarSource
+        from db.models.calendar_sync_state import CalendarSyncState
+
+        source = CalendarSource(provider="synthetic", connection_ref="local", external_id="coverage", name="Example", timezone="UTC")
+        async with get_session_maker()() as session:
+            session.add(source)
+            await session.commit()
+        job = await mail_job.enqueue("calendar", {"source_id": source.id}, dedupe_key="coverage-calendar")
+        claim = await mail_job.claim_next(datetime.now(UTC) + timedelta(seconds=1), stale_after=timedelta(minutes=5))
+        event = CalendarEvent(source_id=source.id, external_id="event")
+        timed = CalendarOccurrence(source_id=source.id, event_id=event.id, external_id="timed", timezone="UTC",
+                                   start_at=datetime(2026, 1, 1, tzinfo=UTC), end_at=datetime(2026, 1, 3, tzinfo=UTC))
+        allday = CalendarOccurrence(source_id=source.id, event_id=event.id, external_id="allday",
+                                    start_date=date(2026, 1, 1), end_date=date(2026, 1, 3))
+        async def replace(first, last, rows, events):
+            await replace_window(source_id=source.id, job_id=job.id, attempt=claim.attempts,
+                                 start=datetime(2026, 1, first, tzinfo=UTC), end=datetime(2026, 1, last, tzinfo=UTC),
+                                 start_date=date(2026, 1, first), end_date=date(2026, 1, last),
+                                 events=events, occurrences=rows)
+        await replace(2, 5, [timed, allday], [event])
+        await replace(3, 4, [], [])
+        async with get_session_maker()() as session:
+            state = await session.get(CalendarSyncState, source.id)
+            assert (state.coverage_start.day, state.coverage_end.day) == (2, 5)
+            assert len((await session.execute(select(CalendarOccurrence).where(CalendarOccurrence.source_id == source.id))).scalars().all()) == 2
+        await replace(10, 12, [], [])
+        async with get_session_maker()() as session:
+            state = await session.get(CalendarSyncState, source.id)
+            assert (state.coverage_start.day, state.coverage_end.day) == (10, 12)
+            assert not (await session.execute(select(CalendarOccurrence).where(CalendarOccurrence.source_id == source.id))).scalars().all()
+            assert not (await session.execute(select(CalendarEvent).where(CalendarEvent.source_id == source.id))).scalars().all()
+
+    asyncio.run(run())
+
+
 def test_occurrence_identity_and_overlap(pg_db):
     async def run():
         from db.accessors.calendar_occurrence import overlapping

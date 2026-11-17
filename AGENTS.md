@@ -139,6 +139,12 @@ vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich 
 `GET /api/v1/calendar/occurrences` nimmt ein Fenster von höchstens 90 Tagen und beliebig viele
 `source_ids` (höchstens 50) und liefert die Instanzen zeitlich geordnet; Ganztägiges zählt ab
 Mitternacht UTC seines ersten Tages. Der Cursor trägt Startzeit und ID der letzten Instanz.
+Vollständige Snapshot-Fenster erweitern die Abdeckung nur, wenn sie die bisherige Abdeckung
+überlappen oder berühren; sonst ersetzen sie sie. Jede gespeicherte Instanz überlappt die
+Abdeckung (auch wenn sie über deren Rand hinausreicht); andere Instanzen und nicht mehr
+referenzierte Ereignisse werden entfernt. `stale` bedeutet, dass noch kein erfolgreicher
+Snapshot vorliegt oder der Index unvollständig ist; ohne periodischen Abruf sagt das Alter des
+letzten Erfolgs allein nichts über die Aktualität beim Anbieter aus.
 
 ## Domänenmodell (Tabellen in Postgres)
 

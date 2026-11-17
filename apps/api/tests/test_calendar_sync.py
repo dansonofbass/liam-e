@@ -19,6 +19,33 @@ class SyntheticICS:
                         [Occurrence("original-date", "master", start_date=date(2026, 3, 28), end_date=date(2026, 3, 30))], True)
 
 
+@pytest.mark.anyio
+async def test_snapshot_checks_event_ids_once():
+    from types import SimpleNamespace
+    from db.accessors.calendar_snapshot import replace_window
+
+    class EventRow:
+        source_id = "source"
+        recurrence_json = "{}"
+        reads = 0
+        def __init__(self, identifier):
+            self.external_id = identifier
+            self.identifier = identifier
+        @property
+        def id(self):
+            type(self).reads += 1
+            return self.identifier
+
+    events = [EventRow(str(i)) for i in range(10)]
+    rows = [SimpleNamespace(source_id="source", external_id=str(i), event_id="0") for i in range(20)]
+    rows[-1].event_id = "unknown"
+    with pytest.raises(ValueError, match="unknown event"):
+        await replace_window(source_id="source", job_id="job", attempt=1,
+                             start=datetime(2026, 1, 1, tzinfo=UTC), end=datetime(2026, 1, 2, tzinfo=UTC),
+                             start_date=date(2026, 1, 1), end_date=date(2026, 1, 2), events=events, occurrences=rows)
+    assert EventRow.reads == len(events)
+
+
 def test_dst_and_interval_validation():
     zone = ZoneInfo("Europe/Berlin")
     item = Occurrence("one", "event", start_at=datetime(2026, 3, 29, 1, 30, tzinfo=zone),

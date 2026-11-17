@@ -4,6 +4,27 @@ from db.models.calendar_occurrence import CalendarOccurrence
 from db.models.calendar_source import CalendarSource
 
 
+def test_stale_depends_on_snapshot_completeness_not_age(client, monkeypatch):
+    from datetime import UTC, datetime
+    from db.accessors import calendar_source, calendar_sync_state
+    from db.models.calendar_sync_state import CalendarSyncState
+
+    source = CalendarSource(provider="synthetic", connection_ref="example", external_id="example", name="Example", timezone="UTC")
+    state = CalendarSyncState(source_id=source.id, last_success_at=datetime(2020, 1, 1, tzinfo=UTC), incomplete=False)
+    async def sources():
+        return [source]
+    async def get(_):
+        return state
+    monkeypatch.setattr(calendar_source, "list_all", sources)
+    monkeypatch.setattr(calendar_sync_state, "get", get)
+    assert client.get("/api/v1/calendar/sources").json()[0]["stale"] is False
+    state.incomplete = True
+    assert client.get("/api/v1/calendar/sources").json()[0]["stale"] is True
+    state.last_success_at = None
+    state.incomplete = False
+    assert client.get("/api/v1/calendar/sources").json()[0]["stale"] is True
+
+
 def test_occurrence_window_and_cursor_validation(client):
     assert client.get("/api/v1/calendar/occurrences", params={"from": "2026-01-01", "to": "2026-04-02"}).status_code == 422
     assert client.get("/api/v1/calendar/occurrences", params={"from": "2026-01-01", "to": "2026-01-02", "cursor": "!!!"}).status_code == 422
