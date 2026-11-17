@@ -83,6 +83,40 @@ async def test_paused_stream_keeps_snapshot_or_stops_before_tools(store, monkeyp
     assert 'Vorlage eins' not in caplog.text
 
 
+@pytest.mark.anyio
+async def test_revocation_immediately_before_model_call_sends_no_template(store, monkeypatch):
+    async def resolve(**kw):
+        return await store.create(), NS(id='context', account_scope_json=json.dumps({'account_ids': []})), 'Synthetic template'
+    monkeypatch.setattr(agent, 'resolve_context', resolve)
+    monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=[True, False]))
+    fake = FakeMistral(streams=[['Antwort']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    events = [event async for event in agent.run_turn_events(conversation_id=None, text='Hallo')]
+    assert events[-1].code == 'context_revoked'
+    assert fake.requests == []
+
+
+@pytest.mark.anyio
+async def test_revocation_closes_running_stream_at_bounded_delta(store, monkeypatch):
+    closed = False
+    class Stream:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args):
+            nonlocal closed
+            closed = True
+        def __aiter__(self): return self.generate()
+        async def generate(self):
+            for _ in range(20):
+                yield NS(data=NS(choices=[NS(delta=NS(content='x', tool_calls=None))]))
+    monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=[True, True, False]))
+    monkeypatch.setattr(agent, 'mistral_client', lambda: NS(chat=NS(stream_async=AsyncMock(return_value=Stream()))))
+    events = [event async for event in agent.run_turn_events(conversation_id=None, text='Hallo')]
+    assert events[-1].code == 'context_revoked'
+    assert sum(event.event == 'delta' for event in events) == agent.REVOCATION_DELTA_INTERVAL - 1
+    assert closed
+    assert store.rows[-1].stopped
+
+
 def test_insights_use_the_trace_free_client():
     from api.mail import chat_client, insights
     assert insights.mistral_client is chat_client.mistral_client

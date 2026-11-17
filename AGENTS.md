@@ -182,8 +182,9 @@ widerruft Kontexte und setzt aktive Auswahlen zurück. Bereits gesendete Modella
 lassen sich nicht zurückholen. Vorschläge widerrufener Kontexte bleiben offen und können abgebrochen,
 aber nicht bestätigt werden (`409 proposal_context_revoked`). Entscheidend ist der atomare Claim:
 Ein danach wirksamer Widerruf macht eine bereits angenommene Bestätigung nicht rückgängig.
-Offen (#47): Ein Widerruf zwischen Prüfung und Modellaufruf oder während des Streams wird nicht
-sofort erkannt; die Prüfung des Verlaufs benötigt je Kontext eigene Datenbankabfragen. Ebenso kann
+Der Agent prüft den Widerruf unmittelbar vor jedem Modellaufruf und Werkzeug sowie während des
+Streams nach jeweils zehn Deltas; ein widerrufener Stream wird geschlossen und meldet `context_revoked`.
+Offen (#47): Die Prüfung des Verlaufs benötigt je Kontext eigene Datenbankabfragen. Ebenso kann
 eine unbeantwortete Rückgängig-Anfrage in der Oberfläche dauerhaft hängen bleiben.
 Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
 
