@@ -1,0 +1,147 @@
+// i18n-exempt: synthetic API fixtures and route paths.
+import { afterEach, expect, test } from 'bun:test'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { client as api } from '../api/generated/client.gen'
+import { Settings } from '../prompts/Settings'
+import { SwipeSettings } from './SwipeSettings'
+import { useSwipeSettings } from './useSwipeSettings'
+
+const originalFetch = globalThis.fetch
+const originalConfig = api.getConfig()
+const confirmed = { swipe_left: 'archive', swipe_right: 'toggle_read', revision: 1, updated_at: '2026-01-01T00:00:00Z' }
+let requests: { path: string; method: string; body: Record<string, unknown> }[]
+function setup(path: string, respond?: (request: Request) => Promise<Response | undefined>) {
+  requests = []
+  api.setConfig({ baseUrl: 'https://api.example.test' })
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init)
+    const url = new URL(request.url)
+    requests.push({ path: url.pathname, method: request.method, body: request.method === 'PATCH' ? await request.clone().json() as Record<string, unknown> : {} })
+    const custom = await respond?.(request)
+    if (custom) return custom
+    return Response.json(url.pathname.endsWith('/settings/ui') ? confirmed : {})
+  }) as typeof fetch
+  const query = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  const root = createRootRoute({ component: () => <QueryClientProvider client={query}><Outlet /></QueryClientProvider> })
+  const settings = createRoute({ getParentRoute: () => root, path: '/settings', component: Settings })
+  const controls = createRoute({ getParentRoute: () => settings, path: '/controls', component: SwipeSettings })
+  const router = createRouter({ routeTree: root.addChildren([settings.addChildren([controls])]), history: createMemoryHistory({ initialEntries: [path] }) })
+  render(<RouterProvider router={router} />)
+  return { query, router }
+}
+afterEach(() => { cleanup(); globalThis.fetch = originalFetch; api.setConfig(originalConfig) })
+
+test('the controls section link is marked as the current page', async () => {
+  setup('/settings/controls')
+  expect((await screen.findByRole('link', { name: 'Bedienung' })).getAttribute('aria-current')).toBe('page')
+})
+
+test('the loading state precedes the confirmed assignment', async () => {
+  let answer!: (value: Response) => void
+  setup('/settings/controls', async () => await new Promise<Response>(resolve => { answer = resolve }))
+  expect((await screen.findByRole('status')).textContent).toBe('Einstellungen werden geladen …')
+  expect(requests).toHaveLength(1)
+  await act(async () => { answer(Response.json(confirmed)) })
+  expect((await screen.findByRole('button', { name: 'Nach links wischen' })).textContent).toContain('Archivieren')
+})
+
+test('the confirmed assignment shows its consequence for each direction', async () => {
+  setup('/settings/controls')
+  expect((await screen.findByRole('button', { name: 'Nach links wischen' })).textContent).toContain('Archivieren')
+  expect(screen.getByRole('button', { name: 'Nach rechts wischen' }).textContent).toContain('Gelesen/Ungelesen')
+  expect(screen.getByText('Die Mail verlässt den Posteingang und bleibt im Konto.')).toBeTruthy()
+  expect(screen.getByText('Die Mail wechselt zwischen gelesen und ungelesen.')).toBeTruthy()
+})
+
+test('saving reports success only after the server accepted the choice', async () => {
+  let answer!: (value: Response) => void
+  setup('/settings/controls', async request => request.method === 'PATCH' ? await new Promise<Response>(resolve => { answer = resolve }) : undefined)
+  fireEvent.click(await screen.findByRole('button', { name: 'Nach links wischen' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'In den Papierkorb' }))
+  expect((await screen.findByRole('button', { name: 'Nach links wischen' })).textContent).toContain('In den Papierkorb')
+  expect(screen.getByText('Die Mail kommt in den Papierkorb und lässt sich von dort wiederherstellen.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  await waitFor(() => expect(requests.find(item => item.method === 'PATCH')?.body).toEqual({ expected_revision: 1, swipe_left: 'trash', swipe_right: 'toggle_read' }))
+  expect(screen.queryByText('Gespeichert.')).toBeNull()
+  await act(async () => { answer(Response.json({ ...confirmed, swipe_left: 'trash', revision: 2 })) })
+  expect(await screen.findByText('Gespeichert.')).toBeTruthy()
+})
+
+test('a conflict keeps the inputs, names the competing change and never retries on its own', async () => {
+  let stored = confirmed
+  setup('/settings/controls', async request => {
+    if (request.method === 'PATCH') {
+      stored = { swipe_left: 'none', swipe_right: 'trash', revision: 2, updated_at: '2026-01-02T00:00:00Z' }
+      return Response.json({ detail: { code: 'ui_settings_conflict', message: 'Konflikt' } }, { status: 409 })
+    }
+    return request.url.endsWith('/settings/ui') ? Response.json(stored) : undefined
+  })
+  fireEvent.click(await screen.findByRole('button', { name: 'Nach links wischen' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Keine Aktion' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  const notice = await screen.findByRole('alert')
+  expect(notice.textContent).toContain('„Keine Aktion“ nach links und „In den Papierkorb“ nach rechts')
+  expect((screen.getByRole('button', { name: 'Nach links wischen' })).textContent).toContain('Keine Aktion')
+  expect(requests.filter(item => item.method === 'PATCH')).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: 'Neu laden' }))
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Nach links wischen' })).textContent).toContain('Keine Aktion'))
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  await waitFor(() => expect(requests.filter(item => item.method === 'PATCH')).toHaveLength(2))
+  expect(requests.filter(item => item.method === 'PATCH')[1]?.body).toEqual({ expected_revision: 2, swipe_left: 'none', swipe_right: 'trash' })
+})
+
+test('a failed save keeps the selection editable', async () => {
+  setup('/settings/controls', async request => request.method === 'PATCH'
+    ? Response.json({ detail: { code: 'settings_unavailable', message: 'Nicht erreichbar' } }, { status: 503 }) : undefined)
+  fireEvent.click(await screen.findByRole('button', { name: 'Nach rechts wischen' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Keine Aktion' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('Die Änderung wurde nicht gespeichert. Deine Auswahl bleibt erhalten.')
+  expect((screen.getByRole('button', { name: 'Nach rechts wischen' })).textContent).toContain('Keine Aktion')
+})
+
+test('restoring the defaults saves both directions with the current revision', async () => {
+  const stored = { ...confirmed, swipe_left: 'trash', swipe_right: 'none', revision: 4 }
+  setup('/settings/controls', async request => request.url.endsWith('/settings/ui') ? Response.json(stored) : undefined)
+  fireEvent.click(await screen.findByRole('button', { name: 'Standard wiederherstellen' }))
+  await waitFor(() => expect(requests.find(item => item.method === 'PATCH')?.body).toEqual({ expected_revision: 4, swipe_left: 'archive', swipe_right: 'toggle_read' }))
+})
+
+function Probe() {
+  const state = useSwipeSettings()
+  return <>
+    <p data-testid="state">{`${state.status}|${state.assignment?.left ?? ''}|${state.assignment?.right ?? ''}|${state.revision ?? ''}`}</p>
+    <button type="button" onClick={() => state.retry()}>Wiederholen</button>
+  </>
+}
+
+function setupHook(respond: (request: Request) => Promise<Response | undefined>) {
+  const query = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  api.setConfig({ baseUrl: 'https://api.example.test' })
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init)
+    const custom = await respond(request)
+    return custom ?? Response.json(confirmed)
+  }) as typeof fetch
+  render(<QueryClientProvider client={query}><Probe /></QueryClientProvider>)
+  return query
+}
+
+test('the hook keeps gestures off until the server confirmed an assignment', async () => {
+  let answer!: (value: Response) => void
+  setupHook(async () => await new Promise<Response>(resolve => { answer = resolve }))
+  expect((await screen.findByTestId('state')).textContent).toBe('loading|||')
+  await act(async () => { answer(Response.json(confirmed)) })
+  expect(await screen.findByText('ready|archive|toggle_read|1')).toBeTruthy()
+})
+
+test('the hook reports a load failure with a retry that recovers', async () => {
+  let failing = true
+  setupHook(async () => failing ? Response.json({}, { status: 503 }) : undefined)
+  expect(await screen.findByText('error|||')).toBeTruthy()
+  failing = false
+  fireEvent.click(screen.getByRole('button', { name: 'Wiederholen' }))
+  expect(await screen.findByText('ready|archive|toggle_read|1')).toBeTruthy()
+})

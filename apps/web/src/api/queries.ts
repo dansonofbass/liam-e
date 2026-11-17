@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
-import { promptsList, promptGet, mailSummary, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList } from './generated/sdk.gen'
+import { promptsList, promptGet, mailSummary, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet } from './generated/sdk.gen'
 import type { MailMessagesListData } from './generated/types.gen'
 import { dataOr404, unwrap } from './unwrap'
 
@@ -23,3 +23,6 @@ export const messageQuery = (id: string) => queryOptions({ queryKey: ['message',
 export const insightQuery = (id: string) => queryOptions({ queryKey: ['insight', id], queryFn: () => unwrap(mailMessageInsight({ path: { message_id: id }, throwOnError: true })) })
 export const historyQuery = (conversationId: string) => queryOptions({ queryKey: ['history', conversationId], queryFn: () => unwrap(chatHistory({ query: { conversation_id: conversationId }, throwOnError: true })) })
 export const modelsQuery = () => queryOptions({ queryKey: ['models'], queryFn: () => unwrap(chatModelsList({ throwOnError: true })) })
+
+// The confirmed device-independent swipe assignment; a second device reads the same row.
+export const uiSettingsQuery = () => queryOptions({ queryKey: ['ui-settings'], refetchOnWindowFocus: 'always', queryFn: () => unwrap(settingsUiGet({ throwOnError: true })) })
