@@ -136,6 +136,36 @@ async def test_worker_loop_polls_once_per_interval(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_calendar_scheduler_failure_logs_only_a_fixed_warning(monkeypatch, caplog):
+    import logging
+    from api.calendar import feed_jobs
+
+    stop = asyncio.Event()
+    monkeypatch.setattr(jobs.mail_env, "mail_sync_interval_minutes", 0)
+
+    async def fail(now):
+        raise RuntimeError("https://calendar.example/test-only?token=test-only")
+
+    async def run_once():
+        return False
+
+    async def wait(stop, timeout):
+        stop.set()
+
+    monkeypatch.setattr(feed_jobs, "enqueue_due", fail)
+    monkeypatch.setattr(jobs, "run_once", run_once)
+    with caplog.at_level(logging.WARNING, logger=jobs.__name__):
+        await jobs.worker_loop(stop, wait=wait)
+    records = [record for record in caplog.records if record.name == jobs.__name__]
+    assert len(records) == 1
+    assert records[0].levelno == logging.WARNING
+    assert records[0].getMessage() == "Calendar scheduling failed"
+    assert records[0].exc_info is None and records[0].args == ()
+    assert "calendar.example" not in caplog.text
+    assert "test-only" not in caplog.text and "RuntimeError" not in caplog.text
+
+
+@pytest.mark.anyio
 async def test_worker_not_started_when_disabled(monkeypatch):
     from fastapi import FastAPI
     monkeypatch.setattr(mail_worker.mail_env, "mail_worker_enabled", False)

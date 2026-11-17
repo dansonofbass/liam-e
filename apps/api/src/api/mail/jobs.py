@@ -103,7 +103,7 @@ async def worker_loop(
                 from api.calendar.feed_jobs import enqueue_due
                 await enqueue_due(now)
             except Exception:
-                pass  # Private calendar failures must not expose provider data.
+                _logger.warning("Calendar scheduling failed")
         interval = mail_env.mail_sync_interval_minutes
         if poll_due(now, last_poll, interval):
             last_poll = now
