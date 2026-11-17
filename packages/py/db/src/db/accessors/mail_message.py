@@ -111,6 +111,22 @@ async def get_message(message_id: str, session: AsyncSession | None = None) -> M
         return await session.get(MailMessage, message_id)
 
 
+async def get_scoped_message(message_id: str, account_ids: list[str]) -> MailMessage | None:
+    """Read a single indexed row without probing outside the authorized scope."""
+    stmt = select(MailMessage).where(MailMessage.id == message_id, MailMessage.account_id.in_(account_ids))
+    async with get_session_maker()() as session:
+        return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def inbox_counts(account_ids: list[str]) -> dict[str, tuple[int, int]]:
+    """Count stored inbox rows and unread rows, restricted in the query itself."""
+    stmt = (select(MailMessage.account_id, func.count(), func.count().filter(MailMessage.is_read.is_(False)))
+            .where(MailMessage.folder == "INBOX", MailMessage.account_id.in_(account_ids))
+            .group_by(MailMessage.account_id))
+    async with get_session_maker()() as session:
+        return {account_id: (total, unread) for account_id, total, unread in (await session.execute(stmt)).all()}
+
+
 async def count_for_account(account_id: str) -> int:
     from sqlalchemy import func
 

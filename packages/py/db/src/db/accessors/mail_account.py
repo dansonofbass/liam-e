@@ -19,6 +19,13 @@ async def list_accounts(session: AsyncSession | None = None) -> list[MailAccount
         return await run(s)
 
 
+async def list_for_ids(account_ids: list[str]) -> list[MailAccount]:
+    """Read only the accounts included in an already authorized scope."""
+    async with get_session_maker()() as session:
+        result = await session.execute(select(MailAccount).where(MailAccount.id.in_(account_ids)).order_by(MailAccount.id))
+        return list(result.scalars().all())
+
+
 async def get_account(account_id: str, session: AsyncSession | None = None) -> MailAccount | None:
     if session is not None:
         return await session.get(MailAccount, account_id)
