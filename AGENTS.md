@@ -171,7 +171,7 @@ und bei unbelegtem Altverlauf `legacy_mixed: true`.
 Nutzerinhalt an das Modell gegeben, nie als App-Regel oder Chat-Extra gespeichert.
 Löschen entfernt Vorlageninhalt und Revisionsinhalt, hinterlässt `removed`-Markierungen,
 widerruft Kontexte und setzt aktive Auswahlen zurück. Bereits gesendete Modellanfragen
-lassen sich nicht zurückholen. Kontowechsel mit Verlauf benötigen eine neue Unterhaltung.
+lassen sich nicht zurückholen. Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
 
 ## Worker und periodischer Abruf
 

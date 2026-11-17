@@ -77,6 +77,13 @@ def test_account_scope_and_unknown_history(pg_db):
             with pytest.raises(c.ScopeChange):
                 await resolve(conversation.id, rejected)
             await resolve(conversation.id, initial)
+        everything, _, _ = await resolve()
+        await messages.add_message(conversation_id=everything.id, role='user', content='Test')
+        added = await accounts.create_account(provider='imap', auth_type='imap_password', email_address='c@example.test')
+        _, snapshot, _ = await resolve(everything.id)
+        assert json.loads(snapshot.account_scope_json)['account_ids'] == sorted([a.id, b.id, added.id])
+        with pytest.raises(c.ScopeChange):
+            await resolve(everything.id, added.id)
         legacy = await conversations.create_conversation()
         await messages.add_message(conversation_id=legacy.id, role='assistant', content='Altverlauf')
         with pytest.raises(c.ScopeChange):

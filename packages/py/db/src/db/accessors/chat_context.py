@@ -90,10 +90,14 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             json.loads(conversation.account_scope_json).get('legacy_mixed', False))
         if legacy_mixed:
             provenance = json.dumps({'account_ids': json.loads(scope), 'selection': account_id, 'legacy_mixed': True})
-        if (has_history or conversation.account_scope_json is not None) and conversation.account_scope_json != provenance:
-            # Unknown historical provenance is mixed, never attributed to one account.
-            if conversation.account_scope_json is not None or account_id is not None:
+        if conversation.account_scope_json is not None:
+            # "Alle Konten" stays the same choice when accounts are added or removed; only another
+            # selection would carry history from one scope into another.
+            if json.loads(conversation.account_scope_json).get('selection') != account_id:
                 raise ScopeChange
+        elif has_history and account_id is not None:
+            # Unknown historical provenance is mixed, never attributed to one account.
+            raise ScopeChange
         conversation.account_scope_json = provenance
         snapshot = ChatContext(conversation_id=conversation.id, prompt_revision_id=selected,
                                prompt_hash=revision.content_hash if revision else None,
