@@ -184,6 +184,7 @@ export const de = {
     undoExpired: 'Die Frist für diese Rücknahme ist abgelaufen.',
     undoFailed: 'Die Aktion ließ sich beim Anbieter nicht rückgängig machen.',
     undoUncertain: 'Ob die Aktion rückgängig gemacht wurde, ist unklar. Lade den Posteingang neu.',
+    undoTimeout: 'Die Rücknahme dauert zu lange. Ob sie geklappt hat, ist unklar. Versuch es noch mal oder lade den Posteingang neu.',
     select: 'Wähle eine Mail aus.', mails: 'Mails', search: 'Suchen', searchTip: 'In allen Konten suchen', searchPlaceholder: 'In allen Konten suchen …',
     refresh: 'Jetzt abrufen', refreshTip: 'Neue Mails aus allen Konten abrufen', refreshError: 'Die Mails konnten nicht abgerufen werden. Versuch es gleich noch mal.',
     unread: 'Ungelesen', important: 'Wichtig', attachments: 'Mit Anhang',

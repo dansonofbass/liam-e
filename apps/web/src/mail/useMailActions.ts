@@ -15,6 +15,8 @@ type Toast = { tone: 'success' | 'danger'; text: string; undoable: boolean }
 type Change = { key: QueryKey; page: number; index: number; row: MessageListItemOut }
 export type UndoEntry = { actionId: string; messageId: string; kind: Kind; changes: Change[]; previousRead?: boolean; text: string; label: string; deadline: number; pending: boolean }
 const LIMIT = 20
+// A provider can stop responding; release the queue after fifteen seconds.
+const UNDO_TIMEOUT_MS = 15_000
 
 export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) {
   const client = useQueryClient()
@@ -163,8 +165,18 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     publish(entriesRef.current.map(entry => entry === selected ? { ...entry, pending: true } : entry))
     return enqueue(selected.messageId, async () => {
       ++pending.current
+      const controller = new AbortController()
+      let timedOut = false
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      const deadline = new Promise<never>((_, reject) => {
+        timeout = clock.setTimeout(() => {
+          timedOut = true
+          controller.abort()
+          reject(new Error('undo_timeout')) // i18n-exempt
+        }, UNDO_TIMEOUT_MS)
+      })
       try {
-        const result = await mailActionsUndo({ body: { action_ids: [selected.actionId] } })
+        const result = await Promise.race([mailActionsUndo({ body: { action_ids: [selected.actionId] }, signal: controller.signal }), deadline])
         if (result.data?.restored.includes(selected.actionId)) {
           restore(selected.changes, removes(selected.kind))
           if (!removes(selected.kind) && selected.previousRead !== undefined) client.setQueryData<MessageDetailOut>(['message', selected.messageId], data => data && { ...data, is_read: selected.previousRead! })
@@ -172,9 +184,12 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         else if (result.data?.expired.includes(selected.actionId)) notify(de.inbox.undoExpired)
         else if (result.data?.failed.includes(selected.actionId)) notify(de.inbox.undoFailed)
         else notify(de.inbox.undoUncertain)
-      } catch { notify(de.inbox.undoUncertain) }
+      } catch { notify(timedOut ? de.inbox.undoTimeout : de.inbox.undoUncertain) }
       finally {
-        publish(entriesRef.current.filter(entry => entry.actionId !== selected.actionId))
+        if (timeout !== undefined) clock.clearTimeout(timeout)
+        publish(timedOut
+          ? entriesRef.current.map(entry => entry.actionId === selected.actionId ? { ...entry, pending: false, deadline: clock.now() + 10_000 } : entry)
+          : entriesRef.current.filter(entry => entry.actionId !== selected.actionId))
         reconcile.current = true
         void client.invalidateQueries({ queryKey: ['summary'] })
         void client.invalidateQueries({ queryKey: ['message', selected.messageId] })

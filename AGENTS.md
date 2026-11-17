@@ -185,7 +185,8 @@ Ein danach wirksamer Widerruf macht eine bereits angenommene Bestätigung nicht 
 Der Agent prüft den Widerruf unmittelbar vor jedem Modellaufruf und Werkzeug sowie während des
 Streams nach jeweils zehn Deltas; ein widerrufener Stream wird geschlossen und meldet `context_revoked`.
 Für einen Verlauf werden die zugehörigen Kontexte jeweils in einer Datenbankabfrage geladen.
-Offen (#47): Eine unbeantwortete Rückgängig-Anfrage kann in der Oberfläche dauerhaft hängen bleiben.
+Rückgängig-Anfragen im Posteingang werden nach 15 Sekunden abgebrochen; bei unklarem Ergebnis
+bleibt die Aktion für einen erneuten Versuch noch zehn Sekunden verfügbar.
 Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
 
 ## Worker und periodischer Abruf
