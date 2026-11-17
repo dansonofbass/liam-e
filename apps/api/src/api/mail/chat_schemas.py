@@ -39,16 +39,6 @@ class ChatMessageOut(BaseModel):
     context: ContextOut | None = None
 
 
-async def with_context(message: ChatMessage) -> ChatMessageOut:
-    from db.accessors.chat_context import get_context
-    result = to_message_out(message)
-    if message.context_id:
-        context = await get_context(message.context_id)
-        if context:
-            result.context = ContextOut.model_validate(context, from_attributes=True)
-    return result
-
-
 def to_message_out(message: ChatMessage) -> ChatMessageOut:
     status = ""
     if message.role == "proposal":

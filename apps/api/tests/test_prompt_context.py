@@ -225,20 +225,24 @@ async def test_agent_batches_hidden_history_contexts(store, monkeypatch):
     assert set(load.await_args.args[0]) == {'live', 'removed', 'missing'}
 
 
-@pytest.mark.anyio
-async def test_history_exposes_content_free_revocation_marker(monkeypatch):
+def test_history_exposes_content_free_revocation_marker(monkeypatch):
     from db.models.chat_context import ChatContext
     from db.models.chat_message import ChatMessage
-    from db.accessors import chat_context
-    from api.mail.chat_schemas import with_context
+    from api.routers.api.v1.chat import history as history_route
     snapshot = ChatContext(conversation_id='c', prompt_revision_id='removed-revision',
                            app_prompt_version='2', account_scope_json='{}', revoked=True)
-    monkeypatch.setattr(chat_context, 'get_context', AsyncMock(return_value=snapshot))
-    row = ChatMessage(conversation_id='c', role='assistant', content='Sichtbare Antwort', context_id=snapshot.id)
-    output = await with_context(row)
-    assert output.content == row.content
-    assert output.context.revoked and output.context.prompt_hash is None
-    assert output.context.prompt_revision_id == 'removed-revision'
+    visible = ChatMessage(conversation_id='c', role='assistant', content='Sichtbare Antwort',
+                          context_id=snapshot.id)
+    monkeypatch.setattr(history_route.conversation_access, 'get_conversation', AsyncMock(return_value=object()))
+    monkeypatch.setattr(history_route.message_access, 'list_messages', AsyncMock(return_value=[visible]))
+    monkeypatch.setattr(history_route.context_access, 'get_contexts', AsyncMock(return_value={snapshot.id: snapshot}))
+    monkeypatch.setattr(history_route.context_access, 'get_context', AsyncMock(side_effect=AssertionError('per-row query')))
+    response = TestClient(build_app()).get('/api/v1/chat/history', params={'conversation_id': 'c'})
+    assert response.status_code == 200
+    output = response.json()[0]
+    assert output['id'] == visible.id and output['content'] == visible.content
+    assert output['context']['revoked'] is True and output['context']['prompt_hash'] is None
+    assert output['context']['prompt_revision_id'] == 'removed-revision'
 
 
 @pytest.mark.anyio
