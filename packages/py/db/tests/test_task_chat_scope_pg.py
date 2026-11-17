@@ -34,6 +34,8 @@ def test_account_and_unlinked_scope_reads_prepares_and_confirms_only_its_union(p
             linked, _ = await create(session, creation_key='x', title='Account example', start=today, zone='UTC', source_account_id=x.id, source_message_id=mx.id)
             personal, _ = await create(session, creation_key='personal', title='Personal example', start=today, zone='UTC')
             foreign, _ = await create(session, creation_key='y', title='Excluded example', start=today, zone='UTC', source_account_id=y.id, source_message_id=my.id)
+            # Bound to another account without a source mail: not personal, so still excluded.
+            foreign_bare, _ = await create(session, creation_key='y-bare', title='Excluded bare example', start=today, zone='UTC', source_account_id=y.id)
             await session.commit()
         args = dict(conversation_id=None, title='Example', model=None, revision_id=None, account_id=x.id,
                     app_prompt_version='test-only', task_source='account_and_unlinked', task_source_account_id=x.id)
@@ -43,7 +45,8 @@ def test_account_and_unlinked_scope_reads_prepares_and_confirms_only_its_union(p
         window = {'from': today.isoformat(), 'to': today.isoformat()}
         result = await chat.read('search_tasks', window, scope)
         assert {r['series_id'] for r in result['untrusted_task_data']['series']} == {linked.id, personal.id}
-        assert await chat.read('get_task', {**window, 'series_id': foreign.id}, scope) == {'error': 'task_not_found'}
+        for row in (foreign, foreign_bare):
+            assert await chat.read('get_task', {**window, 'series_id': row.id}, scope) == {'error': 'task_not_found'}
         for row in (linked, personal):
             assert (await chat.read('get_task', {**window, 'series_id': row.id}, scope))['untrusted_task_data']['series'][0]['series_id'] == row.id
         ctx = TurnContext(conversation.id, x.id, today, account_ids=[x.id], task_scope=scope)
@@ -51,23 +54,28 @@ def test_account_and_unlinked_scope_reads_prepares_and_confirms_only_its_union(p
             command = await chat.prepare({'action': 'archive', 'series_id': row.id, 'expected_version': 1}, ctx)
             card = await proposals.create_proposal(conversation.id, proposals.Proposal(kind='task', reason='Example', items=[], task=command), context_id=snapshot.id)
             assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
-        with pytest.raises(ValueError, match='task_scope_invalid'):
-            await chat.prepare({'action': 'archive', 'series_id': foreign.id, 'expected_version': 1}, ctx)
+        for row in (foreign, foreign_bare):
+            with pytest.raises(ValueError, match='task_scope_invalid'):
+                await chat.prepare({'action': 'archive', 'series_id': row.id, 'expected_version': 1}, ctx)
         create_args = {'action': 'create', 'title': 'Personal creation', 'start': today.isoformat(), 'timezone': 'UTC'}
         command = await chat.prepare(create_args, ctx)
         card = await proposals.create_proposal(conversation.id, proposals.Proposal(kind='task', reason='Example', items=[], task=command), context_id=snapshot.id)
         assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
-        forged = TaskCreateCommand(**create_args, source_account_id=y.id, source_message_id=my.id)
-        card = await proposals.create_proposal(conversation.id, proposals.Proposal(kind='task', reason='Example', items=[], task=forged), context_id=snapshot.id)
-        with pytest.raises(HTTPException) as caught:
-            await proposals.confirm(card.id, selected_ids=[])
-        assert caught.value.status_code == 403 and caught.value.detail['code'] == 'task_scope_invalid'
-        assert (await chat_message.get_message(card.id)).proposal_status == 'pending'
+        for forged in (TaskCreateCommand(**create_args, source_account_id=y.id, source_message_id=my.id),
+                       TaskCreateCommand(**create_args, source_account_id=y.id)):
+            card = await proposals.create_proposal(conversation.id, proposals.Proposal(kind='task', reason='Example', items=[], task=forged), context_id=snapshot.id)
+            with pytest.raises(HTTPException) as caught:
+                await proposals.confirm(card.id, selected_ids=[])
+            assert caught.value.status_code == 403 and caught.value.detail['code'] == 'task_scope_invalid'
+            assert (await chat_message.get_message(card.id)).proposal_status == 'pending'
+            await proposals.cancel(card.id)
         await chat_message.add_message(conversation_id=conversation.id, role='user', content='Synthetic', context_id=snapshot.id)
         with pytest.raises(chat_context.ScopeChange):
             await chat_context.resolve(**{**args, 'conversation_id': conversation.id, 'task_source': 'account'})
         with pytest.raises(ValueError, match='task_scope_invalid'):
             await chat_context.resolve(**{**args, 'task_source_account_id': y.id})
+        with pytest.raises(ValueError, match='task_scope_invalid'):
+            await chat_context.resolve(**{**args, 'account_id': None})
     asyncio.run(run())
 
 

@@ -17,8 +17,11 @@ from api.tasks.reading import complete_in_window, validate_window
 
 def allowed(scope: dict, account_id: str | None, message_id: str | None = None) -> bool:
     source = scope.get('source')
+    # In an account-limited chat, personal tasks are those without any account binding; a task that
+    # names another account stays excluded even when it has no source mail.
     return (source == 'all' or
-            (source in {'unlinked', 'account_and_unlinked'} and message_id is None) or
+            (source == 'unlinked' and message_id is None) or
+            (source == 'account_and_unlinked' and account_id is None and message_id is None) or
             (source in {'account', 'account_and_unlinked'} and account_id is not None and scope.get('account_id') == account_id))
 
 
@@ -29,7 +32,7 @@ def allowed_in_selection(scope: dict, selection: str | None, account_id: str | N
     if selection is None:
         return True
     return scope.get('account_id') == selection and scope.get('source') in {'account', 'account_and_unlinked'} and (
-        account_id == selection or (scope['source'] == 'account_and_unlinked' and message_id is None)
+        account_id == selection or (scope['source'] == 'account_and_unlinked' and account_id is None and message_id is None)
     )
 
 

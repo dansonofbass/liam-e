@@ -17,8 +17,8 @@ export function TaskScopeSelector({ conversationId, disabled }: { conversationId
       {!mail.scope && <><Chip pressed={tasks.scope.source === 'all'} disabled={blocked} onClick={() => tasks.set({ source: 'all' })}>{de.tasks.allSources}</Chip>
         <Chip pressed={tasks.scope.source === 'unlinked'} disabled={blocked} onClick={() => tasks.set({ source: 'unlinked' })}>{de.tasks.unlinked}</Chip></>}
       {mail.scope && <Chip pressed={tasks.scope.source === 'account_and_unlinked'} disabled={blocked} onClick={() => tasks.set({ source: 'account_and_unlinked', account_id: mail.scope! })}>{de.tasks.allSources}</Chip>}
-      {mail.scope && <p className="le-hint">{de.taskChat.accountAndUnlinkedHint}</p>}
       {summary.data?.accounts.filter(account => !mail.scope || account.id === mail.scope).map(account => <Chip key={account.id} aria-label={mail.scope ? de.taskChat.thisAccount : de.taskChat.account(account.display_name || account.email_address)} pressed={tasks.scope.source === 'account' && tasks.scope.account_id === account.id} disabled={blocked} onClick={() => tasks.set({ source: 'account', account_id: account.id })}>{mail.scope ? de.taskChat.thisAccount : account.display_name || account.email_address}</Chip>)}
     </div>
+    {mail.scope && <p className="le-hint">{de.taskChat.accountAndUnlinkedHint}</p>}
   </section>
 }

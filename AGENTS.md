@@ -258,7 +258,8 @@ lokalen Tag. Eine neue Serienrevision kann die Zeitzone ausdrücklich setzen.
 `task_source_account_id` bilden im Composer einen eigenen sichtbaren Umfang. Bei gewähltem
 Mailkonto X gibt es „Keine Aufgaben“, „Aufgaben dieses Kontos“ und „Alle Aufgaben“.
 Letzteres speichert ausdrücklich `{"source":"account_and_unlinked","account_id":X}`
-und erlaubt nur Aufgaben von X plus persönliche Aufgaben ohne Quellmail, nie andere Konten.
+und erlaubt nur Aufgaben von X plus persönliche Aufgaben ohne Konto- und Mailbezug, nie andere Konten
+(auch nicht deren Aufgaben ohne Quellmail).
 Lesen, Vorschlagen und Bestätigen prüfen dieselbe Grenze. Ohne Mailkontoauswahl bleiben
 `none|all|unlinked|account` unverändert; `account_and_unlinked` braucht ein gewähltes Mailkonto. Der Umfang steht
 je Turn in `chat_context.task_scope_json`; Altverlauf erhält durch den Serverstandard

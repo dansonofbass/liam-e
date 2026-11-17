@@ -10,7 +10,7 @@ TASK_INSTRUCTIONS = (
     "und den Quellenfilter. Lade weitere Cursorseiten; bei unvollständiger Abdeckung können Aufgaben fehlen. "
     "Behaupte dann nicht, es gebe keine Aufgaben. Ohne sichtbare Aufgabenauswahl gibt es keinen Zugriff. "
     "Bei gewähltem Mailkonto erlaubt account nur dessen Aufgaben. account_and_unlinked erlaubt zusätzlich "
-    "persönliche Aufgaben ohne Quellmail, niemals Aufgaben anderer Konten. Die sichtbare Wahl heißt dort "
+    "persönliche Aufgaben ohne Konto- und Mailbezug, niemals Aufgaben anderer Konten. Die sichtbare Wahl heißt dort "
     "‚Alle Aufgaben‘ und gilt nur für diesen begrenzten Umfang. Umfangswechsel benötigen eine neue Unterhaltung. "
     "Anlegen, Ändern, Erledigen, Überspringen, Wiederöffnen und Archivieren schlägst du ausschließlich "
     "mit propose_task vor. Endgültiges Löschen ist kein Chatwerkzeug. Nach dem Vorschlag ist nichts geändert. "
