@@ -142,7 +142,8 @@ export function useRestartConversation(id?: string) {
     attempt.current.pending = true
     void client.ensureQueryData(conversationsQuery()).then(
       list => { transfer(resolveScope(latest.current.session, id, list.find(item => item.id === id))) },
-      () => { transfer(undefined) },
+      // Without the list only an explicit or live account is known; otherwise the start page keeps its selection.
+      () => { transfer(resolveScope(latest.current.session, id)) },
     )
   }
 }

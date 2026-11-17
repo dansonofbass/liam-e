@@ -169,3 +169,18 @@ test('restart keeps the start selection when the conversation list fails', async
   expect(start.dataset.scope).toBe('a')
   expect(start.dataset.draft).toBe('Noch offen')
 })
+
+test('a waiting restart whose list fails still carries an account chosen meanwhile', async () => {
+  let fail!: (error: Error) => void
+  spyOn(sdk, 'chatConversationsList').mockImplementation((() => new Promise((_resolve, reject) => { fail = reject })) as never)
+  const { router, setScope } = restartHarness('c', false)
+  await openChat(router)
+  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
+  await act(async () => { setScope('x') })
+  await act(async () => { fail(new Error('offline')) })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  const start = await screen.findByTestId('start')
+  expect(start.dataset.scope).toBe('x')
+  expect(start.dataset.draft).toBe('Noch offen')
+})
