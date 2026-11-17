@@ -88,3 +88,19 @@ test('tap opens, while a drag suppresses its following click', () => {
   const { element, open } = setup(); down(element); up(element, 200); fireEvent.click(element); expect(open).toHaveBeenCalledTimes(1)
   down(element); move(element, 250); up(element, 250); fireEvent.click(element); expect(open).toHaveBeenCalledTimes(1)
 })
+
+test('a drag without a following click does not swallow a later mouse click', () => {
+  const { element, open } = setup()
+  down(element); move(element, 250); up(element, 250)
+  pointer(element, 'pointerdown', 200, 100, 1, 'mouse'); fireEvent.click(element)
+  expect(open).toHaveBeenCalledTimes(1)
+})
+
+test('click suppression after a drag expires for a later keyboard activation', () => {
+  const { element, open } = setup()
+  const now = spyOn(performance, 'now').mockReturnValue(1000)
+  down(element); move(element, 250); up(element, 250)
+  now.mockReturnValue(1000 + 5_000)
+  fireEvent.click(element)
+  expect(open).toHaveBeenCalledTimes(1)
+})

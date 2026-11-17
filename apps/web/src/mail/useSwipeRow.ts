@@ -4,13 +4,14 @@ import { actionFor, beginSwipe, endSwipe, moveSwipe, type SwipeBasis, type Swipe
 type Action = NonNullable<ReturnType<typeof actionFor>>
 type Preview = { action: Action; armed: boolean; direction: 'left' | 'right' }
 type Active = { pointer: number; state: SwipeState; dragged: boolean; navigation: string }
+const SUPPRESS_CLICK_MS = 600
 
 /** One row owns its pointer, animation and preview; movement never updates the list. */
 export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, navigation: string, valid: (basis: SwipeBasis) => boolean, run: (action: Action) => void) {
   const row = useRef<HTMLDivElement>(null)
   const active = useRef<Active | null>(null)
   const frame = useRef<number | null>(null)
-  const suppressClick = useRef(false)
+  const suppressClick = useRef(0)
   const [preview, setPreview] = useState<Preview | null>(null)
   const current = useRef({ basis, enabled, navigation, valid, run })
   current.current = { basis, enabled, navigation, valid, run }
@@ -24,7 +25,8 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
   const stop = () => {
     const gesture = active.current
     active.current = null
-    if (gesture?.dragged) suppressClick.current = true
+    // Only the click the browser synthesizes right after this drag is swallowed; a later tap, mouse click or keyboard activation is not.
+    if (gesture?.dragged) suppressClick.current = performance.now() + SUPPRESS_CLICK_MS
     if (gesture && row.current?.hasPointerCapture(gesture.pointer)) row.current.releasePointerCapture(gesture.pointer)
     paint(0)
     setPreview(null)
@@ -47,8 +49,8 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     }
   }, [])
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.isPrimary) suppressClick.current = 0
     if (active.current || event.pointerType !== 'touch' || !event.isPrimary || !current.current.enabled || !current.current.basis) return
-    suppressClick.current = false
     if (event.clientX < 24 || event.clientX > window.innerWidth - 24 || (event.target as Element).closest('button, a, input, select, textarea, [role="menu"], [role="menuitem"]')) return
     active.current = { pointer: event.pointerId, state: beginSwipe(current.current.basis, event.clientX, event.clientY, event.currentTarget.getBoundingClientRect().width), dragged: false, navigation: current.current.navigation }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -75,7 +77,7 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
   }
   const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => { if (active.current?.pointer === event.pointerId) stop() }
   const onClickCapture = (event: MouseEvent<HTMLDivElement>) => {
-    if (suppressClick.current) { suppressClick.current = false; event.preventDefault(); event.stopPropagation() }
+    if (performance.now() < suppressClick.current) { suppressClick.current = 0; event.preventDefault(); event.stopPropagation() }
   }
   return { row, preview, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onLostPointerCapture: onPointerCancel, onClickCapture }
 }
