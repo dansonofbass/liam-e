@@ -103,6 +103,52 @@ def test_deleted_source_is_not_replaced_and_can_still_be_cancelled(pg_db):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('action', ['complete', 'archive'])
+def test_existing_task_can_be_changed_after_source_mail_is_removed(pg_db, action):
+    async def run():
+        from datetime import UTC, datetime
+        from api.mail import proposals
+        from api.tasks import chat
+        from api.mail.agent_tools import TurnContext
+        from api.tasks.proposals import TaskCreateCommand
+        from db.accessors import task_occurrence, task_series
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+        from db.models.mail_message import MailMessage
+        initial = await proposal()
+        account = MailAccount(provider='imap', auth_type='imap_password', email_address='person@example.org')
+        mail = MailMessage(account_id=account.id, provider_uid='synthetic')
+        async with get_session_maker()() as session:
+            session.add(account)
+            session.add(mail)
+            await session.commit()
+        card = await proposals.create_proposal('synthetic', proposals.Proposal(kind='task', reason='Example', items=[],
+            task=TaskCreateCommand(action='create', title='Example', start=datetime.now(UTC).date().isoformat(), timezone='UTC',
+                source_account_id=account.id, source_message_id=mail.id)), context_id=initial.context_id)
+        done = await proposals.confirm(card.id, selected_ids=[])
+        series_id = proposals.proposal_view(done).result.task_series_id
+        async with get_session_maker()() as session:
+            row = await session.get(MailMessage, mail.id)
+            await session.delete(row)
+            occurrences = await task_occurrence.list_page(session, scope='app', status=None, due_from=None,
+                due_to=None, after=None, limit=10, series_id=series_id)
+            await session.commit()
+        args = {'action': action, 'series_id': series_id, 'expected_version': 1}
+        if action == 'complete':
+            args.update(occurrence_id=occurrences[0].id, expected_occurrence_version=occurrences[0].version)
+        command = await chat.prepare(args, TurnContext('synthetic', None, datetime.now(UTC).date(), task_scope={'source': 'all'}))
+        card = await proposals.create_proposal('synthetic', proposals.Proposal(kind='task', reason='Example', items=[], task=command), context_id=initial.context_id)
+        assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
+        async with get_session_maker()() as session:
+            row = await task_series.get(session, 'app', series_id)
+            assert (row.source_account_id, row.source_message_id) == (account.id, mail.id)
+            if action == 'archive':
+                assert row.archived
+            else:
+                assert (await task_occurrence.get(session, occurrences[0].id)).status == 'completed'
+    asyncio.run(run())
+
+
 def test_parallel_http_confirm_and_lost_response_retry(pg_db):
     async def run():
         import httpx
