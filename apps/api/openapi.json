@@ -713,7 +713,8 @@
               "none",
               "all",
               "unlinked",
-              "account"
+              "account",
+              "account_and_unlinked"
             ],
             "title": "Task Source",
             "type": "string"
@@ -832,7 +833,8 @@
               "none",
               "all",
               "unlinked",
-              "account"
+              "account",
+              "account_and_unlinked"
             ],
             "title": "Task Source",
             "type": "string"

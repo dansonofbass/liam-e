@@ -439,7 +439,7 @@ export type ChatStreamRequest = {
     /**
      * Task Source
      */
-    task_source?: 'none' | 'all' | 'unlinked' | 'account';
+    task_source?: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked';
     /**
      * Task Source Account Id
      */
@@ -495,7 +495,7 @@ export type ChatTurnRequest = {
     /**
      * Task Source
      */
-    task_source?: 'none' | 'all' | 'unlinked' | 'account';
+    task_source?: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked';
     /**
      * Task Source Account Id
      */
