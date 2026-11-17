@@ -124,7 +124,7 @@ export const de = {
     context_revoked: 'Die Vorlage oder Kalenderfreigabe ist nicht mehr gültig. Starte eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
     conversation_scope_change_requires_new: 'Diese Unterhaltung gilt für andere Konten oder Kalender. Starte für die neue Auswahl eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
     context_unavailable: 'Die Unterhaltung oder ihre Vorlage ist nicht mehr verfügbar. Starte eine neue Unterhaltung.',
-    context_invalid: 'Dieses Konto ist nicht verfügbar. Wähle ein anderes Konto und versuch es noch mal.',
+    context_invalid: 'Ein Konto oder Kalender aus deiner Auswahl ist nicht verfügbar. Prüfe deine Auswahl und versuch es noch mal.',
     version_conflict: 'Die Unterhaltung wurde inzwischen geändert. Versuch es noch mal.',
     auth_expired: 'Die Anmeldung ist abgelaufen. Melde dich noch mal beim Anbieter an.',
     unreachable: 'Das Konto ist gerade nicht erreichbar. Versuch es gleich noch mal.',

@@ -272,6 +272,15 @@ test('missing conversation in a stream offers a new conversation', async () => {
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
 })
 
+for (const path of ['/', '/chat/c']) test(`invalid context names both account and calendar selection on ${path}`, async () => {
+  setup(path)
+  globalThis.fetch = (() => Promise.resolve(Response.json({ detail: { code: 'context_invalid' } }, { status: 422 }))) as unknown as typeof fetch
+  await send()
+  const notice = (await screen.findByText('Ein Konto oder Kalender aus deiner Auswahl ist nicht verfügbar. Prüfe deine Auswahl und versuch es noch mal.')).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
+  expect(within(notice).queryByRole('button', { name: 'Neue Unterhaltung' })).toBeNull()
+})
+
 test('account change in a conversation offers a new conversation instead of a retry', async () => {
   const { router } = setup('/chat/c', false, 'a')
   fireEvent.click(await screen.findByRole('button', { name: 'Privat' }))
