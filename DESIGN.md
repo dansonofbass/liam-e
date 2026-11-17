@@ -564,6 +564,12 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 - **Composer:** Das Textfeld wächst bis 200 px Höhe. Enter sendet, Umschalt+Enter beginnt
   eine neue Zeile. Der Konto-Chip links unten („Alle Konten“ oder der Name eines Kontos)
   legt fest, in welchen Konten der Assistent sucht.
+  Daneben legt der Aufgaben-Chip fest, welche Aufgaben der Assistent lesen darf (Vorgabe
+  „Keine Aufgaben“). Sein Menü zeigt die Wahl als Einfachauswahl mit Hinweiszeilen; in einer
+  Unterhaltung mit Verlauf steht bei den anderen Einträgen „Braucht eine neue Unterhaltung.“
+  Die Leiste bricht um, der Senden-Button bleibt am Ende. Auswahlen gehören als Chip in diese
+  Leiste, nicht als Chipgruppe über den Composer: Auf kleinen Telefonen schiebt eine solche
+  Gruppe den Composer aus dem Bild.
 - **Mailbezug:** „Im Chat fragen“ öffnet die Startseite mit der Mail als Bezug. Über dem
   Composer steht dann ihre Mail-Karte mit dem Symbol-Button „Bezug entfernen“ (`x`).
 

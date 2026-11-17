@@ -12,7 +12,7 @@ export function CalendarScope({ conversationId, disabled }: { conversationId?: s
   const selection = useCalendarScope(conversationId)
   const sources = useQuery(calendarSourcesQuery())
   const active = sources.data?.filter(source => source.is_active) ?? []
-  return <section aria-label={de.calendar.chatScope}>
+  return <section className="le-chat-scope" aria-label={de.calendar.chatScope}>
     <strong>{de.calendar.chatScope}</strong>
     <p className="le-hint">{de.calendar.scopeHint}</p>
     <div className="le-calendar-controls">

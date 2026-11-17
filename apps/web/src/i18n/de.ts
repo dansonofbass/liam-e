@@ -12,7 +12,7 @@ export const de = {
     thisAccount: 'Aufgaben dieses Kontos',
     revisionConflict: 'Die neue Wiederholung überschneidet sich mit einer erledigten Fälligkeit. Wähle einen anderen Zeitplan.',
     accountAndUnlinkedHint: '„Alle Aufgaben“ zeigt hier Aufgaben dieses Kontos und persönliche Aufgaben ohne Konto- und Mailbezug. Andere Konten bleiben ausgeschlossen.',
-    scope: 'Aufgaben im Chat', none: 'Keine Aufgaben', scopeHint: 'Eine andere Auswahl braucht bei vorhandenem Verlauf eine neue Unterhaltung.',
+    none: 'Keine Aufgaben', scopeTip: 'Aufgaben für diese Unterhaltung wählen', needsNew: 'Braucht eine neue Unterhaltung.',
     actions: { create: 'Aufgabe vorschlagen', patch: 'Fälligkeit ändern', complete: 'Aufgabe erledigen', skip: 'Fälligkeit überspringen', reopen: 'Aufgabe wieder öffnen', archive: 'Aufgabe archivieren' },
     scopeConflict: 'Für andere Konten, Kalender oder Aufgaben brauchst du eine neue Unterhaltung. Der bisherige Verlauf bleibt erhalten.',
     confirm: 'Bestätigen', done: 'Aufgabenänderung gespeichert.', ask: 'Aufgabe vorschlagen',

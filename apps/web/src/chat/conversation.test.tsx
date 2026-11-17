@@ -43,13 +43,25 @@ async function send() {
 }
 afterEach(() => { cleanup(); mock.restore(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
 
+// The task chip opens its menu; the choices are radio items, the chip names the current one.
+const taskChoice = async (chip: string, choice: string) => {
+  const trigger = await screen.findByRole('button', { name: chip })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(trigger)
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: new RegExp(`^${choice}`) }))
+}
+
 test('account chat explicitly includes personal tasks without granting other accounts', async () => {
   setup('/chat/c', false, 'a')
-  const area = await screen.findByRole('region', { name: 'Aufgaben im Chat' })
-  await waitFor(() => expect(within(area).getByRole('button', { name: 'Aufgaben dieses Kontos' })).toBeTruthy())
-  expect(within(area).getAllByRole('button')).toHaveLength(3)
-  fireEvent.click(within(area).getByRole('button', { name: 'Alle Aufgaben' }))
-  expect(within(area).getByRole('button', { name: 'Alle Aufgaben' }).getAttribute('aria-pressed')).toBe('true')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(trigger)
+  const items = await screen.findAllByRole('menuitemradio')
+  expect(items.map(item => item.querySelector('.le-menu-title')?.textContent)).toEqual(['Keine Aufgaben', 'Alle Aufgaben', 'Aufgaben dieses Kontos'])
+  expect(items[1]!.textContent).toContain('persönliche Aufgaben ohne Konto- und Mailbezug')
+  expect(items[0]!.getAttribute('aria-checked')).toBe('true')
+  fireEvent.click(items[1]!)
+  expect(await screen.findByRole('button', { name: 'Alle Aufgaben' })).toBeTruthy()
   await send()
   expect(requestBody.account_id).toBe('a')
   expect(requestBody.task_source).toBe('account_and_unlinked')
@@ -61,13 +73,14 @@ for (const choice of ['Aufgaben dieses Kontos', 'Alle Aufgaben']) test(`changing
   summary.accounts.push({ ...summary.accounts[0]!, id: 'b', display_name: 'Arbeit', email_address: 'work@example.org' })
   fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
   fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
-  const area = await screen.findByRole('region', { name: 'Aufgaben im Chat' })
-  fireEvent.click(within(area).getByRole('button', { name: choice }))
-  expect(within(area).getByRole('button', { name: choice }).getAttribute('aria-pressed')).toBe('true')
+  await taskChoice('Keine Aufgaben', choice)
+  expect(await screen.findByRole('button', { name: choice })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Privat' }))
   fireEvent.click(screen.getByRole('menuitem', { name: 'Arbeit' }))
-  expect(within(area).getByRole('button', { name: 'Keine Aufgaben' }).getAttribute('aria-pressed')).toBe('true')
-  expect(within(area).getByRole('button', { name: 'Aufgaben dieses Kontos' }).getAttribute('aria-pressed')).toBe('false')
+  fireEvent.click(await screen.findByRole('button', { name: 'Keine Aufgaben' }))
+  expect((await screen.findByRole('menuitemradio', { name: /^Keine Aufgaben/ })).getAttribute('aria-checked')).toBe('true')
+  expect(screen.getByRole('menuitemradio', { name: /^Aufgaben dieses Kontos/ }).getAttribute('aria-checked')).toBe('false')
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
   await send()
   expect(requestBody.account_id).toBe('b')
   expect(requestBody.task_source).toBe('none')
@@ -326,11 +339,29 @@ test('account change in a conversation offers a new conversation instead of a re
   expect(screen.getByRole('button', { name: 'Alle Konten' })).toBeTruthy()
 })
 
+test('in a conversation the other task choices say they need a new conversation', async () => {
+  setup('/chat/c')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(trigger)
+  const items = await screen.findAllByRole('menuitemradio')
+  expect(items[0]!.textContent).not.toContain('Braucht eine neue Unterhaltung.')
+  for (const item of items.slice(1)) expect(item.textContent).toContain('Braucht eine neue Unterhaltung.')
+})
+
+test('a restored task choice the list cannot offer still names itself', async () => {
+  const { client } = setup('/chat/c')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  const context = { id: 'ctx', account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: false, task_scope_json: JSON.stringify({ source: 'account', account_id: 'gone' }) } as ChatMessageOut['context']
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context }]) })
+  expect(await screen.findByRole('button', { name: 'Aufgaben: Gespeichertes Konto nicht verfügbar' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Keine Aufgaben' })).toBeNull()
+})
+
 test('task selection conflict restarts visibly without the old conversation', async () => {
   const { router } = setup('/chat/c')
-  const choose = await screen.findByRole('button', { name: 'Alle Aufgaben' })
-  await waitFor(() => expect((choose as HTMLButtonElement).disabled).toBe(false))
-  fireEvent.click(choose)
+  await taskChoice('Keine Aufgaben', 'Alle Aufgaben')
   globalThis.fetch = ((_url: unknown, init: RequestInit) => {
     requestBody = JSON.parse(String(init.body))
     return Promise.resolve(Response.json({ detail: { code: 'conversation_scope_change_requires_new' } }, { status: 409 }))
@@ -340,7 +371,7 @@ test('task selection conflict restarts visibly without the old conversation', as
   expect(requestBody.task_source).toBe('all')
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-  expect((await screen.findByRole('button', { name: 'Alle Aufgaben' })).getAttribute('aria-pressed')).toBe('true')
+  expect(await screen.findByRole('button', { name: 'Alle Aufgaben' })).toBeTruthy()
   await send()
   await waitFor(() => expect(requestBody.conversation_id).toBeUndefined())
   expect(requestBody.task_source).toBe('all')
