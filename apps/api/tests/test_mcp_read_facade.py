@@ -110,6 +110,11 @@ def test_access_log_redacts_query_in_an_unexpected_record_shape():
     assert redact.filter(plain) and "account_ids" not in plain.getMessage()
     other = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, "GET /api/health?x=1 200", None, None)
     assert redact.filter(other) and other.getMessage() == "GET /api/health?x=1 200"
+    quoted = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, "GET " + BASE + "/messages?query=he\"llo it's HTTP/1.1 200", None, None)
+    assert redact.filter(quoted) and "llo" not in quoted.getMessage() and quoted.getMessage().startswith("GET " + BASE + "/messages ")
+    moved = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '"%s %s" %s - %s %s',
+                              ("GET", BASE + "/summary?account_ids=private", 200, "client", "1.1"), None)
+    assert redact.filter(moved) and "private" not in moved.getMessage() and len(moved.args) == 5
 
 
 def test_default_denies_before_any_service(indexed, monkeypatch):
