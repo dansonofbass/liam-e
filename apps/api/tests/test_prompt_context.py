@@ -126,6 +126,32 @@ async def test_revoked_hidden_history_is_not_reinjected(store, monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_proposal_from_a_revoked_turn_is_not_reinjected(store, monkeypatch):
+    from db.models.mail_message import MailMessage
+    from test_chat_agent import chunk
+    m = MailMessage(account_id=store.account.id, provider_uid='1', subject='Synthetisch', folder='INBOX')
+    store.mail.messages[m.id] = m
+    first = FakeMistral(streams=[[chunk('propose_action', {'kind': 'archive', 'message_ids': [m.id], 'reason': 'Verdeckter Grund'})], ['Erledigt']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: first)
+    events = [event async for event in agent.run_turn_events(conversation_id=None, text='Aufräumen')]
+    assert events[-1].event == 'done'
+    proposal = next(row for row in store.rows if row.role == 'proposal')
+    assert proposal.context_id == 'test-context'
+    resolve = agent.resolve_context
+    async def next_turn(**kw):
+        conversation, _, text = await resolve(**kw)
+        return conversation, NS(id='next-context', account_scope_json=json.dumps({'account_ids': [store.account.id]})), text
+    second = FakeMistral(streams=[['Antwort']])
+    monkeypatch.setattr(agent, 'resolve_context', next_turn)
+    monkeypatch.setattr(agent, 'mistral_client', lambda: second)
+    monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=lambda id: id != 'test-context'))
+    events = [event async for event in agent.run_turn_events(conversation_id=proposal.conversation_id, text='Weiter')]
+    assert events[-1].event == 'done'
+    sent = json.dumps(second.requests, default=str, ensure_ascii=False)
+    assert 'Verdeckter Grund' not in sent and 'Aufräumen' in sent
+
+
+@pytest.mark.anyio
 async def test_history_exposes_content_free_revocation_marker(monkeypatch):
     from db.models.chat_context import ChatContext
     from db.models.chat_message import ChatMessage

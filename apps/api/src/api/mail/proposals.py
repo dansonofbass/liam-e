@@ -105,13 +105,13 @@ def proposal_view(message: ChatMessage) -> Proposal | None:
     return None
 
 
-async def create_proposal(conversation_id: str, proposal: Proposal) -> ChatMessage:
+async def create_proposal(conversation_id: str, proposal: Proposal, *, context_id: str | None = None) -> ChatMessage:
     for attempt in range(2):
         await message_access.cancel_open_proposals(conversation_id)
         try:
             return await message_access.add_message(
                 conversation_id=conversation_id, role="proposal", content=proposal.reason,
-                proposal_json=proposal.model_dump_json(), proposal_status="pending",
+                proposal_json=proposal.model_dump_json(), proposal_status="pending", context_id=context_id,
             )
         except IntegrityError:
             if attempt:

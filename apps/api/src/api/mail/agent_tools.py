@@ -15,6 +15,7 @@ class TurnContext:
     account_id: str | None
     today: date
     account_ids: list[str] | None = None
+    context_id: str | None = None
 
 
 @dataclass
@@ -65,7 +66,7 @@ def _summary(m):
 
 
 async def _proposal(ctx, proposal):
-    row = await proposals.create_proposal(ctx.conversation_id, proposal)
+    row = await proposals.create_proposal(ctx.conversation_id, proposal, context_id=ctx.context_id)
     return result({'proposal_id': row.id, 'status': 'pending', 'note': 'Der Nutzer muss den Vorschlag bestätigen.'}, proposal_message=row)
 
 
