@@ -689,6 +689,66 @@ export type ErrorEvent = {
 };
 
 /**
+ * FeedInput
+ */
+export type FeedInput = {
+    /**
+     * Expected Revision
+     */
+    expected_revision?: number | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Source Id
+     */
+    source_id?: string | null;
+    /**
+     * Timezone
+     */
+    timezone: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * FeedPreviewOut
+ */
+export type FeedPreviewOut = {
+    /**
+     * Coverage End
+     */
+    coverage_end: string;
+    /**
+     * Coverage Start
+     */
+    coverage_start: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Format Issues
+     */
+    format_issues: Array<string>;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Occurrence Count
+     */
+    occurrence_count: number;
+    /**
+     * Validation Id
+     */
+    validation_id: string;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -1848,6 +1908,10 @@ export type SourceOut = {
      */
     coverage_start: string | null;
     /**
+     * Data Revision
+     */
+    data_revision?: number;
+    /**
      * Id
      */
     id: string;
@@ -1860,9 +1924,21 @@ export type SourceOut = {
      */
     is_active: boolean;
     /**
+     * Last Checked At
+     */
+    last_checked_at?: string | null;
+    /**
+     * Last Error
+     */
+    last_error?: string | null;
+    /**
      * Last Success At
      */
     last_success_at: string | null;
+    /**
+     * Last Validated At
+     */
+    last_validated_at?: string | null;
     /**
      * Name
      */
@@ -1871,6 +1947,10 @@ export type SourceOut = {
      * Provider
      */
     provider: string;
+    /**
+     * Revision
+     */
+    revision?: number;
     /**
      * Stale
      */
@@ -1925,6 +2005,36 @@ export type StatusEvent = {
      * Event
      */
     event: 'status';
+};
+
+/**
+ * SubscribeInput
+ */
+export type SubscribeInput = {
+    /**
+     * Expected Revision
+     */
+    expected_revision?: number | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Source Id
+     */
+    source_id?: string | null;
+    /**
+     * Timezone
+     */
+    timezone: string;
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Validation Id
+     */
+    validation_id: string;
 };
 
 /**
@@ -2552,6 +2662,86 @@ export type HealthResponses = {
 
 export type HealthResponse2 = HealthResponses[keyof HealthResponses];
 
+export type CalendarFeedSubscribeData = {
+    body: SubscribeInput;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/feeds';
+};
+
+export type CalendarFeedSubscribeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarFeedSubscribeError = CalendarFeedSubscribeErrors[keyof CalendarFeedSubscribeErrors];
+
+export type CalendarFeedSubscribeResponses = {
+    /**
+     * Successful Response
+     */
+    201: SourceOut;
+};
+
+export type CalendarFeedSubscribeResponse = CalendarFeedSubscribeResponses[keyof CalendarFeedSubscribeResponses];
+
+export type CalendarFeedValidateData = {
+    body: FeedInput;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/feeds/validate';
+};
+
+export type CalendarFeedValidateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarFeedValidateError = CalendarFeedValidateErrors[keyof CalendarFeedValidateErrors];
+
+export type CalendarFeedValidateResponses = {
+    /**
+     * Successful Response
+     */
+    200: FeedPreviewOut;
+};
+
+export type CalendarFeedValidateResponse = CalendarFeedValidateResponses[keyof CalendarFeedValidateResponses];
+
+export type CalendarFeedValidationDiscardData = {
+    body?: never;
+    path: {
+        /**
+         * Validation Id
+         */
+        validation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/feeds/validations/{validation_id}';
+};
+
+export type CalendarFeedValidationDiscardErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarFeedValidationDiscardError = CalendarFeedValidationDiscardErrors[keyof CalendarFeedValidationDiscardErrors];
+
+export type CalendarFeedValidationDiscardResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CalendarFeedValidationDiscardResponse = CalendarFeedValidationDiscardResponses[keyof CalendarFeedValidationDiscardResponses];
+
 export type CalendarOccurrencesListData = {
     body?: never;
     path?: never;
@@ -2714,7 +2904,12 @@ export type CalendarSourceSyncData = {
          */
         source_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Due Only
+         */
+        due_only?: boolean;
+    };
     url: '/api/v1/calendar/sources/{source_id}/sync';
 };
 
