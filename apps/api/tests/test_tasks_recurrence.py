@@ -27,6 +27,30 @@ def test_invalid_rules(rule):
         expand(date(2024, 1, 1), rule, date(2024, 2, 1))
 
 
+@pytest.mark.parametrize('start,rule', [
+    (date(2026, 1, 1), 'FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30'),
+    (date(2026, 1, 1), 'FREQ=MONTHLY;BYMONTHDAY=31;BYMONTH=4,6,9,11'),
+    (date(2026, 1, 1), 'FREQ=WEEKLY;BYMONTHDAY=-30;BYMONTH=2'),
+    (date(2026, 1, 15), 'FREQ=MONTHLY;INTERVAL=12;BYMONTH=3'),
+    (date(2026, 1, 31), 'FREQ=MONTHLY;BYMONTH=2'),
+    (date(2026, 1, 5), 'FREQ=DAILY;INTERVAL=14;BYDAY=TU'),
+])
+def test_rules_that_never_occur_are_rejected(start, rule):
+    with pytest.raises(ValueError, match='never occurs'):
+        expand_page(start, rule, date(2026, 3, 1), limit=10)
+
+
+@pytest.mark.parametrize('start,rule,first', [
+    (date(2026, 1, 1), 'FREQ=MONTHLY;BYMONTH=2;BYMONTHDAY=29', date(2028, 2, 29)),
+    (date(2026, 1, 1), 'FREQ=MONTHLY;BYMONTHDAY=13;BYDAY=FR', date(2026, 2, 13)),
+    (date(2026, 1, 31), 'FREQ=MONTHLY', date(2026, 1, 31)),
+    (date(2026, 1, 5), 'FREQ=DAILY;INTERVAL=14;BYDAY=MO', date(2026, 1, 5)),
+    (date(2026, 1, 15), 'FREQ=MONTHLY;INTERVAL=12;BYMONTH=1', date(2026, 1, 15)),
+])
+def test_sparse_rules_still_occur(start, rule, first):
+    assert expand(start, rule, date(2029, 1, 1))[0] == first
+
+
 def test_pages_include_gap_in_cursor_and_match_preview():
     start = datetime(2024, 3, 30, 2, 30)
     end = datetime(2024, 4, 5)

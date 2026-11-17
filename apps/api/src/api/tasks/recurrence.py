@@ -14,10 +14,35 @@ from dateutil.rrule import rrulestr
 
 _ALLOWED = {'FREQ', 'INTERVAL', 'COUNT', 'UNTIL', 'BYDAY', 'BYMONTHDAY', 'BYMONTH'}
 _DAYS = {'MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'}
+_WEEKDAYS = ('MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU')
+_LONGEST_MONTH = {1: 31, 2: 29, 3: 31, 4: 30, 5: 31, 6: 30, 7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31}
 
 
 def _valid_wall(value: datetime) -> bool:
     return value.astimezone(timezone.utc).astimezone(value.tzinfo).replace(tzinfo=None) == value.replace(tzinfo=None)
+
+
+def _reject_impossible(parts: dict[str, str], dtstart: datetime) -> None:
+    """Refuse rules that can never produce a date.
+
+    dateutil searches period by period up to year 9999 before it gives up, which blocks the
+    API for seconds with a daily rule. Rules that only fail through leap years (Feb 29 with a
+    monthly interval that never reaches one) remain and cost a fraction of a second.
+    """
+    freq, interval = parts['FREQ'], int(parts.get('INTERVAL', '1'))
+    months = {int(v) for v in parts['BYMONTH'].split(',')} if 'BYMONTH' in parts else set(_LONGEST_MONTH)
+    if freq == 'MONTHLY':
+        months &= {(dtstart.month - 1 + k * interval) % 12 + 1 for k in range(12)}
+    if 'BYMONTHDAY' in parts:
+        days = {abs(int(v)) for v in parts['BYMONTHDAY'].split(',')}
+    elif freq == 'MONTHLY' and 'BYDAY' not in parts:
+        days = {dtstart.day}  # dateutil repeats the start day
+    else:
+        days = {1}
+    if not any(day <= _LONGEST_MONTH[month] for month in months for day in days):
+        raise ValueError('recurrence never occurs')
+    if freq == 'DAILY' and interval % 7 == 0 and 'BYDAY' in parts and _WEEKDAYS[dtstart.weekday()] not in parts['BYDAY'].split(','):
+        raise ValueError('recurrence never occurs')
 
 
 def _parse(start: date | datetime, rule: str, through: date | datetime, zone: str | None):
@@ -59,6 +84,7 @@ def _parse(start: date | datetime, rule: str, through: date | datetime, zone: st
                 raise ValueError('invalid recurrence list')
     if 'BYDAY' in parts and (len(parts['BYDAY'].split(',')) > 7 or any(v not in _DAYS for v in parts['BYDAY'].split(','))):
         raise ValueError('invalid weekdays')
+    _reject_impossible(parts, dtstart)
     try:
         recurrence = rrulestr(rule, dtstart=dtstart)
         bound = through.replace(tzinfo=dtstart.tzinfo, fold=0) if timed else datetime.combine(through, time.max)
