@@ -10,6 +10,7 @@ export const de = {
   taskChat: {
     account: (name: string) => `Aufgaben: ${name}`,
     thisAccount: 'Aufgaben dieses Kontos',
+    revisionConflict: 'Die neue Wiederholung überschneidet sich mit einer erledigten Fälligkeit. Wähle einen anderen Zeitplan.',
     accountAndUnlinkedHint: '„Alle Aufgaben“ zeigt hier Aufgaben dieses Kontos und persönliche Aufgaben ohne Mailbezug. Andere Konten bleiben ausgeschlossen.',
     scope: 'Aufgaben im Chat', none: 'Keine Aufgaben', scopeHint: 'Eine andere Auswahl braucht bei vorhandenem Verlauf eine neue Unterhaltung.',
     actions: { create: 'Aufgabe vorschlagen', patch: 'Fälligkeit ändern', complete: 'Aufgabe erledigen', skip: 'Fälligkeit überspringen', reopen: 'Aufgabe wieder öffnen', archive: 'Aufgabe archivieren' },

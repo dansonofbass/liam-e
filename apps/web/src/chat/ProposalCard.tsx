@@ -50,6 +50,7 @@ function safeLink(value: string | null): string | null {
 function failureText(code: string | undefined, kind: Proposal['kind']): string {
   switch (code) {
     case 'task_version_conflict': return de.tasks.conflict
+    case 'task_revision_conflict': return de.taskChat.revisionConflict
     case 'task_source_gone': return de.tasks.unavailableMail
     case 'task_scope_invalid': return de.taskChat.scopeError
     case 'task_not_found': return de.taskChat.unavailable

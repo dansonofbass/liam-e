@@ -9,6 +9,49 @@ import pytest
 pytestmark = pytest.mark.skipif(not os.getenv('RUN_PG_CONTRACT'), reason='RUN_PG_CONTRACT is not set')
 
 
+def test_revision_collision_keeps_card_pending_with_specific_error(pg_db):
+    async def run():
+        from datetime import UTC, datetime
+        from fastapi import HTTPException
+        from api.mail import proposals
+        from api.tasks import state
+        from api.tasks.proposals import TaskCreateCommand, TaskPatchCommand
+        from db.accessors import chat_message, task_occurrence, task_series
+        from db.engine import get_session_maker
+        from db.models.chat_context import ChatContext
+        start = datetime.now(UTC).date() + timedelta(days=7)
+        async with get_session_maker()() as session:
+            context = ChatContext(conversation_id='synthetic', app_prompt_version='test-only',
+                account_scope_json='{"selection":null}', task_scope_json='{"source":"all"}')
+            session.add(context)
+            await session.commit()
+        async def propose(command):
+            return await proposals.create_proposal('synthetic', proposals.Proposal(kind='task', reason='Example',
+                items=[], task=command), context_id=context.id)
+        initial = await propose(TaskCreateCommand(action='create', title='Example', start=start.isoformat(),
+            timezone='UTC', rrule='FREQ=DAILY;COUNT=3'))
+        done = await proposals.confirm(initial.id, selected_ids=[])
+        series_id = proposals.proposal_view(done).result.task_series_id
+        async with get_session_maker()() as session:
+            rows = await task_occurrence.list_page(session, scope='app', status=None, due_from=None, due_to=None,
+                after=None, limit=10, series_id=series_id)
+            await state.transition(session, rows[1].id, version=rows[1].version, action='complete')
+            await session.commit()
+        card = await propose(TaskPatchCommand(action='patch', series_id=series_id, expected_version=1,
+            occurrence_id=rows[0].id, expected_occurrence_version=rows[0].version,
+            scope='this_and_following', start=rows[1].due_local, timezone='UTC'))
+        with pytest.raises(HTTPException) as caught:
+            await proposals.confirm(card.id, selected_ids=[])
+        assert caught.value.status_code == 409
+        assert caught.value.detail == {'code': 'task_revision_conflict', 'message':
+            'Die neue Wiederholung überschneidet sich mit einer erledigten Fälligkeit. Wähle einen anderen Zeitplan.'}
+        assert (await chat_message.get_message(card.id)).proposal_status == 'pending'
+        async with get_session_maker()() as session:
+            assert (await task_series.get(session, 'app', series_id)).version == 1
+            assert (await task_occurrence.get(session, rows[0].id)).status == 'open'
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('action', ['patch', 'split', 'complete', 'skip', 'reopen', 'archive'])
 @pytest.mark.parametrize('conflict', [False, True])
 def test_bound_commands_execute_once(pg_db, action, conflict):

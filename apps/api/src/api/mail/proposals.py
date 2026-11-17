@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 
 from api.mail import actions, netguard, newsletters, send, service, transport
 from api.errors import refuse
+from api.tasks import patch as task_patch
 from api.tasks import proposals as task_proposals
 from api.tasks import state as task_state
 
@@ -255,6 +256,8 @@ async def _confirm_task(message: ChatMessage, edit: task_proposals.TaskCreateCom
             raise refuse(403, 'task_scope_invalid', 'Die Aufgabe gehört nicht zur gewählten Auswahl.')
         try:
             series_id = await task_proposals.execute(session, proposal.task, proposal_id=claimed.id)
+        except task_patch.RevisionConflict:
+            raise refuse(409, 'task_revision_conflict', 'Die neue Wiederholung überschneidet sich mit einer erledigten Fälligkeit. Wähle einen anderen Zeitplan.') from None
         except task_state.StateConflict:
             raise refuse(409, 'task_version_conflict', 'Die Aufgabe wurde inzwischen geändert. Prüfe den aktuellen Stand.') from None
         except task_state.StateNotFound:

@@ -53,6 +53,18 @@ async function setupConfirmed(done: ChatMessageOut, clock?: Parameters<typeof se
   return client
 }
 
+test('task revision collisions explain the conflicting completed occurrence', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'patch', series_id: 'task', expected_version: 1, occurrence_id: 'occurrence', expected_occurrence_version: 1, scope: 'this_and_following', start: '2027-01-01', timezone: 'UTC' } }
+  spyOn(sdk, 'tasksPreview').mockResolvedValue({ data: { occurrences: ['2027-01-01'], exceptions: [], through: '2028-01-01', complete: true } } as never)
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => { throw { detail: { code: 'task_revision_conflict' } } }) as never)
+  setup(initial)
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' }))
+  expect(await screen.findByText('Die neue Wiederholung überschneidet sich mit einer erledigten Fälligkeit. Wähle einen anderen Zeitplan.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeTruthy()
+})
+
 test('task creation edits use a fresh preview and confirmation invalidates tasks with outcome focus', async () => {
   const initial = message()
   initial.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'create', title: 'Example', start: '2027-01-01', timezone: 'UTC' } }
