@@ -1,5 +1,5 @@
 // i18n-exempt: synthetic API data and paths.
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, setSystemTime, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { client as api } from '../api/generated/client.gen'
@@ -14,7 +14,7 @@ const archived = { ...active, id: 'archived', title: 'Archiviert und fällig', a
 const occurrence = { id: 'occ', series_id: 'archived', revision_id: 'rev', occurrence_key: today, due_local: today, due_at: null, status: 'open', version: 1 }
 const windowData = { due_from: today, due_to: today }
 let requests: { path: string; search: string; method: string; body?: unknown }[] = []
-function setup(detail = false, activeDetail = false) {
+function setup(detail = false, activeDetail = false, incomplete = false) {
   api.setConfig({ baseUrl: 'https://api.example.test' })
   requests = []
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -29,8 +29,8 @@ function setup(detail = false, activeDetail = false) {
       if (status === 'skipped') return Response.json({ items: [{ ...occurrence, id: 'skipped', status: 'skipped', due_local: `${today}T09:00:00` }], next_cursor: null })
       return Response.json({ items: [occurrence], next_cursor: null })
     }
-    if (url.pathname.endsWith('/tasks/archived')) return Response.json({ window: windowData, series: activeDetail ? { ...active, id: 'archived' } : archived, occurrences: { items: [occurrence], next_cursor: null } })
-    return Response.json({ window: windowData, items: [active, archived], next_cursor: null })
+    if (url.pathname.endsWith('/tasks/archived')) return Response.json({ window: windowData, series: { ...(activeDetail ? { ...active, id: 'archived' } : archived), complete: !incomplete }, occurrences: { items: [occurrence], next_cursor: null } })
+    return Response.json({ window: windowData, items: [{ ...active, complete: !incomplete }, archived], next_cursor: null })
   }) as typeof fetch
   const query = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(<QueryClientProvider client={query}>{detail ? <TaskDetail id="archived" /> : <TasksPage />}</QueryClientProvider>)
@@ -56,6 +56,28 @@ test('completed view merges skipped and completed occurrences in due order', asy
   expect(skipped.compareDocumentPosition(completed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(requests.some(request => request.path.endsWith('/occurrences') && request.search.includes('status=completed'))).toBe(true)
   expect(requests.some(request => request.path.endsWith('/occurrences') && request.search.includes('status=skipped'))).toBe(true)
+})
+
+test('period and incomplete notices keep date-only days in a western time zone', async () => {
+  const oldZone = process.env.TZ
+  process.env.TZ = 'America/Los_Angeles'
+  setSystemTime(new Date('2028-01-30T20:00:00Z'))
+  try {
+    for (const detail of [false, true]) {
+      setup(detail, false, true)
+      const period = await screen.findByText(/^Zeitraum:/)
+      const notice = await screen.findByText(/^Fälligkeiten werden ergänzt/)
+      for (const element of [period, notice]) {
+        expect(element.textContent).toContain('1.3.2027')
+        expect(element.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/)
+      }
+      cleanup()
+    }
+  } finally {
+    setSystemTime()
+    if (oldZone === undefined) delete process.env.TZ
+    else process.env.TZ = oldZone
+  }
 })
 
 test('the delete confirmation traps focus and names irreversible history loss', async () => {
