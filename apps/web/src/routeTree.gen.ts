@@ -14,10 +14,12 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAccountsRouteImport } from './routes/_app/accounts'
 import { Route as AppMailRouteImport } from './routes/_app/mail'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppTasksRouteImport } from './routes/_app/tasks'
 import { Route as AppChatConversationIdRouteImport } from './routes/_app/chat/$conversationId'
 import { Route as AppMailIndexRouteImport } from './routes/_app/mail/index'
 import { Route as AppMailMessageIdRouteImport } from './routes/_app/mail/$messageId'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings/index'
+import { Route as AppTasksTaskIdRouteImport } from './routes/_app/tasks/$taskId'
 import { Route as AppSettingsControlsIndexRouteImport } from './routes/_app/settings/controls/index'
 import { Route as AppSettingsPromptsIndexRouteImport } from './routes/_app/settings/prompts/index'
 import { Route as AppSettingsPromptsPromptIdRouteImport } from './routes/_app/settings/prompts/$promptId'
@@ -47,6 +49,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTasksRoute = AppTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppChatConversationIdRoute = AppChatConversationIdRouteImport.update({
   id: '/chat/$conversationId',
   path: '/chat/$conversationId',
@@ -66,6 +73,11 @@ const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppTasksTaskIdRoute = AppTasksTaskIdRouteImport.update({
+  id: '/$taskId',
+  path: '/$taskId',
+  getParentRoute: () => AppTasksRoute,
 } as any)
 const AppSettingsControlsIndexRoute =
   AppSettingsControlsIndexRouteImport.update({
@@ -95,8 +107,10 @@ export interface FileRoutesByFullPath {
   '/accounts': typeof AppAccountsRoute
   '/mail': typeof AppMailRouteWithChildren
   '/settings': typeof AppSettingsRouteWithChildren
+  '/tasks': typeof AppTasksRouteWithChildren
   '/chat/$conversationId': typeof AppChatConversationIdRoute
   '/mail/$messageId': typeof AppMailMessageIdRoute
+  '/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/mail/': typeof AppMailIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
@@ -106,9 +120,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/accounts': typeof AppAccountsRoute
+  '/tasks': typeof AppTasksRouteWithChildren
   '/': typeof AppIndexRoute
   '/chat/$conversationId': typeof AppChatConversationIdRoute
   '/mail/$messageId': typeof AppMailMessageIdRoute
+  '/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/mail': typeof AppMailIndexRoute
   '/settings': typeof AppSettingsIndexRoute
   '/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
@@ -122,9 +138,11 @@ export interface FileRoutesById {
   '/_app/accounts': typeof AppAccountsRoute
   '/_app/mail': typeof AppMailRouteWithChildren
   '/_app/settings': typeof AppSettingsRouteWithChildren
+  '/_app/tasks': typeof AppTasksRouteWithChildren
   '/_app/': typeof AppIndexRoute
   '/_app/chat/$conversationId': typeof AppChatConversationIdRoute
   '/_app/mail/$messageId': typeof AppMailMessageIdRoute
+  '/_app/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/_app/mail/': typeof AppMailIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
@@ -139,8 +157,10 @@ export interface FileRouteTypes {
     | '/accounts'
     | '/mail'
     | '/settings'
+    | '/tasks'
     | '/chat/$conversationId'
     | '/mail/$messageId'
+    | '/tasks/$taskId'
     | '/mail/'
     | '/settings/'
     | '/settings/prompts/$promptId'
@@ -150,9 +170,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/accounts'
+    | '/tasks'
     | '/'
     | '/chat/$conversationId'
     | '/mail/$messageId'
+    | '/tasks/$taskId'
     | '/mail'
     | '/settings'
     | '/settings/prompts/$promptId'
@@ -165,9 +187,11 @@ export interface FileRouteTypes {
     | '/_app/accounts'
     | '/_app/mail'
     | '/_app/settings'
+    | '/_app/tasks'
     | '/_app/'
     | '/_app/chat/$conversationId'
     | '/_app/mail/$messageId'
+    | '/_app/tasks/$taskId'
     | '/_app/mail/'
     | '/_app/settings/'
     | '/_app/settings/prompts/$promptId'
@@ -217,6 +241,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/tasks': {
+      id: '/_app/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof AppTasksRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/chat/$conversationId': {
       id: '/_app/chat/$conversationId'
       path: '/chat/$conversationId'
@@ -244,6 +275,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/'
       preLoaderRoute: typeof AppSettingsIndexRouteImport
       parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/tasks/$taskId': {
+      id: '/_app/tasks/$taskId'
+      path: '/$taskId'
+      fullPath: '/tasks/$taskId'
+      preLoaderRoute: typeof AppTasksTaskIdRouteImport
+      parentRoute: typeof AppTasksRoute
     }
     '/_app/settings/controls/': {
       id: '/_app/settings/controls/'
@@ -309,10 +347,23 @@ const AppSettingsRouteWithChildren = AppSettingsRoute._addFileChildren(
   AppSettingsRouteChildren,
 )
 
+interface AppTasksRouteChildren {
+  AppTasksTaskIdRoute: typeof AppTasksTaskIdRoute
+}
+
+const AppTasksRouteChildren: AppTasksRouteChildren = {
+  AppTasksTaskIdRoute: AppTasksTaskIdRoute,
+}
+
+const AppTasksRouteWithChildren = AppTasksRoute._addFileChildren(
+  AppTasksRouteChildren,
+)
+
 interface AppRouteChildren {
   AppAccountsRoute: typeof AppAccountsRoute
   AppMailRoute: typeof AppMailRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
+  AppTasksRoute: typeof AppTasksRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
   AppChatConversationIdRoute: typeof AppChatConversationIdRoute
 }
@@ -321,6 +372,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAccountsRoute: AppAccountsRoute,
   AppMailRoute: AppMailRouteWithChildren,
   AppSettingsRoute: AppSettingsRouteWithChildren,
+  AppTasksRoute: AppTasksRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
   AppChatConversationIdRoute: AppChatConversationIdRoute,
 }
