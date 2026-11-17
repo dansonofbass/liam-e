@@ -1,6 +1,11 @@
 .le-tasks { display: grid; gap: var(--space-4); margin-top: var(--space-5); min-width: 0; }
 
 @media (pointer: coarse) {
+  .le-tasks .le-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-height-lg);
+  }
   .le-task-weekday {
     display: inline-flex;
     align-items: center;

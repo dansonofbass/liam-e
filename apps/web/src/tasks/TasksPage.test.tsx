@@ -45,6 +45,14 @@ function setup(detail = false, activeDetail = false, incomplete = false, path = 
 }
 afterEach(() => { cleanup(); globalThis.fetch = oldFetch; api.setConfig(oldConfig) })
 
+test('task links reach the touch target size on coarse pointers', async () => {
+  const css = await Bun.file(new URL('./tasks.css', import.meta.url)).text()
+  const coarse = css.slice(css.indexOf('@media (pointer: coarse) {'))
+  const rule = coarse.match(/\.le-tasks \.le-link \{([^{}]+)\}/u)
+  expect(rule).toBeTruthy()
+  for (const part of ['display: inline-flex', 'align-items: center', 'min-height: var(--control-height-lg)']) expect(rule?.[1]).toContain(part)
+})
+
 test('task links navigate through the router and preserve filters on return', async () => {
   setup(); cleanup()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
