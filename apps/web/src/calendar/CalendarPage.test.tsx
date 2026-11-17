@@ -1,9 +1,10 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router'
 import type { SourceOut } from '../api/generated/types.gen'
 import * as sdk from '../api/generated/sdk.gen'
+import { client as apiClient } from '../api/generated/client.gen'
 import { CalendarAgenda, SourceStatus } from './CalendarPage'
 import { addDays, todayLocal } from './state'
 import { de } from '../i18n/de'
@@ -37,6 +38,72 @@ test('pausing a source hides its cached agenda rows without waiting for a refetc
   expect(screen.getByRole('link', { name: /Termin Verein/ })).toBeTruthy()
   expect(screen.getByText(de.calendar.paused)).toBeTruthy()
   expect(occurrences).toHaveBeenCalledTimes(1)
+})
+
+function coveredSource(): SourceOut {
+  return { ...source, last_success_at: new Date().toISOString(), coverage_start: `${addDays(todayLocal(), -2)}T00:00:00Z`, coverage_end: `${addDays(todayLocal(), 9)}T00:00:00Z` }
+}
+
+function renderAgenda(sources = [coveredSource()]) {
+  const list = spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  const root = createRootRoute({ component: () => <QueryClientProvider client={client}><CalendarAgenda /></QueryClientProvider> })
+  const page = createRoute({ getParentRoute: () => root, path: '/calendar' })
+  const router = createRouter({ routeTree: root.addChildren([page]), history: createMemoryHistory({ initialEntries: ['/calendar'] }) })
+  render(<RouterProvider router={router} />)
+  return { client, list }
+}
+
+test('an empty first page with a cursor does not claim there are no events', async () => {
+  const occurrences = spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [], next_cursor: 'test-only-next' } } as never)
+  renderAgenda()
+  expect(await screen.findByText(de.calendar.unknown)).toBeTruthy()
+  expect(screen.queryByText(de.calendar.empty)).toBeNull()
+  expect(screen.getByRole('button', { name: de.calendar.more })).toBeTruthy()
+  expect(occurrences).toHaveBeenCalledTimes(1)
+})
+
+test('an agenda query error offers retry instead of claiming there are no events', async () => {
+  const occurrences = spyOn(sdk, 'calendarOccurrencesList').mockRejectedValue(new Error('test-only'))
+  renderAgenda()
+  expect(await screen.findByText(de.calendar.error)).toBeTruthy()
+  expect(screen.queryByText(de.calendar.empty)).toBeNull()
+  occurrences.mockResolvedValue({ data: { items: [], next_cursor: null } } as never)
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.retry }))
+  expect(await screen.findByText(de.calendar.empty)).toBeTruthy()
+  expect(occurrences).toHaveBeenCalledTimes(2)
+})
+
+test('a fully covered empty window without another page shows no events', async () => {
+  spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [], next_cursor: null } } as never)
+  renderAgenda()
+  expect(await screen.findByText(de.calendar.empty)).toBeTruthy()
+  expect(screen.queryByText(de.calendar.unknown)).toBeNull()
+  expect(screen.queryByRole('button', { name: de.calendar.more })).toBeNull()
+})
+
+test('mount requests one sync POST per old active source, including after the sources refetch', async () => {
+  const fresh = coveredSource()
+  const old = { ...fresh, last_success_at: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() }
+  const sources = [old, { ...old, id: 'other-old' }, { ...old, id: 'paused', is_active: false }, { ...fresh, id: 'fresh' }]
+  spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [], next_cursor: null } } as never)
+  const config = apiClient.getConfig()
+  const requests: Request[] = []
+  apiClient.setConfig({ baseUrl: 'https://calendar.example', fetch: (async (request: Request) => {
+    requests.push(request)
+    return new Response(JSON.stringify({ queued: true }), { headers: { 'Content-Type': 'application/json' } })
+  }) as typeof fetch })
+  try {
+    const { client, list } = renderAgenda(sources)
+    await waitFor(() => expect(screen.getAllByText(de.calendar.queued)).toHaveLength(2))
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+    await act(async () => { await client.refetchQueries({ queryKey: ['calendar', 'sources'] }) })
+    expect(list).toHaveBeenCalledTimes(3)
+    expect(requests.map(request => [request.method, new URL(request.url).pathname])).toEqual([
+      ['POST', `/api/v1/calendar/sources/${old.id}/sync`],
+      ['POST', '/api/v1/calendar/sources/other-old/sync'],
+    ])
+  } finally { apiClient.setConfig({ ...config, fetch: config.fetch }) }
 })
 
 test('provider provenance and read-only status are textual', () => {
