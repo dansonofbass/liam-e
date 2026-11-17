@@ -12,7 +12,7 @@ export type SwipeState = { phase: Phase; basis: SwipeBasis; x: number; y: number
 type Action = 'archive' | 'trash' | 'mark_read' | 'mark_unread'
 
 const sameBasis = (a: SwipeBasis, b: SwipeBasis) => a.id === b.id && a.isRead === b.isRead && a.revision === b.revision && a.left === b.left && a.right === b.right
-const actionFor = (state: SwipeState): Action | undefined => {
+export const actionFor = (state: SwipeState): Action | undefined => {
   const assignment = state.dx < 0 ? state.basis.left : state.basis.right
   return assignment === 'none' ? undefined : assignment === 'toggle_read' ? (state.basis.isRead ? 'mark_unread' : 'mark_read') : assignment
 }

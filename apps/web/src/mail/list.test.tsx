@@ -31,6 +31,24 @@ const settle = () => act(async () => { await new Promise(resolve => setTimeout(r
 // Waits until a removal's follow-up refetches are done, then lets their renders settle.
 const settleFetches = async (client: QueryClient) => { await waitFor(() => expect(client.isFetching()).toBe(0)); await settle() }
 
+test('inbox swipe uses the confirmed assignment and the shared action path', async () => {
+  spyOn(sdk, 'settingsUiGet').mockImplementation((async () => ({ data: { swipe_left: 'archive', swipe_right: 'toggle_read', revision: 1 }, response: { ok: true } })) as never)
+  const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'act', message: row }, response: { status: 200 } })) as never)
+  const { client } = setup('row', '/mail', true)
+  const element = (await screen.findByText('Termin')).closest<HTMLElement>('.le-mailrow')!
+  await waitFor(() => expect(client.getQueryState(['ui-settings'])?.status).toBe('success'))
+  element.getBoundingClientRect = () => ({ width: 300, height: 100, left: 0, right: 300, top: 0, bottom: 100, x: 0, y: 0, toJSON() {} })
+  const pointer = (type: string, x: number) => {
+    const event = new MouseEvent(type, { bubbles: true, clientX: x, clientY: 100 })
+    Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: 'touch' }, isPrimary: { value: true } })
+    fireEvent(element, event)
+  }
+  pointer('pointerdown', 200); pointer('pointermove', 300); pointer('pointerup', 300)
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  expect(action.mock.calls[0]?.[0]).toEqual({ path: { message_id: 'm1' }, body: { kind: 'mark_read' } })
+  expect(await screen.findByText('„Termin“ als gelesen markiert.')).toBeTruthy()
+})
+
 test('coarse pointer inbox controls use the large touch target token', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/@media \(pointer: coarse\) \{ (\.le-inbox-filters[^{}]+)\{ ([^{}]+) \} \.le-inbox-toast \.le-link \{ ([^{}]+) \} \}/u)
