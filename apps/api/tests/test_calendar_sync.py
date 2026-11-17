@@ -60,6 +60,40 @@ def test_dst_and_interval_validation():
         normalize(Occurrence("one", "event", start_date=date(2026, 1, 1), end_date=date(2026, 1, 1)))
 
 
+def test_normalize_points_and_reversed_intervals():
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    point = Occurrence("point", "event", start_at=start, end_at=start, timezone="UTC")
+    assert normalize(point) == point
+    with pytest.raises(ValueError, match="invalid timed interval"):
+        normalize(Occurrence("bad", "event", start_at=datetime(2026, 1, 2, tzinfo=UTC), end_at=start, timezone="UTC"))
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("at_end", "accepted"), [(False, True), (True, False)])
+async def test_sync_point_window_boundaries(monkeypatch, at_end, accepted):
+    source = CalendarSource(provider="points", connection_ref="example", external_id="calendar", name="Example", timezone="UTC")
+    class Points:
+        async def snapshot(self, source_id, start, end):
+            point = end if at_end else start
+            return Snapshot([Event("event")], [Occurrence("point", "event", start_at=point, end_at=point, timezone="UTC")], True)
+    async def get(source_id):
+        return source
+    calls = []
+    async def replace(**kwargs):
+        calls.append(kwargs)
+    monkeypatch.setattr(sync.calendar_source, "get", get)
+    monkeypatch.setattr(sync, "replace_window", replace)
+    monkeypatch.setitem(sync._adapters, "points", Points())
+    payload = {"source_id": source.id, "start": "2026-01-01T00:00:00+00:00", "end": "2026-01-02T00:00:00+00:00"}
+    if accepted:
+        await sync.run_sync(payload, "job", 1)
+        assert len(calls[0]["occurrences"]) == 1
+    else:
+        with pytest.raises(ValueError, match="outside window"):
+            await sync.run_sync(payload, "job", 1)
+        assert not calls
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("adapter", [SyntheticGoogle(), SyntheticICS()])
 async def test_synthetic_adapters_use_same_snapshot_path(monkeypatch, adapter):

@@ -1,8 +1,12 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, spyOn, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
+import * as sdk from '../api/generated/sdk.gen'
 import { de } from '../i18n/de'
-import { ChatSessionProvider, useChatSession } from './session'
+import { MobileHeader } from '../shell/MobileHeader'
+import { ChatSessionProvider, useChatSession, useRestartConversation } from './session'
 
 const originalFetch = globalThis.fetch, originalMatchMedia = window.matchMedia
 let controller: ReadableStreamDefaultController<Uint8Array>, signal: AbortSignal
@@ -27,3 +31,156 @@ test('buffers cards until done and text', async () => {
 })
 test('stop aborts and displays notice', async () => { setup(); await act(async () => { frame({ event: 'delta', text: 'Hallo' }) }); fireEvent.click(screen.getByText('stop')); expect(signal.aborted).toBe(true); expect(screen.getByText(de.chat.stopped)).toBeTruthy(); expect(screen.getByTestId('phase').textContent).toBe('stopped') })
 test('network break reports aborted', async () => { setup(); await act(async () => { frame({ event: 'delta', text: 'Hallo' }) }); await act(async () => { controller.error(new TypeError('network')) }); await waitFor(() => expect(screen.getByText(de.errors.aborted)).toBeTruthy()); expect(screen.getByTestId('phase').textContent).toBe('error') })
+
+// Restarting is the only place that hands a conversation's unsent text to the start page.
+function restartHarness(id?: string, seed = true) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  if (seed) client.setQueryData(['conversations'], [{ id: 'c', title: 'Test', account_scope_json: JSON.stringify({ account_ids: ['b'], selection: 'b' }) }])
+  function Start() {
+    const { scope, composerTexts, setScope, setComposerText } = useChatSession()
+    return <><div data-testid="start" data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} /><button onClick={() => { setScope('a'); setComposerText('new', 'Bleibt') }}>draft</button></>
+  }
+  // The harness keeps the open conversation and the composer in its own state so a test can change them mid-flight.
+  const control = { setChatId: (_id?: string) => {}, setText: (_text: string) => {}, setScope: (_scope: string | null) => {} }
+  function Chat() {
+    const session = useChatSession()
+    const [current, setCurrent] = useState(id)
+    control.setChatId = setCurrent
+    control.setText = text => session.setComposerText(current ?? 'new', text)
+    control.setScope = value => { if (current) session.setConversationScope(current, value) }
+    const restart = useRestartConversation(current)
+    return <><button onClick={restart}>restart</button><button onClick={() => session.setComposerText(current ?? 'new', 'Noch offen')}>type</button>{current && <MobileHeader title="Chat" conversationId={current} onMenu={() => {}} />}</>
+  }
+  function Away() { return <div data-testid="away" /> }
+  const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
+  const index = createRoute({ getParentRoute: () => root, path: '/', component: Start })
+  const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: Chat })
+  const accounts = createRoute({ getParentRoute: () => root, path: '/accounts', component: Away })
+  const router = createRouter({ routeTree: root.addChildren([index, chat, accounts]), history: createMemoryHistory({ initialEntries: ['/'] }) })
+  render(<RouterProvider router={router} />)
+  // Wrappers so the test keeps calling into the latest render of the chat.
+  return { router, setChatId: (value?: string) => control.setChatId(value), setText: (text: string) => control.setText(text), setScope: (value: string | null) => control.setScope(value) }
+}
+
+async function restart(router: ReturnType<typeof restartHarness>['router']) {
+  fireEvent.click(await screen.findByText('draft'))
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'c' } }) })
+  fireEvent.click(await screen.findByText('restart'))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+}
+
+test('restart without unsent text keeps the start draft and takes the account', async () => {
+  const { router } = restartHarness('c')
+  await restart(router)
+  expect((await screen.findByTestId('start')).dataset.scope).toBe('b')
+  expect(screen.getByTestId('start').dataset.draft).toBe('Bleibt')
+})
+
+test('restart without a conversation only navigates', async () => {
+  const { router } = restartHarness()
+  await restart(router)
+  expect((await screen.findByTestId('start')).dataset.scope).toBe('a')
+  expect(screen.getByTestId('start').dataset.draft).toBe('Bleibt')
+})
+
+// A conversation list that stays in flight until the test resolves it.
+const savedB = () => ({ data: [{ id: 'c', title: 'Test', account_scope_json: JSON.stringify({ account_ids: ['b'], selection: 'b' }) }] })
+function deferredList() {
+  let release!: (value: { data: unknown[] }) => void
+  spyOn(sdk, 'chatConversationsList').mockImplementation((() => new Promise(resolve => { release = resolve })) as never)
+  return (value: { data: unknown[] }) => release(value)
+}
+async function openChat(router: ReturnType<typeof restartHarness>['router']) {
+  fireEvent.click(await screen.findByText('draft'))
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'c' } }) })
+}
+
+// The conversation list may still be in flight when the plus is pressed: the restart waits for it
+// instead of claiming "all accounts", and keeps the start page's selection when it cannot load.
+test('restart waits for a loading conversation list before taking its account', async () => {
+  const resolveList = deferredList()
+  const { router } = restartHarness('c', false)
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'c' } }) })
+  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
+  expect(router.state.location.pathname).toBe('/chat/c')
+  await act(async () => { resolveList(savedB()) })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  const start = await screen.findByTestId('start')
+  expect(start.dataset.scope).toBe('b')
+  expect(start.dataset.draft).toBe('Noch offen')
+})
+
+// A waiting restart belongs to the conversation that was open: leaving it or switching it drops the attempt.
+test('a waiting restart changes nothing when the chat is left', async () => {
+  const resolveList = deferredList()
+  const { router } = restartHarness('c', false)
+  await openChat(router)
+  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
+  await act(async () => { await router.navigate({ to: '/accounts' }) })
+  await act(async () => { resolveList(savedB()) })
+  expect(router.state.location.pathname).toBe('/accounts')
+  await act(async () => { await router.navigate({ to: '/' }) })
+  const start = await screen.findByTestId('start')
+  expect(start.dataset.scope).toBe('a')
+  expect(start.dataset.draft).toBe('Bleibt')
+})
+
+test('a waiting restart changes nothing when its conversation changes', async () => {
+  const resolveList = deferredList()
+  const { router, setChatId } = restartHarness('c', false)
+  await openChat(router)
+  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
+  await act(async () => { setChatId('d') })
+  await act(async () => { resolveList(savedB()) })
+  expect(router.state.location.pathname).toBe('/chat/c')
+  await act(async () => { await router.navigate({ to: '/' }) })
+  const start = await screen.findByTestId('start')
+  expect(start.dataset.scope).toBe('a')
+  expect(start.dataset.draft).toBe('Bleibt')
+})
+
+// The list resolves later: the restart must carry what the composer holds now, not what it held on click.
+test('a waiting restart copies the current account and text', async () => {
+  const resolveList = deferredList()
+  const { router, setText, setScope } = restartHarness('c', false)
+  await openChat(router)
+  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
+  await act(async () => { setText('Second'); setScope('a') })
+  await act(async () => { resolveList(savedB()) })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  const start = await screen.findByTestId('start')
+  expect(start.dataset.scope).toBe('a')
+  expect(start.dataset.draft).toBe('Second')
+})
+
+test('restart keeps the start selection when the conversation list fails', async () => {
+  spyOn(sdk, 'chatConversationsList').mockImplementation((async () => { throw new Error('offline') }) as never)
+  const { router } = restartHarness('c', false)
+  fireEvent.click(await screen.findByText('draft'))
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'c' } }) })
+  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  const start = await screen.findByTestId('start')
+  expect(start.dataset.scope).toBe('a')
+  expect(start.dataset.draft).toBe('Noch offen')
+})
+
+test('a waiting restart whose list fails still carries an account chosen meanwhile', async () => {
+  let fail!: (error: Error) => void
+  spyOn(sdk, 'chatConversationsList').mockImplementation((() => new Promise((_resolve, reject) => { fail = reject })) as never)
+  const { router, setScope } = restartHarness('c', false)
+  await openChat(router)
+  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
+  await act(async () => { setScope('x') })
+  await act(async () => { fail(new Error('offline')) })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  const start = await screen.findByTestId('start')
+  expect(start.dataset.scope).toBe('x')
+  expect(start.dataset.draft).toBe('Noch offen')
+})

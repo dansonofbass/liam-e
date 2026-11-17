@@ -9,6 +9,12 @@ from db.models.calendar_occurrence import CalendarOccurrence
 from db.models.calendar_source import CalendarSource
 
 
+def timed_overlap(start: datetime, end: datetime):
+    """Match half-open intervals and points in [start, end), using the end_at index."""
+    return and_(CalendarOccurrence.start_at < end, CalendarOccurrence.end_at >= start,
+                or_(CalendarOccurrence.end_at > start, CalendarOccurrence.start_at == CalendarOccurrence.end_at))
+
+
 async def get_visible(occurrence_id: str) -> CalendarOccurrence | None:
     stmt = (select(CalendarOccurrence).join(CalendarSource, CalendarOccurrence.source_id == CalendarSource.id)
             .where(CalendarOccurrence.id == occurrence_id, CalendarSource.is_active.is_(True)))
@@ -39,7 +45,7 @@ async def page_visible(*, start: datetime, end: datetime, start_date: date, end_
     """
     stmt = (select(CalendarOccurrence).join(CalendarSource, CalendarOccurrence.source_id == CalendarSource.id)
             .where(CalendarSource.is_active.is_(True),
-                   or_(and_(CalendarOccurrence.start_at < end, CalendarOccurrence.end_at > start),
+                   or_(timed_overlap(start, end),
                        and_(CalendarOccurrence.start_date < end_date, CalendarOccurrence.end_date > start_date))))
     if source_ids:
         stmt = stmt.where(CalendarOccurrence.source_id.in_(source_ids))
@@ -56,7 +62,7 @@ async def overlapping(source_ids: list[str], *, start: datetime, end: datetime, 
         return []
     stmt = select(CalendarOccurrence).where(
         CalendarOccurrence.source_id.in_(source_ids),
-        or_(and_(CalendarOccurrence.start_at < end, CalendarOccurrence.end_at > start),
+        or_(timed_overlap(start, end),
             and_(CalendarOccurrence.start_date < end_date, CalendarOccurrence.end_date > start_date)),
     ).order_by(CalendarOccurrence.id)
     async with get_session_maker()() as session:

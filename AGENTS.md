@@ -225,6 +225,7 @@ vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich 
 `GET /api/v1/calendar/occurrences` nimmt ein Fenster von höchstens 90 Tagen und beliebig viele
 `source_ids` (höchstens 50) und liefert die Instanzen zeitlich geordnet; Ganztägiges zählt ab
 Mitternacht UTC seines ersten Tages. Der Cursor trägt Startzeit und ID der letzten Instanz.
+Zeitpunkte ohne Dauer gehören zum Fenster, wenn ihr Zeitpunkt am Anfang oder innerhalb, aber nicht am Ende liegt.
 Vollständige Snapshot-Fenster erweitern die Abdeckung nur, wenn sie die bisherige Abdeckung
 überlappen oder berühren; sonst ersetzen sie sie. Jede gespeicherte Instanz überlappt die
 Abdeckung (auch wenn sie über deren Rand hinausreicht); andere Instanzen werden entfernt.
@@ -274,15 +275,15 @@ All-day ends are exclusive; DURATION P1D is nominal, PT24H and DTEND-derived dur
 exact. Local DST recurrence skips nonexistent generated candidates before applying COUNT;
 ambiguous times choose the first offset. Explicit nonexistent times fail. Unsupported
 scheduling METHODs other than PUBLISH, non-Gregorian CALSCALE, RANGE/THISANDFUTURE,
-EXRULE, RSCALE, leap seconds, period-valued RDATE and instantaneous
-(zero-duration) timed events fail explicitly rather than producing partial coverage.
+EXRULE, RSCALE, leap seconds and period-valued RDATE fail explicitly. Instantaneous
+timed events are represented as points with equal start and end instants.
 Duplicate masters/exceptions/supported properties, orphan exceptions, unresolved zones and an RRULE
 whose DTSTART does not match also fail. VTODO, VALARM, attachments and external URLs are
 never executed or loaded; instructions in descriptions remain plain data.
 
 ## Domänenmodell (Tabellen in Postgres)
 
-- `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — Kalenderquelle mit Verbindungsreferenz und Freigabe (`is_active`), Serienstamm je Quelle, Instanz als halboffenes Intervall (ganztägig als Datum, sonst UTC mit Zeitzone; eindeutig je Quelle und `external_id`) sowie Abdeckung, letzter Erfolg und Unvollständigkeit je Quelle.
+- `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — Kalenderquelle mit Verbindungsreferenz und Freigabe (`is_active`), Serienstamm je Quelle, Instanz als halboffenes Intervall oder Zeitpunkt ohne Dauer (ganztägig als Datum mit positivem Intervall, sonst UTC mit Zeitzone; eindeutig je Quelle und `external_id`) sowie Abdeckung, letzter Erfolg und Unvollständigkeit je Quelle.
 - `task_series`, `task_schedule_revision`, `task_occurrence` — Aufgabenserie, Zeitplanrevision und materialisierte Fälligkeit; Erstellungskennung und Instanzschlüssel sind eindeutig.
 - `mail_account` — verbundenes Konto: `provider` z.B. `google`, `microsoft`, `imap` oder Connector-Name wie `gmail`; `auth_type` ist `oauth2`, `imap_password` oder `mistral_connector`.
 - `mail_credential` — verschlüsseltes Payload pro Konto+Art (`oauth2_tokens` | `imap_password`), unique (`account_id`, `kind`).

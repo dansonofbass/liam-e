@@ -1,11 +1,11 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { chatProposalCancel, chatProposalConfirm, mailActionsUndo } from '../api/generated/sdk.gen'
 import type { ChatMessageOut, Proposal } from '../api/generated/types.gen'
 import { errorCode, unwrap } from '../api/unwrap'
 import { ConfirmCard, Notice } from '../ds'
 import { de } from '../i18n/de'
+import { useRestartConversation } from './session'
 
 type Clock = { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }
 const systemClock: Clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id) }
@@ -102,7 +102,6 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
 
 export function ProposalCard({ message, clock = systemClock }: { message: ChatMessageOut; clock?: Clock }) {
   const client = useQueryClient()
-  const navigate = useNavigate()
   const [updated, setUpdated] = useState<ChatMessageOut | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
@@ -113,6 +112,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   const shown = useRef<string | null>(null)
   useLayoutEffect(() => { shown.current = message.id; return () => { shown.current = null } }, [message.id])
   const current = updated?.id === message.id && !(updated.proposal_status === 'running' && message.proposal_status !== 'pending' && message.proposal_status !== 'running') ? updated : message
+  const restart = useRestartConversation(current.conversation_id)
   const proposal = current.proposal
   useEffect(() => {
     if (current.proposal_status !== 'running') return
@@ -171,5 +171,5 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   const saved = cardState(client, current.id)
   const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${de.proposal.manualSubtitle}` } : item)
   const irreversibleNote = proposal.irreversible ? proposal.kind === 'unsubscribe' ? de.proposal.irreversibleUnsubscribe : proposal.kind === 'send' ? de.proposal.irreversibleSend : undefined : undefined
-  return <><ConfirmCard key={current.id} title={de.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={de.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} deselected={saved.deselected ?? new Set<string>()} onDeselectedChange={value => { saved.deselected = value; refresh(n => n + 1) }} body={saved.body ?? proposal.draft?.body ?? ''} onBodyChange={value => { saved.body = value; refresh(n => n + 1) }} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true })), true) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' ? { label: de.shell.newConversation, onClick: () => { void navigate({ to: '/' }) } } : undefined}>{failureText(error, proposal.kind)}</Notice>}</>
+  return <><ConfirmCard key={current.id} title={de.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={de.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} deselected={saved.deselected ?? new Set<string>()} onDeselectedChange={value => { saved.deselected = value; refresh(n => n + 1) }} body={saved.body ?? proposal.draft?.body ?? ''} onBodyChange={value => { saved.body = value; refresh(n => n + 1) }} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true })), true) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' ? { label: de.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind)}</Notice>}</>
 }

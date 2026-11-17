@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
+import { createFileRoute, Outlet, useLocation, useParams } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { mailSyncAll } from '../api/generated/sdk.gen'
@@ -30,6 +30,9 @@ export function Shell() {
     previousSummary.current = { syncing, lastSync }
   }, [client, summary])
   const path = useLocation({ select: location => location.pathname })
+  // The phone bar restarts from the open conversation only; every other page keeps the start page as it is.
+  // The id comes from the matched route, so any spelling the router accepts (`/CHAT/<id>`) carries state.
+  const { conversationId } = useParams({ strict: false }) as { conversationId?: string }
   useEffect(() => {
     if (started) return
     started = true
@@ -37,6 +40,6 @@ export function Shell() {
   }, [client])
   const mobile = breakpoint === 'mobile', tablet = breakpoint === 'tablet'
   const title = path.startsWith('/settings') ? de.prompts.settings : path.startsWith('/mail') ? de.shell.inbox : path.startsWith('/accounts') ? de.shell.accounts : de.shell.chat
-  return <ChatSessionProvider><AppShell sidebar={mobile ? null : <Sidebar collapsed={tablet} onConversations={() => setOpen(true)} />} header={mobile && !(path.startsWith('/mail/') && path !== '/mail/') ? <MobileHeader title={title} onMenu={() => setOpen(true)} /> : undefined}><div key={path === '/' || path.startsWith('/chat/') ? 'chat' : path.startsWith('/mail') ? 'mail' : path} className="le-page-fade"><Outlet /></div></AppShell><Drawer open={open} onClose={() => setOpen(false)} label={mobile ? de.shell.menu : de.shell.conversations}><div className="le-brand le-drawer-brand"><span className="le-mark"><Icon name="sparkle" /></span><span className="le-grow">{de.assistant.name}</span><IconButton icon="x" label={de.shell.closeMenu} onClick={() => setOpen(false)} /></div>{mobile ? <Sidebar hideBrand onNavigate={() => setOpen(false)} /> : <Conversations onNavigate={() => setOpen(false)} />}</Drawer></ChatSessionProvider>
+  return <ChatSessionProvider><AppShell sidebar={mobile ? null : <Sidebar collapsed={tablet} onConversations={() => setOpen(true)} />} header={mobile && !(path.startsWith('/mail/') && path !== '/mail/') ? <MobileHeader title={title} conversationId={conversationId} onMenu={() => setOpen(true)} /> : undefined}><div key={path === '/' || path.startsWith('/chat/') ? 'chat' : path.startsWith('/mail') ? 'mail' : path} className="le-page-fade"><Outlet /></div></AppShell><Drawer open={open} onClose={() => setOpen(false)} label={mobile ? de.shell.menu : de.shell.conversations}><div className="le-brand le-drawer-brand"><span className="le-mark"><Icon name="sparkle" /></span><span className="le-grow">{de.assistant.name}</span><IconButton icon="x" label={de.shell.closeMenu} onClick={() => setOpen(false)} /></div>{mobile ? <Sidebar hideBrand onNavigate={() => setOpen(false)} /> : <Conversations onNavigate={() => setOpen(false)} />}</Drawer></ChatSessionProvider>
 }
 export const Route = createFileRoute('/_app')({ component: Shell })
