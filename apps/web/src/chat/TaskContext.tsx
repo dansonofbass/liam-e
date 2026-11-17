@@ -23,9 +23,15 @@ export function TaskScopeSelector({ conversationId, disabled }: { conversationId
     for (const account of summary.data?.accounts ?? []) choices.push({ label: de.taskChat.account(account.display_name || account.email_address), scope: { source: 'account', account_id: account.id } })
   }
   const same = (scope: TaskScope) => scope.source === tasks.scope.source && (scope.account_id ?? null) === (tasks.scope.account_id ?? null)
-  // A restored choice the list cannot offer (an account no longer listed, or not loaded yet) still names itself rather than
-  // posing as "no tasks" while it is what the next request sends.
-  if (!choices.some(choice => same(choice.scope))) choices.push({ label: tasks.scope.source === 'account' ? de.taskChat.account(de.prompts.scopeUnavailable) : tasks.scope.source === 'unlinked' ? de.tasks.unlinked : de.tasks.allSources, scope: tasks.scope })
+  // A restored choice the list cannot offer still names itself rather than posing as "no tasks" while it is what the next
+  // request sends. It never repeats an offered label: a saved account shows its name (or that it is still loading or gone),
+  // any other saved choice is marked as saved.
+  const restoredLabel = (scope: TaskScope) => {
+    if (scope.source !== 'account') return de.taskChat.saved(scope.source === 'unlinked' ? de.tasks.unlinked : de.tasks.allSources)
+    const account = summary.data?.accounts.find(item => item.id === scope.account_id)
+    return de.taskChat.account(account ? account.display_name || account.email_address : summary.isPending ? de.taskChat.accountLoading : de.prompts.scopeUnavailable)
+  }
+  if (!choices.some(choice => same(choice.scope))) choices.push({ label: restoredLabel(tasks.scope), scope: tasks.scope })
   const current = choices.find(choice => same(choice.scope))!
   // In a conversation with history another choice applies only to a new one; touch has no tooltip, so the items say so.
   const items = choices.map(choice => ({ label: choice.label, checked: same(choice.scope), hint: [choice.hint, conversationId && !same(choice.scope) ? de.taskChat.needsNew : undefined].filter(Boolean).join(' ') || undefined, onSelect: () => tasks.set(choice.scope) }))

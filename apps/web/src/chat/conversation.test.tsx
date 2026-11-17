@@ -15,6 +15,8 @@ let signal: AbortSignal
 let history: ChatMessageOut[] = []
 let requestBody: Record<string, unknown>
 let summary: MailSummaryOut = { accounts: [], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
+// A test can hold the account summary back to see the state while it loads.
+let summaryGate: Promise<void> | null = null
 function setup(path = '/', historyGone = false, selection: string | null = null) {
   history = []
   summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
@@ -23,7 +25,7 @@ function setup(path = '/', historyGone = false, selection: string | null = null)
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
   spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
-  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => { await summaryGate; return { data: summary } }) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatConversationsList').mockImplementation((async () => ({ data: [{ id: 'c', title: 'Test', model: 'm1', version: 5, prompt_revision_id: null, account_scope_json: JSON.stringify({ account_ids: selection ? [selection] : ['a'], selection }), created_at: '', updated_at: '' }] })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
@@ -41,7 +43,7 @@ async function send() {
   fireEvent.change(input, { target: { value: 'Meine Frage' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
 }
-afterEach(() => { cleanup(); mock.restore(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
+afterEach(() => { cleanup(); mock.restore(); summaryGate = null; globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
 
 // The task chip opens its menu; the choices are radio items, the chip names the current one.
 const taskChoice = async (chip: string, choice: string) => {
@@ -357,6 +359,31 @@ test('a restored task choice the list cannot offer still names itself', async ()
   act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context }]) })
   expect(await screen.findByRole('button', { name: 'Aufgaben: Gespeichertes Konto nicht verfügbar' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Keine Aufgaben' })).toBeNull()
+})
+
+const restoredContext = (scope: object) => ({ id: 'ctx', account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: false, task_scope_json: JSON.stringify(scope) }) as ChatMessageOut['context']
+
+test('a restored task choice never repeats an offered label', async () => {
+  const { client } = setup('/chat/c', false, 'a')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context: restoredContext({ source: 'all' }) }]) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Gespeichert: Alle Aufgaben' }))
+  const names = (await screen.findAllByRole('menuitemradio')).map(item => item.querySelector('.le-menu-title')?.textContent)
+  expect(names).toEqual(['Keine Aufgaben', 'Alle Aufgaben', 'Aufgaben dieses Kontos', 'Gespeichert: Alle Aufgaben'])
+})
+
+test('a restored account choice waits for the account list before calling the account unavailable', async () => {
+  let release = () => {}
+  summaryGate = new Promise<void>(resolve => { release = resolve })
+  const { client } = setup('/chat/c')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context: restoredContext({ source: 'account', account_id: 'gone' }) }]) })
+  expect(await screen.findByRole('button', { name: 'Aufgaben: …' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /nicht verfügbar/ })).toBeNull()
+  await act(async () => { release() })
+  expect(await screen.findByRole('button', { name: 'Aufgaben: Gespeichertes Konto nicht verfügbar' })).toBeTruthy()
 })
 
 test('task selection conflict restarts visibly without the old conversation', async () => {
