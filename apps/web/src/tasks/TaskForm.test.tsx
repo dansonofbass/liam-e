@@ -8,6 +8,29 @@ import { TaskForm } from './TaskForm'
 const originalFetch = globalThis.fetch, originalConfig = api.getConfig()
 afterEach(() => { cleanup(); globalThis.fetch = originalFetch; api.setConfig(originalConfig) })
 
+test('weekdays are independently selectable chips', () => {
+  const query = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(<QueryClientProvider client={query}><TaskForm busy={false} save={() => {}} /></QueryClientProvider>)
+  fireEvent.change(screen.getByLabelText('Wiederholung'), { target: { value: 'custom' } })
+  fireEvent.change(screen.getByLabelText('Rhythmus'), { target: { value: 'WEEKLY' } })
+  const monday = screen.getByRole('button', { name: 'Mo.' })
+  const tuesday = screen.getByRole('button', { name: 'Di.' })
+  fireEvent.click(monday); fireEvent.click(tuesday)
+  expect(monday.getAttribute('aria-pressed')).toBe('true')
+  expect(tuesday.getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(monday)
+  expect(monday.getAttribute('aria-pressed')).toBe('false')
+  expect(tuesday.getAttribute('aria-pressed')).toBe('true')
+})
+
+test('invalid time zones show an explanation and prevent saving', () => {
+  const query = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(<QueryClientProvider client={query}><TaskForm busy={false} save={() => { throw new Error('unexpected save') }} /></QueryClientProvider>)
+  fireEvent.change(screen.getByLabelText('Zeitzone'), { target: { value: 'Invalid/Zone' } })
+  expect(screen.getByText(/Gib eine gültige Zeitzone ein/)).toBeTruthy()
+  expect((screen.getByRole('button', { name: 'Aufgabe speichern' }) as HTMLButtonElement).disabled).toBe(true)
+})
+
 test('late preview cannot replace a newer schedule and failed save preserves inputs', async () => {
   api.setConfig({ baseUrl: 'https://api.example.test' })
   const pending: { start: string; resolve: (response: Response) => void }[] = []
