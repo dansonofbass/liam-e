@@ -56,7 +56,7 @@ export function TasksPage() {
         }
       } catch { if (!controller.signal.aborted) setReconcileError(true) }
       finally {
-        selected.filter(id => !finished.has(id)).forEach(id => seen.current.delete(id))
+        if (controller.signal.aborted) selected.filter(id => !finished.has(id)).forEach(id => seen.current.delete(id))
         if (!controller.signal.aborted) { setReconciling(false); if (changed) void client.invalidateQueries({ queryKey: ['tasks'] }) }
       }
     })()
@@ -81,7 +81,7 @@ export function TasksPage() {
     {(series.isError || occurrences.isError) && <Notice tone="danger" action={{ label: t.retry, onClick: () => { void series.refetch(); void occurrences.refetch() } }}>{t.error}</Notice>}
     {(reconciling || rows.some(row => !row.complete)) && <p role="status">{t.incomplete} {window.due_from} – {window.due_to}</p>}
     {reconcileError && <Notice tone="danger" action={{ label: t.retry, onClick: () => { seen.current.clear(); setReconcileError(false); setRetryReconcile(value => value + 1) } }}>{t.error}</Notice>}
-    {!series.isPending && !occurrences.isPending && status !== 'archived' && !joined.length && <p>{status === 'completed' ? t.emptyCompleted : t.empty}</p>}
+    {!series.isPending && !occurrences.isPending && status !== 'archived' && !joined.length && !series.hasNextPage && !occurrences.hasNextPage && !reconciling && <p>{status === 'completed' ? t.emptyCompleted : t.empty}</p>}
     {status === 'archived' ? <ul>{visible.map(row => <li key={row.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a>{row.schedule && <> · {formatTaskDue(row.schedule.start_local)} · {formatTaskRule(row.schedule.rrule)}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul> : groups.map(label => { const items = joined.filter(({ row, item }) => group(item.due_local.slice(0, 10), row.schedule?.timezone ?? null) === label); return items.length ? <section key={label}><h2>{label}</h2><ul>{items.map(({ row, item }) => <li key={item.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a> · {formatTaskDue(item.due_local)} · {formatTaskRule(row.schedule?.rrule)}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul></section> : null })}
     {(series.hasNextPage || occurrences.hasNextPage) && <Button variant="secondary" onClick={() => { if (series.hasNextPage) void series.fetchNextPage(); if (occurrences.hasNextPage) void occurrences.fetchNextPage() }}>{t.more}</Button>}
   </main>

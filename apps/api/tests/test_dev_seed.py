@@ -38,6 +38,47 @@ def test_allows_local_database(monkeypatch, host):
 
 
 @pytest.mark.anyio
+async def test_task_seed_uses_services_and_only_deletes_its_own_series(monkeypatch):
+    from types import SimpleNamespace
+    from db import engine
+    from db.accessors import task_occurrence, task_series
+    from api.tasks import create, lifecycle, reconcile, state
+
+    deleted, created, completed, archived = [], [], [], []
+    class Session:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def commit(self): pass
+    monkeypatch.setattr(engine, 'get_session_maker', lambda: Session)
+    async def list_series(_session, **kwargs):
+        if kwargs['after'] is not None: return []
+        return [SimpleNamespace(id='a', version=1, creation_key='board-seed-task:old'),
+                SimpleNamespace(id='b', version=1, creation_key='personal')]
+    async def delete(_session, series_id, **_kwargs): deleted.append(series_id)
+    async def make(_session, **kwargs):
+        created.append(kwargs)
+        return SimpleNamespace(id=kwargs['creation_key'], version=1), True
+    async def catch_up(_session, **_kwargs): return 'revision', 'cursor', True
+    async def instances(_session, **_kwargs): return [SimpleNamespace(id='occ', version=1)]
+    async def transition(_session, occurrence_id, **_kwargs): completed.append(occurrence_id)
+    async def archive(_session, series_id, **_kwargs): archived.append(series_id)
+    monkeypatch.setattr(task_series, 'list_page', list_series)
+    monkeypatch.setattr(task_occurrence, 'list_page', instances)
+    monkeypatch.setattr(lifecycle, 'delete', delete)
+    monkeypatch.setattr(lifecycle, 'archive', archive)
+    monkeypatch.setattr(create, 'create', make)
+    monkeypatch.setattr(reconcile, 'reconcile_current', catch_up)
+    monkeypatch.setattr(state, 'transition', transition)
+    await dev_seed.seed_tasks(datetime(2026, 11, 13, 12, tzinfo=UTC))
+    assert deleted == ['a']
+    assert len(created) == 8
+    assert {row['rule'] for row in created} == {None, 'FREQ=DAILY', 'FREQ=WEEKLY', 'FREQ=MONTHLY'}
+    assert sum(bool(row.get('source_message_id')) for row in created) == 1
+    assert completed == ['occ']
+    assert archived == ['board-seed-task:archived']
+
+
+@pytest.mark.anyio
 async def test_seed_is_repeatable_and_preserves_other_rows(fake_store, monkeypatch):
     monkeypatch.setattr(db_env, "database_url", "postgresql+asyncpg://localhost/test")
     outsider = MailAccount(id="other", email_address="other@example.org", provider="imap", auth_type="imap_password")
