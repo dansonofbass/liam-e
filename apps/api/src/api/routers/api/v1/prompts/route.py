@@ -1,4 +1,5 @@
 """Prompt CRUD; user content is never interpolated or logged."""
+from datetime import datetime
 from fastapi import APIRouter, Query, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
@@ -54,6 +55,7 @@ class PromptOut(BaseModel):
     revision_id: str
     text: str
     content_hash: str
+    updated_at: datetime | None
 
 
 class PromptRevisionOut(BaseModel):
@@ -74,7 +76,7 @@ async def output(row) -> PromptOut:
     if revision is None or revision.removed:
         raise refuse(404, 'prompt_unavailable', 'Diese Vorlage gibt es nicht mehr. Wähle eine andere.')
     return PromptOut(id=row.id, name=row.name, version=row.version, revision_id=revision.id,
-                     text=revision.content, content_hash=revision.content_hash)
+                     text=revision.content, content_hash=revision.content_hash, updated_at=row.updated_at)
 
 
 @router.get('', operation_id='prompts_list')

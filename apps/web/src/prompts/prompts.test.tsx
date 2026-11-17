@@ -11,7 +11,7 @@ import { TemplateMenu } from './TemplateMenu'
 
 const originalFetch = globalThis.fetch
 const originalConfig = api.getConfig()
-const template = { id: 'p', name: 'Fristen', text: 'Fasse offene Fristen zusammen.', version: 2, revision_id: 'r2', content_hash: 'hash2' }
+const template = { id: 'p', name: 'Fristen', text: 'Fasse offene Fristen zusammen.', version: 2, revision_id: 'r2', content_hash: 'hash2', updated_at: '2020-01-15T12:00:00Z' }
 const detail = { ...template, revisions: [{ id: 'r2', number: 2, content: template.text, content_hash: 'hash2' }, { id: 'r1', number: 1, content: 'Nenne die Fristen.', content_hash: 'hash1' }] }
 const conversation = { id: 'c', title: 'Test', model: 'm', version: 3, prompt_revision_id: 'r1', account_scope_json: JSON.stringify({ selection: 'a', account_ids: ['a'] }), created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }
 let requests: { path: string; search: string; method: string; body: Record<string, unknown> }[]
@@ -38,6 +38,15 @@ function setup(path: string, respond?: (request: Request) => Promise<Response | 
   return { query, router }
 }
 afterEach(() => { cleanup(); globalThis.fetch = originalFetch; api.setConfig(originalConfig) })
+
+test('library displays a date only when it is known', async () => {
+  setup('/settings/prompts', async request => request.url.endsWith('/prompts')
+    ? Response.json([template, { ...template, id: 'old', name: 'Alt', updated_at: null }]) : undefined)
+  const dated = await screen.findByRole('link', { name: /^Fristen/ })
+  expect(within(dated).getByText(/15\.1\.2020/)).toBeTruthy()
+  expect(dated.querySelector('time')?.getAttribute('datetime')).toBe(template.updated_at)
+  expect(screen.getByRole('link', { name: /Alt/ }).querySelector('time')).toBeNull()
+})
 
 test('creates a template only on submit using the generated client', async () => {
   const { router } = setup('/settings/prompts/new', async request => request.method === 'POST' ? Response.json(template) : undefined)

@@ -127,10 +127,16 @@ def test_unchanged_update_keeps_version_and_revision(pg_db):
     async def run():
         from db.accessors import prompt_template as p
         row = await p.create_template('Name', 'Text')
+        assert row.updated_at is not None and row.updated_at.utcoffset() is not None
         for same in (await p.change_template(row.id, 1), await p.change_template(row.id, 1, name='Name', content='Text')):
             assert (same.version, same.revision_id) == (1, row.revision_id)
+            assert same.updated_at == row.updated_at
         with pytest.raises(p.StaleVersion):
             await p.change_template(row.id, 2)
         renamed = await p.change_template(row.id, 1, name='Neu')
         assert renamed.version == 2 and renamed.revision_id != row.revision_id
+        assert renamed.updated_at > row.updated_at
+        with pytest.raises(p.StaleVersion):
+            await p.change_template(row.id, 1, content='Stale')
+        assert (await p.get_template(row.id)).updated_at == renamed.updated_at
     asyncio.run(run())

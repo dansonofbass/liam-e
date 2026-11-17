@@ -1038,6 +1038,10 @@ export type PromptDetailOut = {
      */
     text: string;
     /**
+     * Updated At
+     */
+    updated_at: string | null;
+    /**
      * Version
      */
     version: number;
@@ -1067,6 +1071,10 @@ export type PromptOut = {
      * Text
      */
     text: string;
+    /**
+     * Updated At
+     */
+    updated_at: string | null;
     /**
      * Version
      */

@@ -166,7 +166,7 @@ letzten Erfolgs allein nichts über die Aktualität beim Anbieter aus.
 
 Vorlagen gehören dem festen serverseitigen Scope `installation`; der Zugriff auf die
 Single-Owner-App wird vom Deployment beschränkt, nicht durch eine neue App-Identität.
-`prompt_template` hält Name, Version und aktuelle Revision; Bearbeiten erzeugt eine neue
+`prompt_template` hält Name, Version, aktuelle Revision und das Änderungsdatum `updated_at` (bei Altbeständen unbekannt und `null`); Bearbeiten erzeugt eine neue
 `prompt_revision`. Auswahlen in `chat_conversation.prompt_revision_id` bleiben angeheftet.
 Conversation-PATCH benötigt `expected_version`; `null` als Revision wählt den Standard.
 Vorlagen-POST nimmt `name` und `text`, PATCH zusätzlich `expected_version`, DELETE

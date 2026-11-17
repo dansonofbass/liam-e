@@ -1656,6 +1656,18 @@
             "title": "Text",
             "type": "string"
           },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -1668,6 +1680,7 @@
           "revision_id",
           "text",
           "content_hash",
+          "updated_at",
           "revisions"
         ],
         "title": "PromptDetailOut",
@@ -1695,6 +1708,18 @@
             "title": "Text",
             "type": "string"
           },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -1706,7 +1731,8 @@
           "version",
           "revision_id",
           "text",
-          "content_hash"
+          "content_hash",
+          "updated_at"
         ],
         "title": "PromptOut",
         "type": "object"

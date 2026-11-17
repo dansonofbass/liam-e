@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router'
 import { promptsQuery } from '../api/queries'
 import { Notice } from '../ds'
 import { de } from '../i18n/de'
+import { formatListDate } from '../i18n/format'
 
 export function Library() {
   const query = useQuery(promptsQuery())
@@ -11,6 +12,6 @@ export function Library() {
     {query.isPending && <><p role="status">{de.prompts.loading}</p>{[0, 1, 2].map(i => <div key={i} className="le-prompt-placeholder" aria-hidden="true" />)}</>}
     {query.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{de.prompts.error}</Notice>}
     {query.data?.length === 0 && <p>{de.prompts.empty}</p>}
-    {query.data?.map(prompt => <Link className="le-prompt-row" key={prompt.id} to="/settings/prompts/$promptId" params={{ promptId: prompt.id }}><strong>{prompt.name}</strong><span className="le-prompt-preview">{prompt.text}</span><small>{de.prompts.version(prompt.version)}</small></Link>)}
+    {query.data?.map(prompt => <Link className="le-prompt-row" key={prompt.id} to="/settings/prompts/$promptId" params={{ promptId: prompt.id }}><strong>{prompt.name}</strong><span className="le-prompt-preview">{prompt.text}</span><small>{de.prompts.version(prompt.version)}{prompt.updated_at && <> · <time dateTime={prompt.updated_at}>{formatListDate(new Date(prompt.updated_at), new Date())}</time></>}</small></Link>)}
   </section>
 }

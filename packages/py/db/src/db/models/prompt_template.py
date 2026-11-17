@@ -2,6 +2,8 @@
 
 The owner is an installation-wide server constant, never a request identity.
 """
+from datetime import datetime
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, SQLModel
 from db.models._common import new_id
 
@@ -16,3 +18,4 @@ class PromptTemplate(SQLModel, table=True):
     name: str
     version: int = 1
     revision_id: str
+    updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
