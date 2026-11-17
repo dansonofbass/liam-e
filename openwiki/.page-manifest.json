@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "pages": {
+    "/openwiki/architektur/datenmodell.md": {
+      "gitHead": "1ea2697fa40e6404725e97b669ffd0abc4304bab",
+      "sourceFingerprint": "sha256:87c75fe68b9999c04c7e99e3e7f71426febf07fc0c2e221244146714c383ae64",
+      "pageVersion": "sha256:cde9d9e1540be9c90c2b8c5852390b947b1c76d9bfc403a58f63ca9794902de3",
+      "completedBy": "codex",
+      "completedRunId": "182b6129-f9d1-4898-8caa-e4ecb549c17a"
+    },
+    "/openwiki/architektur/laufzeit.md": {
+      "gitHead": "1ea2697fa40e6404725e97b669ffd0abc4304bab",
+      "sourceFingerprint": "sha256:87c75fe68b9999c04c7e99e3e7f71426febf07fc0c2e221244146714c383ae64",
+      "pageVersion": "sha256:5391e39c23eb6cef0bfe9b111a847f1ac6100258f258eb8108be61e0d6d807fa",
+      "completedBy": "codex",
+      "completedRunId": "182b6129-f9d1-4898-8caa-e4ecb549c17a"
+    },
+    "/openwiki/domaenen/aufgaben.md": {
+      "gitHead": "1ea2697fa40e6404725e97b669ffd0abc4304bab",
+      "sourceFingerprint": "sha256:87c75fe68b9999c04c7e99e3e7f71426febf07fc0c2e221244146714c383ae64",
+      "pageVersion": "sha256:35d2c8f057f9738665192098f9ea164a2334bd3696d311337c9941cfb06a907b",
+      "completedBy": "codex",
+      "completedRunId": "182b6129-f9d1-4898-8caa-e4ecb549c17a"
+    },
+    "/openwiki/domaenen/kalender.md": {
+      "gitHead": "1ea2697fa40e6404725e97b669ffd0abc4304bab",
+      "sourceFingerprint": "sha256:87c75fe68b9999c04c7e99e3e7f71426febf07fc0c2e221244146714c383ae64",
+      "pageVersion": "sha256:9d5d1a960938ba3b824782c1f69ae4aa960be9da8eab4da30f07a4f7228017cf",
+      "completedBy": "codex",
+      "completedRunId": "182b6129-f9d1-4898-8caa-e4ecb549c17a"
+    },
+    "/openwiki/domaenen/vorlagen.md": {
+      "gitHead": "1ea2697fa40e6404725e97b669ffd0abc4304bab",
+      "sourceFingerprint": "sha256:87c75fe68b9999c04c7e99e3e7f71426febf07fc0c2e221244146714c383ae64",
+      "pageVersion": "sha256:9e06543f6b0d63a34e97f8e499fbcb5d8912d39ad7c32ba0164734b22c8d5bf9",
+      "completedBy": "codex",
+      "completedRunId": "182b6129-f9d1-4898-8caa-e4ecb549c17a"
+    },
+    "/openwiki/mail/chat-und-bestaetigung.md": {
+      "gitHead": "1ea2697fa40e6404725e97b669ffd0abc4304bab",
+      "sourceFingerprint": "sha256:87c75fe68b9999c04c7e99e3e7f71426febf07fc0c2e221244146714c383ae64",
+      "pageVersion": "sha256:5fa972dc7d7116732b1d5d78e4edab4639f85e6d1630c63b11a5bdac3a847f90",
+      "completedBy": "codex",
+      "completedRunId": "182b6129-f9d1-4898-8caa-e4ecb549c17a"
+    },
+    "/openwiki/mail/provider-und-sync.md": {
+      "gitHead": "1ea2697fa40e6404725e97b669ffd0abc4304bab",
+      "sourceFingerprint": "sha256:87c75fe68b9999c04c7e99e3e7f71426febf07fc0c2e221244146714c383ae64",
+      "pageVersion": "sha256:94808edbeac32428cd847083a64d190259e340c475ee7a539a0d7bf4946ef8f0",
+      "completedBy": "codex",
+      "completedRunId": "182b6129-f9d1-4898-8caa-e4ecb549c17a"
+    },
+    "/openwiki/quickstart.md": {
+      "gitHead": "1ea2697fa40e6404725e97b669ffd0abc4304bab",
+      "sourceFingerprint": "sha256:87c75fe68b9999c04c7e99e3e7f71426febf07fc0c2e221244146714c383ae64",
+      "pageVersion": "sha256:7793ad7782ccadf3e0625476b7a42131a4dc9e94897bb2f30bfb5cb62b6ed72a",
+      "completedBy": "codex",
+      "completedRunId": "182b6129-f9d1-4898-8caa-e4ecb549c17a"
+    }
+  }
+}

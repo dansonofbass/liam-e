@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:5fa972dc7d7116732b1d5d78e4edab4639f85e6d1630c63b11a5bdac3a847f90",
+  "claims": [
+    {
+      "id": "claim_ececa8833076462398889b0189e90e10",
+      "statement": "Der Stream sendet typisierte SSE-Ereignisse, Ping-Frames bei Verzögerung und schließt den Turn-Generator bei Verbindungsabbruch.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/routers/api/v1/chat/stream.py#L43-L81",
+          "version": "repo-lines-v1:sha256:38a00b04827b2e734bbdbbe33a12c579ef39e09d978604e6a283be523fe24842:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTBkYjNiODc2Y2Y5ODA0M2EyNDdlNTFlMGI5YWY3ZDJlZTMzZThmYTRiYWEwY2M3NjNmZWNhMWZkYzFjZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ3MmUyNzlkZGMyNmRiY2M5OWEwY2M5NzgyM2VkOTdlMjYzYjZkYWM5N2E4YWRkOTYzZDdhOTU4NDYzMDcxMTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBmMjgyMGE0NzJlYmM4NDYwNTQ1NDk3NDZmMGNmNTU2MDcxNTQ4MTllYmEyNWIwOTliMTU5YTcxNzZiMjE0N2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c05fd63394c24e5789b3726e5831a156",
+      "statement": "Die Agentenwerkzeuge lesen innerhalb des Turn-Kontoumfangs und erzeugen Vorschläge für Änderungen oder Versand.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/agent_tools.py#L35-L49",
+          "version": "repo-lines-v1:sha256:d385e0e19f7b82a0759bc7975ae80870bdd247f53440c8a406461e0a2210d538:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5NDE2ZTA5Zjc4YmEzMTZjMDMyNTY4MjEzYjg1NWVlNzU2ZTQxNTY1ZDkxOGYwOTUxOWM4MWZkNjIwZjQwNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5YzM3NGNlZjlmMjRlNGFkZDFjNTRjNjQ1OGYzMmU3NDhlZjFkYzI1ZmEwYzc0OWM3OTQ5OGYwZjVkODJjYTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5OGU3YzRlOTIyZDYwMzAxYThjMTZiMmQxMmFhYTBlOGJjZDg5NzJhNDEzMzhjZjcxMzliOTFjNjIzN2FmOTMifQ"
+        },
+        {
+          "resource": "repo://apps/api/src/api/mail/agent_tools.py#L88-L128",
+          "version": "repo-lines-v1:sha256:54922dee9e60a59e691de256d7370687e7d5eb410b443b1627262c224cf01b6e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2NWMzY2Y5M2RiOTgxYWFjNTA5YWUwMzUyMzk4OGU2NWY2OTMwYmZmMmU1YWEwZDg0NDdmYTY0MzFiOTc1N2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIxMzFjNDViYWU1OTc2YTdjMWQxOTEyNDBiNmYzNDgxNDBkNDUxNDAxNjUzNGNlMjBiYTc2MmVjNGQwZjI0ZGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjNWQ2OTg5OTM4YmI5NzZlZjNhZTYyZWZjZGU1NzJiM2MwOTBlNjhmNGMyZDE0N2RmNWE4M2Q5MjRiMDkwOTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiOTg5Y2Y2NjIzOTMyMmViYzA3MzZmODczMTlkOTRjODFjZWM1M2UyNmIyYTk3ZDY3ZmFmOTNlMDY5NmRlNWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_92cec78c89b74fbf81cbbf3a98b8f3b6",
+      "statement": "Ein neuer Vorschlag derselben Unterhaltung verwirft den vorherigen offenen Vorschlag.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/proposals.py#L113-L126",
+          "version": "repo-lines-v1:sha256:9cf078943072a84bf33eea4dacf4d50eb4667a7c2ab805a0a08c3861b43a0629:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExNjlhMzVjNDI3NjRjOTQ5MWU5MGJlNzhjOTk1NmNmZDkwNTc2MGI2ZDJhODhhMTIzNDBkNGYwMmZmOTBjMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MDE0OWUwNjlhZDY3ZWNjZjQ3MzY0NmZmMWM3NTAwNTBkMzI5ZDExMDAxOGRjNTc2Njg3OGVhZmExZDYwN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2ODdiMjQ4NGM4ZTNlOWVkMDExNDU0ODE2NTRhYjE1MmNjZjI0M2U1ZjY5OTE1OTFmZDczZWU3ODUwNDZkNTIifQ"
+        },
+        {
+          "resource": "repo://apps/api/tests/test_chat_proposals.py#L70-L76",
+          "version": "repo-lines-v1:sha256:0ee3dad5f0b665e87afcc6115cf4309a098e2ba33c5e8ac40f3b30b886e45c87:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDAxODkzYjk0NjExN2NmOWUzZmI4ZTJjNTYzOWM0ZGM5MGJjNjRiYWY0MDVkNWFmYWYzMzRlM2FhMTU0N2JhYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODFhYTU5M2ZkNTMxZjhjYzc3NThlNDBmYjc3NDY2NzdlOWIyNDMxZjk2MTdlMWJiODAwMWJhZmMxYjc1NjU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODc4MjZjZjE5MDYyZTcwNzc5YjhlM2ZiMTYyNjJlYzI1MWJkY2Y4ZDRmNGFlMWI0Mjk4NTg3NGFlODAzY2U5ZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d4877f77bfb64b95bf36f6dfe46dfd29",
+      "statement": "Die ausdrückliche Bestätigung validiert die Auswahl und führt nach erfolgreichem atomarem Claim die gewählten Aktionen oder den Versand aus.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/proposals.py#L219-L252",
+          "version": "repo-lines-v1:sha256:3db068cb0f195d252659aeb43806a3a7078e1ee4a17cc29857ea56d6e40005c0:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiNDgwODg0NjhiNDMyYzEzOTIwODFhNTg2YmI4ZjNlNGM1OTA5NjE4NzI3MTE1OWQ4N2E0MTM3NTA4NWU4NDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiMWUyZGIyNmQwMGIzM2RhMDkxN2EzZTYyYTJjMzA0MTY4MzFkNzNmMzA0NGQxYWI0NDI0ZmNiNGI1MDMwZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmNjc4MDk5ZmNjMDA3NzY2YWJmYTkyZjBjMDUyYjc2OTEyMzI2M2Y5OWU1MDgwMmNmZTlmNzY3NjNjOTg1NzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://packages/py/db/src/db/accessors/chat_message.py#L46-L59",
+          "version": "repo-lines-v1:sha256:04f5ce866f94b9b5c7bf30224178c68f5030e7230673f2b128af07aab5fefebb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlNDMyNTc5MDUyNmZiZTUxZjQ5MTZlNmE4ODAyMmIwYzJiZjcyMWY5Y2NlZjI4NzQzN2U5NGY5NGVjNDRmYmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjMmYwOGM5OTdmYzQ4OTdhNmJkMWU4NzE2MDI5MjQ1NWUxYWNmYjRiYTQ2MzBhMWZkNWM2MDg3MzQxYzZhZjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVjOGY2MDI0MWY3YjcwZjEyNjNjNTkwOGViYzYyOWNmNmQyMTdlNGRhMTBkZjJjYWRlN2Q1ZmVkZGUzMzkxMGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM4MzRiYzQ1YmM0MTYzODZhOWMwMzk2MjVkOGU1NzBhMDJjMTI5YTA4ZjY4NDQzNDQxZWJhMDE5NThkYzQ2ODIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0d3e1990543d4cb59938c49429fae88e",
+      "statement": "Ein zweiter Bestätigungsaufruf führt den bereits beanspruchten Vorschlag nicht erneut aus.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/tests/test_chat_proposals.py#L105-L114",
+          "version": "repo-lines-v1:sha256:05b0ec9349432b1f9944fc39514b044cbbe717d11b4c1960858b28cf0dbe3347:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzMGY2YjE2NDNiYjRiOWE5ZWRkYzZkYTNkODYwNzQzN2Q0MzE1NDk4OWFmN2EzYTU1NjVhNWVjNGEzYTMyZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFlMGRlMzQ3ZmM2MWMyNGZlNWE5ZDZhYWUzNWQwMWJmZWZlZDQ0M2RiMWNkOTU2NGQxN2M1ZWE4ZWZkMjk1NTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMxOGI5MTA2ZGMyZmM3MjQyYmI5Y2MzNTUxZmEzNDhkN2EyYTA3Zjk0NzU2YzI5OGFmOThlYWI5NzI2NTg5MzAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2964faa3e16040ff9a75630f9454d926",
+      "statement": "Selbst ausgelöste Posteingangsaktionen laufen direkt über den Mailendpunkt mit einer Aktions-ID für Rückgängig.",
+      "evidence": [
+        {
+          "resource": "repo://apps/api/src/api/mail/actions.py#L64-L98",
+          "version": "repo-lines-v1:sha256:3cbf0e497d0b44a352498b6ec7ada47b72b972f416ec9ecd700c0e2d51c38196:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmODk3ZGFlNzExNWQ4OTJmNzc5ZDkxN2FlOTRjOGY3ZWQ2MzkzMGY1MWIxMjU3MzU3MDc1N2FiMTg2NjNjYWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5ZWZkOWUxNzJlNTE2NDhjYzY1N2RiZWEwNDYxM2ZiNzc5M2Q2ZjZjYmViOTIyZjE2YWVkYTZmZDRhMTlmNTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdmZGVkZjQ4ZDA0ODcwYjU5YTFlZWQ4OWExM2JlMzYzMTQyZTVhOTEzYjAxNjMzYTc2MGQ5YmY5OGM2M2I2NzYifQ"
+        },
+        {
+          "resource": "repo://apps/api/src/api/routers/api/v1/mail/messages.py#L84-L99",
+          "version": "repo-lines-v1:sha256:a838326d01a63eabf0479dfe3cfdbffcc958340153a4a35e68fe5ea6a46cc899:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmZjk2ZTExYTRiYThmMTM5NmRiYjNkMDQ2NzAyMjYzMjRiOTJlYzgwNjEwYmJkMWUzYmJjYzAyZjE2ZTZiODkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYzRhN2QxY2M3OTZhYmEzZTQ2NzIzMzI3ZjUxN2U5ZjgxMTk4MmQyNTBmMDcwMjk4NmU0YjU3NjRhZDk1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2ZmI0ZTIxZDdiZjhlZWRkODc2NTY0YjEzOTE5ODMwM2I4ZjE3ODU2YTk3ODMzZjY0YjUxNGJlNzMxMDI1Y2UifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-11-17T18:59:26.600Z"
+  }
+}
