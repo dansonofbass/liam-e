@@ -32,7 +32,10 @@ def test_setup_ttl_binding_cleanup_and_replacement(pg_db, monkeypatch, caplog):
         assert preview["expires_at"] == now + timedelta(minutes=10)
         with pytest.raises(feeds.FeedError):
             await feeds.subscribe(preview["validation_id"], {**config, "timezone": "Europe/Berlin"}, now=now)
-        source = await feeds.subscribe(preview["validation_id"], config, now=now)
+        attempts = await asyncio.gather(*(feeds.subscribe(preview["validation_id"], config, now=now) for _ in range(2)),
+                                        return_exceptions=True)
+        assert sum(isinstance(result, feeds.FeedError) for result in attempts) == 1
+        source = next(result for result in attempts if not isinstance(result, Exception))
         with pytest.raises(feeds.FeedError):
             await feeds.subscribe(preview["validation_id"], config, now=now)
         expired = await feeds.validate(config, clock=lambda: now)
@@ -147,4 +150,7 @@ def test_feed_snapshots_304_empty_failure_and_remove_during_fetch(pg_db, monkeyp
         assert await rows() == []
         async with get_session_maker()() as session:
             assert await session.get(CalendarSyncState, source.id) is None
+            from db.models.mail_job import MailJob
+            assert not (await session.execute(select(MailJob).where(
+                MailJob.dedupe_key == f"calendar_sync:{source.id}"))).scalars().all()
     asyncio.run(run())

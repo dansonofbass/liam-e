@@ -21,6 +21,10 @@ class FeedSnapshot(Snapshot):
 
 
 class StoredICSAdapter:
+    def __init__(self, *, clock=None, jitter=None):
+        self.clock = clock or (lambda: datetime.now(UTC))
+        self.jitter = jitter or random.uniform
+
     async def snapshot(self, source_id, start, end):
         source, config, state, stored = await calendar_feed_sync.inputs(source_id)
         try:
@@ -44,8 +48,8 @@ class StoredICSAdapter:
             retry = code in {"rate_limited", "provider_error", "timeout", "fetch_error"}
             public_code = "address_check" if code in {"auth_required", "not_found"} else "feed_unavailable"
             failures = state.failure_count if state else 0
-            await calendar_feed_sync.failure(source_id, revision=source.revision, now=datetime.now(UTC),
-                                             code=public_code, delay_seconds=random.uniform(30, 60) * 2 ** min(failures, 2) if retry else None)
+            await calendar_feed_sync.failure(source_id, revision=source.revision, now=self.clock(),
+                                             code=public_code, delay_seconds=self.jitter(30, 60) * 2 ** min(failures, 2) if retry else None)
             # The calendar scheduler owns retry timing, not the mail worker's generic retries.
             raise LookupError("calendar_feed_unavailable") from None
 
