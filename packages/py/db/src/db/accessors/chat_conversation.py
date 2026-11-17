@@ -15,22 +15,6 @@ async def create_conversation(*, title: str = "", model: str = "") -> ChatConver
         return conversation
 
 
-async def update_conversation(
-    conversation_id: str, *, model: str | None = None, title: str | None = None
-) -> ChatConversation | None:
-    async with get_session_maker()() as session:
-        conversation = await session.get(ChatConversation, conversation_id)
-        if conversation is None:
-            return None
-        if model is not None:
-            conversation.model = model
-        if title is not None:
-            conversation.title = title
-        conversation.updated_at = utcnow()
-        await session.commit()
-        return conversation
-
-
 async def get_conversation(conversation_id: str) -> ChatConversation | None:
     async with get_session_maker()() as session:
         return await session.get(ChatConversation, conversation_id)

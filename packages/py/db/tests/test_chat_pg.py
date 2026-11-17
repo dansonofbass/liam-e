@@ -59,9 +59,6 @@ def test_conversation_and_message_fields(pg_db):
     async def run():
         from db.accessors import chat_conversation as c, chat_message as m
         conversation = await c.create_conversation(title="old", model="one")
-        updated = await c.update_conversation(conversation.id, title="", model="two")
-        assert (updated.title, updated.model) == ("", "two")
-        assert await c.update_conversation("missing", model="x") is None
         row = await m.add_message(conversation_id=conversation.id, role="proposal", proposal_json="{}", proposal_status="pending", stopped=True, extras_json="{}")
         assert (row.proposal_json, row.stopped, row.extras_json) == ("{}", True, "{}")
         updated = await m.set_proposal(row.id, proposal_json='{"x":1}', proposal_status="done")

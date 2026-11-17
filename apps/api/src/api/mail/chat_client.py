@@ -7,6 +7,8 @@ from utils.mistral import mistral_client as app_client
 
 def mistral_client():
     client = app_client()
+    # A no-op provider records no spans at all; redaction=False only stops the SDK from warning
+    # that its redaction does not apply to an application-owned provider.
     configure_telemetry(client, provider=NoOpTracerProvider(), redaction=False)
     logger = logging.Logger('chat-private', level=logging.CRITICAL + 1)
     logger.addHandler(logging.NullHandler())
