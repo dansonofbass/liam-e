@@ -53,6 +53,42 @@ async function setupConfirmed(done: ChatMessageOut, clock?: Parameters<typeof se
   return client
 }
 
+test('task creation edits use a fresh preview and confirmation invalidates tasks with outcome focus', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'create', title: 'Example', start: '2027-01-01', timezone: 'UTC' } }
+  const preview = spyOn(sdk, 'tasksPreview').mockImplementation((async () => ({ data: { occurrences: ['2027-01-01'], exceptions: [], through: '2028-01-01', complete: true } })) as never)
+  const done = { ...initial, proposal_status: 'done', proposal: { ...initial.proposal, result: { done: 1, task_series_id: 'task' } } }
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)
+  const client = setup(initial)
+  const invalidate = spyOn(client, 'invalidateQueries')
+  await screen.findByLabelText('Titel')
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Edited example' } })
+  fireEvent.change(screen.getByLabelText('Erstes Datum'), { target: { value: '2027-02-01' } })
+  expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(true)
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(false))
+  expect(preview.mock.calls.at(-1)?.[0]?.body?.start).toBe('2027-02-01')
+  expect(confirm).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' }))
+  await waitFor(() => expect(confirm.mock.calls[0]?.[0]?.body?.task_edit?.title).toBe('Edited example'))
+  expect(confirm.mock.calls[0]?.[0]?.body?.task_edit?.start).toBe('2027-02-01')
+  const outcome = await screen.findByText('Aufgabenänderung gespeichert.')
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] })
+  expect(outcome.closest('.le-proposal-outcome')).toBe(document.activeElement)
+})
+
+test('cancelling a task card never confirms or invalidates tasks', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'archive', series_id: 'task', expected_version: 1, title: 'Example' } }
+  const confirm = spyOn(sdk, 'chatProposalConfirm')
+  spyOn(sdk, 'chatProposalCancel').mockImplementation((async () => ({ data: { ...initial, proposal_status: 'cancelled' } })) as never)
+  const client = setup(initial), invalidate = spyOn(client, 'invalidateQueries')
+  fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
+  await screen.findByText('Abgebrochen, es wurde nichts geändert.')
+  expect(confirm).not.toHaveBeenCalled()
+  expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['tasks'] })
+})
+
 test('confirmation submits selected ids and replaces the card in history', async () => {
   const done = message('done', { done: 1, undo_action_ids: ['u'] })
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)

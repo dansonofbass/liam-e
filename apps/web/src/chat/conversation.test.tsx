@@ -287,12 +287,34 @@ test('account change in a conversation offers a new conversation instead of a re
   fireEvent.click(screen.getByRole('menuitem', { name: 'Alle Konten' }))
   globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'conversation_scope_change_requires_new' } }), { status: 409 }))) as unknown as typeof fetch
   await send()
-  const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten/)).closest('[role="alert"]') as HTMLElement
+  const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
   expect(within(notice).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   expect((await screen.findByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Meine Frage')
   expect(screen.getByRole('button', { name: 'Alle Konten' })).toBeTruthy()
+})
+
+test('task selection conflict restarts visibly without the old conversation', async () => {
+  const { router } = setup('/chat/c')
+  const choose = await screen.findByRole('button', { name: 'Alle Aufgaben' })
+  await waitFor(() => expect((choose as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(choose)
+  globalThis.fetch = ((_url: unknown, init: RequestInit) => {
+    requestBody = JSON.parse(String(init.body))
+    return Promise.resolve(Response.json({ detail: { code: 'conversation_scope_change_requires_new' } }, { status: 409 }))
+  }) as typeof fetch
+  await send()
+  const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
+  expect(requestBody.task_source).toBe('all')
+  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect((await screen.findByRole('button', { name: 'Alle Aufgaben' })).getAttribute('aria-pressed')).toBe('true')
+  await send()
+  await waitFor(() => expect(requestBody.conversation_id).toBeUndefined())
+  expect(requestBody.task_source).toBe('all')
+  expect(requestBody.text).toBe('Meine Frage')
+  expect(requestBody.history).toBeUndefined()
 })
 
 test('calendar selection is separate from mail and survives a scope-conflict restart', async () => {
@@ -307,7 +329,7 @@ test('calendar selection is separate from mail and survives a scope-conflict res
     return Promise.resolve(Response.json({ detail: { code: 'conversation_scope_change_requires_new' } }, { status: 409 }))
   }) as typeof fetch
   await send()
-  const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten oder Kalender/)).closest('[role="alert"]') as HTMLElement
+  const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
   expect(requestBody.calendar_source_ids).toEqual(['work'])
   expect(requestBody.account_id).toBe('a')
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))

@@ -63,6 +63,12 @@ export function MailView({ id }: { id: string }) {
     })
   }
   const ask = () => { void navigate({ to: '/', search: { about: id } }) }
+  const proposeTask = () => {
+    if (busy || !data) return
+    setStarted(true)
+    void send({ text: de.taskChat.prompt, context_message_id: id, account_id: data.account_id,
+      task_source: 'account', task_source_account_id: data.account_id, calendar_source_ids: [] })
+  }
   const iconSize = !split || coarse ? 'lg' : 'md'
   const actions = data && <>
     <IconButton label={de.controls.archive} icon="archive" size={iconSize} shortcut={split ? 'E' : undefined} onClick={() => remove('archive')} />
@@ -71,6 +77,7 @@ export function MailView({ id }: { id: string }) {
     <Menu placement={split ? 'down-start' : 'down-end'} trigger={props => <IconButton {...props} label={de.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: de.mail.forward, icon: 'forward', onSelect: () => start(de.mail.forwardPrompt) }, { label: de.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : de.mail.unsubscribeUnavailable, onSelect: () => start(de.mail.unsubscribePrompt) }, { label: de.mail.spam, icon: 'ban', onSelect: () => remove('spam') }, { label: de.mail.original, icon: 'file-code', disabled: !data.can_show_original, hint: data.can_show_original ? undefined : de.mail.originalUnavailable, onSelect: () => setOriginal(id) }]} />
   </>
   const chatButtons = <>
+    <Button variant="secondary" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={proposeTask}>{de.taskChat.ask}</Button>
     <Tooltip content={de.mail.askTip}><Button variant="secondary" icon="message-circle" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{de.mail.askInChat}</Button></Tooltip>
     <Tooltip content={de.mail.draftTip}><Button variant="primary" icon="pencil" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={() => start(de.mail.draftPrompt)}>{de.mail.draftReply}</Button></Tooltip>
   </>

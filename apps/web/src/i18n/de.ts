@@ -7,6 +7,17 @@ const noticeSubject = (subject: string) => {
 }
 
 export const de = {
+  taskChat: {
+    account: (name: string) => `Aufgaben: ${name}`,
+    scope: 'Aufgaben im Chat', none: 'Keine Aufgaben', scopeHint: 'Eine andere Auswahl braucht bei vorhandenem Verlauf eine neue Unterhaltung.',
+    actions: { create: 'Aufgabe vorschlagen', patch: 'Fälligkeit ändern', complete: 'Aufgabe erledigen', skip: 'Fälligkeit überspringen', reopen: 'Aufgabe wieder öffnen', archive: 'Aufgabe archivieren' },
+    scopeConflict: 'Für andere Konten, Kalender oder Aufgaben brauchst du eine neue Unterhaltung. Der bisherige Verlauf bleibt erhalten.',
+    confirm: 'Bestätigen', done: 'Aufgabenänderung gespeichert.', ask: 'Aufgabe vorschlagen',
+    prompt: 'Schlage eine Aufgabe zu dieser Mail vor. Kläre vorher, was zu tun ist und wann die Aufgabe fällig ist.',
+    months: 'Monate', until: 'Bis einschließlich', monthEnd: (day: number) => `Vom Monatsende gezählt: ${day}. Tag`,
+    boundary: 'Seriengrenze', originalDue: 'Ursprüngliche Fälligkeit',
+    target: 'Betroffene Fälligkeit', version: 'Geprüfte Version', sourceError: 'Die verknüpfte Mail ist nicht mehr verfügbar.',
+  },
   tasks: {
     title: 'Aufgaben', tip: 'Aufgaben und Fälligkeiten verwalten', create: 'Aufgabe anlegen', name: 'Titel', note: 'Notiz', date: 'Erstes Datum', time: 'Uhrzeit (optional)', zone: 'Zeitzone', invalidZone: 'Gib eine gültige Zeitzone ein, zum Beispiel Europe/Berlin.', recurrence: 'Wiederholung', none: 'Keine', daily: 'Täglich', weekly: 'Wöchentlich', monthly: 'Monatlich', custom: 'Benutzerdefiniert', frequency: 'Rhythmus', interval: 'Intervall', weekdays: 'Wochentage', monthday: 'Monatstag', lastDay: 'Am letzten Tag', dayNumber: (day: number) => `Am ${day}.`, end: 'Ende', noEnd: 'Kein Ende', endDate: 'Enddatum', count: 'Anzahl', preview: 'Nächste Fälligkeiten', previewLoading: 'Vorschau wird geladen …', previewError: 'Die Vorschau ist nicht verfügbar. Prüfe die Angaben und versuch es noch mal.', previewIncomplete: 'Die Vorschau zeigt nur Fälligkeiten im angegebenen Zeitraum.', invalid: 'Prüfe Titel, Datum, Zeitzone und Wiederholung.', exceptions: 'Einige Termine entfallen wegen ungültiger Tage oder Uhrzeiten.', save: 'Aufgabe speichern', saving: 'Wird gespeichert …', saveError: 'Die Aufgabe wurde nicht gespeichert. Deine Eingaben bleiben erhalten.', retry: 'Noch mal versuchen', back: 'Zurück zu Aufgaben',
     open: 'Offen', completed: 'Erledigt', archived: 'Archiviert', overdue: 'Überfällig', today: 'Heute', later: 'Später', allSources: 'Alle Aufgaben', savedAccount: 'Gespeichertes Konto', unlinked: 'Ohne Mailbezug', source: 'Quelle', empty: 'Keine offenen Aufgaben.', loading: 'Aufgaben werden geladen …', error: 'Aufgaben konnten nicht geladen werden. Versuch es noch mal.', incomplete: 'Fälligkeiten werden ergänzt …', detail: 'Fälligkeiten und Verlauf', complete: 'Erledigen', skip: 'Überspringen', reopen: 'Wieder öffnen', conflict: 'Die Aufgabe wurde inzwischen geändert. Prüfe den aktuellen Stand.', archive: 'Archivieren', delete: 'Endgültig löschen', deleteWarning: 'Die Aufgabe und ihr Verlauf werden endgültig gelöscht.', cancel: 'Abbrechen', edit: 'Fälligkeit bearbeiten', onlyThis: 'Nur diese Fälligkeit', following: 'Diese und folgende', unavailableMail: 'Die verknüpfte Mail ist nicht mehr verfügbar.', openMail: 'Quellmail öffnen',

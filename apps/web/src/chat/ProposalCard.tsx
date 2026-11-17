@@ -1,4 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { chatProposalCancel, chatProposalConfirm, mailActionsUndo } from '../api/generated/sdk.gen'
 import type { ChatMessageOut, Proposal } from '../api/generated/types.gen'
@@ -6,6 +7,7 @@ import { errorCode, unwrap } from '../api/unwrap'
 import { ConfirmCard, Notice } from '../ds'
 import { de } from '../i18n/de'
 import { useRestartConversation } from './session'
+import { TaskProposal } from './TaskProposal'
 
 type Clock = { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }
 const systemClock: Clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id) }
@@ -47,6 +49,9 @@ function safeLink(value: string | null): string | null {
 
 function failureText(code: string | undefined, kind: Proposal['kind']): string {
   switch (code) {
+    case 'task_version_conflict': return de.tasks.conflict
+    case 'task_source_gone': return de.tasks.unavailableMail
+    case 'task_scope_invalid': return de.prompts.scopeUnavailable
     case 'item_gone': return kind === 'unsubscribe' ? de.proposalErrors.sender_gone : de.proposalErrors.item_gone
     case 'item_changed': return de.proposalErrors.item_changed
     case 'action_unsupported': return de.proposalErrors.action_unsupported
@@ -85,6 +90,7 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
       pending.current = false; setBusy(false)
     }
   }
+  if (proposal.kind === 'task') return <Notice tone="success"><span>{de.taskChat.done}</span>{result?.task_series_id && <> <Link className="le-link" to="/tasks/$taskId" params={{ taskId: result.task_series_id }}>{de.tasks.detail}</Link></>}</Notice>
   if (undone) return <Notice tone="info">{de.proposal.undone}</Notice>
   const text = proposal.kind === 'unsubscribe' ? de.proposal.results.unsubscribe(result?.done ?? 0, ids.length) : de.proposal.results[proposal.kind](result?.done ?? 0)
   const failed = result?.failed ?? []
@@ -138,6 +144,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
       void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
       void client.invalidateQueries({ queryKey: ['summary'] })
       if (confirm) {
+        if (proposal?.kind === 'task') void client.invalidateQueries({ queryKey: ['tasks'] })
         void client.invalidateQueries({ queryKey: ['messages'] })
         void client.invalidateQueries({ queryKey: ['message'] })
       }
@@ -168,6 +175,10 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   if (current.proposal_status === 'failed') return settled(<Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code, proposal.kind)}</Notice>)
   if (current.proposal_status === 'done' || current.proposal_status === 'partial') return settled(<Result key={current.id} message={current} proposal={proposal} clock={clock} onUndone={() => outcome.current?.focus()} />)
   if (current.proposal_status !== 'pending') return null
+  if (proposal.kind === 'task') return <><TaskProposal key={current.id} proposal={proposal} busy={busy}
+    confirm={task_edit => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids: [], task_edit }, throwOnError: true })), true) }}
+    cancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }}
+  />{error && <Notice tone="danger">{failureText(error, proposal.kind)}</Notice>}</>
   const saved = cardState(client, current.id)
   const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${de.proposal.manualSubtitle}` } : item)
   const irreversibleNote = proposal.irreversible ? proposal.kind === 'unsubscribe' ? de.proposal.irreversibleUnsubscribe : proposal.kind === 'send' ? de.proposal.irreversibleSend : undefined : undefined

@@ -39,6 +39,21 @@ afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMe
 // Lets queries a view starts on mount settle inside act() before the test moves on or ends.
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 
+test('task proposal starts a fresh chat with explicit mail and task account scope', async () => {
+  const { request, action, router } = setup({ stream: true })
+  const confirm = spyOn(sdk, 'chatProposalConfirm')
+  fireEvent.click(await screen.findByRole('button', { name: 'Aufgabe vorschlagen' }))
+  await waitFor(() => expect(request()?.context_message_id).toBe('m1'))
+  expect(request()?.account_id).toBe('a')
+  expect(request()?.task_source).toBe('account')
+  expect(request()?.task_source_account_id).toBe('a')
+  expect(request()?.conversation_id).toBeUndefined()
+  expect(request()?.calendar_source_ids).toEqual([])
+  expect(confirm).not.toHaveBeenCalled()
+  expect(action).not.toHaveBeenCalled()
+  await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c1'))
+})
+
 test('open mail shows the provider when the account has no display name', async () => {
   setup()
   await screen.findByRole('heading', { name: 'Termin' })

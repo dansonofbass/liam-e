@@ -41,7 +41,7 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 ### Mail-Domäne (`apps/api/src/api/mail/`)
 
 - `agent.py` — gestreamter Chat-Turn, Tool-Loop und gespeicherter Verlauf.
-- `agent_tools.py` — lesende Agentenwerkzeuge und Erstellen von Vorschlägen.
+- `agent_tools.py` — lesende Agentenwerkzeuge und Erstellen von Vorschlägen. Aufgabenwerkzeuge delegieren an `api/tasks/chat.py`; typisierte Aufgabenbefehle und ihre lokale Ausführung liegen in `api/tasks/proposals.py`.
 - `agent_prompt.py` — deutsche Systemanweisungen für den Agenten.
 - `chat_events.py` — typisierte Streaming-Ereignisse; `chat_schemas.py` — Chat-Ausgabemodelle.
 - `actions.py` — Indexänderungen und einmaliges Rückgängigmachen; `action_backends.py` — Provider-Aktionen.
@@ -251,6 +251,29 @@ antwortet die Anlage mit `422 task_invalid`. Das Datum bleibt ein Datum. Alte
 Datumsrevisionen mit `timezone: null` verwenden für Tagesgrenzen UTC, ohne die
 Daten umzuschreiben. Heute gilt als bereits fällig, überfällig erst ab dem nächsten
 lokalen Tag. Eine neue Serienrevision kann die Zeitzone ausdrücklich setzen.
+
+### Aufgaben im Chat
+
+`task_source=none|all|unlinked|account` und gegebenenfalls `task_source_account_id` bilden
+im Composer einen eigenen sichtbaren Umfang. Ein gewähltes Mailkonto erlaubt nur dessen
+Aufgaben; für „Alle Aufgaben“ muss auch die Mailauswahl unbeschränkt sein. Der Umfang steht
+je Turn in `chat_context.task_scope_json`; Altverlauf erhält durch den Serverstandard
+`{"source":"none"}` keinen Zugriff. Jede Änderung verlangt bei vorhandenem Verlauf eine neue
+Unterhaltung. Resolver und Agent prüfen alle historischen Kontexte vor Modellanfragen erneut.
+`search_tasks`/`get_task` lesen ohne Reconcile, mit inklusivem Datumsfenster bis 90 Tage,
+Serien- und Instanzcursor sowie Vollständigkeit je Serie/Fenster; Texte stehen in
+`untrusted_task_data`. `propose_task` erzeugt eine Karte für Anlage, Fälligkeitsänderung,
+Erledigen, Überspringen, Wiederöffnen oder Archivieren, niemals für endgültiges Löschen.
+Quellen und Darstellungsdaten stammen aus serverseitigen Reads. Das gemeinsame Proposal-Modell
+bindet Zielversionen und Quelle; neue Aufgaben lassen sich in der Karte bearbeiten, ohne die
+Quelle zu wechseln. Confirm nimmt dafür ausschließlich einen typisierten `task_edit` der Anlage.
+Die Vorschau wird bei Zeitplanänderungen neu gelesen. Claim, erneute Quellen-/Versionsprüfung,
+Aufgabenmutation und erfolgreicher Abschluss liegen in genau einer DB-Transaktion. Fehler vor
+Commit lassen die Karte `pending`; ein zweiter Confirm nach Commit liefert wie im Mailpfad
+409 `proposal_not_pending`, ohne zweite Wirkung. Mail-/Versandaktionen behalten ihren bisherigen
+Providerpfad. Eine entfernte Quellmail wird nicht ersetzt. Der Maileinstieg startet eine neue
+Unterhaltung mit ausdrücklichem Mail- und Aufgaben-Kontoumfang; Mailtexte werden nicht als
+Aufgabenbeschreibung kopiert. Nach Confirm invalidiert die Karte die Query-Gruppe `tasks`.
 
 ## Kalenderdomäne
 
