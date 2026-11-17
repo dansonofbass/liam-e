@@ -1804,6 +1804,48 @@ export type TaskWindow = {
 };
 
 /**
+ * UiSettingsOut
+ */
+export type UiSettingsOut = {
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Swipe Left
+     */
+    swipe_left: 'none' | 'archive' | 'toggle_read' | 'trash';
+    /**
+     * Swipe Right
+     */
+    swipe_right: 'none' | 'archive' | 'toggle_read' | 'trash';
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * UiSettingsUpdate
+ *
+ * A change to the swipe assignment; the owner scope is not part of the contract.
+ */
+export type UiSettingsUpdate = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Swipe Left
+     */
+    swipe_left?: 'none' | 'archive' | 'toggle_read' | 'trash' | null;
+    /**
+     * Swipe Right
+     */
+    swipe_right?: 'none' | 'archive' | 'toggle_read' | 'trash' | null;
+};
+
+/**
  * UndoIn
  */
 export type UndoIn = {
@@ -3107,6 +3149,60 @@ export type PromptUpdateResponses = {
 };
 
 export type PromptUpdateResponse = PromptUpdateResponses[keyof PromptUpdateResponses];
+
+export type SettingsUiGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/ui';
+};
+
+export type SettingsUiGetErrors = {
+    /**
+     * Expected revision is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; the rejected payload is not echoed
+     */
+    422: unknown;
+};
+
+export type SettingsUiGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: UiSettingsOut;
+};
+
+export type SettingsUiGetResponse = SettingsUiGetResponses[keyof SettingsUiGetResponses];
+
+export type SettingsUiUpdateData = {
+    body: UiSettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/ui';
+};
+
+export type SettingsUiUpdateErrors = {
+    /**
+     * Expected revision is stale
+     */
+    409: unknown;
+    /**
+     * Invalid fields; the rejected payload is not echoed
+     */
+    422: unknown;
+};
+
+export type SettingsUiUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: UiSettingsOut;
+};
+
+export type SettingsUiUpdateResponse = SettingsUiUpdateResponses[keyof SettingsUiUpdateResponses];
 
 export type TasksListData = {
     body?: never;

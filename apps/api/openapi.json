@@ -3025,6 +3025,97 @@
         "title": "TaskWindow",
         "type": "object"
       },
+      "UiSettingsOut": {
+        "properties": {
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "swipe_left": {
+            "enum": [
+              "none",
+              "archive",
+              "toggle_read",
+              "trash"
+            ],
+            "title": "Swipe Left",
+            "type": "string"
+          },
+          "swipe_right": {
+            "enum": [
+              "none",
+              "archive",
+              "toggle_read",
+              "trash"
+            ],
+            "title": "Swipe Right",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "swipe_left",
+          "swipe_right",
+          "revision",
+          "updated_at"
+        ],
+        "title": "UiSettingsOut",
+        "type": "object"
+      },
+      "UiSettingsUpdate": {
+        "additionalProperties": false,
+        "description": "A change to the swipe assignment; the owner scope is not part of the contract.",
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "swipe_left": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "archive",
+                  "toggle_read",
+                  "trash"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Swipe Left"
+          },
+          "swipe_right": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "archive",
+                  "toggle_read",
+                  "trash"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Swipe Right"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "UiSettingsUpdate",
+        "type": "object"
+      },
       "UndoIn": {
         "properties": {
           "action_ids": {
@@ -4982,6 +5073,64 @@
           }
         },
         "summary": "Update Prompt"
+      }
+    },
+    "/api/v1/settings/ui": {
+      "get": {
+        "description": "The one confirmed assignment, initializing the canonical defaults on first read.",
+        "operationId": "settings_ui_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Expected revision is stale"
+          },
+          "422": {
+            "description": "Invalid fields; the rejected payload is not echoed"
+          }
+        },
+        "summary": "Get Ui Settings"
+      },
+      "patch": {
+        "description": "Apply a validated change while the caller holds the current revision.",
+        "operationId": "settings_ui_update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Expected revision is stale"
+          },
+          "422": {
+            "description": "Invalid fields; the rejected payload is not echoed"
+          }
+        },
+        "summary": "Update Ui Settings"
       }
     },
     "/api/v1/tasks": {
