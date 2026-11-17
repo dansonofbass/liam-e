@@ -14,6 +14,25 @@ def test_invalid_configuration_is_redacted(client, caplog, change):
     assert "calendar.example" not in response.text + caplog.text
 
 
+def test_discard_accepts_only_a_body_token(client, monkeypatch):
+    from api.calendar import feeds
+    calls = []
+
+    async def discard(token):
+        calls.append(token)
+
+    monkeypatch.setattr(feeds, "discard", discard)
+    token = "test-only-" * 5
+    route = "/api/v1/calendar/feeds/validations/discard"
+    response = client.post(route, json={"validation_id": token})
+    assert response.status_code == 204
+    assert response.headers["cache-control"] == "no-store"
+    assert client.post(route, params={"validation_id": token}).status_code == 422
+    assert client.delete(f"/api/v1/calendar/feeds/validations/{token}").status_code in {404, 405}
+    assert client.post(f"/api/v1/calendar/feeds/validations/{token}").status_code in {404, 405}
+    assert calls == [token]
+
+
 def test_preview_redaction_and_server_context(client, monkeypatch, caplog):
     from datetime import UTC, datetime
     from api.calendar import feeds

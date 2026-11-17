@@ -39,7 +39,7 @@ test.each([de.calendar.feedName, de.calendar.feedAddress, de.calendar.feedZone])
   await screen.findByText(de.calendar.feedCount(2))
   fireEvent.change(screen.getByLabelText(label), { target: { value: 'changed' } })
   expect(screen.queryByRole('button', { name: de.calendar.subscribeConfirm })).toBeNull()
-  expect(discard).toHaveBeenCalledWith({ path: { validation_id: preview.validation_id } })
+  expect(discard).toHaveBeenCalledWith({ body: { validation_id: preview.validation_id } })
   expect(subscribe).not.toHaveBeenCalled()
 })
 

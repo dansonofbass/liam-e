@@ -19,7 +19,7 @@ export function FeedSetup({ source, close, saved }: { source?: SourceOut; close:
   const discard = () => {
     const token = proof.current
     proof.current = undefined
-    if (token) void calendarFeedValidationDiscard({ path: { validation_id: token } }).catch(() => {})
+    if (token) void calendarFeedValidationDiscard({ body: { validation_id: token } }).catch(() => {})
   }
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; abort.current?.abort(); discard() } }, [])
   const changed = () => { discard(); setPreview(undefined); setError('') }
@@ -35,7 +35,7 @@ export function FeedSetup({ source, close, saved }: { source?: SourceOut; close:
       const result = await calendarFeedValidate({ body: { ...body(), url: normalized }, signal: abort.current.signal })
       if (result.error || !result.data) throw new Error()
       if (!mounted.current) {
-        void calendarFeedValidationDiscard({ path: { validation_id: result.data.validation_id } })
+        void calendarFeedValidationDiscard({ body: { validation_id: result.data.validation_id } })
         return
       }
       proof.current = result.data.validation_id

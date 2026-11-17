@@ -89,7 +89,7 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/summary` | `liam_mail_summary` |
 | Kalender | POST | `/api/v1/calendar/feeds/validate` | `calendar_feed_validate` |
 | Kalender | POST | `/api/v1/calendar/feeds` | `calendar_feed_subscribe` |
-| Kalender | DELETE | `/api/v1/calendar/feeds/validations/{validation_id}` | `calendar_feed_validation_discard` |
+| Kalender | POST | `/api/v1/calendar/feeds/validations/discard` | `calendar_feed_validation_discard` |
 | Kalender | GET | `/api/v1/calendar/sources` | `calendar_sources_list` |
 | Kalender | PATCH | `/api/v1/calendar/sources/{source_id}` | `calendar_source_update` |
 | Kalender | DELETE | `/api/v1/calendar/sources/{source_id}` | `calendar_source_delete` |
@@ -314,7 +314,9 @@ per `DELETE RETURNING` in der Anlagetransaktion einmalig verbraucht. Der feste s
 Scope ist `installation`; Konfiguration einschließlich Ersatzquelle und Quellenrevision
 ist gebunden. `feed_secrets.py` nutzt den bestehenden Fernet-Schlüssel; nur ein Hash
 zufälliger Prüftokens wird gespeichert, Konfigurationsprüfsummen sind mit dem Token
-gekeyt. Abbruch verwirft die Prüfung ausdrücklich; der Worker bereinigt Ablauf jede Minute
+gekeyt. Abbruch verwirft die Prüfung ausdrücklich über `POST /calendar/feeds/validations/discard`:
+Der Prüftoken steht ausschließlich als `validation_id` im JSON-Body, nie in Pfad oder Query;
+die Antwort ist 204 mit `Cache-Control: no-store`. Der Worker bereinigt Ablauf jede Minute
 sowie bei weiteren Prüfungen/Anlagen. Schemafehler geben keine Eingabewerte zurück.
 `POST /calendar/feeds` legt die Quelle und den ersten Job atomar an; mit geprüfter
 `source_id`/`expected_revision` ersetzt derselbe Endpunkt die alte Adresse atomar.

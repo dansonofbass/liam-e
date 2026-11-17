@@ -43,6 +43,11 @@ class SubscribeInput(FeedInput):
     validation_id: str = Field(repr=False, min_length=40, max_length=100)
 
 
+class DiscardInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    validation_id: str = Field(repr=False, min_length=40, max_length=100)
+
+
 class FeedPreviewOut(BaseModel):
     validation_id: str
     name: str
@@ -79,7 +84,7 @@ async def subscribe(body: SubscribeInput) -> SourceOut:
     return await source_out(source)
 
 
-@router.delete("/validations/{validation_id}", operation_id="calendar_feed_validation_discard", status_code=204)
-async def discard(validation_id: str) -> Response:
-    await feeds.discard(validation_id)
+@router.post("/validations/discard", operation_id="calendar_feed_validation_discard", status_code=204)
+async def discard(body: DiscardInput) -> Response:
+    await feeds.discard(body.validation_id)
     return Response(status_code=204)
