@@ -17,6 +17,13 @@
         "cwd": "{workspaceRoot}"
       }
     },
+    "gen-agent-openapi": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync python -m api.mcp.export",
+        "cwd": "{workspaceRoot}"
+      }
+    },
     "test": {
       "executor": "nx:run-commands",
       "options": {
