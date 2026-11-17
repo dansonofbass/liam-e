@@ -12,7 +12,7 @@ pytestmark = pytest.mark.skipif(not os.getenv("RUN_PG_CONTRACT"), reason="RUN_PG
 
 def test_unfiltered_window_uses_end_at_index(pg_db):
     async def run():
-        from sqlalchemy import and_, or_, select, text
+        from sqlalchemy import and_, insert, or_, select, text
         from sqlalchemy.dialects import postgresql
         from db.accessors.calendar_occurrence import timed_overlap
         from db.engine import get_session_maker
@@ -27,10 +27,35 @@ def test_unfiltered_window_uses_end_at_index(pg_db):
                                 CalendarOccurrence.end_date > start.date()))))
         sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         async with get_session_maker()() as session:
+            sources = [CalendarSource(id=f"src-{i}", provider="synthetic", connection_ref="local",
+                                      external_id=f"src-{i}", name="Example", timezone="UTC") for i in range(3)]
+            session.add_all(sources)
+            rows = []
+            for i in range(6000):
+                instant = start - timedelta(days=6000 - i)
+                rows.append(dict(source_id=f"src-{i % 3}", event_id="event", external_id=f"timed-{i}",
+                                 title="point", start_at=instant, end_at=instant, timezone="UTC"))
+            for i in range(100):
+                day = start.date() - timedelta(days=i * 30)
+                rows.append(dict(source_id=f"src-{i % 3}", event_id="event", external_id=f"day-{i}",
+                                 title="point", start_date=day, end_date=day + timedelta(days=1)))
+            await session.execute(insert(CalendarOccurrence), rows)
+            await session.flush()
+            await session.execute(text("ANALYZE calendar_source"))
+            await session.execute(text("ANALYZE calendar_occurrence"))
+            # Disable sequential scans to test indexability rather than the planner's cost preference.
             await session.execute(text("SET LOCAL enable_seqscan = off"))
-            plan = "\n".join((await session.execute(text("EXPLAIN " + sql))).scalars())
-            assert "ix_calendar_occurrence_end_at" in plan, plan
-            assert "Seq Scan on calendar_occurrence" not in plan, plan
+            plan = (await session.execute(text("EXPLAIN (FORMAT JSON) " + sql))).scalar_one()[0]["Plan"]
+            def nodes(node):
+                yield node
+                for child in node.get("Plans", []):
+                    yield from nodes(child)
+            scans = list(nodes(plan))
+            assert any(node.get("Index Name") == "ix_calendar_occurrence_end_at"
+                       and node["Node Type"] in ("Bitmap Index Scan", "Index Scan")
+                       and "end_at >= " in node.get("Index Cond", "") for node in scans), plan
+            assert not any(node["Node Type"] == "Seq Scan" and node.get("Relation Name") == "calendar_occurrence"
+                           for node in scans), plan
     asyncio.run(run())
 
 
