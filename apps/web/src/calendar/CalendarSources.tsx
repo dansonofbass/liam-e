@@ -54,7 +54,7 @@ export function CalendarSources() {
   }
   return <section id="calendar-sources" aria-labelledby="calendar-sources-title">
     <h2 className="heading" id="calendar-sources-title" tabIndex={-1} ref={heading}>{de.calendar.title}</h2>
-    <Link to="/calendar" className="le-link">{de.calendar.back}</Link>
+    <Link to="/calendar" className="le-link le-calendar-back">{de.calendar.back}</Link>
     <CalendarSetup />
     {sources.isPending && <p role="status">{de.calendar.loading}</p>}
     {sources.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void sources.refetch() } }}>{de.calendar.error}</Notice>}

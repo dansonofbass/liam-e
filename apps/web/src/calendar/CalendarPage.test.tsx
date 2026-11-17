@@ -11,6 +11,13 @@ import { de } from '../i18n/de'
 
 afterEach(() => { cleanup(); mock.restore() })
 
+test('the agenda link in calendar management has a token-sized touch target outside the calendar page', async () => {
+  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
+  const rule = css.match(/^\.le-calendar-back \{ ([^{}]+) \}$/mu)
+  expect(rule).toBeTruthy()
+  for (const part of ['display: inline-flex', 'align-items: center', 'min-height: var(--control-height-lg)', 'min-width: var(--control-height-lg)']) expect(rule?.[1]).toContain(part)
+})
+
 test('the agenda back link has a token-sized touch target even without the desktop container', async () => {
   const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
   const rule = css.match(/^\.le-calendar-detail > \.le-link \{ ([^{}]+) \}$/mu)

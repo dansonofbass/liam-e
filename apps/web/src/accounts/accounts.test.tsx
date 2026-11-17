@@ -374,6 +374,12 @@ test('IMAP reconnect selects provider and focuses the secret field', async () =>
   expect(document.activeElement).toBe(screen.getByLabelText('Secret mit dem App-Passwort'))
 })
 
+test('the agenda link in calendar management uses the touch-sized link style', async () => {
+  setup()
+  const link = await screen.findByRole('link', { name: 'Zur Agenda' })
+  expect(link.classList.contains('le-calendar-back')).toBe(true)
+})
+
 test('loading, retry and empty states', async () => {
   const loading = setup('loading'); await screen.findByText('Konten werden geladen …'); expect(loading.view.container.querySelectorAll('.le-account--placeholder')).toHaveLength(3); cleanup(); mock.restore()
   const failed = setup('error'); await screen.findByText('Die Konten konnten nicht geladen werden. Versuch es gleich noch mal.'); fireEvent.click(screen.getByRole('button', { name: 'Noch mal versuchen' })); await waitFor(() => expect(failed.list).toHaveBeenCalledTimes(2)); cleanup(); mock.restore()
