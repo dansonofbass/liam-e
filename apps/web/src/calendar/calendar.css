@@ -11,6 +11,7 @@
 .le-calendar-row span, .le-calendar-status { color: var(--ink-muted); font-size: var(--font-size-small); }
 .le-calendar-status { display: flex; flex-direction: column; gap: var(--space-2); padding-block: var(--space-3); overflow-wrap: anywhere; }
 .le-calendar-detail { overflow-wrap: anywhere; }
+.le-calendar-detail > .le-link { display: inline-flex; align-items: center; min-height: var(--control-height-lg); min-width: var(--control-height-lg); }
 .le-calendar-placeholder { background: var(--surface-soft); border-radius: var(--radius-sm); height: var(--space-8); }
 @media (min-width: 1024px) { .le-calendar-agenda { flex: 0 0 var(--list-width); } }
 @media (max-width: 639px) { .le-calendar-agenda, .le-calendar-detail { padding: var(--space-4); } }

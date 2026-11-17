@@ -5,6 +5,17 @@ import { SourceStatus } from './CalendarPage'
 import { de } from '../i18n/de'
 
 afterEach(cleanup)
+
+test('the agenda back link has a token-sized touch target even without the desktop container', async () => {
+  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
+  const rule = css.match(/^\.le-calendar-detail > \.le-link \{ ([^{}]+) \}$/mu)
+  expect(rule).toBeTruthy()
+  expect(rule?.[1]).toContain('display: inline-flex')
+  expect(rule?.[1]).toContain('align-items: center')
+  expect(rule?.[1]).toContain('min-height: var(--control-height-lg)')
+  expect(rule?.[1]).toContain('min-width: var(--control-height-lg)')
+})
+
 const source: SourceOut = { id: 'test-only', name: 'Planung', provider: 'google', timezone: 'UTC', is_active: true, capabilities: ['read'], coverage_start: '2026-11-01T00:00:00Z', coverage_end: '2026-12-01T00:00:00Z', last_success_at: '2026-11-13T10:00:00Z', stale: false, incomplete: false }
 test('provider provenance and read-only status are textual', () => {
   render(<><SourceStatus source={source} /><SourceStatus source={{ ...source, id: 'test-only-ics', name: 'Verein', provider: 'ics' }} /></>)
