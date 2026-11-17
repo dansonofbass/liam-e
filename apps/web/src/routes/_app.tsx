@@ -39,7 +39,7 @@ export function Shell() {
     void mailSyncAll({ body: { only_if_older_than_minutes: 10 } }).then(result => { if (!result.error) void client.invalidateQueries({ queryKey: summaryQuery().queryKey }) }).catch(() => {})
   }, [client])
   const mobile = breakpoint === 'mobile', tablet = breakpoint === 'tablet'
-  const title = path.startsWith('/settings') ? de.prompts.settings : path.startsWith('/mail') ? de.shell.inbox : path.startsWith('/accounts') ? de.shell.accounts : de.shell.chat
+  const title = path.startsWith('/settings') ? de.prompts.settings : path.startsWith('/mail') ? de.shell.inbox : path.startsWith('/accounts') ? de.shell.accounts : path.startsWith('/tasks') ? de.tasks.title : de.shell.chat
   return <ChatSessionProvider><AppShell sidebar={mobile ? null : <Sidebar collapsed={tablet} onConversations={() => setOpen(true)} />} header={mobile && !(path.startsWith('/mail/') && path !== '/mail/') ? <MobileHeader title={title} conversationId={conversationId} onMenu={() => setOpen(true)} /> : undefined}><div key={path === '/' || path.startsWith('/chat/') ? 'chat' : path.startsWith('/mail') ? 'mail' : path} className="le-page-fade"><Outlet /></div></AppShell><Drawer open={open} onClose={() => setOpen(false)} label={mobile ? de.shell.menu : de.shell.conversations}><div className="le-brand le-drawer-brand"><span className="le-mark"><Icon name="sparkle" /></span><span className="le-grow">{de.assistant.name}</span><IconButton icon="x" label={de.shell.closeMenu} onClick={() => setOpen(false)} /></div>{mobile ? <Sidebar hideBrand onNavigate={() => setOpen(false)} /> : <Conversations onNavigate={() => setOpen(false)} />}</Drawer></ChatSessionProvider>
 }
 export const Route = createFileRoute('/_app')({ component: Shell })
