@@ -229,6 +229,7 @@ export const de = {
     doneShort: { archive: 'Mail archiviert.', trash: 'Mail in den Papierkorb gelegt.', spam: 'Mail als Spam markiert.', mark_read: 'Mail als gelesen markiert.', mark_unread: 'Mail als ungelesen markiert.' },
     recentActions: (n: number) => `Letzte Aktionen (${n})`, undoAction: (text: string) => `Rückgängig: ${String(text).replace(/\.$/, '')}`, undoRunning: 'Wird zurückgenommen …',
     swipeRelease: { archive: 'Loslassen zum Archivieren', trash: 'Loslassen für den Papierkorb', mark_read: 'Loslassen: Als gelesen markieren', mark_unread: 'Loslassen: Als ungelesen markieren' },
+    actionUnavailable: 'Diese Aktion ist für die Mail nicht verfügbar.', actionUncertain: 'Der Stand ist unklar. Mails erneut abrufen.',
     undoCapacity: 'Warte kurz, bis eine Rücknahme abgelaufen ist, oder mach eine Aktion rückgängig.',
     undoSkipped: 'Diese Aktion lässt sich nicht mehr rückgängig machen. Die Mail wurde inzwischen geändert.',
     undoExpired: 'Die Frist für diese Rücknahme ist abgelaufen.',

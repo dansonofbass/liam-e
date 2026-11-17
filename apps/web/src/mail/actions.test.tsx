@@ -52,7 +52,7 @@ test.each(['other status', 'other code', 'network'])('uncertain action failure: 
     return { response: { status: failure === 'other status' ? 500 : 502 }, error: { detail: { code: failure === 'other status' ? 'provider_failed' : 'other' } } }
   }) as never)
   setup(); fireEvent.click(screen.getByText('archive 1'))
-  expect(await screen.findByText('Das hat nicht geklappt. Lade den Posteingang neu, um zu sehen, wo die Mail jetzt liegt.')).toBeTruthy()
+  expect(await screen.findByText('Der Stand ist unklar. Mails erneut abrufen.')).toBeTruthy()
   expect(screen.getByText('Erste:false')).toBeTruthy()
 })
 
@@ -137,7 +137,7 @@ for (const replacement of ['new action', 'timeout']) {
   })
 }
 
-for (const [status, text, removed] of [[502, 'Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.', false], [409, 'Das geht bei dieser Mail nicht.', false], [404, 'Die Mail ist nicht mehr da.', true]] as const) {
+for (const [status, text, removed] of [[502, 'Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.', false], [409, 'Diese Aktion ist für die Mail nicht verfügbar.', false], [404, 'Die Mail ist nicht mehr da.', true]] as const) {
   test(`${status} shows a danger notice and ${removed ? 'keeps removal' : 'restores the row'}`, async () => {
     spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ error: { detail: { code: status === 409 ? 'action_unsupported' : status === 404 ? 'message_not_found' : 'provider_failed' } }, response: { status } })) as never)
     setup(); fireEvent.click(screen.getByText('archive 1'))
@@ -161,7 +161,7 @@ for (const first of ['archive 1', 'read 1']) {
     await act(async () => { failFirst({ response: { status: 502 } }) })
     await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
     expect(screen.queryByText('Zweite:false')).toBeNull()
-    expect(screen.getByText('Das hat nicht geklappt. Lade den Posteingang neu, um zu sehen, wo die Mail jetzt liegt.')).toBeTruthy()
+    expect(screen.getByText('Der Stand ist unklar. Mails erneut abrufen.')).toBeTruthy()
     expect(screen.getByText('action-2')).toBeTruthy()
     expect(client.getQueryState(key)?.isInvalidated).toBe(true)
   })
@@ -236,7 +236,7 @@ test('spam on mobile uses the short success text', async () => {
 test('a refused spam action puts the row back and says so', async () => {
   spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ response: { status: 409 }, error: { detail: { code: 'action_unsupported' } } })) as never)
   setup(); fireEvent.click(screen.getByText('spam 1'))
-  expect(await screen.findByText('Das geht bei dieser Mail nicht.')).toBeTruthy()
+  expect(await screen.findByText('Diese Aktion ist für die Mail nicht verfügbar.')).toBeTruthy()
   expect(screen.getByText('Erste:false')).toBeTruthy()
 })
 
