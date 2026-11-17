@@ -26,7 +26,12 @@ async def source_out(source) -> SourceOut:
                      coverage_start=state.coverage_start if state else None,
                      coverage_end=state.coverage_end if state else None, last_success_at=last,
                      stale=last is None or state.incomplete,
-                     incomplete=state.incomplete if state else True)
+                     incomplete=state.incomplete if state else True,
+                     revision=source.revision,
+                     last_checked_at=state.last_checked_at if state else None,
+                     last_validated_at=state.last_validated_at if state else None,
+                     last_error=state.last_error if state else None,
+                     data_revision=state.data_revision if state else 0)
 
 
 @router.get("", operation_id="calendar_sources_list")
@@ -39,6 +44,9 @@ async def update(source_id: str, body: SourcePatch) -> SourceOut:
     row = await calendar_source.set_active(source_id, body.is_active)
     if row is None:
         raise HTTPException(404, "source_not_found")
+    if row.provider == "ics" and row.is_active:
+        from api.calendar.feed_jobs import enqueue
+        await enqueue(row.id, manual=True)
     return await source_out(row)
 
 

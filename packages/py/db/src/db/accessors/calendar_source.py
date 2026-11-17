@@ -3,11 +3,13 @@
 from sqlalchemy import delete, select
 
 from db.engine import get_session_maker
+from db.accessors._calendar_lock import lock_source
 from db.models.calendar_source import CalendarSource
 from db.models.calendar_event import CalendarEvent
 from db.models.calendar_feed_config import CalendarFeedConfig
 from db.models.calendar_occurrence import CalendarOccurrence
 from db.models.calendar_sync_state import CalendarSyncState
+from db.models.mail_job import MailJob
 
 
 async def get(source_id: str) -> CalendarSource | None:
@@ -33,6 +35,9 @@ async def set_active(source_id: str, active: bool) -> CalendarSource | None:
 
 async def remove(source_id: str) -> bool:
     async with get_session_maker()() as session:
+        await lock_source(session, source_id)
+        # Match snapshot lock ordering so deletion cannot deadlock with activation.
+        await session.execute(delete(MailJob).where(MailJob.dedupe_key == f"calendar_sync:{source_id}"))
         row = (await session.execute(select(CalendarSource).where(CalendarSource.id == source_id).with_for_update())).scalar_one_or_none()
         if row is None:
             return False

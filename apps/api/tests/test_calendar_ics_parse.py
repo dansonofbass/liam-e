@@ -215,7 +215,7 @@ async def test_adapter_200_and_304_reexpand_and_dispatch_contract(monkeypatch):
     # Exercise the actual shared dispatch's normalization/window checks, no DB.
     from types import SimpleNamespace
     async def source(identifier):
-        return SimpleNamespace(id=identifier, provider="test-ics", is_active=True)
+        return SimpleNamespace(id=identifier, provider="test-ics", is_active=True, revision=1)
     calls = []
     async def replace(**kwargs):
         calls.append(kwargs)

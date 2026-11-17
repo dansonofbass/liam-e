@@ -7,6 +7,7 @@ from sqlalchemy import String, and_, bindparam, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import ARRAY, insert
 
 from db.accessors.calendar_occurrence import timed_overlap
+from db.accessors._calendar_lock import lock_source
 from db.engine import get_session_maker
 from db.models._common import utcnow
 from db.models.calendar_event import CalendarEvent
@@ -23,7 +24,8 @@ class LostClaim(Exception):
 async def replace_window(*, source_id: str, job_id: str, attempt: int,
                          start: datetime, end: datetime, start_date: date, end_date: date,
                          events: list[CalendarEvent], occurrences: list[CalendarOccurrence],
-                         expected_revision: int | None = None) -> None:
+                         expected_revision: int | None = None, replace_all: bool = False,
+                         encrypted_validators: str | None = None) -> None:
     """Replace a fully processed window; inputs are prepared before the transaction.
 
     Callers must validate adapter completeness and interval normalization before calling.
@@ -42,6 +44,7 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
     if any(row.event_id not in input_event_ids for row in occurrences):
         raise ValueError("unknown event")
     async with get_session_maker()() as session:
+        await lock_source(session, source_id)
         job = (await session.execute(select(MailJob).where(MailJob.id == job_id).with_for_update())).scalar_one_or_none()
         if (job is None or job.status != "running" or job.attempts != attempt
                 or json.loads(job.payload_json).get("source_id") != source_id):
@@ -53,7 +56,7 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
             raise LostClaim()
         state = await session.get(CalendarSyncState, source_id)
         coverage_start, coverage_end = start, end
-        if (state and not state.incomplete and state.coverage_start is not None and state.coverage_end is not None
+        if (not replace_all and state and not state.incomplete and state.coverage_start is not None and state.coverage_end is not None
                 and start <= state.coverage_end and end >= state.coverage_start):
             coverage_start = min(start, state.coverage_start)
             coverage_end = max(end, state.coverage_end)
@@ -69,7 +72,9 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
             event_ids.update({event.id: actual[event.external_id] for event in batch})
         overlap = or_(timed_overlap(start, end),
                       and_(CalendarOccurrence.start_date < end_date, CalendarOccurrence.end_date > start_date))
-        delete_stmt = delete(CalendarOccurrence).where(CalendarOccurrence.source_id == source_id, overlap)
+        delete_stmt = delete(CalendarOccurrence).where(CalendarOccurrence.source_id == source_id)
+        if not replace_all:
+            delete_stmt = delete_stmt.where(overlap)
         if occurrences:
             retained = func.unnest(bindparam("retained_ids", [row.external_id for row in occurrences],
                                             type_=ARRAY(String))).table_valued("id").render_derived()
@@ -103,6 +108,12 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
         state.last_success_at = utcnow()
         state.incomplete = False
         state.data_revision += 1
+        if encrypted_validators is not None:
+            state.encrypted_validators = encrypted_validators
+            state.last_checked_at = state.last_validated_at = state.last_success_at
+            state.next_attempt_at = None
+            state.last_error = None
+            state.failure_count = 0
         values = state.model_dump()
         await session.execute(insert(CalendarSyncState).values(**values).on_conflict_do_update(
             index_elements=[CalendarSyncState.source_id], set_={k: v for k, v in values.items() if k != "source_id"},

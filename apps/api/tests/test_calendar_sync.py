@@ -128,7 +128,10 @@ async def test_incomplete_snapshot_never_activates(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_enqueue_deduplicates_by_source(fake_store):
+async def test_enqueue_deduplicates_by_source(fake_store, monkeypatch):
+    async def get(source_id):
+        return None
+    monkeypatch.setattr(sync.calendar_source, "get", get)
     start, end = datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 2, 1, tzinfo=UTC)
     assert await sync.enqueue("source", start, end)
     assert not await sync.enqueue("source", start, end)

@@ -20,6 +20,9 @@ from conftest import build_app
 # deciding that it must not be reachable from a Studio agent.
 MUTATING_OPERATIONS: frozenset[str] = frozenset(
     {
+        "calendar_feed_validate",
+        "calendar_feed_subscribe",
+        "calendar_feed_validation_discard",
         "calendar_source_delete",
         "calendar_source_sync",
         "calendar_source_update",
