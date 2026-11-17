@@ -32,7 +32,7 @@ router = APIRouter(route_class=PrivateRoute)
 
 class FeedInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    name: str = Field(min_length=1, max_length=80)
+    name: str
     url: str = Field(repr=False, min_length=1, max_length=4096)
     timezone: str = Field(min_length=1, max_length=100)
     source_id: str | None = None

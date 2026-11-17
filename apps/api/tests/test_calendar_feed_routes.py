@@ -5,13 +5,35 @@ import pytest
 
 @pytest.mark.parametrize("change", [{"timezone": []}, {"url": ["https://calendar.example/test-only"]},
                                     {"url": "http://calendar.example/test-only"},
-                                    {"context_id": "other"}, {"name": "https://calendar.example/test-only"}])
+                                    {"context_id": "other"}, {"name": "Example\nCalendar"}])
 def test_invalid_configuration_is_redacted(client, caplog, change):
     body = {"name": "Example", "url": "https://calendar.example/test-only", "timezone": "UTC", **change}
     response = client.post("/api/v1/calendar/feeds/validate", json=body)
     assert response.status_code == 422
     assert response.json() == {"detail": "calendar_feed_invalid"}
     assert "calendar.example" not in response.text + caplog.text
+
+
+@pytest.mark.parametrize("name", ["Schule & Ferien", "Team: Büro, 2027", "旅行 ☀", "  Verein  ", " " + "A" * 80 + " "])
+def test_printable_names_are_trimmed(client, monkeypatch, name):
+    from api.calendar import feeds
+
+    async def validate(config):
+        assert config["name"] == name.strip()
+        raise feeds.FeedError("calendar_feed_unavailable")
+
+    monkeypatch.setattr(feeds, "validate", validate)
+    response = client.post("/api/v1/calendar/feeds/validate", json={
+        "name": name, "url": "https://calendar.example/test-only", "timezone": "UTC"})
+    assert response.json() == {"detail": "calendar_feed_unavailable"}
+
+
+@pytest.mark.parametrize("name", ["", "   ", "A" * 81, "A\nB", "A\rB", "A\tB", "A\x00B", "A\x7fB", "A\u200bB", "A\u202eB", "A\u2028B", "A\u2029B", "\nExample"])
+def test_nonprintable_or_invalid_length_names_are_rejected(name):
+    from api.calendar import feeds
+
+    with pytest.raises(feeds.FeedError, match="^calendar_feed_invalid$"):
+        feeds.configuration(name=name, url="https://calendar.example/test-only", timezone="UTC")
 
 
 def test_discard_accepts_only_a_body_token(client, monkeypatch):

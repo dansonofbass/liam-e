@@ -6,7 +6,6 @@ under its key. No proof/address is persisted before the safe parser succeeds.
 """
 
 import asyncio
-import re
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -29,7 +28,10 @@ class FeedError(ValueError):
 def configuration(*, name: str, url: str, timezone: str, source_id: str | None = None,
                   expected_revision: int | None = None) -> dict:
     try:
-        if not 1 <= len(name) <= 80 or not re.fullmatch(r"[\w ()\-]+", name) or not name.strip():
+        if not name.isprintable():
+            raise ValueError
+        name = name.strip()
+        if not 1 <= len(name) <= 80:
             raise ValueError
         if len(url) > 4096 or len(timezone) > 100:
             raise ValueError
