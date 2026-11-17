@@ -61,6 +61,6 @@ export function TaskDetail({ id }: { id: string }) {
 }
 function DeleteDialog({ busy, close, remove }: { busy: boolean; close: () => void; remove: () => void }) {
   const ref = useFocusTrap(true, () => { if (!busy) close() }), title = useId()
-  return createPortal(<div className="le-scrim"><div className="le-dialog" role="dialog" aria-modal="true" aria-labelledby={title} ref={ref} tabIndex={-1}><h2 id={title} className="heading">{t.delete}</h2><p>{t.deleteWarning}</p><div className="le-dialog-actions"><Button variant="secondary" disabled={busy} onClick={close}>{t.cancel}</Button><Button variant="danger" disabled={busy} onClick={remove}>{t.delete}</Button></div></div></div>, document.body)
+  return createPortal(<div className="le-scrim" onMouseDown={event => { if (!busy && event.target === event.currentTarget) close() }}><div className="le-dialog" role="dialog" aria-modal="true" aria-labelledby={title} ref={ref} tabIndex={-1}><h2 id={title} className="heading">{t.delete}</h2><p>{t.deleteWarning}</p><div className="le-dialog-actions"><Button variant="secondary" disabled={busy} onClick={close}>{t.cancel}</Button><Button variant="danger" disabled={busy} onClick={remove}>{t.delete}</Button></div></div></div>, document.body)
 }
 function windowLocation() { globalThis.window.location.assign('/tasks') }

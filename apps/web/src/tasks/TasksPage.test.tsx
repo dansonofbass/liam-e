@@ -181,6 +181,22 @@ test('the delete confirmation traps focus and names irreversible history loss', 
   expect(within(document.body).getByRole('button', { name: 'Endgültig löschen' })).toBeTruthy()
 })
 
+test('delete dialog closes on the scrim, but not inside the dialog', async () => {
+  setup(true)
+  const trigger = await screen.findByRole('button', { name: 'Endgültig löschen' })
+  trigger.focus()
+  fireEvent.click(trigger)
+  const dialog = screen.getByRole('dialog')
+  const scrim = dialog.parentElement!
+  fireEvent.mouseDown(within(dialog).getByText('Die Aufgabe und ihr Verlauf werden endgültig gelöscht.'))
+  expect(screen.getByRole('dialog')).toBe(dialog)
+  expect(dialog.contains(document.activeElement)).toBe(true)
+  fireEvent.mouseDown(scrim)
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(document.activeElement).toBe(trigger)
+  expect(requests.some(request => request.method === 'DELETE')).toBe(false)
+})
+
 test('editing targets the selected occurrence and sends both versions and scope', async () => {
   setup(true, true)
   fireEvent.click(await screen.findByRole('button', { name: 'Fälligkeit bearbeiten' }))
