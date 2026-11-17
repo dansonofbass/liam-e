@@ -4,7 +4,7 @@ Text belongs to the series in the current schema. This endpoint edits schedules,
 not text; no implicit title/note changes can alter historical occurrences.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from db.accessors import task_occurrence, task_schedule_revision, task_series
@@ -94,9 +94,9 @@ async def patch(
         raise ValueError('new schedule must start in the future')
     if value.isoformat()[:10] < occurrence.occurrence_key[:10]:
         raise ValueError('new schedule cannot start before the split day')
-    previous_day = date.fromisoformat(occurrence.occurrence_key[:10]) - timedelta(days=1)
-    first_day = date.fromisoformat(revision.start_local[:10])
-    if previous_day >= first_day and not complete_in_window([revision], previous_day, previous_day):
+    split_day = date.fromisoformat(occurrence.occurrence_key[:10])
+    closed = revision.model_copy(update={'end_key': occurrence.occurrence_key})
+    if not complete_in_window([closed], split_day, split_day):
         raise StateConflict('reconcile preceding history before splitting')
 
     for completed in await task_occurrence.completed_for_series(session, series_id):

@@ -149,7 +149,9 @@ Schlüssel; Genauigkeit (Datum/Uhrzeit), Zeitzone und Regel bleiben gleich. Beid
 steigen. `scope=this_and_following` wählt eine zukünftige offene Instanz der aktuellen
 Revision; ihre tatsächliche Fälligkeit und ihr ursprünglicher Schlüssel müssen noch in
 der Zukunft liegen. Bereits fällige Instanzen werden nicht als Trennstelle verwendet.
-Vorherige Tage müssen materialisiert sein. Die alte Regel endet exklusiv vor dem
+Der gespeicherte Abruffortschritt muss die Vollständigkeit der alten Revision bis zur
+exklusiven Trennstelle belegen; sonst wird die Teilung mit `409 task_version_conflict`
+abgelehnt und muss nach weiterem Reconcile erneut versucht werden. Die alte Regel endet exklusiv vor dem
 ursprünglichen Schlüssel; offene zukünftige Instanzen ab dort werden ersetzt. Vergangene,
 erledigte und übersprungene Instanzen bleiben erhalten, auch bereits verschobene
 Vergangenheitsausnahmen. Die neue Revision darf Datum/Uhrzeit und Zeitzone ändern,

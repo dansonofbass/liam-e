@@ -647,6 +647,39 @@ def test_single_patch_preserves_key_and_reconcile_never_recreates_it(pg_db):
     asyncio.run(run())
 
 
+def test_split_rejects_incomplete_timed_boundary(pg_db):
+    async def run():
+        from api.tasks.create import create
+        from api.tasks.patch import patch
+        from api.tasks.reconcile import reconcile_current
+        from api.tasks.state import StateConflict
+        from db.accessors import task_occurrence, task_schedule_revision
+        from db.engine import get_session_maker
+        from db.models.task_occurrence import TaskOccurrence
+
+        async with get_session_maker()() as session:
+            series, _ = await create(session, creation_key='boundary', title='Example',
+                start=datetime(2024, 1, 1, 7), zone='Europe/Berlin', rule='FREQ=DAILY')
+            await reconcile_current(session, series_id=series.id, now=datetime(2024, 1, 1, tzinfo=UTC))
+            revision = await task_schedule_revision.current(session, series.id)
+            # An occurrence may already exist beyond the current coverage marker.
+            row = TaskOccurrence(series_id=series.id, revision_id=revision.id,
+                occurrence_key='2024-01-31T07:00:00', due_local='2024-01-31T07:00:00',
+                due_at=datetime(2024, 1, 31, 6, tzinfo=UTC))
+            await task_occurrence.insert_once(session, row)
+            await session.commit()
+        async with get_session_maker()() as session:
+            with pytest.raises(StateConflict, match='reconcile preceding history'):
+                await patch(session, series.id, expected_version=1, occurrence_id=row.id,
+                    expected_occurrence_version=1, scope='this_and_following',
+                    start='2024-01-31T07:00:00', now=datetime(2024, 1, 1, tzinfo=UTC))
+            old = await task_schedule_revision.get(session, revision.id)
+            assert old.end_key is None
+            await session.rollback()
+
+    asyncio.run(run())
+
+
 def test_split_collision_is_read_only_and_noncolliding_revision_preserves_history(pg_db):
     async def run():
         from api.tasks.patch import RevisionConflict, patch
