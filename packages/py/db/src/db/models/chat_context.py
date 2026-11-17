@@ -14,5 +14,6 @@ class ChatContext(SQLModel, table=True):
     app_prompt_version: str
     account_scope_json: str
     calendar_scope_json: str = Field(default="[]", sa_column=Column(Text, nullable=False, server_default="[]"))
+    task_scope_json: str = Field(default='{"source":"none"}', sa_column=Column(Text, nullable=False, server_default='{"source":"none"}'))
     preference_revision_id: str | None = None
     revoked: bool = False

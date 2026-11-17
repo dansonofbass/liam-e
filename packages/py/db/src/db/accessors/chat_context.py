@@ -1,4 +1,9 @@
-"""Resolve and persist a turn snapshot under conversation and template locks."""
+"""Resolve and persist a turn snapshot under conversation and template locks.
+
+Task provenance is independent of preferences: legacy turns have source=none.
+Any task selection change requires a fresh conversation, including expansion.
+A mail-account selection also bounds task sources; it cannot include personal tasks.
+"""
 import json
 from sqlalchemy import select
 from db.engine import get_session_maker
@@ -61,7 +66,8 @@ async def configure(conversation_id, expected_version, *, revision_id=None, chan
         return row
 
 
-async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version, calendar_source_ids=None):
+async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version, calendar_source_ids=None,
+                  task_source='none', task_source_account_id=None):
     async with get_session_maker()() as session:
         # Lock order matches deletion: template before conversation.
         existing = await session.get(ChatConversation, conversation_id) if conversation_id else None
@@ -118,11 +124,29 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
                 raise ScopeChange
         elif active_ids != set(calendar_ids):
             raise ValueError('calendar_invalid')
+        if task_source not in {'none', 'all', 'unlinked', 'account'}:
+            raise ValueError('task_scope_invalid')
+        if (task_source == 'account') != bool(task_source_account_id):
+            raise ValueError('task_scope_invalid')
+        if task_source_account_id and task_source_account_id not in accounts:
+            raise ValueError('task_scope_invalid')
+        if account_id is not None and task_source != 'none' and (
+            task_source != 'account' or task_source_account_id != account_id
+        ):
+            raise ValueError('task_scope_invalid')
+        task_scope = {'source': task_source}
+        if task_source_account_id:
+            task_scope['account_id'] = task_source_account_id
+        if has_history:
+            for id in context_ids:
+                prior_task = json.loads(by_id[id].task_scope_json) if id in by_id else {'source': 'none'}
+                if prior_task != task_scope:
+                    raise ScopeChange
         conversation.account_scope_json = provenance
         snapshot = ChatContext(conversation_id=conversation.id, prompt_revision_id=selected,
                                prompt_hash=revision.content_hash if revision else None,
                                app_prompt_version=app_prompt_version, account_scope_json=provenance,
-                               calendar_scope_json=json.dumps(calendar_ids))
+                               calendar_scope_json=json.dumps(calendar_ids), task_scope_json=json.dumps(task_scope))
         session.add(snapshot)
         await session.commit()
         return conversation, snapshot, revision.content if revision else None
@@ -131,6 +155,11 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
 async def get_context(context_id: str) -> ChatContext | None:
     async with get_session_maker()() as session:
         return await session.get(ChatContext, context_id)
+
+
+async def get_context_in_session(session, context_id: str) -> ChatContext | None:
+    """Read provenance inside a local proposal transaction; never commit here."""
+    return await session.get(ChatContext, context_id)
 
 
 async def get_contexts(context_ids: set[str]) -> dict[str, ChatContext]:
