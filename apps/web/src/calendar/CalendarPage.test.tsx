@@ -109,8 +109,8 @@ test('mount requests one sync POST per old active source, including after the so
   }) as typeof fetch })
   try {
     const { client, list } = renderAgenda(sources)
-    await waitFor(() => expect(screen.getAllByText(de.calendar.queued)).toHaveLength(2))
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText(de.calendar.queued)).toBeNull()
     await act(async () => { await client.refetchQueries({ queryKey: ['calendar', 'sources'] }) })
     expect(list).toHaveBeenCalledTimes(3)
     expect(requests.map(request => [request.method, new URL(request.url).pathname])).toEqual([
@@ -118,6 +118,22 @@ test('mount requests one sync POST per old active source, including after the so
       ['POST', '/api/v1/calendar/sources/other-old/sync'],
     ])
   } finally { apiClient.setConfig({ ...config, fetch: config.fetch }) }
+})
+
+test.each(['not-due', 'queued', 'error'])('automatic catch-up stays silent (%s); only manual refresh shows feedback', async outcome => {
+  spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [], next_cursor: null } } as never)
+  const sync = spyOn(sdk, 'calendarSourceSync').mockResolvedValue(outcome === 'error'
+    ? { error: { detail: 'test-only' }, response: { ok: false } } as never
+    : { data: { queued: outcome === 'queued' }, response: { ok: true } } as never)
+  const { list } = renderAgenda([{ ...coveredSource(), provider: 'ics' }])
+  await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+  expect(sync).toHaveBeenCalledWith({ path: { source_id: source.id }, query: { due_only: true } })
+  for (const message of [de.calendar.feedNotQueued, de.calendar.queued, de.calendar.refreshError]) {
+    expect(screen.queryByText(message)).toBeNull()
+  }
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.refresh }))
+  expect(await screen.findByText(outcome === 'error' ? de.calendar.refreshError : outcome === 'queued' ? de.calendar.queued : de.calendar.feedNotQueued)).toBeTruthy()
+  expect(sync).toHaveBeenLastCalledWith({ path: { source_id: source.id }, query: { due_only: false } })
 })
 
 test('provider provenance and read-only status are textual', () => {

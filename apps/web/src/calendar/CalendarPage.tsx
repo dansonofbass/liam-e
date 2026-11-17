@@ -55,8 +55,8 @@ export function CalendarAgenda() {
       try {
         const result = await calendarSourceSync({ path: { source_id: source.id }, query: { due_only: dueOnly } })
         if (result.error || !result.response?.ok) throw new Error()
-        setNotices(current => ({ ...current, [source.id]: result.data?.queued ? de.calendar.queued : source.provider === 'ics' ? de.calendar.feedNotQueued : de.calendar.notQueued }))
-      } catch { setNotices(current => ({ ...current, [source.id]: de.calendar.refreshError })) }
+        if (!dueOnly) setNotices(current => ({ ...current, [source.id]: result.data?.queued ? de.calendar.queued : source.provider === 'ics' ? de.calendar.feedNotQueued : de.calendar.notQueued }))
+      } catch { if (!dueOnly) setNotices(current => ({ ...current, [source.id]: de.calendar.refreshError })) }
     }))
     setRefreshing(false)
     void sources.refetch()
