@@ -1,4 +1,27 @@
 // Serialize structured choices only; the server remains responsible for recurrence expansion.
+
+/** Convert the final second of a local calendar day to an RFC 5545 UTC UNTIL. */
+export function timedUntil(day: string, zone: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error('invalid day')
+  const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+  const desired = `${day}T23:59:59`
+  const naive = Date.parse(`${desired}Z`)
+  if (!Number.isFinite(naive) || new Date(naive).toISOString().slice(0, 10) !== day) throw new Error('invalid day')
+  const local = (instant: number) => {
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(instant)).map(p => [p.type, p.value]))
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`
+  }
+  // Sample offsets around the boundary, including either side of a DST transition.
+  const matches = new Set<number>()
+  for (let h = -36; h <= 36; h += 6) {
+    const sample = naive + h * 3600000
+    const offset = Date.parse(`${local(sample)}Z`) - sample
+    const candidate = naive - offset
+    if (local(candidate) === desired) matches.add(candidate)
+  }
+  if (!matches.size) throw new Error('nonexistent end of day')
+  return new Date(Math.max(...matches)).toISOString().replace(/[-:]/g, '').replace('.000Z', 'Z')
+}
 export type Weekday = 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA' | 'SU'
 export type Recurrence = {
   frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY'
