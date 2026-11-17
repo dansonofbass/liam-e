@@ -68,7 +68,8 @@ export function CalendarAgenda() {
   }, [sources.data])
   // Adjacent padded windows can return the same spanning instance. Keep its stable identity once.
   const unique = new Map(page.data?.pages.flatMap(p => p.items).map(row => [row.id, row]))
-  const rows = page.isSuccess ? [...unique.values()].filter(row => inLocalWindow(row, from, to, timeZone)).sort((a, b) => occurrenceDay(a, timeZone).localeCompare(occurrenceDay(b, timeZone)) || (a.start_at ?? '').localeCompare(b.start_at ?? '') || a.id.localeCompare(b.id)) : []
+  const activeIds = new Set(selected.map(source => source.id))
+  const rows = page.isSuccess ? [...unique.values()].filter(row => activeIds.has(row.source_id) && inLocalWindow(row, from, to, timeZone)).sort((a, b) => occurrenceDay(a, timeZone).localeCompare(occurrenceDay(b, timeZone)) || (a.start_at ?? '').localeCompare(b.start_at ?? '') || a.id.localeCompare(b.id)) : []
   return <section className="le-calendar-agenda" aria-label={de.calendar.title}>
     <h1 className="title">{de.calendar.title}</h1>
     <div className="le-calendar-controls">
