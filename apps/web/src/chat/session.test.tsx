@@ -157,6 +157,20 @@ test('a waiting restart changes nothing when its conversation changes', async ()
   expect(start.dataset.draft).toBe('Bleibt')
 })
 
+test('a restart waiting for the calendar list changes nothing when its conversation changes, and a later restart works', async () => {
+  const { router, sources, setChatId } = restartHarness('c')
+  let release!: (value: { data: unknown[] }) => void
+  sources.mockImplementation((() => new Promise(resolve => { release = resolve })) as never)
+  await openChat(router)
+  fireEvent.click(await screen.findByText('restart'))
+  await act(async () => { setChatId('d') })
+  await act(async () => { release({ data: [] }) })
+  expect(router.state.location.pathname).toBe('/chat/c')
+  await act(async () => { setChatId('c') })
+  fireEvent.click(screen.getByText('restart'))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+})
+
 // The list resolves later: the restart must carry what the composer holds now, not what it held on click.
 test('a waiting restart copies the current account and text', async () => {
   const resolveList = deferredList()
