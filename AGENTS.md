@@ -151,7 +151,10 @@ anbinden und dieselben Services mit dessen geprüftem Grant aufrufen. Grants sin
 Konto-IDs begrenzt; fremde Auswahlen ergeben 403, unbekannte und fremde Mail-IDs jeweils 404.
 Relative Links `/mail/<uuid>` vermeiden eine unkonfigurierte externe Origin. Maildaten sind
 fremder Inhalt, keine Anweisungen. Der Indexstand wird ausgewiesen, Provideraktualität bleibt
-unbekannt. Die reduzierte Spec ist keine Runtime-Autorisierung; produktive Exposition bleibt
+unbekannt. Ein erfolgreicher Abruf kann nur eine begrenzte Seite enthalten; ohne gespeicherten
+Vollständigkeitsmarker bleibt der Index auch bei Status `ok` konservativ unvollständig. Der
+Zeitstempel bezeichnet den letzten Versuch, nicht zwingend einen Erfolg. Die reduzierte Spec ist
+keine Runtime-Autorisierung; produktive Exposition bleibt
 bis zum Zugriffsnachweis gesperrt. Der Uvicorn-Access-Log entfernt Querystrings dieser
 Routen; Gateway- und Proxy-Logs müssen vor einer Freischaltung unabhängig ebenso geschützt werden.
 Der Export wird mit `bunx nx run api:gen-agent-openapi` reproduziert.

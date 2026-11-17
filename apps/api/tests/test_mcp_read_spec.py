@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from api.mcp.export import OUTPUT, _refs, build_spec, serialized_spec
 from api.mcp.registry import OPERATIONS
 from conftest import build_app
@@ -35,3 +37,15 @@ def test_normal_route_never_enters_export():
     app.openapi_schema = None
     assert "/api/v1/unrelated" in app.openapi()["paths"]
     assert build_spec(app) == before
+
+
+def test_unregistered_agent_route_fails_closed():
+    app = build_app()
+
+    @app.get("/api/agent-read/v1/unexpected", operation_id="unexpected")
+    async def unexpected():
+        return {}
+
+    app.openapi_schema = None
+    with pytest.raises(ValueError, match="do not match the registry"):
+        build_spec(app)

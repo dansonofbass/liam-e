@@ -1,6 +1,7 @@
 """Runtime contracts for the independently protected, read-only mail facade."""
 
 import logging
+import socket
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -65,6 +66,7 @@ def indexed(monkeypatch):
     monkeypatch.setattr(Session, "flush", forbidden)
     monkeypatch.setattr(Session, "commit", forbidden)
     monkeypatch.setattr(httpx.AsyncClient, "send", forbidden)
+    monkeypatch.setattr(socket.socket, "connect", forbidden)
     monkeypatch.setattr(insights, "get_or_compute", forbidden)
     monkeypatch.setattr(original, "fetch", forbidden)
     monkeypatch.setattr(models_catalog, "list_chat_models", forbidden)
@@ -109,12 +111,26 @@ def test_default_denies_before_any_service(indexed, monkeypatch):
     assert indexed[2] == []
 
 
+def test_malformed_grant_is_denied_before_services(indexed, monkeypatch):
+    app = build_app()
+
+    class InvalidVerifier:
+        async def verify(self, request):
+            return ReadGrant(frozenset({"x" * 65}))
+
+    app.dependency_overrides[get_read_access_verifier] = InvalidVerifier
+    assert TestClient(app).get(BASE + "/accounts").status_code == 401
+    assert indexed[2] == []
+
+
 def test_four_reads_scope_pagination_and_missing_state(authorized):
     client, ids, rows, calls = authorized
     data = client.get(BASE + "/accounts").json()
     assert {a["id"] for a in data["accounts"]} == set(ids[:2])
     assert data["schema_version"] == 1 and data["scope"] == sorted(ids[:2])
-    assert next(i for i in data["index"] if i["account_id"] == ids[1])["incomplete"]
+    assert all(i["incomplete"] and i["stale"] for i in data["index"])
+    assert "index_incomplete" in next(i for i in data["index"] if i["account_id"] == ids[1])["warnings"]
+    assert "index_completeness_unknown" in next(i for i in data["index"] if i["account_id"] == ids[0])["warnings"]
     first = client.get(BASE + "/messages", params={"query": "Example", "limit": 1}).json()
     assert len(first["untrusted_messages"]) == 1 and first["truncated"]
     assert first["untrusted_messages"][0]["truncated"]
@@ -125,6 +141,8 @@ def test_four_reads_scope_pagination_and_missing_state(authorized):
     assert client.get(BASE + "/messages", params={"query": "Example", "account_ids": ids[0], "cursor": first["next_cursor"]}).status_code == 422
     assert client.get(BASE + "/messages", params={"account_ids": ids[2]}).status_code == 403
     assert client.get(BASE + "/summary", params={"account_ids": ids[2]}).status_code == 403
+    assert client.get(BASE + "/summary", params={"account_ids": ids[2]}).json() == client.get(BASE + "/summary", params={"account_ids": str(uuid4())}).json()
+    assert client.get(BASE + "/messages", params={"cursor": "not-base64!"}).status_code == 422
     assert client.get(BASE + "/messages/" + rows[3].id).json() == client.get(BASE + "/messages/" + str(uuid4())).json() == {"detail": "message_not_found"}
     detail = client.get(BASE + "/messages/" + rows[0].id).json()
     assert len(detail["body_text"]) == 20000 and detail["truncated"]
@@ -133,6 +151,11 @@ def test_four_reads_scope_pagination_and_missing_state(authorized):
     assert summary["total"] == 3 and summary["unread"] == 3
     assert client.get(BASE + "/messages", params={"query": "nothing"}).json()["untrusted_messages"] == []
     assert client.get(BASE + "/messages", params={"limit": 51}).status_code == 422
+    assert client.get(BASE + "/messages", params={"limit": 0}).status_code == 422
+    rows[0].body_text = ""
+    rows[0].folder = "ARCHIVE"
+    archived = client.get(BASE + "/messages/" + rows[0].id).json()
+    assert archived["untrusted_message"]["folder"] == "ARCHIVE" and not archived["body_available"]
     assert set(calls) == {"accounts", "states", "page", "get", "counts"}
 
 

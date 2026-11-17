@@ -38,12 +38,13 @@ async def _envelope(scope: list[str]) -> dict:
     index = []
     for account_id in scope:
         state = states.get(account_id)
-        incomplete = state is None or state.last_sync_at is None or state.status != "ok"
-        warnings = ["provider_freshness_unknown"]
-        if incomplete:
+        # A successful sync can still be a bounded provider page; there is no durable
+        # completeness watermark in this index, so even an "ok" status is not proof.
+        warnings = ["provider_freshness_unknown", "index_completeness_unknown"]
+        if state is None or state.last_sync_at is None or state.status != "ok":
             warnings.append("index_incomplete")
         index.append(IndexStatus(account_id=account_id, last_sync_at=state.last_sync_at if state else None,
-                                 incomplete=incomplete, warnings=warnings))
+                                 incomplete=True, warnings=warnings))
     return {"scope": scope, "index": index}
 
 

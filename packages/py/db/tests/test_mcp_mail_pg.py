@@ -14,6 +14,8 @@ def test_read_services_use_only_selects_and_scope_every_query(pg_db, monkeypatch
         from api.mcp import mail
         from api.mcp.access import ReadGrant
         from db.accessors import mail_account, mail_message, mail_sync_state
+        from db.engine import get_engine
+        from sqlalchemy import event
         from sqlalchemy.orm import Session
 
         first = await mail_account.create_account(provider="imap", auth_type="imap_password", email_address="a@example.org", display_name="A")
@@ -28,6 +30,14 @@ def test_read_services_use_only_selects_and_scope_every_query(pg_db, monkeypatch
         def forbidden(*args, **kwargs):
             pytest.fail("read service attempted a write")
 
+        statements = []
+
+        def check_statement(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+            assert statement.lstrip().upper().startswith("SELECT"), "non-read SQL"
+
+        engine = get_engine().sync_engine
+        event.listen(engine, "before_cursor_execute", check_statement)
         with monkeypatch.context() as patch:
             patch.setattr(Session, "flush", forbidden)
             patch.setattr(Session, "commit", forbidden)
@@ -45,5 +55,7 @@ def test_read_services_use_only_selects_and_scope_every_query(pg_db, monkeypatch
             assert (summary.total, summary.unread) == (2, 1)
             assert summary.index[0].last_sync_at is not None
             assert (await mail.liam_mail_search(ReadGrant(frozenset()), query="Example")).untrusted_messages == []
+        event.remove(engine, "before_cursor_execute", check_statement)
+        assert statements
 
     asyncio.run(run())

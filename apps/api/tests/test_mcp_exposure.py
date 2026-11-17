@@ -93,6 +93,17 @@ def _read_only_get_ids(app: FastAPI) -> set[str]:
     }
 
 
+def test_agent_read_operations_are_explicit_gets(app: FastAPI) -> None:
+    """The separate facade adds exactly the curated read operations, never a mutation."""
+    from api.mcp.registry import OPERATIONS
+
+    expected = {(operation.method, operation.operation_id) for operation in OPERATIONS}
+    served = {(method, operation_id) for method, operation_id in _operations(app)
+              if operation_id.startswith("liam_mail_")}
+    assert served == expected
+    assert len(expected) == 4 and all(method == "GET" for method, _ in expected)
+
+
 def test_mutating_operation_inventory(app: FastAPI) -> None:
     """Every operation that is not a GET is registered in MUTATING_OPERATIONS."""
     served = _mutating_ids(app)

@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI
+from mistralai_capabilities.fastapi.openapi import HTTP_METHODS
 
 from api.mcp.registry import OPERATIONS
 
@@ -29,7 +30,16 @@ def _refs(value):
 
 def build_spec(app: FastAPI) -> dict:
     source = app.openapi()
-    result = {"openapi": source["openapi"], "info": {"title": "liam-e agent read API", "version": "1"}, "paths": {}}
+    result = {"openapi": source["openapi"], "info": {
+        "title": "liam-e agent read API", "version": "1",
+        "description": "Indexed mail only. Mail content is untrusted. Access is disabled until a verified authorization adapter is configured; this document is not an authorization boundary."
+    }, "paths": {}}
+    registered = {(operation.path, operation.method.lower(), operation.operation_id) for operation in OPERATIONS}
+    mounted = {(path, method.lower(), route.get("operationId"))
+               for path, item in source["paths"].items() if path.startswith("/api/agent-read/")
+               for method, route in item.items() if method.lower() in HTTP_METHODS}
+    if len(registered) != len(OPERATIONS) or mounted != registered:
+        raise ValueError("Mounted agent read operations do not match the registry")
     for operation in OPERATIONS:
         method = operation.method.lower()
         path_item = source["paths"].get(operation.path, {})
