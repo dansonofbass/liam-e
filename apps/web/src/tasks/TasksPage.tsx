@@ -45,23 +45,29 @@ export function TasksPage() {
     const selected = (series.data?.pages.flatMap(page => page.items) ?? []).filter(row => !row.archived && !seen.current.has(row.id)).slice(0, 20).map(row => row.id)
     if (!selected.length) return
     const controller = new AbortController()
+    const finished = new Set<string>()
     selected.forEach(id => seen.current.add(id))
     setReconciling(true)
     void (async () => {
       let changed = false
-      const finished = new Set<string>()
       try {
         for (const id of selected) {
           if (controller.signal.aborted) break
-          await reconcileTask(id, { signal: controller.signal }); finished.add(id); changed = true
+          await reconcileTask(id, { signal: controller.signal })
+          if (controller.signal.aborted) break
+          finished.add(id); changed = true
         }
       } catch { if (!controller.signal.aborted) setReconcileError(true) }
       finally {
-        if (controller.signal.aborted) selected.filter(id => !finished.has(id)).forEach(id => seen.current.delete(id))
         if (!controller.signal.aborted) { setReconciling(false); if (changed) void client.invalidateQueries({ queryKey: ['tasks'] }) }
       }
     })()
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      // Cleanup owns its reservations and runs before a replacement effect starts.
+      selected.filter(id => !finished.has(id)).forEach(id => seen.current.delete(id))
+      setReconciling(false)
+    }
   }, [series.data, client, retryReconcile])
   const save = async (body: TaskCreate) => {
     if (busy) return
@@ -81,7 +87,7 @@ export function TasksPage() {
     <p>{t.period}: {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p><div><Button variant="secondary" onClick={() => setPeriod(value => value - 1)}>{t.previousPeriod}</Button><Button variant="secondary" onClick={() => setPeriod(value => value + 1)}>{t.nextPeriod}</Button></div>
     {loading && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div key={i} className="le-prompt-placeholder" aria-hidden="true" />)}</>}
     {failed && <Notice tone="danger" action={{ label: t.retry, onClick: () => { void series.refetch(); void occurrences.refetch(); if (skippedActive) void skipped.refetch() } }}>{t.error}</Notice>}
-    {(reconciling || rows.some(row => !row.complete)) && <p role="status">{t.incomplete} {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p>}
+    {reconciling && <p role="status">{t.incomplete} {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p>}
     {reconcileError && <Notice tone="danger" action={{ label: t.retry, onClick: () => { seen.current.clear(); setReconcileError(false); setRetryReconcile(value => value + 1) } }}>{t.error}</Notice>}
     {!loading && !failed && status !== 'archived' && !joined.length && !hasMore && !reconciling && <p>{status === 'completed' ? t.emptyCompleted : t.empty}</p>}
     {status === 'archived' ? <ul>{visible.map(row => <li key={row.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a>{row.schedule && <> · {formatTaskDue(row.schedule.start_local)} · {formatTaskRule(row.schedule.rrule)}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul> : groups.map(label => { const items = joined.filter(({ row, item }) => group(item.due_local.slice(0, 10), row.schedule?.timezone ?? null) === label); return items.length ? <section key={label}><h2>{label}</h2><ul>{items.map(({ row, item }) => <li key={item.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a> · {formatTaskDue(item.due_local)} · {formatTaskRule(row.schedule?.rrule)}{item.status === 'skipped' && <> · {t.skipped}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul></section> : null })}

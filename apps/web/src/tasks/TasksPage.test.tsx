@@ -17,13 +17,13 @@ const archived = { ...active, id: 'archived', title: 'Archiviert und fällig', a
 const occurrence = { id: 'occ', series_id: 'archived', revision_id: 'rev', occurrence_key: today, due_local: today, due_at: null, status: 'open', version: 1 }
 const windowData = { due_from: today, due_to: today }
 let requests: { path: string; search: string; method: string; body?: unknown }[] = []
-function setup(detail = false, activeDetail = false, incomplete = false, path = '/tasks') {
+function setup(detail = false, activeDetail = false, incomplete = false, path = '/tasks', reconcile?: (request: Request) => Promise<Response>) {
   api.setConfig({ baseUrl: 'https://api.example.test' })
   requests = []
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const req = input instanceof Request ? input : new Request(input, init), url = new URL(req.url)
     requests.push({ path: url.pathname, search: url.search, method: req.method, body: ['POST', 'PATCH', 'DELETE'].includes(req.method) ? await req.clone().json() : undefined })
-    if (url.pathname.endsWith('/reconcile')) return Response.json({ revision_id: 'rev', cursor: 'cursor', target: '2027-01-01T00:00:00Z', complete: true })
+    if (url.pathname.endsWith('/reconcile')) return reconcile ? reconcile(req) : Response.json({ revision_id: 'rev', cursor: 'cursor', target: '2027-01-01T00:00:00Z', complete: true })
     if (url.pathname.endsWith('/complete') || req.method === 'PATCH' || req.method === 'DELETE') return Response.json({ detail: { code: 'task_version_conflict' } }, { status: 409 })
     if (url.pathname.endsWith('/accounts')) return Response.json([{ id: accountId, email_address: 'mail@example.org' }])
     if (url.pathname.endsWith('/occurrences')) {
@@ -33,7 +33,7 @@ function setup(detail = false, activeDetail = false, incomplete = false, path = 
       return Response.json({ items: [occurrence], next_cursor: null })
     }
     if (url.pathname.endsWith('/tasks/archived')) return Response.json({ window: windowData, series: { ...(activeDetail ? { ...active, id: 'archived' } : archived), complete: !incomplete }, occurrences: { items: [occurrence], next_cursor: null } })
-    return Response.json({ window: windowData, items: [{ ...active, complete: !incomplete }, archived], next_cursor: null })
+    return Response.json({ window: windowData, items: url.searchParams.get('status') === 'archived' ? [archived] : [{ ...active, complete: !incomplete }, archived], next_cursor: null })
   }) as typeof fetch
   const query = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={query}><Outlet /></QueryClientProvider> })
@@ -41,7 +41,7 @@ function setup(detail = false, activeDetail = false, incomplete = false, path = 
   const other = createRoute({ getParentRoute: () => root, path: '/accounts', component: () => <p>Other page</p> })
   const router = createRouter({ routeTree: root.addChildren([tasks, other]), history: createMemoryHistory({ initialEntries: [path] }) })
   const view = render(<RouterProvider router={router} />)
-  return { router, view }
+  return { router, view, query }
 }
 afterEach(() => { cleanup(); globalThis.fetch = oldFetch; api.setConfig(oldConfig) })
 
@@ -104,7 +104,7 @@ test('period and incomplete notices keep date-only days in a western time zone',
   setSystemTime(new Date('2028-01-30T20:00:00Z'))
   try {
     for (const detail of [false, true]) {
-      setup(detail, false, true)
+      setup(detail, detail, true, '/tasks', () => new Promise(() => {}))
       const period = await screen.findByText(/^Zeitraum:/)
       const notice = await screen.findByText(/^Fälligkeiten werden ergänzt/)
       for (const element of [period, notice]) {
@@ -118,6 +118,53 @@ test('period and incomplete notices keep date-only days in a western time zone',
     if (oldZone === undefined) delete process.env.TZ
     else process.env.TZ = oldZone
   }
+})
+
+function delayedLastReconciles() {
+  const pending: { resolve: (value: Response) => void; reject: (error: Error) => void }[] = []
+  const response = () => Response.json({ revision_id: 'rev', cursor: 'cursor', target: '2027-01-01T00:00:00Z', complete: true })
+  const reconcile = async (request: Request) => {
+    const body = await request.clone().json() as { advance?: boolean }
+    if (!body.advance) return response()
+    return await new Promise<Response>((resolve, reject) => pending.push({ resolve, reject }))
+  }
+  return { pending, response, reconcile }
+}
+
+test('aborting the final reconcile request clears the banner', async () => {
+  const work = delayedLastReconciles()
+  setup(false, false, false, '/tasks', work.reconcile)
+  await waitFor(() => expect(work.pending).toHaveLength(1))
+  expect(screen.getByText(/^Fälligkeiten werden ergänzt/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Archiviert' }))
+  await waitFor(() => expect(screen.queryByText(/^Fälligkeiten werden ergänzt/)).toBeNull())
+  await act(async () => { work.pending[0]!.reject(new Error('aborted')) })
+  expect(screen.queryByText(/^Fälligkeiten werden ergänzt/)).toBeNull()
+})
+
+test('a replaced run cannot clear the newer banner or reservations', async () => {
+  const work = delayedLastReconciles()
+  const { query } = setup(false, false, false, '/tasks', work.reconcile)
+  await waitFor(() => expect(work.pending).toHaveLength(1))
+  fireEvent.click(screen.getByRole('button', { name: 'Quelle' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Ohne Mailbezug' }))
+  await waitFor(() => expect(work.pending).toHaveLength(2))
+  await act(async () => { work.pending[0]!.reject(new Error('aborted')) })
+  expect(screen.getByText(/^Fälligkeiten werden ergänzt/)).toBeTruthy()
+  await act(async () => { work.pending[1]!.resolve(work.response()) })
+  await waitFor(() => expect(screen.queryByText(/^Fälligkeiten werden ergänzt/)).toBeNull())
+  await waitFor(() => expect(query.isFetching()).toBe(0))
+  expect(work.pending).toHaveLength(2)
+  expect(requests.filter(request => request.path.endsWith('/reconcile'))).toHaveLength(4)
+})
+
+test('normal reconciliation hides the banner when its final request finishes', async () => {
+  const work = delayedLastReconciles()
+  setup(false, false, false, '/tasks', work.reconcile)
+  await waitFor(() => expect(work.pending).toHaveLength(1))
+  expect(screen.getByText(/^Fälligkeiten werden ergänzt/)).toBeTruthy()
+  await act(async () => { work.pending[0]!.resolve(work.response()) })
+  await waitFor(() => expect(screen.queryByText(/^Fälligkeiten werden ergänzt/)).toBeNull())
 })
 
 test('the delete confirmation traps focus and names irreversible history loss', async () => {
