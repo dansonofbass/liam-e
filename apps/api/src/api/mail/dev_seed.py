@@ -76,6 +76,47 @@ NEWSLETTERS = [
 ]
 
 
+async def seed_tasks(now: datetime) -> None:
+    """Replace only synthetic task series through the normal transactional services."""
+    from db.accessors import task_occurrence, task_series
+    from db.engine import get_session_maker
+    from api.tasks import create, lifecycle, reconcile, state
+
+    today = now.astimezone(BERLIN).date()
+    specs = [
+        ('once', 'Unterlagen prüfen', today, None),
+        ('daily', 'Post prüfen', today, 'FREQ=DAILY'),
+        ('weekly', 'Wochenplanung', today, 'FREQ=WEEKLY'),
+        ('monthly', 'Belege ablegen', today, 'FREQ=MONTHLY'),
+        ('overdue', 'Angebot beantworten', today - timedelta(days=3), None),
+        ('completed', 'Notizen ordnen', today - timedelta(days=1), None),
+        ('archived', 'Termin vorbereiten', today, None),
+        ('mail', 'Abrechnung prüfen', today, None),
+    ]
+    async with get_session_maker()() as session:
+        after = None
+        while True:
+            rows = await task_series.list_page(session, scope='app', due_from='0001-01-01', due_to='9999-12-31', archived=None, source='all', source_account_id=None, after=after, limit=100)
+            if not rows:
+                break
+            after = rows[-1].id
+            for row in rows:
+                if row.creation_key.startswith('board-seed-task:'):
+                    await lifecycle.delete(session, row.id, expected_version=row.version, confirm_history_loss=True)
+        for key, title, start, rule in specs:
+            source = {'source_account_id': seed_id('account', 'privat'), 'source_message_id': seed_id('mail', 'hausverwaltung-nebenkosten')} if key == 'mail' else {}
+            row, _ = await create.create(session, creation_key=f'board-seed-task:{key}', title=title, start=start, zone='Europe/Berlin', rule=rule, **source)
+            _, cursor, complete = await reconcile.reconcile_current(session, series_id=row.id, now=now)
+            while not complete:
+                _, cursor, complete = await reconcile.reconcile_current(session, series_id=row.id, cursor=cursor, now=now)
+            if key == 'completed':
+                instances = await task_occurrence.list_page(session, scope='app', status='open', due_from=None, due_to=None, after=None, limit=1, series_id=row.id)
+                await state.transition(session, instances[0].id, version=instances[0].version, action='complete')
+            if key == 'archived':
+                await lifecycle.archive(session, row.id, expected_version=row.version, now=now)
+        await session.commit()
+
+
 async def seed(now: datetime | None = None) -> SeedResult:
     """Replace local board sample mail data, never accessing a remote database."""
     require_local_database()
@@ -143,6 +184,7 @@ async def seed(now: datetime | None = None) -> SeedResult:
                     dedupe_key=f"seed-sync-{by_key['familie'].id}", locked_at=started,
                     created_at=started, updated_at=started)]
     await seed_access.replace_mail_data(accounts, states, messages, [insight], jobs)
+    await seed_tasks(local_now.astimezone(UTC))
 
     conversation_specs = [
         ("was-ist-heute-wichtig", "Was ist heute wichtig?", at(0, "08:57")),

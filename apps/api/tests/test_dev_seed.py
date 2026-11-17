@@ -86,6 +86,9 @@ async def test_seed_is_repeatable_and_preserves_other_rows(fake_store, monkeypat
         insights.update({row.message_id: row for row in rows})
 
     monkeypatch.setattr(dev_seed.seed_access, "replace_mail_data", replace)
+    async def skip_tasks(_now):
+        pass
+    monkeypatch.setattr(dev_seed, "seed_tasks", skip_tasks)
     now = datetime(2026, 11, 13, 12, 30, tzinfo=UTC)
     for _ in range(2):
         result = await dev_seed.seed(now)
