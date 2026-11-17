@@ -8,7 +8,7 @@ import { messagesInfiniteQuery } from '../api/queries'
 import { Button, Chip, Notice, TextField } from '../ds'
 import { de } from '../i18n/de'
 import { recurrenceRule, timedUntil, type Recurrence, type Weekday } from './recurrence'
-import { formatTaskDue } from './format'
+import { formatTaskDue, isTimeZone } from './format'
 import { TaskSelect } from './TaskSelect'
 import './tasks.css'
 
@@ -54,7 +54,7 @@ export function TaskForm({ save, busy, error }: { save: (body: TaskCreate) => vo
     } catch { return undefined }
   }, [mode, frequency, interval, weekdays, monthday, end, count, endDate, time, zone])
   let input: PreviewIn | null = null
-  const validZone = Intl.supportedValuesOf('timeZone').includes(zone) || zone === 'UTC'
+  const validZone = isTimeZone(zone)
   try {
     if (!validZone) throw new RangeError('Invalid time zone')
     if (date && zone && rule !== undefined && (mode === 'none' || end !== 'date' || endDate >= date) && !(mode === 'custom' && frequency === 'WEEKLY' && !weekdays.length)) input = { start, through: through(start), timezone: zone, rrule: rule, limit: 5 }

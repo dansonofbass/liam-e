@@ -33,6 +33,17 @@ test('invalid time zones show an explanation and prevent saving', () => {
   expect((screen.getByRole('button', { name: 'Aufgabe speichern' }) as HTMLButtonElement).disabled).toBe(true)
 })
 
+test('the form renders and accepts a zone without Intl.supportedValuesOf', () => {
+  const intl = Intl as { supportedValuesOf?: unknown }, original = intl.supportedValuesOf
+  intl.supportedValuesOf = undefined
+  try {
+    const query = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={query}><TaskForm busy={false} save={() => {}} /></QueryClientProvider>)
+    fireEvent.change(screen.getByLabelText('Zeitzone'), { target: { value: 'Europe/Berlin' } })
+    expect(screen.queryByText(/Gib eine gültige Zeitzone ein/)).toBeNull()
+  } finally { intl.supportedValuesOf = original }
+})
+
 test('late preview cannot replace a newer schedule and failed save preserves inputs', async () => {
   api.setConfig({ baseUrl: 'https://api.example.test' })
   const pending: { start: string; resolve: (response: Response) => void }[] = []
