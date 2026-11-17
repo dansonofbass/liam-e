@@ -74,6 +74,16 @@ test.each(['read', 'settings', 'identity'])('changing %s invalidates an existing
   expect(action).not.toHaveBeenCalled()
 })
 
+test.each(['edge', 'button'])('start on %s never takes the gesture', async target => {
+  const { element, action } = setup()
+  const start = target === 'button' ? element.querySelector('button')! : element
+  pointer(start, 'pointerdown', target === 'edge' ? 10 : 200)
+  move(element, 310); up(element, 310)
+  await act(async () => {})
+  expect(action).not.toHaveBeenCalled()
+  expect(screen.getByRole('status').textContent).toBe('')
+})
+
 test('tap opens, while a drag suppresses its following click', () => {
   const { element, open } = setup(); down(element); up(element, 200); fireEvent.click(element); expect(open).toHaveBeenCalledTimes(1)
   down(element); move(element, 250); up(element, 250); fireEvent.click(element); expect(open).toHaveBeenCalledTimes(1)

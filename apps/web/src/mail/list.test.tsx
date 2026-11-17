@@ -49,6 +49,19 @@ test('inbox swipe uses the confirmed assignment and the shared action path', asy
   expect(await screen.findByText('„Termin“ als gelesen markiert.')).toBeTruthy()
 })
 
+test('two disabled swipe directions do not capture a touch', async () => {
+  spyOn(sdk, 'settingsUiGet').mockImplementation((async () => ({ data: { swipe_left: 'none', swipe_right: 'none', revision: 1 }, response: { ok: true } })) as never)
+  const { client } = setup('row', '/mail', true)
+  const element = (await screen.findByText('Termin')).closest<HTMLElement>('.le-mailrow')!
+  await waitFor(() => expect(client.getQueryState(['ui-settings'])?.status).toBe('success'))
+  await settle()
+  const capture = spyOn(element, 'setPointerCapture')
+  const event = new MouseEvent('pointerdown', { bubbles: true, clientX: 200, clientY: 100 })
+  Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: 'touch' }, isPrimary: { value: true } })
+  fireEvent(element, event)
+  expect(capture).not.toHaveBeenCalled()
+})
+
 test('coarse pointer inbox controls use the large touch target token', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/@media \(pointer: coarse\) \{ (\.le-inbox-filters[^{}]+)\{ ([^{}]+) \} \.le-inbox-toast \.le-link \{ ([^{}]+) \} \}/u)
