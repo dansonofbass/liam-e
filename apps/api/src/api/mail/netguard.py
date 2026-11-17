@@ -88,6 +88,47 @@ class _PinnedBackend(httpcore.AsyncNetworkBackend):
         )
 
 
+class _CoreStream(httpx.AsyncByteStream):
+    def __init__(self, response: httpcore.Response):
+        self._response = response
+
+    async def __aiter__(self):
+        async for chunk in self._response.aiter_stream():
+            yield chunk
+
+    async def aclose(self) -> None:
+        await self._response.aclose()
+
+
+class PinnedStreamingTransport(httpx.AsyncBaseTransport):
+    """Streaming sibling of the POST transport; callers must close responses.
+
+    No client logging, cookies, proxies, redirects or retries are installed here.
+    Each instance binds one checked origin to numeric addresses.
+    """
+
+    def __init__(self, host: str, addresses: list[str]):
+        self._pool = httpcore.AsyncConnectionPool(
+            network_backend=_PinnedBackend(host, addresses),
+        )
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        response = await self._pool.handle_async_request(httpcore.Request(
+            method=request.method,
+            url=httpcore.URL(
+                scheme=request.url.raw_scheme, host=request.url.raw_host,
+                port=request.url.port, target=request.url.raw_path,
+            ),
+            headers=request.headers.raw, content=request.stream,
+            extensions=request.extensions,
+        ))
+        return httpx.Response(response.status, headers=response.headers,
+                              stream=_CoreStream(response))
+
+    async def aclose(self) -> None:
+        await self._pool.aclose()
+
+
 class _PinnedTransport(httpx.AsyncBaseTransport):
     """Minimal status/header-only adapter; no response content crosses this boundary."""
 

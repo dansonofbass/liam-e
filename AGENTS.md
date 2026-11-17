@@ -231,6 +231,17 @@ Instanz sie referenziert; enthaltene Ereignisse bleiben auch ohne Instanzen erha
 Snapshot vorliegt oder der Index unvollständig ist; ohne periodischen Abruf sagt das Alter des
 letzten Erfolgs allein nichts über die Aktualität beim Anbieter aus.
 
+`ics_fetch.py` provides the unregistered HTTPS acquisition layer for ICS. It shares the
+numeric-pinned streaming transport in `mail/netguard.py`, rejects non-public/mixed DNS
+answers and mapped/transition addresses, and permits only HTTPS:443 with three same-origin
+redirects within one 15-second deadline. Wire and decoded bodies each have a 5 MiB limit;
+only identity/gzip and calendar MIME types are accepted. `normalize_url` explicitly returns
+the HTTPS spelling (including private path/query data) for owner confirmation; never log it.
+Fetch results hide body and validators from repr, and task-local filtering suppresses
+httpcore traces that could expose headers or protocol content. Envelope validation is not
+RFC 5545 parsing: no fetch result may activate a snapshot before the isolated parser and
+recurrence layer are implemented. No adapter is registered yet.
+
 ## Domänenmodell (Tabellen in Postgres)
 
 - `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — Kalenderquelle mit Verbindungsreferenz und Freigabe (`is_active`), Serienstamm je Quelle, Instanz als halboffenes Intervall (ganztägig als Datum, sonst UTC mit Zeitzone; eindeutig je Quelle und `external_id`) sowie Abdeckung, letzter Erfolg und Unvollständigkeit je Quelle.
