@@ -45,6 +45,26 @@ function setup(detail = false, activeDetail = false, incomplete = false, path = 
 }
 afterEach(() => { cleanup(); globalThis.fetch = oldFetch; api.setConfig(oldConfig) })
 
+test('task links navigate through the router and preserve filters on return', async () => {
+  setup(); cleanup()
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const root = createRootRoute({ component: () => <QueryClientProvider client={client}><Outlet /></QueryClientProvider> })
+  const tasks = createRoute({ getParentRoute: () => root, path: '/tasks', validateSearch: TasksRoute.options.validateSearch, component: () => <Outlet /> })
+  const index = createRoute({ getParentRoute: () => tasks, path: '/', component: TasksPage })
+  const detail = createRoute({ getParentRoute: () => tasks, path: '$taskId', component: () => <TaskDetail id="archived" /> })
+  const router = createRouter({ routeTree: root.addChildren([tasks.addChildren([index, detail])]), history: createMemoryHistory({ initialEntries: ['/tasks?source=unlinked'] }) })
+  render(<RouterProvider router={router} />)
+  fireEvent.click(await screen.findByRole('link', { name: 'Archiviert und fällig' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/tasks/archived'))
+  await screen.findByRole('heading', { name: 'Archiviert und fällig' })
+  const back = screen.getByRole('link', { name: 'Zurück zu Aufgaben' })
+  expect(back.getAttribute('href')).toContain('/tasks?source=unlinked')
+  fireEvent.click(back)
+  await waitFor(() => expect(router.state.location.pathname).toBe('/tasks'))
+  expect(router.state.location.search).toMatchObject({ source: 'unlinked' })
+  expect(await screen.findByRole('heading', { name: 'Aufgaben' })).toBeTruthy()
+})
+
 test('open list includes due instances of archived series and sends independent source filter', async () => {
   const { router } = setup()
   expect(await screen.findByRole('link', { name: 'Archiviert und fällig' })).toBeTruthy()

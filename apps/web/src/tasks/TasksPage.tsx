@@ -1,6 +1,6 @@
 // i18n-exempt: route paths, CSS classes and API values.
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useSearch } from '@tanstack/react-router'
+import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { tasksCreate } from '../api/generated/sdk.gen'
 import type { TaskCreate } from '../api/generated/types.gen'
@@ -15,6 +15,7 @@ import { reconcileTask } from './reconcile'
 import { SourceMail } from './SourceMail'
 import { formatTaskDue, formatTaskRule } from './format'
 import type { TaskSearch } from './filters'
+import './tasks.css'
 
 const t = de.tasks
 export function TasksPage() {
@@ -81,7 +82,7 @@ export function TasksPage() {
   const joined = entries.flatMap(item => { const row = seriesById.get(item.series_id); return row ? [{ row, item }] : [] })
   const groups = [t.overdue, t.today, t.later] as const
   const group = (day: string, zone: string | null) => { const today = localToday(zone); return day < today ? t.overdue : day === today ? t.today : t.later }
-  return <main className="le-prompts"><h1 className="heading">{t.title}</h1><Button variant="primary" onClick={() => { setError(undefined); setCreating(true) }}>{t.create}</Button>
+  return <main className="le-tasks"><h1 className="heading">{t.title}</h1><Button variant="primary" onClick={() => { setError(undefined); setCreating(true) }}>{t.create}</Button>
     <div>{(['open', 'completed', 'archived'] as const).map(value => <Button key={value} variant={status === value ? 'primary' : 'secondary'} aria-pressed={status === value} onClick={() => changeSearch({ status: value === 'open' ? undefined : value })}>{value === 'open' ? t.open : value === 'completed' ? t.completed : t.archived}</Button>)}</div>
     <TaskSelect label={t.source} value={source} onChange={value => changeSearch(value === 'all' ? { source: undefined, source_account_id: undefined } : value === 'unlinked' ? { source: 'unlinked', source_account_id: undefined } : { source: 'account', source_account_id: value })} options={[{ value: 'all', label: t.allSources }, { value: 'unlinked', label: t.unlinked }, ...(accounts.data?.map(account => ({ value: account.id, label: account.email_address })) ?? [])]} />
     <p>{t.period}: {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p><div><Button variant="secondary" onClick={() => setPeriod(value => value - 1)}>{t.previousPeriod}</Button><Button variant="secondary" onClick={() => setPeriod(value => value + 1)}>{t.nextPeriod}</Button></div>
@@ -90,7 +91,7 @@ export function TasksPage() {
     {reconciling && <p role="status">{t.incomplete} {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p>}
     {reconcileError && <Notice tone="danger" action={{ label: t.retry, onClick: () => { seen.current.clear(); setReconcileError(false); setRetryReconcile(value => value + 1) } }}>{t.error}</Notice>}
     {!loading && !failed && status !== 'archived' && !joined.length && !hasMore && !reconciling && <p>{status === 'completed' ? t.emptyCompleted : t.empty}</p>}
-    {status === 'archived' ? <ul>{visible.map(row => <li key={row.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a>{row.schedule && <> · {formatTaskDue(row.schedule.start_local)} · {formatTaskRule(row.schedule.rrule)}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul> : groups.map(label => { const items = joined.filter(({ row, item }) => group(item.due_local.slice(0, 10), row.schedule?.timezone ?? null) === label); return items.length ? <section key={label}><h2>{label}</h2><ul>{items.map(({ row, item }) => <li key={item.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a> · {formatTaskDue(item.due_local)} · {formatTaskRule(row.schedule?.rrule)}{item.status === 'skipped' && <> · {t.skipped}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul></section> : null })}
+    {status === 'archived' ? <ul>{visible.map(row => <li key={row.id}><Link className="le-link" to="/tasks/$taskId" params={{ taskId: row.id }} search={true}>{row.title}</Link>{row.schedule && <> · {formatTaskDue(row.schedule.start_local)} · {formatTaskRule(row.schedule.rrule)}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul> : groups.map(label => { const items = joined.filter(({ row, item }) => group(item.due_local.slice(0, 10), row.schedule?.timezone ?? null) === label); return items.length ? <section key={label}><h2>{label}</h2><ul>{items.map(({ row, item }) => <li key={item.id}><Link className="le-link" to="/tasks/$taskId" params={{ taskId: row.id }} search={true}>{row.title}</Link> · {formatTaskDue(item.due_local)} · {formatTaskRule(row.schedule?.rrule)}{item.status === 'skipped' && <> · {t.skipped}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul></section> : null })}
     {hasMore && <Button variant="secondary" onClick={() => { if (series.hasNextPage) void series.fetchNextPage(); if (occurrences.hasNextPage) void occurrences.fetchNextPage(); if (skippedActive && skipped.hasNextPage) void skipped.fetchNextPage() }}>{t.more}</Button>}
   </main>
 }

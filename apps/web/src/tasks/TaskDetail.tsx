@@ -1,5 +1,6 @@
 // i18n-exempt: route paths, CSS classes and API values.
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { useEffect, useId, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../ds/useFocusTrap'
@@ -13,6 +14,7 @@ import { taskWindow } from './window'
 import { SourceMail } from './SourceMail'
 import { TaskSelect } from './TaskSelect'
 import { formatTaskDue, formatTaskRule } from './format'
+import './tasks.css'
 
 const t = de.tasks
 export function TaskDetail({ id }: { id: string }) {
@@ -40,13 +42,13 @@ export function TaskDetail({ id }: { id: string }) {
     } catch { setDeleting(false); setError(t.saveError) } finally { setBusy(false) }
   }
   const refresh = () => { void query.refetch().then(result => { if (!result.isError) { setConflict(false); setError(undefined); setEditing(undefined); setDeleting(false) } }) }
-  if (!series) return <main className="le-prompts"><a href="/tasks" className="le-link">{t.back}</a>{query.isPending ? <p role="status">{t.loading}</p> : <Notice tone="danger" action={{ label: t.retry, onClick: refresh }}>{t.error}</Notice>}</main>
+  if (!series) return <main className="le-tasks"><Link to="/tasks" search={true} className="le-link">{t.back}</Link>{query.isPending ? <p role="status">{t.loading}</p> : <Notice tone="danger" action={{ label: t.retry, onClick: refresh }}>{t.error}</Notice>}</main>
   const occurrences = query.data?.pages.flatMap(page => page.occurrences.items) ?? []
   const transition = (item: Occurrence, kind: 'complete' | 'skip' | 'reopen') => {
     const fn = kind === 'complete' ? tasksOccurrenceComplete : kind === 'skip' ? tasksOccurrenceSkip : tasksOccurrenceReopen
     void run(() => fn({ path: { occurrence_id: item.id }, body: { version: item.version } }))
   }
-  return <main className="le-prompts"><a href="/tasks" className="le-link">{t.back}</a><h1 className="heading">{series.title}</h1><p>{series.description}</p><p>{series.schedule?.timezone ?? 'UTC'} · {formatTaskRule(series.schedule?.rrule)}</p>
+  return <main className="le-tasks"><Link to="/tasks" search={true} className="le-link">{t.back}</Link><h1 className="heading">{series.title}</h1><p>{series.description}</p><p>{series.schedule?.timezone ?? 'UTC'} · {formatTaskRule(series.schedule?.rrule)}</p>
     {series.source_message_id && <SourceMail id={series.source_message_id} />}
     {(reconciling || !series.complete) && <p role="status">{t.incomplete} {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p>}
     {reconcileFailed && <Notice tone="danger" action={{ label: t.retry, onClick: () => setAttempt(value => value + 1) }}>{t.error}</Notice>}

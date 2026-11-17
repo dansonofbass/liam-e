@@ -59,7 +59,7 @@ export function TaskForm({ save, busy, error }: { save: (body: TaskCreate) => vo
     if (!validZone) throw new RangeError('Invalid time zone')
     if (date && zone && rule !== undefined && (mode === 'none' || end !== 'date' || endDate >= date) && !(mode === 'custom' && frequency === 'WEEKLY' && !weekdays.length)) input = { start, through: through(start), timezone: zone, rrule: rule, limit: 5 }
   } catch { /* Invalid fields disable preview and save. */ }
-  return <form className="le-prompts le-task-form" onSubmit={event => { event.preventDefault(); if (input && title.trim() && previewValid) save({ creation_key: creationKey.current, title: title.trim(), description, start, timezone: zone, rrule: rule, source_message_id: mail?.id, source_account_id: mail?.account_id }) }}>
+  return <form className="le-tasks le-task-form" onSubmit={event => { event.preventDefault(); if (input && title.trim() && previewValid) save({ creation_key: creationKey.current, title: title.trim(), description, start, timezone: zone, rrule: rule, source_message_id: mail?.id, source_account_id: mail?.account_id }) }}>
     <h2 className="heading">{labels.create}</h2>
     <TextField label={labels.name} value={title} onChange={e => setTitle(e.target.value)} required maxLength={500} autoFocus />
     <TextField label={labels.note} multiline value={description} onChange={e => setDescription(e.target.value)} maxLength={10000} />
