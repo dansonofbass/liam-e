@@ -150,7 +150,7 @@ export const de = {
     aborted: 'Die Antwort ist abgebrochen.',
     internal: 'Die Antwort konnte nicht erstellt werden. Versuch es gleich noch mal.',
     conversation_not_found: 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.',
-    context_revoked: 'Die Vorlage oder Kalenderfreigabe ist nicht mehr gültig. Starte eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
+    context_revoked: 'Die Vorlage oder die Auswahl von Konten, Kalendern oder Aufgaben ist nicht mehr gültig. Starte eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
     conversation_scope_change_requires_new: 'Diese Unterhaltung gilt für andere Konten oder Kalender. Starte für die neue Auswahl eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
     context_unavailable: 'Die Unterhaltung oder ihre Vorlage ist nicht mehr verfügbar. Starte eine neue Unterhaltung.',
     context_invalid: 'Ein Konto oder Kalender aus deiner Auswahl ist nicht verfügbar. Prüfe deine Auswahl und versuch es noch mal.',

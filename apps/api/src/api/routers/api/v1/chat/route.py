@@ -38,7 +38,7 @@ async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
                 conversation_id, user_id = event.conversation_id, event.user_message_id
             elif event.event == 'error':
                 if event.code == 'context_revoked':
-                    raise refuse(409, 'context_revoked', 'Die Vorlage oder Kalenderfreigabe ist nicht mehr gültig. Starte eine neue Unterhaltung.')
+                    raise refuse(409, 'context_revoked', 'Die Vorlage oder die Auswahl von Konten, Kalendern oder Aufgaben ist nicht mehr gültig. Starte eine neue Unterhaltung.')
                 if event.code == 'model_unavailable':
                     raise refuse(503, 'model_unavailable', 'Das Modell antwortet gerade nicht. Versuch es gleich noch mal.')
                 raise refuse(500, 'internal', 'Die Antwort konnte nicht erstellt werden. Versuch es gleich noch mal.')
