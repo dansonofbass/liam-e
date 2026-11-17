@@ -102,7 +102,12 @@ def test_snapshot_fences_configuration_pause_resume_and_removal(pg_db):
             assert await session.get(CalendarSyncState, source.id) is None
         args["expected_revision"] = (await calendar_source.get(source.id)).revision
         await replace_window(**args)
-        assert await calendar_source.remove(source.id)
+        # Actual competing transactions: either the commit precedes deletion or
+        # the worker loses its source lock. Neither order may resurrect rows.
+        result, removed = await asyncio.gather(replace_window(**args), calendar_source.remove(source.id),
+                                               return_exceptions=True)
+        assert result is None or isinstance(result, LostClaim)
+        assert removed is True
         with pytest.raises(LostClaim):
             await replace_window(**args)
         async with get_session_maker()() as session:
