@@ -64,6 +64,8 @@ async def change_template(template_id: str, expected_version: int, *, name: str 
             await session.delete(row)
         else:
             previous = await session.get(PromptRevision, row.revision_id)
+            if (content is None or content == previous.content) and (name is None or name == row.name):
+                return row  # Nothing changes: no new revision and no version bump.
             row.version += 1
             rev = revision(row.id, row.version, content if content is not None else previous.content)
             row.revision_id = rev.id

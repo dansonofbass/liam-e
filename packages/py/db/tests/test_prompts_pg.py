@@ -93,3 +93,16 @@ def test_account_scope_and_unknown_history(pg_db):
         with pytest.raises(c.ScopeChange):
             await resolve(legacy.id, a.id)
     asyncio.run(run())
+
+
+def test_unchanged_update_keeps_version_and_revision(pg_db):
+    async def run():
+        from db.accessors import prompt_template as p
+        row = await p.create_template('Name', 'Text')
+        for same in (await p.change_template(row.id, 1), await p.change_template(row.id, 1, name='Name', content='Text')):
+            assert (same.version, same.revision_id) == (1, row.revision_id)
+        with pytest.raises(p.StaleVersion):
+            await p.change_template(row.id, 2)
+        renamed = await p.change_template(row.id, 1, name='Neu')
+        assert renamed.version == 2 and renamed.revision_id != row.revision_id
+    asyncio.run(run())
