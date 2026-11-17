@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from 'bun:test'
+import { afterEach, expect, mock, spyOn, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -21,7 +21,7 @@ function setup() {
   fireEvent.click(screen.getByText('send'))
 }
 function frame(value: object) { controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`)) }
-afterEach(() => { cleanup(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
+afterEach(() => { cleanup(); mock.restore(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
 test('buffers cards until done and text', async () => {
   setup(); await act(async () => { frame({ event: 'start', conversation_id: 'c' }); frame({ event: 'delta', text: 'Hallo' }); frame({ event: 'mails', mails: [{}] }) })
   expect(screen.getByTestId('text').textContent).toBe('Hallo'); expect(screen.getByTestId('mails').textContent).toBe('0')
@@ -34,11 +34,12 @@ test('network break reports aborted', async () => { setup(); await act(async () 
 
 // Restarting is the only place that hands a conversation's unsent text to the start page.
 function restartHarness(id?: string, seed = true) {
+  const sources = spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   if (seed) client.setQueryData(['conversations'], [{ id: 'c', title: 'Test', account_scope_json: JSON.stringify({ account_ids: ['b'], selection: 'b' }) }])
   function Start() {
-    const { scope, composerTexts, setScope, setComposerText } = useChatSession()
-    return <><div data-testid="start" data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} /><button onClick={() => { setScope('a'); setComposerText('new', 'Bleibt') }}>draft</button></>
+    const { scope, composerTexts, setScope, setComposerText, calendarScopes } = useChatSession()
+    return <><div data-testid="start" data-calendars={JSON.stringify(calendarScopes.new)} data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} /><button onClick={() => { setScope('a'); setComposerText('new', 'Bleibt') }}>draft</button></>
   }
   // The harness keeps the open conversation and the composer in its own state so a test can change them mid-flight.
   const control = { setChatId: (_id?: string) => {}, setText: (_text: string) => {}, setScope: (_scope: string | null) => {} }
@@ -49,7 +50,7 @@ function restartHarness(id?: string, seed = true) {
     control.setText = text => session.setComposerText(current ?? 'new', text)
     control.setScope = value => { if (current) session.setConversationScope(current, value) }
     const restart = useRestartConversation(current)
-    return <><button onClick={restart}>restart</button><button onClick={() => session.setComposerText(current ?? 'new', 'Noch offen')}>type</button>{current && <MobileHeader title="Chat" conversationId={current} onMenu={() => {}} />}</>
+    return <><button onClick={() => void session.send({ text: 'Test', conversation_id: current, calendar_source_ids: ['work'] })}>send-calendar</button><span>{session.state.errorCode}</span><button onClick={restart}>restart</button><button onClick={() => session.setComposerText(current ?? 'new', 'Noch offen')}>type</button>{current && <MobileHeader title="Chat" conversationId={current} onMenu={() => {}} />}</>
   }
   function Away() { return <div data-testid="away" /> }
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
@@ -59,7 +60,7 @@ function restartHarness(id?: string, seed = true) {
   const router = createRouter({ routeTree: root.addChildren([index, chat, accounts]), history: createMemoryHistory({ initialEntries: ['/'] }) })
   render(<RouterProvider router={router} />)
   // Wrappers so the test keeps calling into the latest render of the chat.
-  return { router, setChatId: (value?: string) => control.setChatId(value), setText: (text: string) => control.setText(text), setScope: (value: string | null) => control.setScope(value) }
+  return { router, client, sources, setChatId: (value?: string) => control.setChatId(value), setText: (text: string) => control.setText(text), setScope: (value: string | null) => control.setScope(value) }
 }
 
 async function restart(router: ReturnType<typeof restartHarness>['router']) {
@@ -68,6 +69,20 @@ async function restart(router: ReturnType<typeof restartHarness>['router']) {
   fireEvent.click(await screen.findByText('restart'))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
 }
+
+test('restart after 409 preserves calendar selection when an uncached sources request fails', async () => {
+  const { router, client, sources } = restartHarness('c')
+  await openChat(router)
+  globalThis.fetch = (async () => new Response(JSON.stringify({ detail: { code: 'conversation_scope_change_requires_new' } }), { status: 409 })) as unknown as typeof fetch
+  sources.mockRejectedValue(new Error('test-only'))
+  expect(client.getQueryData(['calendar', 'sources'])).toBeUndefined()
+  fireEvent.click(screen.getByText('send-calendar'))
+  await screen.findByText('conversation_scope_change_requires_new')
+  fireEvent.click(screen.getByText('restart'))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect(screen.getByTestId('start').dataset.calendars).toBe('["work"]')
+  expect(sources).toHaveBeenCalledTimes(1)
+})
 
 test('restart without unsent text keeps the start draft and takes the account', async () => {
   const { router } = restartHarness('c')

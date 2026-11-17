@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { ChatMessageOut, ChatStreamRequest, ConversationOut, MailRefOut, StatusEvent, CalendarRefOut, SourceOut } from '../api/generated/types.gen'
 import { ChatStreamError, streamChatTurn, type ChatRefusal } from './transport'
 import { createTypewriter } from './typewriter'
-import { conversationsQuery, historyQuery } from '../api/queries'
+import { calendarSourcesQuery, conversationsQuery, historyQuery } from '../api/queries'
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | ChatRefusal
 type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
@@ -134,27 +134,34 @@ export function useRestartConversation(id?: string) {
   return () => {
     if (attempt.current.pending) return
     const { token } = attempt.current
-    const transfer = (selection: string | null | undefined) => {
+    const transfer = async (selection: string | null | undefined) => {
+      if (attempt.current.token !== token) return
+      attempt.current.pending = true
+      let sources: SourceOut[] | undefined
+      if (id) {
+        try { sources = await client.ensureQueryData(calendarSourcesQuery()) }
+        catch { /* Without a successful list, preserve the known calendar selection. */ }
+      }
       if (attempt.current.token !== token) return // The conversation was left or switched: drop the attempt.
       attempt.current.pending = false
       const now = latest.current
       const text = now.id ? now.session.composerTexts[now.id] : undefined
       if (now.id && selection !== undefined) now.session.setScope(selection)
       if (now.id) {
-        const activeIds = new Set((client.getQueryData<SourceOut[]>(['calendar', 'sources']) ?? []).filter(source => source.is_active).map(source => source.id))
+        const activeIds = sources && new Set(sources.filter(source => source.is_active).map(source => source.id))
         const ids = now.session.calendarScopes[now.id] ?? (now.session.state.conversationId === now.id ? now.session.state.request?.calendar_source_ids : undefined) ?? savedCalendarScope(client.getQueryData(historyQuery(now.id).queryKey))
-        now.session.setCalendarScope('new', ids.filter(sourceId => activeIds.has(sourceId)))
+        now.session.setCalendarScope('new', activeIds ? ids.filter(sourceId => activeIds.has(sourceId)) : ids)
       }
       if (text) now.session.setComposerText('new', text)
       void navigate({ to: '/' })
     }
-    if (!id || ready) { transfer(scope); return }
+    if (!id || ready) { void transfer(scope); return }
     // The list may still be loading: wait for it rather than restarting with "all accounts".
     attempt.current.pending = true
     void client.ensureQueryData(conversationsQuery()).then(
-      list => { transfer(resolveScope(latest.current.session, id, list.find(item => item.id === id))) },
+      list => transfer(resolveScope(latest.current.session, id, list.find(item => item.id === id))),
       // Without the list only an explicit or live account is known; otherwise the start page keeps its selection.
-      () => { transfer(resolveScope(latest.current.session, id)) },
+      () => transfer(resolveScope(latest.current.session, id)),
     )
   }
 }
