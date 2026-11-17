@@ -239,6 +239,34 @@ export type AttachmentOut = {
 };
 
 /**
+ * CalendarRefOut
+ */
+export type CalendarRefOut = {
+    /**
+     * Occurrence Id
+     */
+    occurrence_id: string;
+    /**
+     * Source Id
+     */
+    source_id: string;
+};
+
+/**
+ * CalendarsEvent
+ */
+export type CalendarsEvent = {
+    /**
+     * Calendars
+     */
+    calendars: Array<CalendarRefOut>;
+    /**
+     * Event
+     */
+    event: 'calendars';
+};
+
+/**
  * ChatConversationUpdateIn
  */
 export type ChatConversationUpdateIn = {
@@ -274,6 +302,8 @@ export type ChatEvent = ({
 } & DeltaEvent) | ({
     event: 'mails';
 } & MailsEvent) | ({
+    event: 'calendars';
+} & CalendarsEvent) | ({
     event: 'proposal';
 } & ProposalEvent) | ({
     event: 'suggestions';
@@ -287,6 +317,10 @@ export type ChatEvent = ({
  * ChatExtrasOut
  */
 export type ChatExtrasOut = {
+    /**
+     * Calendars
+     */
+    calendars?: Array<CalendarRefOut>;
     /**
      * Mails
      */
@@ -373,9 +407,21 @@ export type ChatStreamRequest = {
      */
     account_id?: string | null;
     /**
+     * Calendar Source Ids
+     */
+    calendar_source_ids?: Array<string>;
+    /**
+     * Calendar Timezone
+     */
+    calendar_timezone?: string;
+    /**
      * Context Message Id
      */
     context_message_id?: string | null;
+    /**
+     * Context Occurrence Id
+     */
+    context_occurrence_id?: string | null;
     /**
      * Conversation Id
      */
@@ -405,9 +451,21 @@ export type ChatTurnRequest = {
      */
     account_id?: string | null;
     /**
+     * Calendar Source Ids
+     */
+    calendar_source_ids?: Array<string>;
+    /**
+     * Calendar Timezone
+     */
+    calendar_timezone?: string;
+    /**
      * Context Message Id
      */
     context_message_id?: string | null;
+    /**
+     * Context Occurrence Id
+     */
+    context_occurrence_id?: string | null;
     /**
      * Conversation Id
      *
@@ -488,6 +546,10 @@ export type ContextOut = {
      * App Prompt Version
      */
     app_prompt_version: string;
+    /**
+     * Calendar Scope Json
+     */
+    calendar_scope_json?: string;
     /**
      * Id
      */
