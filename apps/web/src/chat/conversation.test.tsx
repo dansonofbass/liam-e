@@ -286,6 +286,26 @@ test('a template deleted during the answer says so and offers a retry', async ()
   expect(within(notice).getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
 })
 
+test('a conversation renders both header menus without a duplicate key', async () => {
+  const error = spyOn(console, 'error').mockImplementation(() => {})
+  setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  const duplicate = error.mock.calls.filter(call => call.some(part => typeof part === 'string' && part.includes('same key')))
+  expect(duplicate).toEqual([])
+})
+
+test('model selection errors do not follow a conversation switch', async () => {
+  spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'model_unknown' } } }) as never)
+  const { client, router } = setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei', is_default: false }]) })
+  fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
+  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei/ }))
+  expect(await screen.findByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeTruthy()
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'b' } }) })
+  expect(screen.queryByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeNull()
+})
+
 test('template selection errors do not follow a conversation switch', async () => {
   spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'version_conflict' } } }) as never)
   const { client, router } = setup('/chat/c')
