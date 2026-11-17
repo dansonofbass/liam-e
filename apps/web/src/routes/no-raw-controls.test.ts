@@ -17,6 +17,11 @@ test('routes do not contain raw controls outside legacy pages', () => {
   }
 })
 
+test('task screens use design system controls', () => {
+  const rawControl = new RegExp('<' + '(?:button|input|select)\\b')
+  for (const path of files(join(root, '..', 'tasks'))) expect(readFileSync(path, 'utf8')).not.toMatch(rawControl)
+})
+
 test('the app-wide error and not-found screens build on the design system too', () => {
   const source = readFileSync(join(root, '..', 'root-screens', 'de.tsx'), 'utf8')
   // Case-sensitive: the design system's Button component is what these screens should use.

@@ -12,12 +12,18 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAccountsRouteImport } from './routes/_app/accounts'
+import { Route as AppCalendarRouteImport } from './routes/_app/calendar'
 import { Route as AppMailRouteImport } from './routes/_app/mail'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppTasksRouteImport } from './routes/_app/tasks'
+import { Route as AppCalendarIndexRouteImport } from './routes/_app/calendar/index'
+import { Route as AppCalendarOccurrenceIdRouteImport } from './routes/_app/calendar/$occurrenceId'
 import { Route as AppChatConversationIdRouteImport } from './routes/_app/chat/$conversationId'
 import { Route as AppMailIndexRouteImport } from './routes/_app/mail/index'
 import { Route as AppMailMessageIdRouteImport } from './routes/_app/mail/$messageId'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings/index'
+import { Route as AppTasksTaskIdRouteImport } from './routes/_app/tasks/$taskId'
+import { Route as AppSettingsControlsIndexRouteImport } from './routes/_app/settings/controls/index'
 import { Route as AppSettingsPromptsIndexRouteImport } from './routes/_app/settings/prompts/index'
 import { Route as AppSettingsPromptsPromptIdRouteImport } from './routes/_app/settings/prompts/$promptId'
 import { Route as AppSettingsPromptsNewRouteImport } from './routes/_app/settings/prompts/new'
@@ -36,6 +42,11 @@ const AppAccountsRoute = AppAccountsRouteImport.update({
   path: '/accounts',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCalendarRoute = AppCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppMailRoute = AppMailRouteImport.update({
   id: '/mail',
   path: '/mail',
@@ -45,6 +56,21 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
   getParentRoute: () => AppRoute,
+} as any)
+const AppTasksRoute = AppTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCalendarIndexRoute = AppCalendarIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppCalendarRoute,
+} as any)
+const AppCalendarOccurrenceIdRoute = AppCalendarOccurrenceIdRouteImport.update({
+  id: '/$occurrenceId',
+  path: '/$occurrenceId',
+  getParentRoute: () => AppCalendarRoute,
 } as any)
 const AppChatConversationIdRoute = AppChatConversationIdRouteImport.update({
   id: '/chat/$conversationId',
@@ -66,6 +92,17 @@ const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppSettingsRoute,
 } as any)
+const AppTasksTaskIdRoute = AppTasksTaskIdRouteImport.update({
+  id: '/$taskId',
+  path: '/$taskId',
+  getParentRoute: () => AppTasksRoute,
+} as any)
+const AppSettingsControlsIndexRoute =
+  AppSettingsControlsIndexRouteImport.update({
+    id: '/controls/',
+    path: '/controls/',
+    getParentRoute: () => AppSettingsRoute,
+  } as any)
 const AppSettingsPromptsIndexRoute = AppSettingsPromptsIndexRouteImport.update({
   id: '/prompts/',
   path: '/prompts/',
@@ -86,40 +123,57 @@ const AppSettingsPromptsNewRoute = AppSettingsPromptsNewRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/accounts': typeof AppAccountsRoute
+  '/calendar': typeof AppCalendarRouteWithChildren
   '/mail': typeof AppMailRouteWithChildren
   '/settings': typeof AppSettingsRouteWithChildren
+  '/tasks': typeof AppTasksRouteWithChildren
+  '/calendar/$occurrenceId': typeof AppCalendarOccurrenceIdRoute
   '/chat/$conversationId': typeof AppChatConversationIdRoute
   '/mail/$messageId': typeof AppMailMessageIdRoute
+  '/tasks/$taskId': typeof AppTasksTaskIdRoute
+  '/calendar/': typeof AppCalendarIndexRoute
   '/mail/': typeof AppMailIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
   '/settings/prompts/new': typeof AppSettingsPromptsNewRoute
+  '/settings/controls/': typeof AppSettingsControlsIndexRoute
   '/settings/prompts/': typeof AppSettingsPromptsIndexRoute
 }
 export interface FileRoutesByTo {
   '/accounts': typeof AppAccountsRoute
+  '/tasks': typeof AppTasksRouteWithChildren
   '/': typeof AppIndexRoute
+  '/calendar/$occurrenceId': typeof AppCalendarOccurrenceIdRoute
   '/chat/$conversationId': typeof AppChatConversationIdRoute
   '/mail/$messageId': typeof AppMailMessageIdRoute
+  '/tasks/$taskId': typeof AppTasksTaskIdRoute
+  '/calendar': typeof AppCalendarIndexRoute
   '/mail': typeof AppMailIndexRoute
   '/settings': typeof AppSettingsIndexRoute
   '/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
   '/settings/prompts/new': typeof AppSettingsPromptsNewRoute
+  '/settings/controls': typeof AppSettingsControlsIndexRoute
   '/settings/prompts': typeof AppSettingsPromptsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/_app/accounts': typeof AppAccountsRoute
+  '/_app/calendar': typeof AppCalendarRouteWithChildren
   '/_app/mail': typeof AppMailRouteWithChildren
   '/_app/settings': typeof AppSettingsRouteWithChildren
+  '/_app/tasks': typeof AppTasksRouteWithChildren
   '/_app/': typeof AppIndexRoute
+  '/_app/calendar/$occurrenceId': typeof AppCalendarOccurrenceIdRoute
   '/_app/chat/$conversationId': typeof AppChatConversationIdRoute
   '/_app/mail/$messageId': typeof AppMailMessageIdRoute
+  '/_app/tasks/$taskId': typeof AppTasksTaskIdRoute
+  '/_app/calendar/': typeof AppCalendarIndexRoute
   '/_app/mail/': typeof AppMailIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
   '/_app/settings/prompts/new': typeof AppSettingsPromptsNewRoute
+  '/_app/settings/controls/': typeof AppSettingsControlsIndexRoute
   '/_app/settings/prompts/': typeof AppSettingsPromptsIndexRoute
 }
 export interface FileRouteTypes {
@@ -127,39 +181,56 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/accounts'
+    | '/calendar'
     | '/mail'
     | '/settings'
+    | '/tasks'
+    | '/calendar/$occurrenceId'
     | '/chat/$conversationId'
     | '/mail/$messageId'
+    | '/tasks/$taskId'
+    | '/calendar/'
     | '/mail/'
     | '/settings/'
     | '/settings/prompts/$promptId'
     | '/settings/prompts/new'
+    | '/settings/controls/'
     | '/settings/prompts/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/accounts'
+    | '/tasks'
     | '/'
+    | '/calendar/$occurrenceId'
     | '/chat/$conversationId'
     | '/mail/$messageId'
+    | '/tasks/$taskId'
+    | '/calendar'
     | '/mail'
     | '/settings'
     | '/settings/prompts/$promptId'
     | '/settings/prompts/new'
+    | '/settings/controls'
     | '/settings/prompts'
   id:
     | '__root__'
     | '/_app'
     | '/_app/accounts'
+    | '/_app/calendar'
     | '/_app/mail'
     | '/_app/settings'
+    | '/_app/tasks'
     | '/_app/'
+    | '/_app/calendar/$occurrenceId'
     | '/_app/chat/$conversationId'
     | '/_app/mail/$messageId'
+    | '/_app/tasks/$taskId'
+    | '/_app/calendar/'
     | '/_app/mail/'
     | '/_app/settings/'
     | '/_app/settings/prompts/$promptId'
     | '/_app/settings/prompts/new'
+    | '/_app/settings/controls/'
     | '/_app/settings/prompts/'
   fileRoutesById: FileRoutesById
 }
@@ -190,6 +261,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAccountsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/calendar': {
+      id: '/_app/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof AppCalendarRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/mail': {
       id: '/_app/mail'
       path: '/mail'
@@ -203,6 +281,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings'
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/tasks': {
+      id: '/_app/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof AppTasksRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/calendar/': {
+      id: '/_app/calendar/'
+      path: '/'
+      fullPath: '/calendar/'
+      preLoaderRoute: typeof AppCalendarIndexRouteImport
+      parentRoute: typeof AppCalendarRoute
+    }
+    '/_app/calendar/$occurrenceId': {
+      id: '/_app/calendar/$occurrenceId'
+      path: '/$occurrenceId'
+      fullPath: '/calendar/$occurrenceId'
+      preLoaderRoute: typeof AppCalendarOccurrenceIdRouteImport
+      parentRoute: typeof AppCalendarRoute
     }
     '/_app/chat/$conversationId': {
       id: '/_app/chat/$conversationId'
@@ -232,6 +331,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsIndexRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/tasks/$taskId': {
+      id: '/_app/tasks/$taskId'
+      path: '/$taskId'
+      fullPath: '/tasks/$taskId'
+      preLoaderRoute: typeof AppTasksTaskIdRouteImport
+      parentRoute: typeof AppTasksRoute
+    }
+    '/_app/settings/controls/': {
+      id: '/_app/settings/controls/'
+      path: '/controls'
+      fullPath: '/settings/controls/'
+      preLoaderRoute: typeof AppSettingsControlsIndexRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/prompts/': {
       id: '/_app/settings/prompts/'
       path: '/prompts'
@@ -256,6 +369,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppCalendarRouteChildren {
+  AppCalendarOccurrenceIdRoute: typeof AppCalendarOccurrenceIdRoute
+  AppCalendarIndexRoute: typeof AppCalendarIndexRoute
+}
+
+const AppCalendarRouteChildren: AppCalendarRouteChildren = {
+  AppCalendarOccurrenceIdRoute: AppCalendarOccurrenceIdRoute,
+  AppCalendarIndexRoute: AppCalendarIndexRoute,
+}
+
+const AppCalendarRouteWithChildren = AppCalendarRoute._addFileChildren(
+  AppCalendarRouteChildren,
+)
+
 interface AppMailRouteChildren {
   AppMailMessageIdRoute: typeof AppMailMessageIdRoute
   AppMailIndexRoute: typeof AppMailIndexRoute
@@ -273,6 +400,7 @@ interface AppSettingsRouteChildren {
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
   AppSettingsPromptsPromptIdRoute: typeof AppSettingsPromptsPromptIdRoute
   AppSettingsPromptsNewRoute: typeof AppSettingsPromptsNewRoute
+  AppSettingsControlsIndexRoute: typeof AppSettingsControlsIndexRoute
   AppSettingsPromptsIndexRoute: typeof AppSettingsPromptsIndexRoute
 }
 
@@ -280,6 +408,7 @@ const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsIndexRoute: AppSettingsIndexRoute,
   AppSettingsPromptsPromptIdRoute: AppSettingsPromptsPromptIdRoute,
   AppSettingsPromptsNewRoute: AppSettingsPromptsNewRoute,
+  AppSettingsControlsIndexRoute: AppSettingsControlsIndexRoute,
   AppSettingsPromptsIndexRoute: AppSettingsPromptsIndexRoute,
 }
 
@@ -287,18 +416,34 @@ const AppSettingsRouteWithChildren = AppSettingsRoute._addFileChildren(
   AppSettingsRouteChildren,
 )
 
+interface AppTasksRouteChildren {
+  AppTasksTaskIdRoute: typeof AppTasksTaskIdRoute
+}
+
+const AppTasksRouteChildren: AppTasksRouteChildren = {
+  AppTasksTaskIdRoute: AppTasksTaskIdRoute,
+}
+
+const AppTasksRouteWithChildren = AppTasksRoute._addFileChildren(
+  AppTasksRouteChildren,
+)
+
 interface AppRouteChildren {
   AppAccountsRoute: typeof AppAccountsRoute
+  AppCalendarRoute: typeof AppCalendarRouteWithChildren
   AppMailRoute: typeof AppMailRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
+  AppTasksRoute: typeof AppTasksRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
   AppChatConversationIdRoute: typeof AppChatConversationIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAccountsRoute: AppAccountsRoute,
+  AppCalendarRoute: AppCalendarRouteWithChildren,
   AppMailRoute: AppMailRouteWithChildren,
   AppSettingsRoute: AppSettingsRouteWithChildren,
+  AppTasksRoute: AppTasksRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
   AppChatConversationIdRoute: AppChatConversationIdRoute,
 }

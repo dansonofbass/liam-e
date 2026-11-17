@@ -17,6 +17,9 @@ class ChatTurnRequest(BaseModel):
     prompt_revision_id: str | None = None
     model: str | None = None
     context_message_id: str | None = None
+    context_occurrence_id: str | None = None
+    calendar_source_ids: list[str] = Field(default_factory=list, max_length=50)
+    calendar_timezone: str = Field(default='Europe/Berlin', max_length=100)
 
 
 @router.post('', operation_id='chat_turn', summary='Send a message to the mail agent')
@@ -27,12 +30,12 @@ async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
     conversation_id = ''
     user_id = ''
     try:
-        async for event in agent.run_turn_events(conversation_id=body.conversation_id or None, text=body.message, account_id=body.account_id, prompt_revision_id=body.prompt_revision_id, model=body.model, context_message_id=body.context_message_id):
+        async for event in agent.run_turn_events(conversation_id=body.conversation_id or None, text=body.message, account_id=body.account_id, prompt_revision_id=body.prompt_revision_id, model=body.model, context_message_id=body.context_message_id, context_occurrence_id=body.context_occurrence_id, calendar_source_ids=body.calendar_source_ids, calendar_timezone=body.calendar_timezone):
             if event.event == 'start':
                 conversation_id, user_id = event.conversation_id, event.user_message_id
             elif event.event == 'error':
                 if event.code == 'context_revoked':
-                    raise refuse(409, 'context_revoked', 'Die Vorlage wurde gelöscht. Starte die Antwort erneut.')
+                    raise refuse(409, 'context_revoked', 'Die Vorlage oder Kalenderfreigabe ist nicht mehr gültig. Starte eine neue Unterhaltung.')
                 if event.code == 'model_unavailable':
                     raise refuse(503, 'model_unavailable', 'Das Modell antwortet gerade nicht. Versuch es gleich noch mal.')
                 raise refuse(500, 'internal', 'Die Antwort konnte nicht erstellt werden. Versuch es gleich noch mal.')

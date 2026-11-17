@@ -222,7 +222,7 @@ async def test_agent_batches_hidden_history_contexts(store, monkeypatch):
     events = [event async for event in agent.run_turn_events(conversation_id=conversation.id, text='Hallo')]
     assert events[-1].event == 'done'
     load.assert_awaited_once()
-    assert set(load.await_args.args[0]) == {'live', 'removed', 'missing'}
+    assert set(load.await_args.args[0]) == {'live', 'removed', 'missing', 'test-context'}
 
 
 def test_history_exposes_content_free_revocation_marker(monkeypatch):

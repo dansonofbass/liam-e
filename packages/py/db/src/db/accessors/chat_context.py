@@ -7,6 +7,7 @@ from db.models.chat_context import ChatContext
 from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
 from db.models.mail_account import MailAccount
+from db.models.calendar_source import CalendarSource
 from db.models.prompt_revision import PromptRevision
 from db.models.prompt_template import OWNER_SCOPE, PromptTemplate
 from db.accessors.prompt_template import StaleVersion
@@ -60,7 +61,7 @@ async def configure(conversation_id, expected_version, *, revision_id=None, chan
         return row
 
 
-async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version):
+async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version, calendar_source_ids=None):
     async with get_session_maker()() as session:
         # Lock order matches deletion: template before conversation.
         existing = await session.get(ChatConversation, conversation_id) if conversation_id else None
@@ -98,10 +99,30 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
         elif has_history and account_id is not None:
             # Unknown historical provenance is mixed, never attributed to one account.
             raise ScopeChange
+        # Any calendar selection change (including expansion) starts fresh. Legacy turns
+        # have no calendar access. Check every historical context, not just the latest turn.
+        calendar_ids = sorted(set(calendar_source_ids or []))
+        active_ids = set((await session.execute(select(CalendarSource.id).where(
+            CalendarSource.is_active.is_(True), CalendarSource.id.in_(calendar_ids)))).scalars()) if calendar_ids else set()
+        previous = list((await session.execute(select(ChatContext).where(
+            ChatContext.conversation_id == conversation.id))).scalars()) if has_history else []
+        if has_history:
+            context_ids = list((await session.execute(select(ChatMessage.context_id).where(
+                ChatMessage.conversation_id == conversation.id))).scalars())
+            by_id = {row.id: row for row in previous}
+            for id in context_ids:
+                prior = json.loads(by_id[id].calendar_scope_json) if id in by_id else []
+                if sorted(prior) != calendar_ids:
+                    raise ScopeChange
+            if active_ids != set(calendar_ids):
+                raise ScopeChange
+        elif active_ids != set(calendar_ids):
+            raise ValueError('calendar_invalid')
         conversation.account_scope_json = provenance
         snapshot = ChatContext(conversation_id=conversation.id, prompt_revision_id=selected,
                                prompt_hash=revision.content_hash if revision else None,
-                               app_prompt_version=app_prompt_version, account_scope_json=provenance)
+                               app_prompt_version=app_prompt_version, account_scope_json=provenance,
+                               calendar_scope_json=json.dumps(calendar_ids))
         session.add(snapshot)
         await session.commit()
         return conversation, snapshot, revision.content if revision else None
@@ -123,4 +144,11 @@ async def get_contexts(context_ids: set[str]) -> dict[str, ChatContext]:
 async def is_live(context_id: str) -> bool:
     async with get_session_maker()() as session:
         row = await session.get(ChatContext, context_id)
-        return row is not None and not row.revoked
+        if row is None or row.revoked:
+            return False
+        ids = json.loads(row.calendar_scope_json)
+        if not ids:
+            return True
+        active = set((await session.execute(select(CalendarSource.id).where(
+            CalendarSource.id.in_(ids), CalendarSource.is_active.is_(True)))).scalars())
+        return active == set(ids)

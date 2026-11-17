@@ -9,10 +9,16 @@ from pydantic import BaseModel, Field
 from api.mail.proposals import Proposal, proposal_view
 
 
+class CalendarRefOut(BaseModel):
+    source_id: str
+    occurrence_id: str
+
+
 class ChatExtrasOut(BaseModel):
     mails: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     model: str = ""
+    calendars: list[CalendarRefOut] = Field(default_factory=list)
 
 
 class ContextOut(BaseModel):
@@ -21,6 +27,7 @@ class ContextOut(BaseModel):
     prompt_hash: str | None
     app_prompt_version: str
     account_scope_json: str
+    calendar_scope_json: str = '[]'
     preference_revision_id: str | None
     revoked: bool
 

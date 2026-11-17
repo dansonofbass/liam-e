@@ -11,6 +11,7 @@ import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
 import { redirect } from './redirect'
 import { RemoveDialog } from './RemoveDialog'
 import { ConnectPanel } from './ConnectPanel'
+import { CalendarSources } from '../calendar/CalendarSources'
 
 const messageFor = (error: unknown, fallback: string) => {
   const code = errorCode(error)
@@ -94,6 +95,7 @@ export function AccountsPage() {
         </section>}
         <ConnectPanel headingRef={connectHeading} reconnect={imapReconnect} onConnected={account => { setNotice({ tone: 'success', text: de.accounts.connected }); invalidate(); void sync(account.id) }} />
       </div>
+      <CalendarSources />
     </div>
     {removing && <RemoveDialog account={removing} onClose={() => setRemoving(undefined)} onRemoved={() => removed(removing)} />}
   </>

@@ -14,13 +14,14 @@ const oneModel = [{ id: 'm', label: 'Standardmodell', description: '', is_defaul
 function setup(accounts = true, path = '/', unread = 3, lastSync: string | null = null, displayName = 'Privat', models = oneModel) {
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { request = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start() {} }))) }) as typeof fetch
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: accounts ? [{ id: 'a', display_name: displayName, provider: 'gmail', email_address: 'a@example.com', color_index: 0, state: 'ok' }] : [], unread_total: unread, newsletter_senders: 2, last_sync_at: lastSync } })) as never)
   spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: models })) as never)
   spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail1', account_id: 'a', color_index: 0, sender_name: 'Anna', subject: 'Termin', internal_date: null, deadline: null } })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
-  const index = createRoute({ getParentRoute: () => root, path: '/', validateSearch: (search: Record<string, unknown>) => ({ about: typeof search.about === 'string' ? search.about : undefined }), component: Route.options.component })
+  const index = createRoute({ getParentRoute: () => root, path: '/', validateSearch: Route.options.validateSearch, component: Route.options.component })
   const accountsRoute = createRoute({ getParentRoute: () => root, path: '/accounts', component: () => <p>Konten</p> })
   const mailRoute = createRoute({ getParentRoute: () => root, path: '/mail/$messageId', component: () => <p>Mail</p> })
   const router = createRouter({ routeTree: root.addChildren([index, accountsRoute, mailRoute]), history: createMemoryHistory({ initialEntries: [path] }) })
@@ -51,6 +52,38 @@ test('without accounts offers connection instead of actions and composer', async
   expect(screen.queryByPlaceholderText(de.chat.placeholder)).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Konto verbinden' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/accounts'))
+})
+
+test('a calendar reference and composer remain available when the mail summary fails', async () => {
+  setup(true, '/?calendarAbout=occurrence-test')
+  spyOn(sdk, 'mailSummary').mockRejectedValue(new Error('test-only'))
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  spyOn(sdk, 'calendarOccurrenceGet').mockResolvedValue({ data: { id: 'occurrence-test', source_id: 'work', title: 'Planung', start_date: '2026-11-13', end_date: '2026-11-14' } } as never)
+  expect(await screen.findByText(de.chat.summaryError)).toBeTruthy()
+  expect(await screen.findByRole('link', { name: 'Planung' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Senden' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Arbeit' }))
+  fireEvent.change(screen.getByPlaceholderText(de.chat.placeholder), { target: { value: 'Was steht an?' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+  expect(request.context_occurrence_id).toBe('occurrence-test')
+  expect(request.calendar_source_ids).toEqual(['work'])
+})
+
+test('a calendar reference keeps the composer visible while sources are still loading', async () => {
+  setup(true, '/?calendarAbout=occurrence-test')
+  spyOn(sdk, 'mailSummary').mockRejectedValue(new Error('test-only'))
+  spyOn(sdk, 'calendarSourcesList').mockImplementation(() => new Promise<never>(() => {}))
+  expect(await screen.findByText(de.chat.summaryError)).toBeTruthy()
+  expect(screen.getByText(de.calendar.referenceLoading)).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Senden' })).toBeTruthy()
+})
+
+test('active calendars keep the composer available without a mail summary or reference', async () => {
+  setup()
+  spyOn(sdk, 'mailSummary').mockRejectedValue(new Error('test-only'))
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  expect(await screen.findByText(de.chat.summaryError)).toBeTruthy()
+  expect(await screen.findByRole('button', { name: 'Senden' })).toBeTruthy()
 })
 
 test('priority sends its fixed prompt and selected account', async () => {

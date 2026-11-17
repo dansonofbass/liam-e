@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import { act, render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
-import type { AccountOptionsOut, AccountOut } from '../api/generated/types.gen'
+import type { AccountOptionsOut, AccountOut, SourceOut } from '../api/generated/types.gen'
 import { AccountCard } from '../ds/AccountCard'
 import { AccountsPage } from './AccountsPage'
 import { redirect } from './redirect'
@@ -17,6 +17,7 @@ const props = { onSync: () => {}, onReconnect: () => {}, onRename: () => {}, onR
 const options: AccountOptionsOut = { gmail_connector: false, outlook_connector: false, google_oauth: true, microsoft_oauth: false, imap_presets: [{ domain: 'yahoo.com', imap_host: 'imap.mail.yahoo.com', smtp_host: 'smtp.mail.yahoo.com' }] }
 function setup(mode: 'row' | 'empty' | 'error' | 'loading' = 'row', path = '/accounts', item = account, extra: AccountOut[] = [], available = options, connectorNames: string[] = [], optionsMode: 'ready' | 'error' | 'loading' = 'ready') {
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
   const list = spyOn(sdk, 'mailAccountsList').mockImplementation((async () => { if (mode === 'loading') return await new Promise(() => {}); if (mode === 'error') throw new Error('offline'); return { data: mode === 'empty' ? [] : [item, ...extra] } }) as never)
   const optionList = spyOn(sdk, 'mailAccountOptions').mockImplementation((async () => { if (optionsMode === 'loading') return await new Promise(() => {}); if (optionsMode === 'error') throw new Error('offline'); return { data: available } }) as never)
   spyOn(sdk, 'mailConnectorsList').mockImplementation((async () => ({ data: connectorNames.map(name => ({ id: name, name })) })) as never)
@@ -27,6 +28,35 @@ function setup(mode: 'row' | 'empty' | 'error' | 'loading' = 'row', path = '/acc
   const view = render(<RouterProvider router={router} />)
   return { router, list, view, client, optionList }
 }
+
+const calendarSource: SourceOut = { id: 'test-only', provider: 'ics', name: 'Verein', timezone: 'UTC', is_active: false, capabilities: ['read'], last_success_at: null, coverage_start: null, coverage_end: null, stale: true, incomplete: true }
+
+test('calendar management keeps setup unavailable and activates a paused source explicitly', async () => {
+  const { client } = setup('empty')
+  await waitFor(() => expect(client.getQueryData(['calendar', 'sources'])).toEqual([]))
+  act(() => client.setQueryData(['calendar', 'sources'], [calendarSource]))
+  await screen.findByText('Verein')
+  const update = spyOn(sdk, 'calendarSourceUpdate').mockResolvedValue({ data: { ...calendarSource, is_active: true }, response: new Response() } as never)
+  expect(screen.getByText('Abonnierter Kalender · Nur lesen')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Kalender verbinden' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Aktivieren' }))
+  await settle()
+  expect(update.mock.calls[0]?.[0]).toEqual({ path: { source_id: 'test-only' }, body: { is_active: true } })
+})
+
+test('calendar removal names historical consequences and Escape cancels without a request', async () => {
+  const { client } = setup('empty')
+  await waitFor(() => expect(client.getQueryData(['calendar', 'sources'])).toEqual([]))
+  act(() => client.setQueryData(['calendar', 'sources'], [calendarSource]))
+  await screen.findByText('Verein')
+  const remove = spyOn(sdk, 'calendarSourceDelete')
+  fireEvent.click(screen.getByRole('button', { name: 'Entfernen' }))
+  const dialog = screen.getByRole('dialog')
+  expect(dialog.textContent).toContain('Frühere Chatnachrichten und der Kalender beim Anbieter bleiben erhalten.')
+  fireEvent.keyDown(dialog, { key: 'Escape' })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(remove).not.toHaveBeenCalled()
+})
 
 test('coarse pointer account actions and notice links use large touch targets', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
@@ -342,6 +372,12 @@ test('IMAP reconnect selects provider and focuses the secret field', async () =>
   expect((await screen.findByLabelText('E-Mail-Adresse') as HTMLInputElement).value).toBe('x@yahoo.com')
   await waitFor(() => expect((screen.getByLabelText('IMAP-Server') as HTMLInputElement).value).toBe('imap.mail.yahoo.com'))
   expect(document.activeElement).toBe(screen.getByLabelText('Secret mit dem App-Passwort'))
+})
+
+test('the agenda link in calendar management uses the touch-sized link style', async () => {
+  setup()
+  const link = await screen.findByRole('link', { name: 'Zur Agenda' })
+  expect(link.classList.contains('le-calendar-back')).toBe(true)
 })
 
 test('loading, retry and empty states', async () => {

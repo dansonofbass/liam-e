@@ -34,6 +34,7 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `/chat/$conversationId` — Unterhaltung mit Verlauf, Antworten und Vorschlagskarten.
 - `/mail` — Posteingang mit Liste und Filtern; `/mail/$messageId` — geöffnete Mail mit Lesebereich.
 - `/accounts` — Kontenübersicht, Verbinden, erneutes Anmelden und Entfernen.
+- `/tasks` und `/tasks/$taskId` — Aufgabenliste, manuelle Anlage und Fälligkeiten mit Verlauf.
 - `/settings` und `/settings/prompts` — Einstellungen mit Vorlagenbibliothek; `settingsSections` ist der Navigationseinstieg für weitere implementierte Bereiche.
 - `/settings/prompts/new` und `/settings/prompts/$promptId` — Vorlage anlegen oder bearbeiten, auf allen Bildschirmgrößen als eigene Ansicht.
 
@@ -82,6 +83,10 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Routergruppe | Methode | Pfad | `operation_id` |
 | --- | --- | --- | --- |
 | Health | GET | `/api/health` | `health` |
+| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/accounts` | `liam_mail_accounts` |
+| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages` | `liam_mail_search` |
+| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages/{message_id}` | `liam_mail_read` |
+| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/summary` | `liam_mail_summary` |
 | Kalender | GET | `/api/v1/calendar/sources` | `calendar_sources_list` |
 | Kalender | PATCH | `/api/v1/calendar/sources/{source_id}` | `calendar_source_update` |
 | Kalender | DELETE | `/api/v1/calendar/sources/{source_id}` | `calendar_source_delete` |
@@ -93,6 +98,8 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Vorlagen | GET | `/api/v1/prompts/{id}` | `prompt_get` |
 | Vorlagen | PATCH | `/api/v1/prompts/{id}` | `prompt_update` |
 | Vorlagen | DELETE | `/api/v1/prompts/{id}` | `prompt_delete` |
+| Einstellungen | GET | `/api/v1/settings/ui` | `settings_ui_get` |
+| Einstellungen | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
 | Chat | POST | `/api/v1/chat/stream` | `chat_stream` |
 | Chat | GET | `/api/v1/chat/conversations` | `chat_conversations_list` |
@@ -133,7 +140,32 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/skip` | `tasks_occurrence_skip` |
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/reopen` | `tasks_occurrence_reopen` |
 
+## Agent-Lesefassade
+
+`api/mcp/registry.py` zählt die vier ausdrücklich freigegebenen Mail-Leseoperationen auf;
+`api/mcp/mail.py` liest ausschließlich den vorhandenen INBOX-Index über Accessors. Der Scope
+stammt aus einem `ReadGrant`, nie aus Requestparametern. Der Standard-Verifier in
+`api/mcp/access.py` lehnt alle Anfragen mit 401 ab. Ein späterer nativer Transport muss nach
+positivem Zugriffsnachweis einen eigenen `ReadAccessVerifier` an `get_read_access_verifier`
+anbinden und dieselben Services mit dessen geprüftem Grant aufrufen. Grants sind auf 100
+Konto-IDs begrenzt; fremde Auswahlen ergeben 403, unbekannte und fremde Mail-IDs jeweils 404.
+Auch das Lesen per ID bleibt im INBOX-Index: Eine inzwischen verschobene Mail antwortet wie eine
+fehlende. Ein leerer Grant liefert leere Ergebnisse, nie alle Konten.
+Relative Links `/mail/<uuid>` vermeiden eine unkonfigurierte externe Origin. Maildaten sind
+fremder Inhalt, keine Anweisungen. Der Indexstand wird ausgewiesen, Provideraktualität bleibt
+unbekannt. Ein erfolgreicher Abruf kann nur eine begrenzte Seite enthalten; ohne gespeicherten
+Vollständigkeitsmarker bleibt der Index auch bei Status `ok` konservativ unvollständig. Der
+Zeitstempel bezeichnet den letzten Versuch, nicht zwingend einen Erfolg. Die reduzierte Spec ist
+keine Runtime-Autorisierung; produktive Exposition bleibt
+bis zum Zugriffsnachweis gesperrt. Der Uvicorn-Access-Log entfernt Querystrings dieser
+Routen, auch wenn sich das Format des Logeintrags ändert; Gateway- und Proxy-Logs müssen vor einer Freischaltung unabhängig ebenso geschützt werden.
+Der Export wird mit `bunx nx run api:gen-agent-openapi` reproduziert.
+
 ## Aufgabendomäne
+
+Die Oberfläche unter `apps/web/src/tasks/` verwendet die generierten Task-Endpunkte. Die
+Anlage zeigt eine serverseitige Vorschau; `reconcile.ts` begrenzt jeden Abruf auf einen
+festen Horizont und setzt den gespeicherten Fortschritt beim nächsten Öffnen fort.
 
 `api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
 Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite
@@ -219,6 +251,55 @@ lokalen Tag. Eine neue Serienrevision kann die Zeitzone ausdrücklich setzen.
 
 ## Kalenderdomäne
 
+Die Oberfläche unter `/calendar` zeigt die gemeinsame Agenda; `/calendar/$occurrenceId`
+öffnet eine stabile Instanz. `is_active` bleibt die Freigabe: Pausierte Quellen werden
+in der Verwaltung und als Hinweis angezeigt, ihre Termine bleiben bis zur Aktivierung
+verborgen. Sie tragen nicht zu einer Aussage „Keine Termine“ bei und bleiben auch für
+Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
+`CalendarSetup` in `apps/web/src/calendar/CalendarSources.tsx` ist der Anschluss für
+spätere geprüfte Providerformulare. Aktuell zeigt er nur die fehlende Verfügbarkeit;
+er registriert keinen Adapter und bietet keine Verbindungsaktion an. Ein späteres
+Formular muss nach erfolgreicher Einrichtung die Query-Gruppe `calendar` invalidieren.
+Die Agenda gruppiert und zeigt Zeitpunkte in der Browser-Zeitzone; Ganztägiges bleibt
+bei seinem Datum. Lokale Tagesgrenzen werden in Zeitpunkte umgerechnet. Weil der
+Index-Endpunkt nur ganze UTC-Daten akzeptiert, wird das Abfragefenster nach außen
+aufgerundet und umfasst zusätzlich die Ganztagsdaten. Fenster über 90 UTC-Tagen werden
+in angrenzende Teilfenster aufgeteilt, die wie Cursorseiten nur ausdrücklich nachgeladen
+werden. Randtreffer außerhalb der gewählten lokalen Starttage werden ausgeblendet,
+doppelte Instanz-IDs aus angrenzenden Fenstern zusammengeführt. Eine leere Teilseite
+behauptet nicht „Keine Termine“, solange weitere Seiten oder Teilfenster fehlen.
+Ein Stand älter als 24 Stunden bekommt einen Altershinweis; beim Öffnen wird einmal je
+Quelle über den expliziten Verwaltungsendpunkt ein Abruf angefragt. Das verspricht keine
+Aktualität beim Anbieter. `seed_calendars` ergänzt fünf synthetische Quellen für Google-/ICS-
+Darstellung, Ganztag, langen Titel, alten Stand, fehlende Abdeckung und Pause. Ihre festen
+IDs werden vor dem Einreihen und vor der Adapterausführung übersprungen.
+
+„Im Chat fragen“ öffnet eine neue Unterhaltung mit `context_occurrence_id` und ausdrücklich
+gewählter Quelle. Der Kalenderumfang (`calendar_source_ids`, maximal 50) steht getrennt vom
+Mailkonto im Composer und wird als JSON-Liste in `chat_context.calendar_scope_json` gespeichert.
+Der Datenbankstandard `[]` gibt Altverlauf keinen Kalenderzugriff. Jede Änderung der Auswahl,
+auch eine Erweiterung, benötigt bei vorhandenem Verlauf eine neue Unterhaltung (409
+`conversation_scope_change_requires_new`); historische Texte bleiben erhalten. Diese konservative
+Regel vermeidet eine unbelegte Neuzuordnung alter Nutzer-, Werkzeug- oder Assistententexte.
+Der Resolver prüft alle historischen Nachrichtenkontexte; der Agent prüft dieselbe Herkunft
+nochmals vor dem Aufbau der Modellnachrichten. Pausieren/Entfernen macht einen Turn mit dieser
+Quelle bei der nächsten Live-Prüfung ungültig, auch vor weiteren Modell- und Werkzeugaufrufen.
+Bereits übertragene Modellanfragen können nicht zurückgeholt werden. Beim Neustart übernimmt die
+Oberfläche nur Kalender, die sie noch als aktiv kennt; ohne belegte Auswahl bleibt der Umfang leer.
+
+`api/mail/calendar_tools.py` stellt `search_calendar` und `get_calendar_occurrence` bereit:
+Indexzugriff ohne Provider, lokale Datumsfenster bis 90 Tage und Cursorseiten bis 50 Instanzen;
+Werkzeugparameter können den Turn-Umfang nur einschränken. Kalendertexte und Quellennamen stehen
+in `untrusted_calendar_data`, einschließlich Stand und Abdeckung. Kalender-Schreibwerkzeuge fehlen;
+der Prompt untersagt auch Ersatzaktionen als Mailvorschlag, Kalenderkopie oder Aufgabe.
+`calendar_timezone` kommt aus dem Browser; ältere Clients ohne Angabe behalten Europe/Berlin.
+Chat-Extras und das SSE-Ereignis `calendars` enthalten nur `source_id`/`occurrence_id`, keine Titel
+oder privaten Verbindungsreferenzen. Belege lesen ihre Darstellung erneut über die freigegebene
+Quelle und stabile Instanzroute; pausierte, entfernte oder nicht passende Quellen zeigen keine
+Termindaten. Ort und Beschreibung fehlen im Indexvertrag und werden nicht vorgetäuscht.
+Die autogenerierte Migration ergänzt die Spalte mit Serverstandard und führt die bestehenden
+Migrationsköpfe zusammen; sie wurde nicht von Hand geändert.
+
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
 Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen
 vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich auf den Index zu.
@@ -293,6 +374,7 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `mail_insight` — Kurzfassung (`points_json`), Frist, Antwortbedarf, Folgevorschläge und Modell je Mail.
 - `mail_job` — dauerhafte Sync-/Insight-Warteschlange mit Status, Deduplizierung, Versuchen und Sperrzeit.
 - `chat_conversation`, `chat_message` — Verlauf; Vorschläge in `proposal_json` mit `proposal_status`, Mailreferenzen/Vorschläge/Modell in `extras_json`; ältere Entwürfe tragen `draft_json`.
+- `ui_settings` — die eine geräteübergreifende Bedienungskonfiguration mit festem serverseitigem Scope (`installation`, unique): `swipe_left`/`swipe_right` aus der Allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` für bedingte Updates und `updated_at`; Erstinitialisierung mit links `archive`, rechts `toggle_read`.
 
 ## Vorlagen und Turn-Kontext
 
@@ -395,9 +477,10 @@ in der Probe HTTP 401.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
 - Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus, sofern der Turn-Kontext beim Claim nicht widerrufen ist. `.../cancel` verwirft sie auch nach Widerruf.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
-- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
+- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `liam_mail_accounts`, `liam_mail_read`, `liam_mail_search`, `liam_mail_summary`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `settings_ui_get`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
   `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
   `mail_message_original` ruft die Mail beim Anbieter ab (lesend, ohne sie als gelesen zu markieren) und speichert nichts.
+  `settings_ui_get` legt beim allerersten Lesen einmalig die Standardbelegung in `ui_settings` an; eine bestehende Belegung ändert es nie.
   Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.
   Neue verändernde Operationen gehören bewusst in `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, sonst scheitert der Inventur-Test.
 

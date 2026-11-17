@@ -17,6 +17,13 @@ async def get_state(account_id: str) -> MailSyncState | None:
         return result.scalar_one_or_none()
 
 
+async def list_for_accounts(account_ids: list[str]) -> list[MailSyncState]:
+    """Read stored sync progress for the authorized accounts only."""
+    async with get_session_maker()() as session:
+        result = await session.execute(select(MailSyncState).where(MailSyncState.account_id.in_(account_ids)))
+        return list(result.scalars().all())
+
+
 async def save_state(
     *,
     account_id: str,

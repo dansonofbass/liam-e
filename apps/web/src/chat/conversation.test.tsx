@@ -20,6 +20,7 @@ function setup(path = '/', historyGone = false, selection: string | null = null)
   summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; requestBody = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start(c) { stream = c } }))) }) as typeof fetch
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
   spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
@@ -112,14 +113,17 @@ test('account scope and composer focus survive navigation to the conversation', 
   expect(requestBody.conversation_id).toBe('c')
 })
 
-test('a follow-up suggestion keeps the selected account', async () => {
+test('a live follow-up keeps the selected account and calendars after navigation', async () => {
   setup()
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
   fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
   await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
   expect(requestBody.text).toBe('Weiter fragen')
+  expect(requestBody.calendar_source_ids).toEqual(['work'])
   expect(requestBody.account_id).toBe('a')
   expect(requestBody.conversation_id).toBe('c')
 })
@@ -139,13 +143,18 @@ test('reload restores the saved account for the composer', async () => {
   expect(requestBody.account_id).toBe('a')
 })
 
-test('the pencil on a mail card asks for a reply draft to that mail in the same conversation', async () => {
-  setup('/chat/c', false, 'a'); await send()
+test('the pencil on a mail card keeps the live calendar scope after navigation', async () => {
+  setup()
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Alle Konten' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
+  await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', snippet: 'Einwände bis Freitag möglich', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   expect(await screen.findByRole('img', { name: 'Dringend' })).toBeTruthy()
   expect(screen.getByText('Einwände bis Freitag möglich').classList.contains('le-mailref-snippet')).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
-  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
+  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1', calendar_source_ids: ['work'] })
   expect(requestBody.account_id).toBe('a')
 })
 
@@ -263,6 +272,15 @@ test('missing conversation in a stream offers a new conversation', async () => {
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
 })
 
+for (const path of ['/', '/chat/c']) test(`invalid context names both account and calendar selection on ${path}`, async () => {
+  setup(path)
+  globalThis.fetch = (() => Promise.resolve(Response.json({ detail: { code: 'context_invalid' } }, { status: 422 }))) as unknown as typeof fetch
+  await send()
+  const notice = (await screen.findByText('Ein Konto oder Kalender aus deiner Auswahl ist nicht verfügbar. Prüfe deine Auswahl und versuch es noch mal.')).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
+  expect(within(notice).queryByRole('button', { name: 'Neue Unterhaltung' })).toBeNull()
+})
+
 test('account change in a conversation offers a new conversation instead of a retry', async () => {
   const { router } = setup('/chat/c', false, 'a')
   fireEvent.click(await screen.findByRole('button', { name: 'Privat' }))
@@ -277,13 +295,34 @@ test('account change in a conversation offers a new conversation instead of a re
   expect(screen.getByRole('button', { name: 'Alle Konten' })).toBeTruthy()
 })
 
-test('a template deleted during the answer says so and offers a retry', async () => {
+test('calendar selection is separate from mail and survives a scope-conflict restart', async () => {
+  const { client, router } = setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  const sources = [{ id: 'work', name: 'Arbeitskalender', provider: 'google', is_active: true }]
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
+  act(() => client.setQueryData(['calendar', 'sources'], sources))
+  fireEvent.click(await screen.findByRole('button', { name: 'Arbeitskalender' }))
+  globalThis.fetch = ((_url: unknown, init: RequestInit) => {
+    requestBody = JSON.parse(String(init.body))
+    return Promise.resolve(Response.json({ detail: { code: 'conversation_scope_change_requires_new' } }, { status: 409 }))
+  }) as typeof fetch
+  await send()
+  const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten oder Kalender/)).closest('[role="alert"]') as HTMLElement
+  expect(requestBody.calendar_source_ids).toEqual(['work'])
+  expect(requestBody.account_id).toBe('a')
+  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect((await screen.findByRole('button', { name: 'Arbeitskalender' })).getAttribute('aria-pressed')).toBe('true')
+  expect(screen.getByRole('button', { name: 'Privat' })).toBeTruthy()
+})
+
+test('revoked context during an answer offers a fresh conversation', async () => {
   setup('/chat/c')
   const frames = ['event: start\ndata: {"event":"start","conversation_id":"c","user_message_id":"u"}\n\n', 'event: error\ndata: {"event":"error","code":"context_revoked"}\n\n']
   globalThis.fetch = (() => Promise.resolve(new Response(frames.join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))) as unknown as typeof fetch
   await send()
-  const notice = (await screen.findByText(/Die Vorlage wurde gelöscht/)).closest('[role="alert"]') as HTMLElement
-  expect(within(notice).getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
+  const notice = (await screen.findByText(/Die Vorlage oder Kalenderfreigabe ist nicht mehr gültig/)).closest('[role="alert"]') as HTMLElement
+  expect(within(notice).getByRole('button', { name: 'Neue Unterhaltung' })).toBeTruthy()
 })
 
 test('a conversation renders both header menus without a duplicate key', async () => {

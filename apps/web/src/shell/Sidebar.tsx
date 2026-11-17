@@ -19,6 +19,8 @@ export function Sidebar({ collapsed = false, hideBrand = false, onConversations,
     {!hideBrand && <div className="le-brand"><span className="le-mark"><Icon name="sparkle" /></span>{!collapsed && de.assistant.name}</div>}
     <NavItem to="/" icon="message-circle" label={de.shell.chat} tip={de.shell.chatTip} collapsed={collapsed} current={path === '/' || path.startsWith('/chat/')} />
     <NavItem to="/mail" icon="inbox" label={de.shell.inbox} tip={de.shell.inboxTip} badge={data?.unread_total || undefined} badgeLabel={data?.unread_total ? de.shell.unread(data.unread_total) : undefined} collapsed={collapsed} />
+    <NavItem to="/calendar" icon="clock" label={de.calendar.title} tip={de.calendar.tip} collapsed={collapsed} current={path.startsWith('/calendar')} />
+    <NavItem to="/tasks" icon="check" label={de.tasks.title} tip={de.tasks.tip} collapsed={collapsed} current={path === '/tasks' || path.startsWith('/tasks/')} />
     <NavItem to="/accounts" icon="at-sign" label={de.shell.accounts} tip={de.shell.accountsTip} collapsed={collapsed} />
     <NavItem to="/settings" icon="pencil" label={de.prompts.settings} tip={de.prompts.settingsTip} collapsed={collapsed} current={path.startsWith('/settings')} />
     {collapsed ? <NavButton icon="messages-square" label={de.shell.conversations} tip={de.shell.conversationsTip} collapsed onClick={onConversations} /> :<div className="le-shell-conversations"><Conversations onNavigate={onNavigate} /></div>}

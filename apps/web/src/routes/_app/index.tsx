@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { messageQuery, summaryQuery } from '../../api/queries'
+import { calendarSourcesQuery, messageQuery, summaryQuery } from '../../api/queries'
+import { CalendarReference } from '../../chat/CalendarContext'
 import { ChatComposer } from '../../chat/Conversation'
 import { ModelMenu } from '../../chat/ModelMenu'
 import { TemplateMenu } from '../../prompts/TemplateMenu'
@@ -13,7 +14,7 @@ import { de } from '../../i18n/de'
 import { formatTime } from '../../i18n/format'
 export const Route = createFileRoute('/_app/')({
   staticData: { landing: true },
-  validateSearch: (search: Record<string, unknown>): { about?: string } => typeof search.about === 'string' ? { about: search.about } : {},
+  validateSearch: (search: Record<string, unknown>): { about?: string; calendarAbout?: string } => ({ about: typeof search.about === 'string' ? search.about : undefined, calendarAbout: typeof search.calendarAbout === 'string' ? search.calendarAbout : undefined }),
   beforeLoad: ({ context }) => {
     const to = context.landingPath()
     if (to !== undefined && to !== '' && to !== '/') {
@@ -27,8 +28,10 @@ function Greeting() {
   const { state, send, retry, scope } = useChatSession()
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
+  const calendarAbout = typeof search.calendarAbout === 'string' ? search.calendarAbout : undefined
   const about = typeof search.about === 'string' ? search.about : undefined
   const summary = useQuery(summaryQuery())
+  const calendars = useQuery(calendarSourcesQuery())
   const reference = useQuery({ ...messageQuery(about ?? ''), enabled: Boolean(about) })
   const [started, setStarted] = useState(false)
   // The model chosen in the chip rides along with the first message and becomes the model of the new conversation.
@@ -38,7 +41,7 @@ function Greeting() {
   const quickSend = (text: string) => {
     if (busy) return
     setStarted(true)
-    void send({ text, account_id: scope, context_message_id: about, model, prompt_revision_id: revision })
+    void send({ text, account_id: scope, context_message_id: about, context_occurrence_id: calendarAbout, model, prompt_revision_id: revision })
   }
   const modelGone = started && state.phase === 'error' && !state.conversationId && state.errorCode === 'model_unknown'
   useEffect(() => { if (modelGone) setModel(undefined) }, [modelGone])
@@ -59,5 +62,5 @@ function Greeting() {
       <QuickAction icon="newspaper" title={de.quickActions.newsletters.title} sub={de.quickActions.newsletters.subtitle(data.newsletter_senders)} onClick={() => quickSend(de.quickActions.newsletters.prompt)} />
       <QuickAction icon="clock" title={de.quickActions.dueToday.title} sub={de.quickActions.dueToday.subtitle} onClick={() => quickSend(de.quickActions.dueToday.prompt)} />
     </div></>)}
-  </div></div>{data && data.accounts.length > 0 && <div className="le-chat-composer">{about && <div className="le-chat-reference">{reference.isPending && <span className="le-hint">{de.chat.loadingReference}</span>}{reference.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void reference.refetch() } }}>{de.chat.referenceError}</Notice>}{reference.data && <MailReference mail={reference.data} accountLabel={data.accounts.filter(account => account.id === reference.data?.account_id).map(providerLabel)[0]} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: reference.data.id } }) }} />}<IconButton icon="x" label={de.chat.removeReference} onClick={() => { void navigate({ to: '/', search: { about: undefined } }) }} /></div>}<ChatComposer contextMessageId={about} model={model} promptRevisionId={revision} onSend={() => setStarted(true)} /></div>}</div>
+  </div></div>{(!!data?.accounts.length || calendars.data?.some(source => source.is_active) || calendarAbout) && <div className="le-chat-composer">{calendarAbout && <div className="le-chat-reference"><CalendarReference occurrenceId={calendarAbout} /><IconButton icon="x" label={de.calendar.removeReference} onClick={() => { void navigate({ to: '/', search: { about } }) }} /></div>}{about && <div className="le-chat-reference">{reference.isPending && <span className="le-hint">{de.chat.loadingReference}</span>}{reference.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void reference.refetch() } }}>{de.chat.referenceError}</Notice>}{reference.data && <MailReference mail={reference.data} accountLabel={data?.accounts.filter(account => account.id === reference.data?.account_id).map(providerLabel)[0]} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: reference.data.id } }) }} />}<IconButton icon="x" label={de.chat.removeReference} onClick={() => { void navigate({ to: '/', search: { about: undefined } }) }} /></div>}<ChatComposer contextMessageId={about} contextOccurrenceId={calendarAbout} model={model} promptRevisionId={revision} onSend={() => setStarted(true)} /></div>}</div>
 }

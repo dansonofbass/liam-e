@@ -30,6 +30,9 @@ class ChatStreamRequest(BaseModel):
     account_id: str | None = None
     prompt_revision_id: str | None = None
     context_message_id: str | None = None
+    context_occurrence_id: str | None = None
+    calendar_source_ids: list[str] = Field(default_factory=list, max_length=50)
+    calendar_timezone: str = Field(default='Europe/Berlin', max_length=100)
     model: str | None = Field(default=None, description='Model for a new conversation; ignored when conversation_id is set (use PATCH on the conversation).')
 
 

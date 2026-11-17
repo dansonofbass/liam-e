@@ -39,6 +39,7 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "mail_actions_undo",
         "mail_message_action",
         "mail_sync_all",
+        "settings_ui_update",
         "tasks_archive",
         "tasks_create",
         "tasks_delete",
@@ -90,6 +91,17 @@ def _read_only_get_ids(app: FastAPI) -> set[str]:
         for method, operation_id in _operations(app)
         if method == "GET" and operation_id not in BROWSER_ONLY_GET_OPERATIONS
     }
+
+
+def test_agent_read_operations_are_explicit_gets(app: FastAPI) -> None:
+    """The separate facade adds exactly the curated read operations, never a mutation."""
+    from api.mcp.registry import OPERATIONS
+
+    expected = {(operation.method, operation.operation_id) for operation in OPERATIONS}
+    served = {(method, operation_id) for method, operation_id in _operations(app)
+              if operation_id.startswith("liam_mail_")}
+    assert served == expected
+    assert len(expected) == 4 and all(method == "GET" for method, _ in expected)
 
 
 def test_mutating_operation_inventory(app: FastAPI) -> None:

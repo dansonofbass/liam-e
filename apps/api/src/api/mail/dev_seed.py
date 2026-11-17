@@ -76,6 +76,47 @@ NEWSLETTERS = [
 ]
 
 
+async def seed_tasks(now: datetime) -> None:
+    """Replace only synthetic task series through the normal transactional services."""
+    from db.accessors import task_occurrence, task_series
+    from db.engine import get_session_maker
+    from api.tasks import create, lifecycle, reconcile, state
+
+    today = now.astimezone(BERLIN).date()
+    specs = [
+        ('once', 'Unterlagen prüfen', today, None),
+        ('daily', 'Post prüfen', today, 'FREQ=DAILY'),
+        ('weekly', 'Wochenplanung', today, 'FREQ=WEEKLY'),
+        ('monthly', 'Belege ablegen', today, 'FREQ=MONTHLY'),
+        ('overdue', 'Angebot beantworten', today - timedelta(days=3), None),
+        ('completed', 'Notizen ordnen', today - timedelta(days=1), None),
+        ('archived', 'Termin vorbereiten', today, None),
+        ('mail', 'Abrechnung prüfen', today, None),
+    ]
+    async with get_session_maker()() as session:
+        after = None
+        while True:
+            rows = await task_series.list_page(session, scope='app', due_from='0001-01-01', due_to='9999-12-31', archived=None, source='all', source_account_id=None, after=after, limit=100)
+            if not rows:
+                break
+            after = rows[-1].id
+            for row in rows:
+                if row.creation_key.startswith('board-seed-task:'):
+                    await lifecycle.delete(session, row.id, expected_version=row.version, confirm_history_loss=True)
+        for key, title, start, rule in specs:
+            source = {'source_account_id': seed_id('account', 'privat'), 'source_message_id': seed_id('mail', 'hausverwaltung-nebenkosten')} if key == 'mail' else {}
+            row, _ = await create.create(session, creation_key=f'board-seed-task:{key}', title=title, start=start, zone='Europe/Berlin', rule=rule, **source)
+            _, cursor, complete = await reconcile.reconcile_current(session, series_id=row.id, now=now)
+            while not complete:
+                _, cursor, complete = await reconcile.reconcile_current(session, series_id=row.id, cursor=cursor, now=now)
+            if key == 'completed':
+                instances = await task_occurrence.list_page(session, scope='app', status='open', due_from=None, due_to=None, after=None, limit=1, series_id=row.id)
+                await state.transition(session, instances[0].id, version=instances[0].version, action='complete')
+            if key == 'archived':
+                await lifecycle.archive(session, row.id, expected_version=row.version, now=now)
+        await session.commit()
+
+
 async def seed(now: datetime | None = None) -> SeedResult:
     """Replace local board sample mail data, never accessing a remote database."""
     require_local_database()
@@ -143,6 +184,7 @@ async def seed(now: datetime | None = None) -> SeedResult:
                     dedupe_key=f"seed-sync-{by_key['familie'].id}", locked_at=started,
                     created_at=started, updated_at=started)]
     await seed_access.replace_mail_data(accounts, states, messages, [insight], jobs)
+    await seed_tasks(local_now.astimezone(UTC))
 
     conversation_specs = [
         ("was-ist-heute-wichtig", "Was ist heute wichtig?", at(0, "08:57")),
@@ -184,7 +226,46 @@ async def seed(now: datetime | None = None) -> SeedResult:
         kind="unsubscribe", reason="Du hast sie seit über drei Monaten nicht geöffnet.", items=items))
     for conversation in (third, fourth):
         await chat_access.add_message(conversation_id=conversation.id, role="user", content=conversation.title)
+    await seed_calendars(local_now)
     return SeedResult(len(accounts), len(messages), sum(not m.is_read for m in messages), 1, len(conversations), 1)
+
+
+async def seed_calendars(now: datetime) -> None:
+    """Install synthetic Google/ICS presentations without registering adapters."""
+    from db.accessors import calendar_seed
+    from db.models.calendar_source import CalendarSource
+    from db.models.calendar_event import CalendarEvent
+    from db.models.calendar_occurrence import CalendarOccurrence
+    from db.models.calendar_sync_state import CalendarSyncState
+    from api.calendar.seed_ids import SEED_CALENDAR_KEYS
+
+    require_local_database()
+    today = datetime.combine(now.astimezone(UTC).date(), time.min, UTC)
+    sources, events, occurrences, states = [], [], [], []
+    names = ("Arbeit", "Verein", "Alter Stand", "Ohne Abdeckung", "Pausierter Kalender")
+    for index, (key, name) in enumerate(zip(SEED_CALENDAR_KEYS, names, strict=True)):
+        source_id = seed_id("calendar", key)
+        sources.append(CalendarSource(id=source_id, provider="google" if index == 0 else "ics",
+            connection_ref="test-only", external_id=key, name=name, timezone="Europe/Berlin",
+            capabilities_json='["read"]', is_active=key != "paused"))
+        states.append(CalendarSyncState(source_id=source_id,
+            coverage_start=None if key == "uncovered" else today - timedelta(days=30),
+            coverage_end=None if key == "uncovered" else today + timedelta(days=60),
+            last_success_at=None if key == "uncovered" else now.astimezone(UTC) - timedelta(days=7 if key == "old" else 0),
+            incomplete=key == "uncovered"))
+        if key == "uncovered":
+            continue
+        title = "Planung" if index < 2 else "Gemeinsame Vorbereitung des Sommerfestes mit dem Team und allen Helfenden aus dem Verein"
+        event_id = seed_id("calendar-event", key)
+        events.append(CalendarEvent(id=event_id, source_id=source_id, external_id=key, title=title))
+        occurrences.append(CalendarOccurrence(id=seed_id("calendar-occurrence", key), source_id=source_id,
+            event_id=event_id, external_id=key, title=title,
+            start_date=today.date() if key == "old" else None,
+            end_date=(today + timedelta(days=1)).date() if key == "old" else None,
+            start_at=None if key == "old" else today + timedelta(hours=10),
+            end_at=None if key == "old" else today + timedelta(hours=11),
+            timezone=None if key == "old" else "Europe/Berlin"))
+    await calendar_seed.replace(sources, events, occurrences, states)
 
 
 def main() -> None:

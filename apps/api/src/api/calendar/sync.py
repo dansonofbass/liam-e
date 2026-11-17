@@ -9,6 +9,7 @@ from db.models.calendar_event import CalendarEvent
 from db.models.calendar_occurrence import CalendarOccurrence
 
 from api.calendar.adapters import Adapter, normalize, timed_overlaps
+from api.calendar.seed_ids import SEED_CALENDAR_IDS
 
 _adapters: dict[str, Adapter] = {}
 
@@ -29,11 +30,15 @@ async def enqueue(source_id: str, start: datetime, end: datetime) -> bool:
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if any((start.hour, start.minute, start.second, start.microsecond, end.hour, end.minute, end.second, end.microsecond)):
         raise ValueError("window must use UTC date boundaries")
+    if source_id in SEED_CALENDAR_IDS:
+        return False
     payload = {"source_id": source_id, "start": start.isoformat(), "end": end.isoformat()}
     return await mail_job.enqueue("calendar_sync", payload, dedupe_key=f"calendar_sync:{source_id}") is not None
 
 
 async def run_sync(payload: dict, job_id: str, attempt: int) -> None:
+    if payload["source_id"] in SEED_CALENDAR_IDS:
+        return
     source = await calendar_source.get(payload["source_id"])
     if source is None or not source.is_active:
         raise LookupError("source unavailable")
