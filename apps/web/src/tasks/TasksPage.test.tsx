@@ -33,7 +33,7 @@ function setup(detail = false, activeDetail = false, incomplete = false, path = 
       return Response.json({ items: [occurrence], next_cursor: null })
     }
     if (url.pathname.endsWith('/tasks/archived')) return Response.json({ window: windowData, series: { ...(activeDetail ? { ...active, id: 'archived' } : archived), complete: !incomplete }, occurrences: { items: [occurrence], next_cursor: null } })
-    return Response.json({ window: windowData, items: url.searchParams.get('status') === 'archived' ? [archived] : [{ ...active, complete: !incomplete }, archived], next_cursor: null })
+    return Response.json({ window: windowData, items: url.searchParams.get('status') === 'archived' ? [{ ...archived, complete: !incomplete }] : [{ ...active, complete: !incomplete }, archived], next_cursor: null })
   }) as typeof fetch
   const query = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={query}><Outlet /></QueryClientProvider> })
@@ -125,6 +125,13 @@ test('a finished run keeps the notice while the stored progress is incomplete', 
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
   expect(screen.getByText(/^Fälligkeiten werden ergänzt/)).toBeTruthy()
   expect(screen.queryByText('Keine offenen Aufgaben.')).toBeNull()
+})
+
+test('an incomplete archived series does not claim that dues are being added', async () => {
+  setup(false, false, true, '/tasks?status=archived')
+  await screen.findByRole('link', { name: 'Archiviert und fällig' })
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
+  expect(screen.queryByText(/^Fälligkeiten werden ergänzt/)).toBeNull()
 })
 
 test('a stored account filter without a known account shows a neutral label', async () => {

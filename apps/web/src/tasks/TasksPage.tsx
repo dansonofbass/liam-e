@@ -40,8 +40,9 @@ export function TasksPage() {
   const seen = useRef(new Set<string>())
   const [reconciling, setReconciling] = useState(false), [reconcileError, setReconcileError] = useState(false)
   const rows = series.data?.pages.flatMap(p => p.items) ?? []
-  // A finished run does not prove the window is complete; the stored progress decides.
-  const incomplete = rows.some(row => !row.complete)
+  // A finished run does not prove the window is complete; the stored progress decides. Archived
+  // series are never reconciled, so they cannot keep a notice that something is being added.
+  const incomplete = rows.some(row => !row.archived && !row.complete)
   const entries = [...(occurrences.data?.pages.flatMap(p => p.items) ?? []), ...(skippedActive ? skipped.data?.pages.flatMap(p => p.items) ?? [] : [])]
     .sort((a, b) => a.due_local.localeCompare(b.due_local) || a.id.localeCompare(b.id))
   useEffect(() => {
