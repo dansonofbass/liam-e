@@ -1,6 +1,6 @@
 """Revocable, content-free turn provenance, including a preference revision extension point."""
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Column, Text
+from sqlalchemy import Boolean, Column, Text
 from db.models._common import new_id
 
 
@@ -16,4 +16,7 @@ class ChatContext(SQLModel, table=True):
     calendar_scope_json: str = Field(default="[]", sa_column=Column(Text, nullable=False, server_default="[]"))
     task_scope_json: str = Field(default='{"source":"none"}', sa_column=Column(Text, nullable=False, server_default='{"source":"none"}'))
     preference_revision_id: str | None = None
+    preference_revision_ids_json: str = Field(default='[]', sa_column=Column(Text, nullable=False, server_default='[]'))
+    preference_resolver_version: str = Field(default='1', sa_column=Column(Text, nullable=False, server_default='1'))
+    preferences_enabled: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default='false'))
     revoked: bool = False
