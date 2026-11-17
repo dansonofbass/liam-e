@@ -73,6 +73,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const { data: models = [] } = useQuery(modelsQuery())
   const { state, send, retry } = useChatSession()
   const { scope, ready } = useConversationScope(conversationId)
+  const calendar = useCalendarScope(conversationId)
   const restart = useRestartConversation(conversationId)
   const [selectedModel, setSelectedModel] = useState<{ conversationId: string; id: string }>()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -88,10 +89,10 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const userIndex = state.userMessageId ? messages.findIndex(message => message.id === state.userMessageId) : -1
   const savedPartial = (state.phase === 'stopped' || state.phase === 'error') && userIndex >= 0 && messages.slice(userIndex + 1).some(message => message.role === 'assistant')
   const busy = state.phase === 'working' || state.phase === 'streaming'
-  // Follow-ups keep the account the composer shows, like a typed question.
-  const submitSuggestion = (text: string) => { if (!ready) return; void send({ text, account_id: scope, conversation_id: conversationId }) }
+  // Follow-ups keep the account and calendars the composer shows, like a typed question.
+  const submitSuggestion = (text: string) => { if (!ready || !calendar.ready) return; void send({ text, account_id: scope, conversation_id: conversationId, calendar_source_ids: calendar.ids }) }
   // The pencil on a mail card asks for a reply draft to that mail in this conversation, like the button on the open mail.
-  const draft: Draft = { onDraft: id => { if (!ready) return; void send({ text: de.mail.draftPrompt, account_id: scope, conversation_id: conversationId, context_message_id: id }) }, disabled: !ready || busy }
+  const draft: Draft = { onDraft: id => { if (!ready || !calendar.ready) return; void send({ text: de.mail.draftPrompt, account_id: scope, conversation_id: conversationId, context_message_id: id, calendar_source_ids: calendar.ids }) }, disabled: !ready || !calendar.ready || busy }
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
   const renderMessage = (message: ChatMessageOut) => {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>

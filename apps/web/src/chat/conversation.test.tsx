@@ -113,14 +113,17 @@ test('account scope and composer focus survive navigation to the conversation', 
   expect(requestBody.conversation_id).toBe('c')
 })
 
-test('a follow-up suggestion keeps the selected account', async () => {
+test('a live follow-up keeps the selected account and calendars after navigation', async () => {
   setup()
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
   fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
   await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
   expect(requestBody.text).toBe('Weiter fragen')
+  expect(requestBody.calendar_source_ids).toEqual(['work'])
   expect(requestBody.account_id).toBe('a')
   expect(requestBody.conversation_id).toBe('c')
 })
@@ -140,13 +143,18 @@ test('reload restores the saved account for the composer', async () => {
   expect(requestBody.account_id).toBe('a')
 })
 
-test('the pencil on a mail card asks for a reply draft to that mail in the same conversation', async () => {
-  setup('/chat/c', false, 'a'); await send()
+test('the pencil on a mail card keeps the live calendar scope after navigation', async () => {
+  setup()
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Alle Konten' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
+  await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', snippet: 'Einwände bis Freitag möglich', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   expect(await screen.findByRole('img', { name: 'Dringend' })).toBeTruthy()
   expect(screen.getByText('Einwände bis Freitag möglich').classList.contains('le-mailref-snippet')).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
-  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
+  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1', calendar_source_ids: ['work'] })
   expect(requestBody.account_id).toBe('a')
 })
 
