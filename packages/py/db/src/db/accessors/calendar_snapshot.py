@@ -6,6 +6,7 @@ from datetime import date, datetime
 from sqlalchemy import String, and_, bindparam, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import ARRAY, insert
 
+from db.accessors.calendar_occurrence import timed_overlap
 from db.engine import get_session_maker
 from db.models._common import utcnow
 from db.models.calendar_event import CalendarEvent
@@ -63,7 +64,7 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
             ).returning(CalendarEvent.id, CalendarEvent.external_id)
             actual = {external: identifier for identifier, external in (await session.execute(stmt)).all()}
             event_ids.update({event.id: actual[event.external_id] for event in batch})
-        overlap = or_(and_(CalendarOccurrence.start_at < end, CalendarOccurrence.end_at > start),
+        overlap = or_(timed_overlap(start, end),
                       and_(CalendarOccurrence.start_date < end_date, CalendarOccurrence.end_date > start_date))
         delete_stmt = delete(CalendarOccurrence).where(CalendarOccurrence.source_id == source_id, overlap)
         if occurrences:
@@ -81,7 +82,7 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
             stmt = insert(CalendarOccurrence).values(batch)
             changes = {key: getattr(stmt.excluded, key) for key in batch[0] if key not in ("id", "source_id", "external_id")}
             await session.execute(stmt.on_conflict_do_update(constraint="uq_calendar_occurrence_external", set_=changes))
-        covered = or_(and_(CalendarOccurrence.start_at < coverage_end, CalendarOccurrence.end_at > coverage_start),
+        covered = or_(timed_overlap(coverage_start, coverage_end),
                       and_(CalendarOccurrence.start_date < coverage_end.date(), CalendarOccurrence.end_date > coverage_start.date()))
         await session.execute(delete(CalendarOccurrence).where(CalendarOccurrence.source_id == source_id,
                                                                ~func.coalesce(covered, False)))

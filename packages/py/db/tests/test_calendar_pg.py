@@ -10,6 +10,93 @@ from sqlalchemy.exc import IntegrityError
 pytestmark = pytest.mark.skipif(not os.getenv("RUN_PG_CONTRACT"), reason="RUN_PG_CONTRACT is not set")
 
 
+def test_points_constraint_window_and_replacement(pg_db):
+    async def run():
+        from sqlalchemy import select
+        from db.accessors import calendar_occurrence, mail_job
+        from db.accessors.calendar_snapshot import replace_window
+        from db.engine import get_session_maker
+        from db.models.calendar_event import CalendarEvent
+        from db.models.calendar_occurrence import CalendarOccurrence
+        from db.models.calendar_source import CalendarSource
+
+        source = CalendarSource(provider="synthetic", connection_ref="local", external_id="points", name="Example", timezone="UTC")
+        event = CalendarEvent(source_id=source.id, external_id="event")
+        start, end = datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC)
+        def point(uid, instant):
+            return CalendarOccurrence(source_id=source.id, event_id=event.id, external_id=uid,
+                                      start_at=instant, end_at=instant, timezone="UTC")
+        first, last = point("first", start), point("last", end)
+        async with get_session_maker()() as session:
+            session.add_all([source, event, first, last])
+            await session.commit()
+        async with get_session_maker()() as session:
+            session.add(CalendarOccurrence(source_id=source.id, event_id=event.id, external_id="invalid",
+                                           start_at=end, end_at=start, timezone="UTC"))
+            with pytest.raises(IntegrityError):
+                await session.commit()
+        args = dict(start=start, end=end, start_date=start.date(), end_date=end.date())
+        rows = await calendar_occurrence.page_visible(**args, source_ids=[source.id], after=None, limit=10)
+        assert [row.external_id for row in rows] == ["first"]
+        assert [row.external_id for row in await calendar_occurrence.overlapping([source.id], **args)] == ["first"]
+        job = await mail_job.enqueue("calendar", {"source_id": source.id}, dedupe_key="points-calendar")
+        claim = await mail_job.claim_next(datetime.now(UTC) + timedelta(seconds=1), stale_after=timedelta(minutes=5))
+        await replace_window(source_id=source.id, job_id=job.id, attempt=claim.attempts,
+                             **args, events=[event], occurrences=[first])
+        async with get_session_maker()() as session:
+            stored = (await session.execute(select(CalendarOccurrence).where(CalendarOccurrence.source_id == source.id))).scalars().all()
+            assert [row.external_id for row in stored] == ["first"]
+        await replace_window(source_id=source.id, job_id=job.id, attempt=claim.attempts,
+                             **args, events=[event], occurrences=[])
+        async with get_session_maker()() as session:
+            assert not (await session.execute(select(CalendarOccurrence).where(CalendarOccurrence.source_id == source.id))).scalars().all()
+    asyncio.run(run())
+
+
+def test_point_migration_round_trip(pg_db):
+    from pathlib import Path
+    from alembic import command
+    from alembic.config import Config
+    from db.engine import dispose_engine, get_session_maker
+    from db.models.calendar_occurrence import CalendarOccurrence
+    from db.models.calendar_sync_state import CalendarSyncState
+
+    async def seed():
+        async with get_session_maker()() as session:
+            instant = datetime(2026, 1, 1, tzinfo=UTC)
+            session.add_all([CalendarSyncState(source_id="point-source", incomplete=False),
+                             CalendarSyncState(source_id="other-source", incomplete=False),
+                             CalendarOccurrence(source_id="point-source", event_id="event", external_id="point",
+                                                start_at=instant, end_at=instant, timezone="UTC")])
+            await session.commit()
+    async def verify():
+        from sqlalchemy import select
+        async with get_session_maker()() as session:
+            assert (await session.get(CalendarSyncState, "point-source")).incomplete
+            assert not (await session.get(CalendarSyncState, "other-source")).incomplete
+            assert not (await session.execute(select(CalendarOccurrence).where(CalendarOccurrence.source_id == "point-source"))).scalars().all()
+    project = Path(__file__).resolve().parents[1]
+    config = Config(str(project / "alembic.ini"))
+    config.set_main_option("script_location", str(project / "src/db/migrations"))
+    asyncio.run(seed())
+    asyncio.run(dispose_engine())
+    command.downgrade(config, "9c420cfdeeb6")
+    asyncio.run(verify())
+    asyncio.run(dispose_engine())
+    command.upgrade(config, "heads")
+    asyncio.run(seed_after_upgrade())
+
+
+async def seed_after_upgrade():
+    from db.engine import get_session_maker
+    from db.models.calendar_occurrence import CalendarOccurrence
+    instant = datetime(2026, 1, 1, tzinfo=UTC)
+    async with get_session_maker()() as session:
+        session.add(CalendarOccurrence(source_id="point-source", event_id="event", external_id="point",
+                                       start_at=instant, end_at=instant, timezone="UTC"))
+        await session.commit()
+
+
 def test_large_snapshot_and_unknown_event(pg_db):
     async def run():
         from db.accessors import mail_job

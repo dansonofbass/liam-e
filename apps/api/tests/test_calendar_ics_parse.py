@@ -136,7 +136,8 @@ async def test_floating_until_and_ambiguous_first_offset():
     "DTSTART:20260328T120000Z\nDURATION:PT1Hgarbage",
     "DTSTART:20260328T120000Z\nDURATION:PT1H\nEXDATE;VALUE=DATE:20260329",
     "DTSTART:20260328T120000Z\nDURATION:PT1H\nRECURRENCE-ID:20260329T120000Z",
-    "DTSTART:20260328T120000Z",
+    "DTSTART;VALUE=DATE:20260328\nDTEND;VALUE=DATE:20260328",
+    "DTSTART:20260328T120000Z\nDTEND:20260328T110000Z",
 ])
 async def test_invalid_or_unsupported_semantics_fail_without_partial_snapshot(properties, caplog):
     with pytest.raises(ics.ICSError) as caught:
@@ -356,6 +357,25 @@ async def test_actual_fetch_to_parser_pipeline(monkeypatch):
     result = await adapter.snapshot("source", instant("2026-03-28"), instant("2026-04-01"))
     assert len(result.occurrences) == 4 and result.complete
     assert result.occurrences[1].start_at == instant("2026-03-29T07:00:00")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("ending", ["", "DTEND;TZID=Europe/Berlin:20260105T090000", "DURATION:PT0S"])
+async def test_timed_points_do_not_reject_other_events(ending):
+    body = feed("DTSTART;TZID=Europe/Berlin:20260105T090000\n" + ending).replace(
+        b"END:VCALENDAR", b"BEGIN:VEVENT\nUID:other@example.org\nDTSTART;VALUE=DATE:20260105\nEND:VEVENT\nEND:VCALENDAR")
+    result = await ics.parse(body, instant("2026-01-05"), instant("2026-01-06"), fallback_zone="UTC")
+    assert len(result.occurrences) == 2
+    point = next(row for row in result.occurrences if row.start_at is not None)
+    assert point.start_at == point.end_at == instant("2026-01-05T08:00:00")
+
+
+@pytest.mark.anyio
+async def test_recurring_points_and_window_boundaries():
+    body = feed("DTSTART:20260105T000000Z\nRRULE:FREQ=DAILY;COUNT=3\nRDATE:20260108T000000Z")
+    result = await ics.parse(body, instant("2026-01-06"), instant("2026-01-08"), fallback_zone="UTC")
+    assert [row.start_at for row in result.occurrences] == [instant("2026-01-06"), instant("2026-01-07")]
+    assert all(row.start_at == row.end_at for row in result.occurrences)
 
 
 @pytest.mark.anyio

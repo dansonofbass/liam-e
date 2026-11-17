@@ -64,6 +64,21 @@ def test_page_cursor(client, monkeypatch):
     assert page.status_code == 200 and page.json()["next_cursor"] is None
 
 
+def test_point_response_has_equal_instants(client, monkeypatch):
+    from datetime import UTC, datetime
+    from db.accessors import calendar_occurrence
+    instant = datetime(2026, 1, 1, tzinfo=UTC)
+    point = CalendarOccurrence(source_id="example", event_id="event", external_id="point",
+                               start_at=instant, end_at=instant, timezone="UTC")
+    async def page_visible(**kwargs):
+        return [point]
+    monkeypatch.setattr(calendar_occurrence, "page_visible", page_visible)
+    response = client.get("/api/v1/calendar/occurrences", params={"from": "2026-01-01", "to": "2026-01-02"})
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["start_at"] == item["end_at"] == "2026-01-01T00:00:00Z"
+
+
 def test_several_sources_are_checked_and_passed(client, monkeypatch):
     from db.accessors import calendar_occurrence, calendar_source
     active = {name: CalendarSource(provider="synthetic", connection_ref="example", external_id=name, name=name,

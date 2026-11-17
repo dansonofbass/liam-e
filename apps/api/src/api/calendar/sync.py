@@ -8,7 +8,7 @@ from db.accessors.calendar_snapshot import replace_window
 from db.models.calendar_event import CalendarEvent
 from db.models.calendar_occurrence import CalendarOccurrence
 
-from api.calendar.adapters import Adapter, normalize
+from api.calendar.adapters import Adapter, normalize, timed_overlaps
 
 _adapters: dict[str, Adapter] = {}
 
@@ -59,7 +59,7 @@ async def run_sync(payload: dict, job_id: str, attempt: int) -> None:
         if row.start_date is not None:
             in_window = row.start_date < end.date() and row.end_date > start.date()
         else:
-            in_window = row.start_at < end and row.end_at > start
+            in_window = timed_overlaps(row.start_at, row.end_at, start, end)
         if not in_window:
             raise ValueError("occurrence outside window")
         occurrences.append(CalendarOccurrence(source_id=source.id, event_id=ids[row.event_external_id],

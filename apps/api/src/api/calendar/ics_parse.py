@@ -27,7 +27,7 @@ from icalendar import Calendar, Timezone, TimezoneDaylight, TimezoneStandard, vR
 from icalendar.parser import Contentlines
 from icalendar.prop.dt.duration import DURATION_REGEX
 
-from api.calendar.adapters import Event, Occurrence, Snapshot, normalize
+from api.calendar.adapters import Event, Occurrence, Snapshot, normalize, timed_overlaps
 
 MAX_COMPONENTS = 10_000
 MAX_OCCURRENCES = 50_000
@@ -300,10 +300,10 @@ def _component(component, raw, zones, fallback):
     elif type(dt) is date or status == "CANCELLED":
         result["duration"] = {"mode": "nominal", "days": 1, "seconds": 0}
     else:
-        # The shared snapshot interval contract cannot represent instantaneous events.
-        fail("unsupported_semantics")
+        result["duration"] = {"mode": "exact", "days": 0, "seconds": 0}
     length = result["duration"]
-    if length["days"] * 86400 + length["seconds"] <= 0:
+    total = length["days"] * 86400 + length["seconds"]
+    if total < 0 or (type(dt) is date and total == 0):
         fail()
     if type(dt) is date and length["seconds"] % 86400:
         fail()
@@ -478,7 +478,7 @@ def expand(events: list[Event], start: datetime, end: datetime, occurrence_limit
                     zone_name = "UTC"
                 row = Occurrence(identity, event.external_id, item["summary"], start_at=actual,
                                  end_at=finish, timezone=zone_name)
-                overlaps = actual.astimezone(UTC) < end and finish.astimezone(UTC) > start
+                overlaps = timed_overlaps(actual.astimezone(UTC), finish.astimezone(UTC), start, end)
             row = normalize(row)
             if overlaps:
                 rows.append(row)
