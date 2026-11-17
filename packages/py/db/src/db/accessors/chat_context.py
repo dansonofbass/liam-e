@@ -6,6 +6,8 @@ A mail-account selection also bounds task sources; it cannot include personal ta
 """
 import json
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+from db.accessors import user_preference
 from db.engine import get_session_maker
 from db.models._common import utcnow
 from db.models.chat_context import ChatContext
@@ -16,6 +18,10 @@ from db.models.calendar_source import CalendarSource
 from db.models.prompt_revision import PromptRevision
 from db.models.prompt_template import OWNER_SCOPE, PromptTemplate
 from db.accessors.prompt_template import StaleVersion
+
+
+class PreferencesUnavailable(Exception):
+    pass
 
 
 class ContextUnavailable(Exception):
@@ -67,8 +73,15 @@ async def configure(conversation_id, expected_version, *, revision_id=None, chan
 
 
 async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version, calendar_source_ids=None,
-                  task_source='none', task_source_account_id=None):
+                  task_source='none', task_source_account_id=None, without_preferences=False):
     async with get_session_maker()() as session:
+        enabled, preference_ids = False, []
+        if not without_preferences:
+            try:
+                await user_preference.lock(session)
+                enabled, preference_ids = await user_preference.resolve_in_session(session, account_id)
+            except SQLAlchemyError:
+                raise PreferencesUnavailable from None
         # Lock order matches deletion: template before conversation.
         existing = await session.get(ChatConversation, conversation_id) if conversation_id else None
         if conversation_id and existing is None:
@@ -148,7 +161,8 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
         snapshot = ChatContext(conversation_id=conversation.id, prompt_revision_id=selected,
                                prompt_hash=revision.content_hash if revision else None,
                                app_prompt_version=app_prompt_version, account_scope_json=provenance,
-                               calendar_scope_json=json.dumps(calendar_ids), task_scope_json=json.dumps(task_scope))
+                               calendar_scope_json=json.dumps(calendar_ids), task_scope_json=json.dumps(task_scope),
+                               preferences_enabled=enabled, preference_revision_ids_json=json.dumps(preference_ids))
         session.add(snapshot)
         await session.commit()
         return conversation, snapshot, revision.content if revision else None

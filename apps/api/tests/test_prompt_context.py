@@ -18,6 +18,7 @@ from support.fake_mistral import FakeMistral
     (context_resolver.chat_context.ContextUnavailable(), 404, 'context_unavailable'),
     (context_resolver.StaleVersion(), 409, 'version_conflict'),
     (ValueError(), 422, 'context_invalid'),
+    (context_resolver.chat_context.PreferencesUnavailable(), 503, 'preferences_unavailable'),
 ])
 async def test_resolver_errors_are_content_free(monkeypatch, error, status, code):
     monkeypatch.setattr(context_resolver.chat_context, 'resolve', AsyncMock(side_effect=error))

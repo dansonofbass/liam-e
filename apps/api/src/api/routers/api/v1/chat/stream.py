@@ -30,6 +30,7 @@ class ChatStreamRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     account_id: str | None = None
     prompt_revision_id: str | None = None
+    without_preferences: bool = False
     context_message_id: str | None = None
     context_occurrence_id: str | None = None
     calendar_source_ids: list[str] = Field(default_factory=list, max_length=50)
