@@ -39,14 +39,17 @@ ADDRESS = re.compile(r"(?<![\w.%+-])([A-Za-z0-9._%+-]+)@((?:[A-Za-z0-9-]+\.)+[A-
 HOME_PATH = re.compile(r"(?<![\w.~-])/(?:home|Users)/[A-Za-z_][\w.-]*(?![\w-])")
 # One or two backslashes: a plain path or one escaped in JSON or a string literal.
 WINDOWS_HOME = re.compile(r"(?i)(?<![\w])[a-z]:\\{1,2}Users\\{1,2}[^\\\s\"'<>]+")
-# The host must be claude.ai itself: right after a scheme, or standing alone (not a path segment
-# or the tail of another host). Hosts are case-insensitive.
+# The host must be claude.ai itself: after "//" (with a scheme or protocol-relative, but not a
+# doubled slash inside another URL's path), or standing alone (not a path segment or the tail of
+# another host). Hosts are case-insensitive.
 PRIVATE_LINK = re.compile(
-    r"(?i)(?:(?<=://)|(?<![\w./-]))(?:www\.)?claude\.ai/(?:artifact|chat|code|project|public|share)/[a-z0-9_-]+"
+    r"(?i)(?:(?<=//)(?<![\w.-]//)|(?<![\w./-]))(?:www\.)?claude\.ai/(?:artifact|chat|code|project|public|share)/[a-z0-9_-]+"
 )
-# Strings that look like a home path but are not one, such as a web route under "/home". Each
-# entry is the exact match and needs a comment saying where it occurs and why it is harmless.
-NOT_HOME_PATHS: frozenset[str] = frozenset()
+# Paths that look like a home directory but are not one, such as a web route under "/home". Each
+# entry is (file, the whole path as written there) with a comment saying why it is harmless. The
+# same path in another file, or a longer path that starts with it, is still reported.
+NOT_HOME_PATHS: frozenset[tuple[str, str]] = frozenset()
+WHOLE_PATH = re.compile(r"[^\s\"'`<>()\[\]{},;]+")
 DEPLOYMENT_KEYS = ("organizationId", "workspaceId", "appId")
 
 
@@ -106,9 +109,28 @@ def test_no_links_to_private_claude_resources() -> None:
     assert hits(PRIVATE_LINK, everything=True) == [], "name the artifact or session instead of linking it"
 
 
+def home_path_hits(texts: dict[str, str], allowed: frozenset[tuple[str, str]]) -> list[str]:
+    found = []
+    for path, text in texts.items():
+        for number, line in enumerate(text.splitlines(), start=1):
+            for match in HOME_PATH.finditer(line):
+                whole = WHOLE_PATH.match(line, match.start()).group(0)
+                if (path, whole) not in allowed:
+                    found.append(f"{path}:{number}: {match.group(0)}")
+    return found
+
+
 def test_no_absolute_home_paths() -> None:
-    found = hits(HOME_PATH, keep=lambda match: match.group(0) not in NOT_HOME_PATHS) + hits(WINDOWS_HOME)
+    found = home_path_hits(tracked_texts(), NOT_HOME_PATHS) + hits(WINDOWS_HOME)
     assert found == [], "use repository-relative paths or a placeholder; a route is listed in NOT_HOME_PATHS"
+
+
+def test_home_path_exception_is_bound_to_file_and_whole_path() -> None:
+    route = "/home" + "/settings"
+    allowed = frozenset({("apps/web/src/routes.ts", route)})
+    assert home_path_hits({"apps/web/src/routes.ts": f'route = "{route}"'}, allowed) == []
+    assert home_path_hits({"apps/web/src/routes.ts": f'path = "{route}/.ssh/config"'}, allowed) != []
+    assert home_path_hits({"docs/notes.md": f'route = "{route}"'}, allowed) != []
 
 
 def is_personal_address(match: re.Match[str]) -> bool:
@@ -174,8 +196,11 @@ def test_home_path_rule(text: str, flagged: bool) -> None:
         ("https://claude" + ".ai/share/test-only", True),
         ("https://CLAUDE" + ".AI/chat/test-only", True),
         ("(see claude" + ".ai/share/test-only)", True),
+        ("[chat](//claude" + ".ai/chat/test-only)", True),
+        ("//claude" + ".ai/chat/test-only", True),
         ("https://notclaude" + ".ai/artifact/test-only", False),
         ("https://example.org/claude" + ".ai/chat/test-only", False),
+        ("https://example.org//claude" + ".ai/chat/test-only", False),
         ("https://sub.claude" + ".ai.example/chat/test-only", False),
         ("https://claude" + ".ai/", False),
     ],
