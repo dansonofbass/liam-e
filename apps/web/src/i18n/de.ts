@@ -23,7 +23,7 @@ export const de = {
     next: 'Gilt ab deiner nächsten Nachricht.', manage: 'Vorlagen verwalten', newer: 'Neue Version verfügbar', adopt: 'Version übernehmen',
     selectionError: 'Die Vorlage wurde nicht gewechselt. Prüfe die Auswahl und versuch es noch mal.',
     selectionConflict: 'Die Unterhaltung wurde inzwischen geändert. Lade die aktuelle Fassung und wähle erneut.',
-    restart: 'Neue Unterhaltung ohne bisherigen Kontext', version: (number: number) => `Version ${number}`,
+    restart: 'Neue Unterhaltung ohne bisherigen Kontext', useStandard: 'Standard verwenden', version: (number: number) => `Version ${number}`,
     count: (count: number, max = 8000) => `${count.toLocaleString('de-DE')} / ${max.toLocaleString('de-DE')} Zeichen`,
   },
   rootScreens: {

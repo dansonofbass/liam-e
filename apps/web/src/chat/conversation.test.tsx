@@ -313,6 +313,18 @@ test('restart after template removal preserves account and unsent text', async (
   expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Noch offen')
 })
 
+test('restart from a revoked answer preserves account and unsent text', async () => {
+  const { client, router } = setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([]))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('revoked', 'assistant'), context: { id: 'ctx', account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: true } }]) })
+  fireEvent.change(screen.getByPlaceholderText('Frag etwas zu deinen Mails …'), { target: { value: 'Noch offen' } })
+  fireEvent.click(await screen.findByRole('button', { name: 'Neue Unterhaltung ohne bisherigen Kontext' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect(await screen.findByRole('button', { name: 'Privat' })).toBeTruthy()
+  expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Noch offen')
+})
+
 test('unknown model refusal renders its explanation', async () => {
   spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'model_unknown' } } }) as never)
   const { client } = setup('/chat/c')

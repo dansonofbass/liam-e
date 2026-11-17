@@ -1,7 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
 import { de } from '../i18n/de'
 import { formatTime } from '../i18n/format'
@@ -25,7 +25,7 @@ function setup(accounts = true, path = '/', unread = 3, lastSync: string | null 
   const mailRoute = createRoute({ getParentRoute: () => root, path: '/mail/$messageId', component: () => <p>Mail</p> })
   const router = createRouter({ routeTree: root.addChildren([index, accountsRoute, mailRoute]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
-  return router
+  return Object.assign(router, { testClient: client })
 }
 afterEach(() => { cleanup(); mock.restore(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
 
@@ -120,6 +120,25 @@ test('a model that is gone is named, the chip falls back to the default and ther
   expect((await screen.findByRole('alert')).textContent).toBe('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')
   expect(screen.queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
   expect(await screen.findByRole('button', { name: 'Standardmodell' })).toBeTruthy()
+})
+
+test('a removed start template can be cleared before sending', async () => {
+  const router = setup()
+  const template = { id: 't', name: 'Testvorlage', revision_id: 'r', text: 'Test', version: 1 }
+  spyOn(sdk, 'promptGet').mockImplementation((async () => ({ data: { ...template, revisions: [{ id: 'r', number: 1, content: 'Test' }] } })) as never)
+  await screen.findByRole('button', { name: 'Vorlage: Standard' })
+  await waitFor(() => expect(router.testClient.getQueryData(['prompts'])).toEqual([]))
+  act(() => { router.testClient.setQueryData(['prompts'], [template]) })
+  await waitFor(() => expect(router.testClient.getQueryData(['prompts', 't'])).toBeTruthy())
+  fireEvent.click(screen.getByRole('button', { name: 'Vorlage: Standard' }))
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: /Testvorlage/ }))
+  expect(await screen.findByRole('button', { name: 'Vorlage: Testvorlage' })).toBeTruthy()
+  act(() => { router.testClient.setQueryData(['prompts'], []) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Standard verwenden' }))
+  expect(await screen.findByRole('button', { name: 'Vorlage: Standard' })).toBeTruthy()
+  fireEvent.change(screen.getByPlaceholderText(de.chat.placeholder), { target: { value: 'Was steht drin?' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+  expect(request.prompt_revision_id).toBeNull()
 })
 
 test('about displays a mail and sends its context, which can be removed', async () => {

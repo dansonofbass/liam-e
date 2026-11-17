@@ -48,6 +48,6 @@ export function TemplateMenu({ conversationId, revision = null, onChange }: { co
     {(list.isError || details.some(item => item.isError)) && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void client.invalidateQueries({ queryKey: ['prompts'] }) } }}>{de.prompts.error}</Notice>}
     {owner && owner.revision_id !== selected && <Notice tone="info" action={busy ? undefined : { label: de.prompts.adopt, onClick: () => { void choose(owner.revision_id) } }}>{de.prompts.newer}</Notice>}
     {error && <Notice tone="danger" action={{ label: de.prompts.loadCurrent, onClick: () => { void reload().catch(() => setError(de.prompts.selectionError)) } }}>{error}</Notice>}
-    {selected && !current && resolved && <Notice tone="info" action={{ label: de.prompts.restart, onClick: () => { setScope(scope); setComposerText('new', composerTexts[conversationId ?? 'new'] ?? ''); void navigate({ to: '/' }) } }}>{de.prompts.removed}</Notice>}
+    {selected && !current && resolved && <Notice tone="info" action={{ label: conversationId ? de.prompts.restart : de.prompts.useStandard, onClick: () => { if (!conversationId) { onChange?.(null); return }; setScope(scope); setComposerText('new', composerTexts[conversationId] ?? ''); void navigate({ to: '/' }) } }}>{de.prompts.removed}</Notice>}
   </div>
 }

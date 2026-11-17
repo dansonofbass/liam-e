@@ -91,16 +91,17 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   // The pencil on a mail card asks for a reply draft to that mail in this conversation, like the button on the open mail.
   const draft: Draft = { onDraft: id => { if (!ready) return; void send({ text: de.mail.draftPrompt, account_id: scope, conversation_id: conversationId, context_message_id: id }) }, disabled: !ready || busy }
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
+  const restart = () => { setScope(scope); setComposerText('new', composerTexts[conversationId] ?? ''); void navigate({ to: '/' }) }
   const renderMessage = (message: ChatMessageOut) => {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
     if (message.role === 'proposal' || message.role === 'draft') return <ProposalCard key={message.id} message={message} />
     if (message.role !== 'assistant') return null
-    return <>{message.context?.revoked && <Notice tone="info" action={{ label: de.prompts.restart, onClick: () => { setScope(scope); void navigate({ to: '/' }) } }}>{de.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}</>
+    return <>{message.context?.revoked && <Notice tone="info" action={{ label: de.prompts.restart, onClick: restart }}>{de.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}</>
   }
   const status = state.status?.code === 'searching' ? de.status.searching(state.status.count ?? 0) : state.status ? de.status[state.status.code] : null
   const liveModel = modelLabel(selectedModel?.conversationId === conversationId ? selectedModel.id : lastAssistant?.extras.model) ?? models.find(model => model.is_default)?.label
   const historyGone = errorCode(history.error instanceof Error ? history.error.cause : history.error) === 'conversation_not_found'
-  const newConversation = { label: de.shell.newConversation, onClick: () => { setScope(scope); setComposerText('new', composerTexts[conversationId] ?? ''); void navigate({ to: '/' }) } }
+  const newConversation = { label: de.shell.newConversation, onClick: restart }
   return <div className="le-chat-view"><ChatHeader conversationId={conversationId}><ModelMenu key={conversationId} conversationId={conversationId} model={lastAssistant?.extras.model} onChange={id => setSelectedModel({ conversationId, id })} /><TemplateMenu key={conversationId} conversationId={conversationId} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
     {history.isPending && <p className="le-hint">{de.chat.loadingHistory}</p>}
     {history.isError && <Notice tone="danger" action={historyGone ? newConversation : { label: de.chat.retry, onClick: () => { void history.refetch() } }}>{historyGone ? de.errors.conversation_not_found : de.chat.historyError}</Notice>}

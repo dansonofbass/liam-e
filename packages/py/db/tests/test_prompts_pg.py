@@ -54,6 +54,19 @@ def test_revisions_concurrent_updates_and_revocation(pg_db):
     asyncio.run(run())
 
 
+def test_legacy_template_has_unknown_updated_at(pg_db):
+    async def run():
+        from sqlalchemy import text
+        from db.engine import get_session_maker
+        from db.accessors import prompt_template as p
+        async with get_session_maker()() as session:
+            await session.execute(text("INSERT INTO prompt_template (id, owner_scope, name, version, revision_id, updated_at) VALUES ('legacy', 'installation', 'Alt', 1, 'revision', NULL)"))
+            await session.commit()
+        assert (await p.get_template('legacy')).updated_at is None
+        assert next(row for row in await p.list_templates() if row.id == 'legacy').updated_at is None
+    asyncio.run(run())
+
+
 def test_context_batch_is_one_query(pg_db):
     async def run():
         from sqlalchemy import event
