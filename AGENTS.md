@@ -140,6 +140,12 @@ Abschlussmarker werden beim nächsten Reconcile seitenweise erneut ausgewertet;
 die ursprünglichen Instanzschlüssel verhindern Duplikate und erhalten den Zustand.
 So werden fehlende Endinstanzen ergänzt, ohne Datenmigration.
 
+Neue Aufgaben brauchen auch ohne Uhrzeit eine gültige IANA-Zeitzone; fehlt sie,
+antwortet die Anlage mit `422 task_invalid`. Das Datum bleibt ein Datum. Alte
+Datumsrevisionen mit `timezone: null` verwenden für Tagesgrenzen UTC, ohne die
+Daten umzuschreiben. Heute gilt als bereits fällig, überfällig erst ab dem nächsten
+lokalen Tag. Eine neue Serienrevision kann die Zeitzone ausdrücklich setzen.
+
 ## Kalenderdomäne
 
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der

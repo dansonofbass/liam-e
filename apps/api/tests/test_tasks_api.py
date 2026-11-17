@@ -33,7 +33,7 @@ def access(monkeypatch):
 
 def test_creation_and_conflict(client, access):
     session, create, _, _ = access
-    body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01'}
+    body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01', 'timezone': 'UTC'}
     response = client.post('/api/v1/tasks', json=body)
     assert response.status_code == 200 and response.json()['created'] is True
     session.commit.assert_awaited_once()
@@ -60,7 +60,7 @@ def test_new_task_is_visible_and_retry_does_not_reconcile_again(client, access):
         return None, True
 
     route.reconcile.reconcile_batch.side_effect = materialize
-    body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01'}
+    body = {'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01', 'timezone': 'UTC'}
     assert client.post('/api/v1/tasks', json=body).status_code == 200
     response = client.get('/api/v1/tasks/occurrences')
     assert response.status_code == 200 and response.json()['items'][0]['id'] == 'o'
@@ -74,8 +74,18 @@ def test_reconcile_failure_does_not_commit_creation(client, access):
     session, _, _, _ = access
     route.reconcile.reconcile_batch.side_effect = RuntimeError('synthetic failure')
     with pytest.raises(RuntimeError, match='synthetic failure'):
-        client.post('/api/v1/tasks', json={'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01'})
+        client.post('/api/v1/tasks', json={'creation_key': 'k', 'title': 'Example', 'start': '2024-01-01', 'timezone': 'UTC'})
     session.commit.assert_not_awaited()
+
+
+@pytest.mark.parametrize('zone', [None, '', 'Not/AZone'])
+def test_creation_requires_valid_zone_for_dates(client, access, zone):
+    response = client.post('/api/v1/tasks', json={
+        'creation_key': 'zone', 'title': 'Example', 'start': '2024-01-01', 'timezone': zone,
+    })
+    assert response.status_code == 422
+    assert 'task_invalid' in response.text
+    access[1].assert_not_awaited()
 
 
 def test_list_filters_cursor_and_invalid_input(client, access):

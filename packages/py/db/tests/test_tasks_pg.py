@@ -42,14 +42,14 @@ def test_creation_payload_conflict(pg_db):
         from db.engine import get_session_maker
 
         async with get_session_maker()() as session:
-            first, created = await create(session, creation_key='key', title='Example', start=date(2024, 1, 1))
+            first, created = await create(session, creation_key='key', title='Example', start=date(2024, 1, 1), zone='UTC')
             assert created
             await session.commit()
         async with get_session_maker()() as session:
-            second, created = await create(session, creation_key='key', title='Example', start=date(2024, 1, 1))
+            second, created = await create(session, creation_key='key', title='Example', start=date(2024, 1, 1), zone='UTC')
             assert not created and first.id == second.id
             with pytest.raises(CreationConflict):
-                await create(session, creation_key='key', title='Different', start=date(2024, 1, 1))
+                await create(session, creation_key='key', title='Different', start=date(2024, 1, 1), zone='UTC')
             await session.rollback()
 
     asyncio.run(run())
@@ -70,11 +70,11 @@ def test_creation_validates_source_account_and_message(pg_db):
             session.add(message)
             await session.commit()
         async with get_session_maker()() as session:
-            row, created = await create(session, creation_key='source', title='Example', start=date(2024, 1, 1),
+            row, created = await create(session, creation_key='source', title='Example', start=date(2024, 1, 1), zone='UTC',
                                         source_account_id=account.id, source_message_id=message.id)
             assert created and row.source_message_id == message.id
             with pytest.raises(ValueError):
-                await create(session, creation_key='invalid', title='Example', start=date(2024, 1, 1),
+                await create(session, creation_key='invalid', title='Example', start=date(2024, 1, 1), zone='UTC',
                              source_account_id=account.id, source_message_id='missing')
             await session.commit()
 
@@ -190,7 +190,7 @@ def test_creation_rolls_back_when_materialization_fails(pg_db, monkeypatch):
     original = route.reconcile.reconcile_batch
     monkeypatch.setattr(route.reconcile, 'reconcile_batch', fail)
     app = create_app(hooks=FastAPIHooks.empty())
-    body = {'creation_key': 'rollback', 'title': 'Example', 'start': date.today().isoformat()}
+    body = {'creation_key': 'rollback', 'title': 'Example', 'start': date.today().isoformat(), 'timezone': 'UTC'}
     with TestClient(app, raise_server_exceptions=False) as client:
         assert client.post('/api/v1/tasks', json=body).status_code == 500
         assert client.get('/api/v1/tasks/occurrences').json()['items'] == []
@@ -206,7 +206,7 @@ def test_created_task_is_immediately_visible_via_api(pg_db):
     from mistralai_capabilities.fastapi.hooks import FastAPIHooks
 
     app = create_app(hooks=FastAPIHooks.empty())
-    body = {'creation_key': 'api-create', 'title': 'Example', 'start': date.today().isoformat()}
+    body = {'creation_key': 'api-create', 'title': 'Example', 'start': date.today().isoformat(), 'timezone': 'UTC'}
     with TestClient(app) as client:
         first = client.post('/api/v1/tasks', json=body)
         assert first.status_code == 200 and first.json()['created'] is True

@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from api.errors import refuse
 from api.tasks import create, reconcile
+from api.tasks.recurrence import expand_page
 from .schemas import TaskCreate, TaskCreated
 
 router = APIRouter()
@@ -18,6 +19,9 @@ async def create_task(body: TaskCreate) -> TaskCreated:
     try:
         # ISO 8601 allows a lowercase separator; a date has neither.
         start = datetime.fromisoformat(body.start) if 't' in body.start.lower() else date.fromisoformat(body.start)
+        if not body.timezone:
+            raise ValueError('timezone required')
+        expand_page(start, body.rrule or 'FREQ=DAILY;COUNT=1', start, body.timezone, limit=1)
         async with get_session_maker()() as session:
             row, created = await create.create(
                 session, creation_key=body.creation_key, title=body.title, description=body.description,

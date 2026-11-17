@@ -50,6 +50,11 @@ def _parse(start: date | datetime, rule: str, through: date | datetime, zone: st
     timed = isinstance(start, datetime)
     if timed != isinstance(through, datetime):
         raise ValueError('start and bound must have the same precision')
+    if zone is not None:
+        try:
+            ZoneInfo(zone)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError('unknown timezone') from exc
     if timed:
         if start.tzinfo is not None or through.tzinfo is not None or not zone:
             raise ValueError('timed values must be naive local datetimes with a zone')
@@ -61,8 +66,6 @@ def _parse(start: date | datetime, rule: str, through: date | datetime, zone: st
         if not _valid_wall(dtstart):
             raise ValueError('nonexistent start time')
     else:
-        if zone is not None:
-            raise ValueError('date values cannot have a timezone')
         dtstart = datetime.combine(start, time.min)
     parts = {}
     for part in rule.split(';'):

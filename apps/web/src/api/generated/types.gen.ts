@@ -1446,6 +1446,8 @@ export type TaskCreate = {
     start: string;
     /**
      * Timezone
+     *
+     * Required IANA timezone, including for date-only tasks; missing or invalid values return task_invalid.
      */
     timezone?: string | null;
     /**

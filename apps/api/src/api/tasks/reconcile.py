@@ -61,16 +61,16 @@ async def reconcile_batch(
     if position == 'done:rfc5545':
         return cursor, True
     if position == 'done':
-        if revision.timezone is None or not any(part.startswith('COUNT=') for part in (revision.rrule or '').split(';')):
+        if 'T' not in revision.start_local.upper() or not any(part.startswith('COUNT=') for part in (revision.rrule or '').split(';')):
             return cursor, True
         # Old COUNT runs may have stopped before the valid tail. Replay in bounded
         # pages; original keys preserve existing occurrences and their state.
         position = None
 
-    timed = revision.timezone is not None
+    timed = 'T' in revision.start_local.upper()
     parser = datetime.fromisoformat if timed else date.fromisoformat
     start = parser(revision.start_local)
-    end = target_dt.astimezone(ZoneInfo(revision.timezone)).replace(tzinfo=None) if timed else target_dt.date()
+    end = target_dt.astimezone(ZoneInfo(revision.timezone)).replace(tzinfo=None) if timed else target_dt.astimezone(ZoneInfo(revision.timezone or 'UTC')).date()
     after = parser(position) if position is not None else None
     rule = revision.rrule or 'FREQ=DAILY;COUNT=1'
     values, next_position = expand_page(start, rule, end, revision.timezone, cursor=after, limit=limit)

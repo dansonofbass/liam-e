@@ -11,7 +11,7 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     description: str = Field(default='', max_length=10000)
     start: str = Field(min_length=10, max_length=26)
-    timezone: str | None = Field(default=None, max_length=100)
+    timezone: str | None = Field(default=None, max_length=100, description='Required IANA timezone, including for date-only tasks; missing or invalid values return task_invalid.')
     rrule: str | None = Field(default=None, max_length=500)
     source_account_id: str | None = Field(default=None, max_length=200)
     source_message_id: str | None = Field(default=None, max_length=200)

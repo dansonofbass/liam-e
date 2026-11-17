@@ -73,6 +73,21 @@ def test_page_rejects_non_candidate_cursor_and_invalid_limit():
         expand_page(date(2024, 1, 1), 'FREQ=DAILY', date(2024, 2, 1), limit=0)
 
 
+def test_date_zone_does_not_change_expansion_and_legacy_boundaries_use_utc():
+    from datetime import UTC
+    from api.tasks.dates import is_future, is_overdue
+
+    start, end = date(2024, 1, 1), date(2024, 1, 3)
+    assert expand(start, 'FREQ=DAILY', end, 'Europe/Berlin') == expand(start, 'FREQ=DAILY', end)
+    now = datetime(2024, 1, 1, 23, 30, tzinfo=UTC)
+    assert not is_overdue('2024-01-01', None, now)
+    assert is_overdue('2024-01-01', 'Europe/Berlin', now)
+    assert is_future('2024-01-02', None, now)
+    assert not is_future('2024-01-02', 'Europe/Berlin', now)
+    with pytest.raises(ValueError):
+        expand(start, 'FREQ=DAILY', end, 'Not/AZone')
+
+
 def test_invalid_start_and_zone():
     with pytest.raises(ValueError):
         expand(datetime(2024, 3, 31, 2, 30), 'FREQ=DAILY', datetime(2024, 4, 1), 'Europe/Berlin')
