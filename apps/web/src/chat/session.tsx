@@ -8,7 +8,7 @@ import { calendarSourcesQuery, conversationsQuery, historyQuery } from '../api/q
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | ChatRefusal
 type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
-export type TaskScope = { source: 'none' | 'all' | 'unlinked' | 'account'; account_id?: string }
+export type TaskScope = { source: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked'; account_id?: string }
 type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; calendarScopes: Record<string, string[]>; setCalendarScope: (id: string, ids: string[]) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
@@ -196,7 +196,7 @@ function savedTaskScope(messages?: ChatMessageOut[]): TaskScope {
   try {
     const raw = JSON.parse(messages?.findLast(message => message.context)?.context?.task_scope_json ?? '{"source":"none"}') as TaskScope
     if (['none', 'all', 'unlinked'].includes(raw.source)) return { source: raw.source }
-    if (raw.source === 'account' && typeof raw.account_id === 'string') return raw
+    if (['account', 'account_and_unlinked'].includes(raw.source) && typeof raw.account_id === 'string') return raw
   } catch { /* Unknown provenance grants no access. */ }
   return { source: 'none' }
 }

@@ -254,9 +254,13 @@ lokalen Tag. Eine neue Serienrevision kann die Zeitzone ausdrücklich setzen.
 
 ### Aufgaben im Chat
 
-`task_source=none|all|unlinked|account` und gegebenenfalls `task_source_account_id` bilden
-im Composer einen eigenen sichtbaren Umfang. Ein gewähltes Mailkonto erlaubt nur dessen
-Aufgaben; für „Alle Aufgaben“ muss auch die Mailauswahl unbeschränkt sein. Der Umfang steht
+`task_source=none|all|unlinked|account|account_and_unlinked` und gegebenenfalls
+`task_source_account_id` bilden im Composer einen eigenen sichtbaren Umfang. Bei gewähltem
+Mailkonto X gibt es „Keine Aufgaben“, „Aufgaben dieses Kontos“ und „Alle Aufgaben“.
+Letzteres speichert ausdrücklich `{"source":"account_and_unlinked","account_id":X}`
+und erlaubt nur Aufgaben von X plus persönliche Aufgaben ohne Quellmail, nie andere Konten.
+Lesen, Vorschlagen und Bestätigen prüfen dieselbe Grenze. Ohne Mailkontoauswahl bleiben
+`none|all|unlinked|account` unverändert; `account_and_unlinked` braucht ein gewähltes Mailkonto. Der Umfang steht
 je Turn in `chat_context.task_scope_json`; Altverlauf erhält durch den Serverstandard
 `{"source":"none"}` keinen Zugriff. Jede Änderung verlangt bei vorhandenem Verlauf eine neue
 Unterhaltung. Resolver und Agent prüfen alle historischen Kontexte vor Modellanfragen erneut.

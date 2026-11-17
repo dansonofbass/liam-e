@@ -21,7 +21,7 @@ class ChatTurnRequest(BaseModel):
     context_occurrence_id: str | None = None
     calendar_source_ids: list[str] = Field(default_factory=list, max_length=50)
     calendar_timezone: str = Field(default='Europe/Berlin', max_length=100)
-    task_source: Literal['none', 'all', 'unlinked', 'account'] = 'none'
+    task_source: Literal['none', 'all', 'unlinked', 'account', 'account_and_unlinked'] = 'none'
     task_source_account_id: str | None = Field(default=None, max_length=200)
 
 

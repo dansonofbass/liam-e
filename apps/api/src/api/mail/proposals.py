@@ -250,10 +250,8 @@ async def _confirm_task(message: ChatMessage, edit: task_proposals.TaskCreateCom
         account_scope = json.loads(context.account_scope_json)
         source = proposal.task.source_account_id
         selection = account_scope.get('selection')
-        allowed = scope.get('source') == 'all' or (
-            scope.get('source') == 'unlinked' and proposal.task.source_message_id is None
-        ) or (scope.get('source') == 'account' and source == scope.get('account_id') and source is not None)
-        if not allowed or (selection is not None and source != selection):
+        from api.tasks.chat import allowed_in_selection
+        if not allowed_in_selection(scope, selection, source, proposal.task.source_message_id):
             raise refuse(403, 'task_scope_invalid', 'Die Aufgabe gehört nicht zur gewählten Auswahl.')
         try:
             series_id = await task_proposals.execute(session, proposal.task, proposal_id=claimed.id)

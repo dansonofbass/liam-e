@@ -122,6 +122,27 @@ async def test_task_scope_boundary_blocks_all_old_roles_before_model_payload(sto
     assert 'Neue Bitte' in payload
 
 
+async def test_account_and_personal_tasks_reach_model_but_other_accounts_do_not(store, monkeypatch):
+    from api.tasks import chat as task_chat
+    scope = {'source': 'account_and_unlinked', 'account_id': store.account.id}
+    snapshot = NS(id='task-context', account_scope_json=json.dumps({'account_ids': [store.account.id], 'selection': store.account.id}),
+                  task_scope_json=json.dumps(scope), calendar_scope_json='[]', revoked=False)
+    conversation = await store.create()
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(return_value={snapshot.id: snapshot}))
+    async def read(name, args, actual_scope):
+        assert actual_scope == scope
+        rows = [(store.account.id, 'mail-x', 'account-task'), (None, None, 'personal-task'), ('other', 'mail-y', 'excluded-task')]
+        return {'untrusted_task_data': [title for account, message, title in rows if task_chat.allowed(actual_scope, account, message)]}
+    monkeypatch.setattr(task_chat, 'read', read)
+    events, fake = await run(store, monkeypatch, [[chunk('search_tasks', {'from': '2026-11-13', 'to': '2026-11-13'})], ['Antwort']],
+        account_id=store.account.id, resolved_context=(conversation, snapshot, None))
+    assert events[-1].event == 'done'
+    payload = json.dumps(fake.requests[1]['messages'])
+    assert 'account-task' in payload and 'personal-task' in payload
+    assert 'excluded-task' not in payload
+    assert 'account_and_unlinked' in payload
+
+
 async def test_turn_streams_text_deltas_in_order(store, monkeypatch):
     events, _ = await run(store, monkeypatch, [['Hallo', ' Welt']])
     assert [e.text for e in events if e.event == 'delta'] == ['Hallo', ' Welt']

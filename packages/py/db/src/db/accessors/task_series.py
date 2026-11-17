@@ -49,6 +49,9 @@ async def list_page(
         query = query.where(TaskSeries.source_message_id.is_(None))
     elif source == 'account':
         query = query.where(TaskSeries.source_account_id == source_account_id)
+    elif source == 'account_and_unlinked':
+        query = query.where(or_(TaskSeries.source_account_id == source_account_id,
+                               TaskSeries.source_message_id.is_(None)))
     if after is not None:
         query = query.where(TaskSeries.id > after)
     return list((await session.execute(query.order_by(TaskSeries.id).limit(limit))).scalars().all())

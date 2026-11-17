@@ -43,6 +43,19 @@ async function send() {
 }
 afterEach(() => { cleanup(); mock.restore(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
 
+test('account chat explicitly includes personal tasks without granting other accounts', async () => {
+  setup('/chat/c', false, 'a')
+  const area = await screen.findByRole('region', { name: 'Aufgaben im Chat' })
+  await waitFor(() => expect(within(area).getByRole('button', { name: 'Aufgaben dieses Kontos' })).toBeTruthy())
+  expect(within(area).getAllByRole('button')).toHaveLength(3)
+  fireEvent.click(within(area).getByRole('button', { name: 'Alle Aufgaben' }))
+  expect(within(area).getByRole('button', { name: 'Alle Aufgaben' }).getAttribute('aria-pressed')).toBe('true')
+  await send()
+  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.task_source).toBe('account_and_unlinked')
+  expect(requestBody.task_source_account_id).toBe('a')
+})
+
 test('shows status, streams text and stops the answer', async () => {
   setup('/chat/c'); await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'status', code: 'searching', count: 4 }) })

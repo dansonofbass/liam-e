@@ -16,9 +16,21 @@ from api.tasks.reading import complete_in_window, validate_window
 
 
 def allowed(scope: dict, account_id: str | None, message_id: str | None = None) -> bool:
-    return (scope.get('source') == 'all' or
-            (scope.get('source') == 'unlinked' and message_id is None) or
-            (scope.get('source') == 'account' and account_id is not None and scope.get('account_id') == account_id))
+    source = scope.get('source')
+    return (source == 'all' or
+            (source in {'unlinked', 'account_and_unlinked'} and message_id is None) or
+            (source in {'account', 'account_and_unlinked'} and account_id is not None and scope.get('account_id') == account_id))
+
+
+def allowed_in_selection(scope: dict, selection: str | None, account_id: str | None, message_id: str | None) -> bool:
+    """Apply the persisted task boundary and the mail selection together."""
+    if not allowed(scope, account_id, message_id):
+        return False
+    if selection is None:
+        return True
+    return scope.get('account_id') == selection and scope.get('source') in {'account', 'account_and_unlinked'} and (
+        account_id == selection or (scope['source'] == 'account_and_unlinked' and message_id is None)
+    )
 
 
 async def series_data(session, row, start, end, cursor=None, limit=5, status=None):
@@ -114,8 +126,6 @@ async def prepare(args, ctx):
             command['next_due'] = [item.due_local for item in upcoming]
             if command.get('expected_version') != row.version or (occurrence and command.get('expected_occurrence_version') != occurrence.version):
                 raise ValueError('task_version_conflict')
-        if not allowed(ctx.task_scope, command.get('source_account_id'), command.get('source_message_id')):
-            raise ValueError('task_scope_invalid')
-        if ctx.account_id is not None and command.get('source_account_id') != ctx.account_id:
+        if not allowed_in_selection(ctx.task_scope, ctx.account_id, command.get('source_account_id'), command.get('source_message_id')):
             raise ValueError('task_scope_invalid')
         return TypeAdapter(TaskProposal).validate_python(command)

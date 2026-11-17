@@ -124,15 +124,17 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
                 raise ScopeChange
         elif active_ids != set(calendar_ids):
             raise ValueError('calendar_invalid')
-        if task_source not in {'none', 'all', 'unlinked', 'account'}:
+        if task_source not in {'none', 'all', 'unlinked', 'account', 'account_and_unlinked'}:
             raise ValueError('task_scope_invalid')
-        if (task_source == 'account') != bool(task_source_account_id):
+        if (task_source in {'account', 'account_and_unlinked'}) != bool(task_source_account_id):
             raise ValueError('task_scope_invalid')
         if task_source_account_id and task_source_account_id not in accounts:
             raise ValueError('task_scope_invalid')
         if account_id is not None and task_source != 'none' and (
-            task_source != 'account' or task_source_account_id != account_id
+            task_source not in {'account', 'account_and_unlinked'} or task_source_account_id != account_id
         ):
+            raise ValueError('task_scope_invalid')
+        if task_source == 'account_and_unlinked' and account_id is None:
             raise ValueError('task_scope_invalid')
         task_scope = {'source': task_source}
         if task_source_account_id:

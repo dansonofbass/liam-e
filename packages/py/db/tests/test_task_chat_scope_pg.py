@@ -10,6 +10,68 @@ import pytest
 pytestmark = pytest.mark.skipif(not os.getenv('RUN_PG_CONTRACT'), reason='RUN_PG_CONTRACT is not set')
 
 
+def test_account_and_unlinked_scope_reads_prepares_and_confirms_only_its_union(pg_db):
+    async def run():
+        from datetime import UTC, datetime
+        from fastapi import HTTPException
+        from api.tasks import chat
+        from api.tasks.create import create
+        from api.tasks.proposals import TaskCreateCommand
+        from api.mail import proposals
+        from api.mail.agent_tools import TurnContext
+        from db.accessors import chat_context, chat_message
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+        from db.models.mail_message import MailMessage
+        today = datetime.now(UTC).date()
+        x = MailAccount(provider='imap', auth_type='imap_password', email_address='x@example.org')
+        y = MailAccount(provider='imap', auth_type='imap_password', email_address='y@example.org')
+        mx = MailMessage(account_id=x.id, provider_uid='x')
+        my = MailMessage(account_id=y.id, provider_uid='y')
+        async with get_session_maker()() as session:
+            for row in (x, y, mx, my):
+                session.add(row)
+            await session.flush()
+            linked, _ = await create(session, creation_key='x', title='Account example', start=today, zone='UTC', source_account_id=x.id, source_message_id=mx.id)
+            personal, _ = await create(session, creation_key='personal', title='Personal example', start=today, zone='UTC')
+            foreign, _ = await create(session, creation_key='y', title='Excluded example', start=today, zone='UTC', source_account_id=y.id, source_message_id=my.id)
+            await session.commit()
+        args = dict(conversation_id=None, title='Example', model=None, revision_id=None, account_id=x.id,
+                    app_prompt_version='test-only', task_source='account_and_unlinked', task_source_account_id=x.id)
+        conversation, snapshot, _ = await chat_context.resolve(**args)
+        scope = json.loads(snapshot.task_scope_json)
+        assert scope == {'source': 'account_and_unlinked', 'account_id': x.id}
+        window = {'from': today.isoformat(), 'to': today.isoformat()}
+        result = await chat.read('search_tasks', window, scope)
+        assert {r['series_id'] for r in result['untrusted_task_data']['series']} == {linked.id, personal.id}
+        assert await chat.read('get_task', {**window, 'series_id': foreign.id}, scope) == {'error': 'task_not_found'}
+        for row in (linked, personal):
+            assert (await chat.read('get_task', {**window, 'series_id': row.id}, scope))['untrusted_task_data']['series'][0]['series_id'] == row.id
+        ctx = TurnContext(conversation.id, x.id, today, account_ids=[x.id], task_scope=scope)
+        for row in (linked, personal):
+            command = await chat.prepare({'action': 'archive', 'series_id': row.id, 'expected_version': 1}, ctx)
+            card = await proposals.create_proposal(conversation.id, proposals.Proposal(kind='task', reason='Example', items=[], task=command), context_id=snapshot.id)
+            assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
+        with pytest.raises(ValueError, match='task_scope_invalid'):
+            await chat.prepare({'action': 'archive', 'series_id': foreign.id, 'expected_version': 1}, ctx)
+        create_args = {'action': 'create', 'title': 'Personal creation', 'start': today.isoformat(), 'timezone': 'UTC'}
+        command = await chat.prepare(create_args, ctx)
+        card = await proposals.create_proposal(conversation.id, proposals.Proposal(kind='task', reason='Example', items=[], task=command), context_id=snapshot.id)
+        assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
+        forged = TaskCreateCommand(**create_args, source_account_id=y.id, source_message_id=my.id)
+        card = await proposals.create_proposal(conversation.id, proposals.Proposal(kind='task', reason='Example', items=[], task=forged), context_id=snapshot.id)
+        with pytest.raises(HTTPException) as caught:
+            await proposals.confirm(card.id, selected_ids=[])
+        assert caught.value.status_code == 403 and caught.value.detail['code'] == 'task_scope_invalid'
+        assert (await chat_message.get_message(card.id)).proposal_status == 'pending'
+        await chat_message.add_message(conversation_id=conversation.id, role='user', content='Synthetic', context_id=snapshot.id)
+        with pytest.raises(chat_context.ScopeChange):
+            await chat_context.resolve(**{**args, 'conversation_id': conversation.id, 'task_source': 'account'})
+        with pytest.raises(ValueError, match='task_scope_invalid'):
+            await chat_context.resolve(**{**args, 'task_source_account_id': y.id})
+    asyncio.run(run())
+
+
 def test_scope_change_and_legacy_history_require_fresh_conversation(pg_db):
     async def run():
         from db.accessors import chat_context, chat_message
