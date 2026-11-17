@@ -67,4 +67,6 @@ def test_persistent_interval_pause_manual_throttle_and_bounded_failures(pg_db):
         async with get_session_maker()() as session:
             state = await session.get(CalendarSyncState, source.id)
             assert state.last_error == "address_check" and state.failure_count == 3
+        # The owner can still trigger a manual check after an address error.
+        assert await enqueue(now + timedelta(days=2), True)
     asyncio.run(run())
