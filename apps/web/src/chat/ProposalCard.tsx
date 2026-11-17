@@ -51,7 +51,9 @@ function failureText(code: string | undefined, kind: Proposal['kind']): string {
   switch (code) {
     case 'task_version_conflict': return de.tasks.conflict
     case 'task_source_gone': return de.tasks.unavailableMail
-    case 'task_scope_invalid': return de.prompts.scopeUnavailable
+    case 'task_scope_invalid': return de.taskChat.scopeError
+    case 'task_not_found': return de.taskChat.unavailable
+    case 'task_invalid': return de.tasks.invalid
     case 'item_gone': return kind === 'unsubscribe' ? de.proposalErrors.sender_gone : de.proposalErrors.item_gone
     case 'item_changed': return de.proposalErrors.item_changed
     case 'action_unsupported': return de.proposalErrors.action_unsupported
@@ -178,7 +180,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   if (proposal.kind === 'task') return <><TaskProposal key={current.id} proposal={proposal} busy={busy}
     confirm={task_edit => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids: [], task_edit }, throwOnError: true })), true) }}
     cancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }}
-  />{error && <Notice tone="danger">{failureText(error, proposal.kind)}</Notice>}</>
+  />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' || error === 'task_scope_invalid' ? { label: de.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind)}</Notice>}</>
   const saved = cardState(client, current.id)
   const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${de.proposal.manualSubtitle}` } : item)
   const irreversibleNote = proposal.irreversible ? proposal.kind === 'unsubscribe' ? de.proposal.irreversibleUnsubscribe : proposal.kind === 'send' ? de.proposal.irreversibleSend : undefined : undefined

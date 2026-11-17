@@ -32,9 +32,7 @@ class TaskCreateCommand(TaskCommand):
     @model_validator(mode='after')
     def schedule(self):
         start = patch.parse_local(self.start)
-        values, _ = expand_page(start, self.rrule or 'FREQ=DAILY;COUNT=1', start, self.timezone, limit=1)
-        if values != [start]:
-            raise ValueError('start must match rule')
+        expand_page(start, self.rrule or 'FREQ=DAILY;COUNT=1', start, self.timezone, limit=1)
         self.start = start.isoformat()
         if self.rrule:
             self.rrule = ';'.join(sorted(self.rrule.split(';')))

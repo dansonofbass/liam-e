@@ -57,7 +57,7 @@ async def read(name, args, scope):
                 rows, cursor = [row], None
             else:
                 rows = await task_series.list_page(session, scope='app', due_from=start.isoformat(),
-                    due_to=(end + timedelta(days=1)).isoformat(), archived=False,
+                    due_to=(end + timedelta(days=1)).isoformat(), archived=None,
                     source=scope['source'], source_account_id=scope.get('account_id'),
                     after=args.get('cursor'), limit=21)
                 cursor = rows[19].id if len(rows) > 20 else None

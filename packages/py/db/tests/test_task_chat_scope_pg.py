@@ -28,6 +28,29 @@ def test_scope_change_and_legacy_history_require_fresh_conversation(pg_db):
     asyncio.run(run())
 
 
+def test_open_due_instance_of_archived_series_remains_readable(pg_db):
+    async def run():
+        from datetime import UTC, datetime
+        from api.mail.agent_tools import execute_tool, TurnContext
+        from api.tasks import create, reconcile, lifecycle
+        from db.accessors import task_schedule_revision
+        from db.engine import get_session_maker
+        async with get_session_maker()() as session:
+            row, _ = await create.create(session, creation_key='archived', title='Due example', start=date.today(), zone='UTC')
+            revision = await task_schedule_revision.current(session, row.id)
+            await reconcile.reconcile_batch(session, scope='app', series_id=row.id, revision_id=revision.id,
+                                            started_at=datetime.now(UTC), cursor=None)
+            await lifecycle.archive(session, row.id, expected_version=1)
+            await session.commit()
+        args = {'from': date.today().isoformat(), 'to': date.today().isoformat()}
+        ctx = TurnContext('synthetic', None, date.today(), task_scope={'source': 'all'})
+        result = json.loads((await execute_tool('search_tasks', args, ctx)).content)
+        rows = result['untrusted_task_data']['series']
+        assert len(rows) == 1 and rows[0]['archived'] is True
+        assert rows[0]['occurrences'][0]['status'] == 'open'
+    asyncio.run(run())
+
+
 def test_task_read_is_scoped_incomplete_and_does_not_materialize(pg_db, monkeypatch):
     async def run():
         from api.mail.agent_tools import execute_tool, TurnContext

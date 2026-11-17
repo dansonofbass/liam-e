@@ -7,13 +7,14 @@ import { SourceMail } from '../tasks/SourceMail'
 import { SchedulePreview, TaskForm } from '../tasks/TaskForm'
 import { formatTaskDue } from '../tasks/format'
 import { TaskRule } from '../tasks/TaskRule'
+import './task-proposal.css'
 
 export function TaskProposal({ proposal, busy, confirm, cancel }: { proposal: Proposal; busy: boolean; confirm: (edit?: TaskCreateCommand) => void; cancel: () => void }) {
   const [previewValid, setPreviewValid] = useState(false)
   const task = proposal.task
   if (!task) return null
   const source = task.source_message_id ? <SourceMail id={task.source_message_id} /> : <p>{de.tasks.unlinked}</p>
-  if (task.action === 'create') return <section className="le-confirm">
+  if (task.action === 'create') return <section className="le-confirm le-task-proposal">
     <p>{proposal.reason}</p>{source}
     <TaskForm proposal busy={busy} initial={{ ...task, creation_key: 'proposal' }} save={body => confirm({
       action: 'create', title: body.title, start: body.start, timezone: body.timezone!, rrule: body.rrule,
@@ -30,7 +31,7 @@ export function TaskProposal({ proposal, busy, confirm, cancel }: { proposal: Pr
     end.setUTCDate(end.getUTCDate() + 365)
     through = end.toISOString().slice(0, 10) + (start.includes('T') ? 'T23:59:59' : '')
   }
-  return <section className="le-confirm"><h3>{de.taskChat.actions[task.action]}</h3>
+  return <section className="le-confirm le-task-proposal"><h3 className="heading">{de.taskChat.actions[task.action]}</h3>
     <strong>{task.title}</strong><p>{proposal.reason}</p>{source}
     {start && <p>{de.taskChat.target}: {formatTaskDue(start)}</p>}
     <p>{de.tasks.zone}: {zone ?? 'UTC'}</p>

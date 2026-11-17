@@ -91,11 +91,16 @@ async def test_calendar_context_reference_only_reaches_model_when_visible_and_in
     assert all(requested not in row.content and requested not in row.extras_json for row in store.rows)
 
 
-async def test_task_scope_boundary_blocks_all_old_roles_before_model_payload(store, monkeypatch):
+@pytest.mark.parametrize('boundary', ['task', 'mail'])
+async def test_task_scope_boundary_blocks_all_old_roles_before_model_payload(store, monkeypatch, boundary):
     old = NS(id='old-task-context', account_scope_json=json.dumps({'account_ids': [store.account.id]}),
              task_scope_json='{"source":"all"}', calendar_scope_json='[]', revoked=False)
     narrow = NS(id='new-task-context', account_scope_json=old.account_scope_json,
                 task_scope_json='{"source":"unlinked"}', calendar_scope_json='[]', revoked=False)
+    if boundary == 'mail':
+        narrow.account_scope_json = json.dumps({'account_ids': [store.account.id], 'selection': store.account.id})
+        old.task_scope_json = narrow.task_scope_json = '{"source":"none"}'
+    selected_account = store.account.id if boundary == 'mail' else None
     conversation = await store.create()
     for role in ('user', 'assistant', 'tool'):
         store.rows.append(ChatMessage(conversation_id=conversation.id, role=role, context_id=old.id,
@@ -103,12 +108,12 @@ async def test_task_scope_boundary_blocks_all_old_roles_before_model_payload(sto
     monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(return_value={old.id: old, narrow.id: narrow}))
     fake = FakeMistral(streams=[['Antwort']])
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
-    events = [event async for event in agent.run_turn_events(conversation_id=conversation.id, text='Weiter',
+    events = [event async for event in agent.run_turn_events(conversation_id=conversation.id, text='Weiter', account_id=selected_account,
         resolved_context=(conversation, narrow, None))]
     assert events[-1].event == 'error' and events[-1].code == 'context_revoked'
     assert fake.requests == []
     fresh = await store.create()
-    events = [event async for event in agent.run_turn_events(conversation_id=fresh.id, text='Neue Bitte',
+    events = [event async for event in agent.run_turn_events(conversation_id=fresh.id, text='Neue Bitte', account_id=selected_account,
         resolved_context=(fresh, narrow, None))]
     assert events[-1].event == 'done'
     assert fake.requests

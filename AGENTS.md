@@ -271,8 +271,8 @@ Die Vorschau wird bei Zeitplanänderungen neu gelesen. Claim, erneute Quellen-/V
 Aufgabenmutation und erfolgreicher Abschluss liegen in genau einer DB-Transaktion. Fehler vor
 Commit lassen die Karte `pending`; ein zweiter Confirm nach Commit liefert wie im Mailpfad
 409 `proposal_not_pending`, ohne zweite Wirkung. Mail-/Versandaktionen behalten ihren bisherigen
-Providerpfad. Eine entfernte Quellmail wird nicht ersetzt. Der Maileinstieg startet eine neue
-Unterhaltung mit ausdrücklichem Mail- und Aufgaben-Kontoumfang; Mailtexte werden nicht als
+Providerpfad. Eine entfernte Quellmail wird nicht ersetzt. „Weitere Aktionen → Aufgabe
+vorschlagen“ an der geöffneten Mail startet eine neue Unterhaltung mit ausdrücklichem Mail- und Aufgaben-Kontoumfang; Mailtexte werden nicht als
 Aufgabenbeschreibung kopiert. Nach Confirm invalidiert die Karte die Query-Gruppe `tasks`.
 
 ## Kalenderdomäne

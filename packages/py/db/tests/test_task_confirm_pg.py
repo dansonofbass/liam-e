@@ -131,6 +131,39 @@ def test_parallel_http_confirm_and_lost_response_retry(pg_db):
     asyncio.run(run())
 
 
+def test_http_response_failure_after_commit_cannot_duplicate_creation(pg_db, monkeypatch):
+    async def run():
+        import httpx
+        from fastapi import FastAPI
+        from api.mail import proposals
+        from api.routers.api.v1.chat.proposals import router
+        from db.accessors import chat_message, task_series
+        from db.engine import get_session_maker
+        message = await proposal()
+        original = proposals.confirm
+        async def lose_response(*args, **kwargs):
+            await original(*args, **kwargs)
+            raise ConnectionError('test-only response loss after commit')
+        monkeypatch.setattr(proposals, 'confirm', lose_response)
+        app = FastAPI()
+        app.include_router(router, prefix='/proposals')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False), base_url='http://test') as client:
+            response = await client.post(f'/proposals/{message.id}/confirm', json={'selected_ids': []})
+            assert response.status_code == 500
+            stored = await chat_message.get_message(message.id)
+            assert stored.proposal_status == 'done'
+            monkeypatch.setattr(proposals, 'confirm', original)
+            retry = await client.post(f'/proposals/{message.id}/confirm', json={'selected_ids': []})
+            assert retry.status_code == 409
+            assert retry.json()['detail']['code'] == 'proposal_not_pending'
+        async with get_session_maker()() as session:
+            rows = await task_series.list_page(session, scope='app', due_from='2000-01-01', due_to='2100-01-01',
+                archived=None, source='all', source_account_id=None, after=None, limit=10)
+            assert len(rows) == 1
+            assert rows[0].id == proposals.proposal_view(stored).result.task_series_id
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('point', ['mutation', 'finish'])
 def test_confirm_failure_rolls_back_everything(pg_db, monkeypatch, point):
     async def run():

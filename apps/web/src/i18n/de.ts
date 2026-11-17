@@ -15,6 +15,7 @@ export const de = {
     confirm: 'Bestätigen', done: 'Aufgabenänderung gespeichert.', ask: 'Aufgabe vorschlagen',
     prompt: 'Schlage eine Aufgabe zu dieser Mail vor. Kläre vorher, was zu tun ist und wann die Aufgabe fällig ist.',
     months: 'Monate', until: 'Bis einschließlich', monthEnd: (day: number) => `Vom Monatsende gezählt: ${day}. Tag`,
+    unavailable: 'Die Aufgabe ist nicht mehr verfügbar.', scopeError: 'Die Aufgabe gehört nicht zur gewählten Auswahl. Starte eine neue Unterhaltung mit der passenden Auswahl.',
     boundary: 'Seriengrenze', originalDue: 'Ursprüngliche Fälligkeit',
     target: 'Betroffene Fälligkeit', version: 'Geprüfte Version', sourceError: 'Die verknüpfte Mail ist nicht mehr verfügbar.',
   },
