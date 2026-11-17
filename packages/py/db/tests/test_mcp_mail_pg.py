@@ -25,7 +25,7 @@ def test_read_services_use_only_selects_and_scope_every_query(pg_db, monkeypatch
         one = await mail_message.upsert_message(account_id=first.id, folder="INBOX", provider_uid="1", subject="Example", internal_date=now)
         two = await mail_message.upsert_message(account_id=first.id, folder="INBOX", provider_uid="2", subject="Example", internal_date=now - timedelta(seconds=1), is_read=True)
         foreign = await mail_message.upsert_message(account_id=second.id, folder="INBOX", provider_uid="3", subject="Example", internal_date=now)
-        await mail_message.upsert_message(account_id=first.id, folder="TRASH", provider_uid="4", subject="Example", internal_date=now)
+        trashed = await mail_message.upsert_message(account_id=first.id, folder="TRASH", provider_uid="4", subject="Example", internal_date=now)
 
         def forbidden(*args, **kwargs):
             pytest.fail("read service attempted a write")
@@ -50,6 +50,9 @@ def test_read_services_use_only_selects_and_scope_every_query(pg_db, monkeypatch
             assert (await mail.liam_mail_read(grant, one.id)).untrusted_message.id == one.id
             with pytest.raises(Exception) as error:
                 await mail.liam_mail_read(grant, foreign.id)
+            assert error.value.status_code == 404
+            with pytest.raises(Exception) as error:
+                await mail.liam_mail_read(grant, trashed.id)
             assert error.value.status_code == 404
             summary = await mail.liam_mail_summary(grant)
             assert (summary.total, summary.unread) == (2, 1)

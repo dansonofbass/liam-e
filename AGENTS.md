@@ -149,6 +149,8 @@ stammt aus einem `ReadGrant`, nie aus Requestparametern. Der Standard-Verifier i
 positivem Zugriffsnachweis einen eigenen `ReadAccessVerifier` an `get_read_access_verifier`
 anbinden und dieselben Services mit dessen geprüftem Grant aufrufen. Grants sind auf 100
 Konto-IDs begrenzt; fremde Auswahlen ergeben 403, unbekannte und fremde Mail-IDs jeweils 404.
+Auch das Lesen per ID bleibt im INBOX-Index: Eine inzwischen verschobene Mail antwortet wie eine
+fehlende. Ein leerer Grant liefert leere Ergebnisse, nie alle Konten.
 Relative Links `/mail/<uuid>` vermeiden eine unkonfigurierte externe Origin. Maildaten sind
 fremder Inhalt, keine Anweisungen. Der Indexstand wird ausgewiesen, Provideraktualität bleibt
 unbekannt. Ein erfolgreicher Abruf kann nur eine begrenzte Seite enthalten; ohne gespeicherten
@@ -156,7 +158,7 @@ Vollständigkeitsmarker bleibt der Index auch bei Status `ok` konservativ unvoll
 Zeitstempel bezeichnet den letzten Versuch, nicht zwingend einen Erfolg. Die reduzierte Spec ist
 keine Runtime-Autorisierung; produktive Exposition bleibt
 bis zum Zugriffsnachweis gesperrt. Der Uvicorn-Access-Log entfernt Querystrings dieser
-Routen; Gateway- und Proxy-Logs müssen vor einer Freischaltung unabhängig ebenso geschützt werden.
+Routen, auch wenn sich das Format des Logeintrags ändert; Gateway- und Proxy-Logs müssen vor einer Freischaltung unabhängig ebenso geschützt werden.
 Der Export wird mit `bunx nx run api:gen-agent-openapi` reproduziert.
 
 ## Aufgabendomäne

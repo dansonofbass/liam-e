@@ -111,9 +111,11 @@ async def get_message(message_id: str, session: AsyncSession | None = None) -> M
         return await session.get(MailMessage, message_id)
 
 
-async def get_scoped_message(message_id: str, account_ids: list[str]) -> MailMessage | None:
-    """Read a single indexed row without probing outside the authorized scope."""
-    stmt = select(MailMessage).where(MailMessage.id == message_id, MailMessage.account_id.in_(account_ids))
+async def get_scoped_message(message_id: str, account_ids: list[str], *, folder: str) -> MailMessage | None:
+    """Read a single indexed row of one folder without probing outside the authorized scope."""
+    stmt = select(MailMessage).where(
+        MailMessage.id == message_id, MailMessage.account_id.in_(account_ids), MailMessage.folder == folder
+    )
     async with get_session_maker()() as session:
         return (await session.execute(stmt)).scalar_one_or_none()
 

@@ -47,9 +47,9 @@ def indexed(monkeypatch):
             found = [r for r in found if (r.internal_date, r.id) < before]
         return found[:limit]
 
-    async def get(id, scope):
+    async def get(id, scope, *, folder):
         calls.append("get")
-        return next((r for r in rows if r.id == id and r.account_id in scope), None)
+        return next((r for r in rows if r.id == id and r.account_id in scope and r.folder == folder), None)
 
     async def counts(scope):
         calls.append("counts")
@@ -98,6 +98,18 @@ def test_uvicorn_access_log_hides_query_without_changing_other_routes():
     other = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %s',
                               ("client", "GET", "/api/health?x=1", "1.1", 200), None)
     assert redact.filter(other) and "?x=1" in other.getMessage()
+
+
+def test_access_log_redacts_query_in_an_unexpected_record_shape():
+    redact = RedactAgentReadQuery()
+    record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%(client)s "%(line)s" %(status)s',
+                               ({"client": "client", "line": "GET " + BASE + "/messages?query=private-text HTTP/1.1", "status": 200},), None)
+    assert redact.filter(record)
+    assert "private-text" not in record.getMessage() and BASE + "/messages" in record.getMessage()
+    plain = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, "GET " + BASE + "/summary?account_ids=x 200", None, None)
+    assert redact.filter(plain) and "account_ids" not in plain.getMessage()
+    other = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, "GET /api/health?x=1 200", None, None)
+    assert redact.filter(other) and other.getMessage() == "GET /api/health?x=1 200"
 
 
 def test_default_denies_before_any_service(indexed, monkeypatch):
@@ -156,9 +168,12 @@ def test_four_reads_scope_pagination_and_missing_state(authorized):
     assert invalid.status_code == 422 and invalid.json() == {"detail": "invalid_request"}
     assert len(invalid.content) < 100
     rows[0].body_text = ""
+    empty = client.get(BASE + "/messages/" + rows[0].id).json()
+    assert empty["untrusted_message"]["folder"] == "INBOX" and not empty["body_available"]
     rows[0].folder = "ARCHIVE"
-    archived = client.get(BASE + "/messages/" + rows[0].id).json()
-    assert archived["untrusted_message"]["folder"] == "ARCHIVE" and not archived["body_available"]
+    archived = client.get(BASE + "/messages/" + rows[0].id)
+    missing = client.get(BASE + "/messages/" + str(uuid4()))
+    assert archived.status_code == missing.status_code == 404 and archived.json() == missing.json()
     assert set(calls) == {"accounts", "states", "page", "get", "counts"}
 
 

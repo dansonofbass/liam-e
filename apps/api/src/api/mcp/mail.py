@@ -145,7 +145,9 @@ async def liam_mail_read(grant: ReadGrant, message_id: str) -> ReadResult:
             raise ValueError
     except (ValueError, TypeError, AttributeError):
         raise HTTPException(status_code=404, detail="message_not_found") from None
-    row = await mail_message.get_scoped_message(message_id, scope)
+    # The read space is the inbox index, like search: a mail moved elsewhere answers like a
+    # missing one instead of widening access to other folders by ID.
+    row = await mail_message.get_scoped_message(message_id, scope, folder="INBOX")
     if row is None:
         raise HTTPException(status_code=404, detail="message_not_found")
     body, cut = _bounded(row.body_text, 20_000)
