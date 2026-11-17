@@ -15,7 +15,7 @@ let signal: AbortSignal
 let history: ChatMessageOut[] = []
 let requestBody: Record<string, unknown>
 let summary: MailSummaryOut = { accounts: [], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
-function setup(path = '/', historyGone = false) {
+function setup(path = '/', historyGone = false, selection: string | null = null) {
   history = []
   summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
@@ -23,7 +23,7 @@ function setup(path = '/', historyGone = false) {
   spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [] })) as never)
-  spyOn(sdk, 'chatConversationsList').mockImplementation((async () => ({ data: [{ id: 'c', title: 'Test', model: 'm1', version: 5, prompt_revision_id: null, account_scope_json: null, created_at: '', updated_at: '' }] })) as never)
+  spyOn(sdk, 'chatConversationsList').mockImplementation((async () => ({ data: [{ id: 'c', title: 'Test', model: 'm1', version: 5, prompt_revision_id: null, account_scope_json: JSON.stringify({ account_ids: selection ? [selection] : ['a'], selection }), created_at: '', updated_at: '' }] })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
   const start = createRoute({ getParentRoute: () => root, path: '/', component: StartRoute.options.component })
@@ -123,14 +123,29 @@ test('a follow-up suggestion keeps the selected account', async () => {
   expect(requestBody.conversation_id).toBe('c')
 })
 
+test('a history suggestion after reload uses the saved account', async () => {
+  const { client } = setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  act(() => { client.setQueryData(['history', 'c'], [historyRow('answer', 'assistant', { suggestions: ['Weiter fragen'] })]) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
+  expect(requestBody.account_id).toBe('a')
+})
+
+test('reload restores the saved account for the composer', async () => {
+  setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  await send()
+  expect(requestBody.account_id).toBe('a')
+})
+
 test('the pencil on a mail card asks for a reply draft to that mail in the same conversation', async () => {
-  setup('/chat/c'); await send()
+  setup('/chat/c', false, 'a'); await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', snippet: 'Einwände bis Freitag möglich', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   expect(await screen.findByRole('img', { name: 'Dringend' })).toBeTruthy()
   expect(screen.getByText('Einwände bis Freitag möglich').classList.contains('le-mailref-snippet')).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
   expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
-  expect(requestBody.account_id).toBeUndefined()
+  expect(requestBody.account_id).toBe('a')
 })
 
 test('an answer shows at most three follow-up suggestions', async () => {
@@ -246,7 +261,9 @@ test('missing conversation in a stream offers a new conversation', async () => {
 })
 
 test('account change in a conversation offers a new conversation instead of a retry', async () => {
-  const { router } = setup('/chat/c')
+  const { router } = setup('/chat/c', false, 'a')
+  fireEvent.click(await screen.findByRole('button', { name: 'Privat' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Alle Konten' }))
   globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'conversation_scope_change_requires_new' } }), { status: 409 }))) as unknown as typeof fetch
   await send()
   const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten/)).closest('[role="alert"]') as HTMLElement

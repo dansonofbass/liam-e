@@ -12,7 +12,7 @@ import { ChatHeader } from './ChatHeader'
 import { ProposalCard } from './ProposalCard'
 import { useFollowScroll } from './useFollowScroll'
 import { SafeMarkdown } from './SafeMarkdown'
-import { useChatSession } from './session'
+import { useChatSession, useConversationScope } from './session'
 
 type Accounts = AccountSummaryOut[]
 // A retry would send the same request and be refused again.
@@ -20,11 +20,12 @@ const NEEDS_NEW_CONVERSATION = new Set(['conversation_not_found', 'conversation_
 
 export function ChatComposer({ conversationId, contextMessageId, model, onSend, autoFocus }: { conversationId?: string; contextMessageId?: string; model?: string; onSend?: () => void; autoFocus?: boolean }) {
   const { data: summary } = useQuery(summaryQuery())
-  const { state, send, stop, scope, setScope } = useChatSession()
+  const { state, send, stop } = useChatSession()
+  const { scope, setScope, ready } = useConversationScope(conversationId)
   const [value, setValue] = useState('')
   const busy = state.phase === 'working' || state.phase === 'streaming'
   return <Composer value={value} onChange={setValue} onSubmit={() => {
-    if (busy || !value.trim()) return
+    if (busy || !ready || !value.trim()) return
     onSend?.()
     void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, model })
     setValue('')
@@ -66,7 +67,8 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const history = useQuery(historyQuery(conversationId))
   const { data: summary } = useQuery(summaryQuery())
   const { data: models = [] } = useQuery(modelsQuery())
-  const { state, send, retry, scope } = useChatSession()
+  const { state, send, retry } = useChatSession()
+  const { scope, ready } = useConversationScope(conversationId)
   const [selectedModel, setSelectedModel] = useState<{ conversationId: string; id: string }>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const { showEnd, scrollToEnd } = useFollowScroll(scrollRef, [history.data, state, conversationId])
@@ -82,9 +84,9 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const savedPartial = (state.phase === 'stopped' || state.phase === 'error') && userIndex >= 0 && messages.slice(userIndex + 1).some(message => message.role === 'assistant')
   const busy = state.phase === 'working' || state.phase === 'streaming'
   // Follow-ups keep the account the composer shows, like a typed question.
-  const submitSuggestion = (text: string) => { void send({ text, account_id: scope, conversation_id: conversationId }) }
+  const submitSuggestion = (text: string) => { if (!ready) return; void send({ text, account_id: scope, conversation_id: conversationId }) }
   // The pencil on a mail card asks for a reply draft to that mail in this conversation, like the button on the open mail.
-  const draft: Draft = { onDraft: id => { void send({ text: de.mail.draftPrompt, conversation_id: conversationId, context_message_id: id }) }, disabled: state.phase === 'working' || state.phase === 'streaming' }
+  const draft: Draft = { onDraft: id => { if (!ready) return; void send({ text: de.mail.draftPrompt, account_id: scope, conversation_id: conversationId, context_message_id: id }) }, disabled: !ready || busy }
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
   const renderMessage = (message: ChatMessageOut) => {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
