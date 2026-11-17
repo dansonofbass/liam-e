@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from datetime import date, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -11,7 +11,6 @@ pytestmark = pytest.mark.skipif(not os.getenv('RUN_PG_CONTRACT'), reason='RUN_PG
 
 def test_revision_collision_keeps_card_pending_with_specific_error(pg_db):
     async def run():
-        from datetime import UTC, datetime
         from fastapi import HTTPException
         from api.mail import proposals
         from api.tasks import state
@@ -71,7 +70,8 @@ def test_bound_commands_execute_once(pg_db, action, conflict):
         async def propose(command):
             return await proposals.create_proposal('synthetic', proposals.Proposal(kind='task', reason='Example',
                 items=[], task=command), context_id=context.id)
-        initial = await propose(TaskCreateCommand(action='create', title='Example', start=(date.today() + timedelta(days=7)).isoformat(), timezone='UTC'))
+        today = datetime.now(UTC).date()
+        initial = await propose(TaskCreateCommand(action='create', title='Example', start=(today + timedelta(days=7)).isoformat(), timezone='UTC'))
         done = await proposals.confirm(initial.id, selected_ids=[])
         series_id = proposals.proposal_view(done).result.task_series_id
         async with get_session_maker()() as session:
@@ -89,7 +89,7 @@ def test_bound_commands_execute_once(pg_db, action, conflict):
             command = TaskPatchCommand(action='patch', **common, **target,
                 scope='occurrence' if action == 'patch' else 'this_and_following',
                 timezone='UTC' if action == 'split' else None,
-                start=(date.today() + timedelta(days=8)).isoformat())
+                start=(today + timedelta(days=8)).isoformat())
         else:
             command = TaskStateCommand(action=action, **common, **target)
         message = await propose(command)

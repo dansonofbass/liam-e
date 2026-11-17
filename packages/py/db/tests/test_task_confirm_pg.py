@@ -3,7 +3,7 @@
 import asyncio
 import json
 import os
-from datetime import date
+from datetime import UTC, datetime
 
 import pytest
 
@@ -23,7 +23,7 @@ async def proposal(*, source='all', revoked=False):
         session.add(context)
         await session.commit()
     return await create_proposal('synthetic', Proposal(kind='task', reason='Example', items=[],
-        task=TaskCreateCommand(action='create', title='Example', start=date.today().isoformat(), timezone='UTC')),
+        task=TaskCreateCommand(action='create', title='Example', start=datetime.now(UTC).date().isoformat(), timezone='UTC')),
         context_id=context.id)
 
 
@@ -54,12 +54,13 @@ def test_create_edit_is_bound_and_stored_with_the_actual_result(pg_db):
         from db.accessors import task_series, task_schedule_revision, chat_message
         from db.engine import get_session_maker
         message = await proposal()
+        today = datetime.now(UTC).date()
         with pytest.raises(proposals.ProposalSelectionError):
             await proposals.confirm(message.id, selected_ids=[], task_edit=TaskCreateCommand(
-                action='create', title='Other source', start=date.today().isoformat(), timezone='UTC',
+                action='create', title='Other source', start=today.isoformat(), timezone='UTC',
                 source_account_id='foreign', source_message_id='foreign'))
         assert (await chat_message.get_message(message.id)).proposal_status == 'pending'
-        edit = TaskCreateCommand(action='create', title='Edited example', start=date.today().isoformat(),
+        edit = TaskCreateCommand(action='create', title='Edited example', start=today.isoformat(),
                                  timezone='UTC', rrule='FREQ=DAILY;COUNT=2')
         done = await proposals.confirm(message.id, selected_ids=[], task_edit=edit)
         saved = proposals.proposal_view(done)
@@ -89,7 +90,7 @@ def test_deleted_source_is_not_replaced_and_can_still_be_cancelled(pg_db):
             session.add(mail)
             await session.commit()
         message = await proposals.create_proposal('synthetic', proposals.Proposal(kind='task', reason='Example', items=[],
-            task=TaskCreateCommand(action='create', title='Example', start=date.today().isoformat(), timezone='UTC',
+            task=TaskCreateCommand(action='create', title='Example', start=datetime.now(UTC).date().isoformat(), timezone='UTC',
                 source_account_id=account.id, source_message_id=mail.id)), context_id=initial.context_id)
         async with get_session_maker()() as session:
             row = await session.get(MailMessage, mail.id)
@@ -106,7 +107,6 @@ def test_deleted_source_is_not_replaced_and_can_still_be_cancelled(pg_db):
 @pytest.mark.parametrize('action', ['complete', 'archive'])
 def test_existing_task_can_be_changed_after_source_mail_is_removed(pg_db, action):
     async def run():
-        from datetime import UTC, datetime
         from api.mail import proposals
         from api.tasks import chat
         from api.mail.agent_tools import TurnContext
@@ -231,7 +231,7 @@ def test_confirm_failure_rolls_back_everything(pg_db, monkeypatch, point):
         assert (await chat_message.get_message(message.id)).proposal_status == 'pending'
         async with get_session_maker()() as session:
             _, created = await create.create(session, creation_key=message.id, title='Rollback probe',
-                                             start=date.today(), zone='UTC')
+                                             start=datetime.now(UTC).date(), zone='UTC')
             assert created
             await session.rollback()
         monkeypatch.setattr(owner, name, original)
