@@ -11,6 +11,13 @@ import { de } from '../i18n/de'
 
 afterEach(() => { cleanup(); mock.restore() })
 
+test('the date range has its own two-column row instead of squeezing beside the buttons', async () => {
+  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
+  const rule = css.match(/^\.le-calendar-range \{ ([^{}]+) \}$/mu)
+  expect(rule?.[1]).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))')
+  expect(css).not.toMatch(/\.le-calendar-controls \.le-field/u)
+})
+
 test('the agenda link in calendar management has a token-sized touch target outside the calendar page', async () => {
   const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
   const rule = css.match(/^\.le-calendar-back \{ ([^{}]+) \}$/mu)

@@ -76,6 +76,8 @@ export function CalendarAgenda() {
       <Button variant="secondary" onClick={() => { setFrom(todayLocal()); setTo(addDays(todayLocal(), 7)) }}>{de.calendar.today}</Button>
       <Button variant="ghost" icon="refresh-cw" disabled={!selected.length || refreshing} onClick={() => { void refreshSources(selected) }}>{de.calendar.refresh}</Button>
       <Link className="le-link" to="/accounts">{de.calendar.manage}</Link>
+    </div>
+    <div className="le-calendar-range">
       <TextField label={de.calendar.from} type="date" value={from} onChange={e => { setFrom(e.target.value) }} />
       <TextField label={de.calendar.to} type="date" value={to} onChange={e => { setTo(e.target.value) }} />
     </div>
