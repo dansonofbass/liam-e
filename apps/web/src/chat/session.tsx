@@ -120,21 +120,28 @@ export function useRestartConversation(id?: string) {
   const { scope, ready } = useConversationScope(id)
   const client = useQueryClient()
   const navigate = useNavigate()
-  const pending = useRef(false)
+  // A waiting restart finishes with the live state of the conversation it was pressed in.
+  const latest = useRef({ session, id })
+  latest.current = { session, id }
+  const attempt = useRef({ token: 0, pending: false })
+  useEffect(() => () => { attempt.current.token += 1; attempt.current.pending = false }, [id])
   return () => {
-    if (pending.current) return
-    const text = id ? session.composerTexts[id] : undefined
+    if (attempt.current.pending) return
+    const { token } = attempt.current
     const transfer = (selection: string | null | undefined) => {
-      pending.current = false
-      if (id && selection !== undefined) session.setScope(selection)
-      if (text) session.setComposerText('new', text)
+      if (attempt.current.token !== token) return // The conversation was left or switched: drop the attempt.
+      attempt.current.pending = false
+      const now = latest.current
+      const text = now.id ? now.session.composerTexts[now.id] : undefined
+      if (now.id && selection !== undefined) now.session.setScope(selection)
+      if (text) now.session.setComposerText('new', text)
       void navigate({ to: '/' })
     }
     if (!id || ready) { transfer(scope); return }
     // The list may still be loading: wait for it rather than restarting with "all accounts".
-    pending.current = true
+    attempt.current.pending = true
     void client.ensureQueryData(conversationsQuery()).then(
-      list => { transfer(resolveScope(session, id, list.find(item => item.id === id))) },
+      list => { transfer(resolveScope(latest.current.session, id, list.find(item => item.id === id))) },
       () => { transfer(undefined) },
     )
   }
