@@ -23,7 +23,12 @@ function setup(detail = false, activeDetail = false) {
     if (url.pathname.endsWith('/reconcile')) return Response.json({ revision_id: 'rev', cursor: 'cursor', target: '2027-01-01T00:00:00Z', complete: true })
     if (url.pathname.endsWith('/complete') || req.method === 'PATCH' || req.method === 'DELETE') return Response.json({ detail: { code: 'task_version_conflict' } }, { status: 409 })
     if (url.pathname.endsWith('/accounts')) return Response.json([])
-    if (url.pathname.endsWith('/occurrences')) return Response.json({ items: [occurrence], next_cursor: null })
+    if (url.pathname.endsWith('/occurrences')) {
+      const status = url.searchParams.get('status')
+      if (status === 'completed') return Response.json({ items: [{ ...occurrence, id: 'completed', series_id: 'active', status: 'completed', due_local: `${today}T12:00:00` }], next_cursor: null })
+      if (status === 'skipped') return Response.json({ items: [{ ...occurrence, id: 'skipped', status: 'skipped', due_local: `${today}T09:00:00` }], next_cursor: null })
+      return Response.json({ items: [occurrence], next_cursor: null })
+    }
     if (url.pathname.endsWith('/tasks/archived')) return Response.json({ window: windowData, series: activeDetail ? { ...active, id: 'archived' } : archived, occurrences: { items: [occurrence], next_cursor: null } })
     return Response.json({ window: windowData, items: [active, archived], next_cursor: null })
   }) as typeof fetch
@@ -39,6 +44,18 @@ test('open list includes due instances of archived series and sends independent 
   fireEvent.click(screen.getByRole('menuitemradio', { name: 'Ohne Mailbezug' }))
   await waitFor(() => expect(requests.some(request => request.path.endsWith('/tasks') && request.search.includes('source=unlinked'))).toBe(true))
   expect(globalThis.window.location.search).toContain('source=unlinked')
+})
+
+test('completed view merges skipped and completed occurrences in due order', async () => {
+  setup()
+  fireEvent.click(screen.getByRole('button', { name: 'Erledigt' }))
+  const skipped = (await screen.findByRole('link', { name: 'Archiviert und fällig' })).closest('li')!
+  const completed = (await screen.findByRole('link', { name: 'Offene Aufgabe' })).closest('li')!
+  expect(skipped.textContent).toContain('Übersprungen')
+  expect(completed.textContent).not.toContain('Übersprungen')
+  expect(skipped.compareDocumentPosition(completed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(requests.some(request => request.path.endsWith('/occurrences') && request.search.includes('status=completed'))).toBe(true)
+  expect(requests.some(request => request.path.endsWith('/occurrences') && request.search.includes('status=skipped'))).toBe(true)
 })
 
 test('the delete confirmation traps focus and names irreversible history loss', async () => {

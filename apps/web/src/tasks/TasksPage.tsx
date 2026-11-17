@@ -37,10 +37,16 @@ export function TasksPage() {
   const sourceFilter = source === 'all' ? { source: 'all' as const } : source === 'unlinked' ? { source: 'unlinked' as const } : { source: 'account' as const, source_account_id: source }
   const series = useInfiniteQuery(taskListQuery({ ...window, ...sourceFilter, status: status === 'archived' ? 'archived' : undefined, limit: 100 }))
   const occurrences = useInfiniteQuery(taskOccurrencesQuery({ ...window, status: status === 'completed' ? 'completed' : 'open', limit: 100 }))
+  const skipped = useInfiniteQuery({ ...taskOccurrencesQuery({ ...window, status: 'skipped', limit: 100 }), enabled: status === 'completed' })
+  const skippedActive = status === 'completed'
+  const loading = series.isPending || occurrences.isPending || (skippedActive && skipped.isPending)
+  const failed = series.isError || occurrences.isError || (skippedActive && skipped.isError)
+  const hasMore = series.hasNextPage || occurrences.hasNextPage || (skippedActive && skipped.hasNextPage)
   const seen = useRef(new Set<string>())
   const [reconciling, setReconciling] = useState(false), [reconcileError, setReconcileError] = useState(false)
   const rows = series.data?.pages.flatMap(p => p.items) ?? []
-  const entries = occurrences.data?.pages.flatMap(p => p.items) ?? []
+  const entries = [...(occurrences.data?.pages.flatMap(p => p.items) ?? []), ...(skippedActive ? skipped.data?.pages.flatMap(p => p.items) ?? [] : [])]
+    .sort((a, b) => a.due_local.localeCompare(b.due_local) || a.id.localeCompare(b.id))
   useEffect(() => {
     const selected = (series.data?.pages.flatMap(page => page.items) ?? []).filter(row => !row.archived && !seen.current.has(row.id)).slice(0, 20).map(row => row.id)
     if (!selected.length) return
@@ -71,19 +77,20 @@ export function TasksPage() {
   }
   if (creating) return <div><Button variant="ghost" onClick={() => setCreating(false)}>{t.back}</Button><TaskForm save={body => { void save(body) }} busy={busy} error={error} /></div>
   const visible = rows.filter(row => status !== 'archived' || row.archived)
-  const joined = visible.flatMap(row => entries.filter(item => item.series_id === row.id).map(item => ({ row, item })))
+  const seriesById = new Map(visible.map(row => [row.id, row]))
+  const joined = entries.flatMap(item => { const row = seriesById.get(item.series_id); return row ? [{ row, item }] : [] })
   const groups = [t.overdue, t.today, t.later] as const
   const group = (day: string, zone: string | null) => { const today = localToday(zone); return day < today ? t.overdue : day === today ? t.today : t.later }
   return <main className="le-prompts"><h1 className="heading">{t.title}</h1><Button variant="primary" onClick={() => { setError(undefined); setCreating(true) }}>{t.create}</Button>
     <div>{(['open', 'completed', 'archived'] as const).map(value => <Button key={value} variant={status === value ? 'primary' : 'secondary'} aria-pressed={status === value} onClick={() => { setStatus(value); persistFilter('status', value) }}>{value === 'open' ? t.open : value === 'completed' ? t.completed : t.archived}</Button>)}</div>
     <TaskSelect label={t.source} value={source} onChange={value => { setSource(value); persistFilter('source', value) }} options={[{ value: 'all', label: t.allSources }, { value: 'unlinked', label: t.unlinked }, ...(accounts.data?.map(account => ({ value: account.id, label: account.email_address })) ?? [])]} />
     <p>{t.period}: {window.due_from} – {window.due_to}</p><div><Button variant="secondary" onClick={() => setPeriod(value => value - 1)}>{t.previousPeriod}</Button><Button variant="secondary" onClick={() => setPeriod(value => value + 1)}>{t.nextPeriod}</Button></div>
-    {(series.isPending || occurrences.isPending) && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div key={i} className="le-prompt-placeholder" aria-hidden="true" />)}</>}
-    {(series.isError || occurrences.isError) && <Notice tone="danger" action={{ label: t.retry, onClick: () => { void series.refetch(); void occurrences.refetch() } }}>{t.error}</Notice>}
+    {loading && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div key={i} className="le-prompt-placeholder" aria-hidden="true" />)}</>}
+    {failed && <Notice tone="danger" action={{ label: t.retry, onClick: () => { void series.refetch(); void occurrences.refetch(); if (skippedActive) void skipped.refetch() } }}>{t.error}</Notice>}
     {(reconciling || rows.some(row => !row.complete)) && <p role="status">{t.incomplete} {window.due_from} – {window.due_to}</p>}
     {reconcileError && <Notice tone="danger" action={{ label: t.retry, onClick: () => { seen.current.clear(); setReconcileError(false); setRetryReconcile(value => value + 1) } }}>{t.error}</Notice>}
-    {!series.isPending && !occurrences.isPending && status !== 'archived' && !joined.length && !series.hasNextPage && !occurrences.hasNextPage && !reconciling && <p>{status === 'completed' ? t.emptyCompleted : t.empty}</p>}
-    {status === 'archived' ? <ul>{visible.map(row => <li key={row.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a>{row.schedule && <> · {formatTaskDue(row.schedule.start_local)} · {formatTaskRule(row.schedule.rrule)}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul> : groups.map(label => { const items = joined.filter(({ row, item }) => group(item.due_local.slice(0, 10), row.schedule?.timezone ?? null) === label); return items.length ? <section key={label}><h2>{label}</h2><ul>{items.map(({ row, item }) => <li key={item.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a> · {formatTaskDue(item.due_local)} · {formatTaskRule(row.schedule?.rrule)}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul></section> : null })}
-    {(series.hasNextPage || occurrences.hasNextPage) && <Button variant="secondary" onClick={() => { if (series.hasNextPage) void series.fetchNextPage(); if (occurrences.hasNextPage) void occurrences.fetchNextPage() }}>{t.more}</Button>}
+    {!loading && !failed && status !== 'archived' && !joined.length && !hasMore && !reconciling && <p>{status === 'completed' ? t.emptyCompleted : t.empty}</p>}
+    {status === 'archived' ? <ul>{visible.map(row => <li key={row.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a>{row.schedule && <> · {formatTaskDue(row.schedule.start_local)} · {formatTaskRule(row.schedule.rrule)}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul> : groups.map(label => { const items = joined.filter(({ row, item }) => group(item.due_local.slice(0, 10), row.schedule?.timezone ?? null) === label); return items.length ? <section key={label}><h2>{label}</h2><ul>{items.map(({ row, item }) => <li key={item.id}><a className="le-link" href={`/tasks/${encodeURIComponent(row.id)}`}>{row.title}</a> · {formatTaskDue(item.due_local)} · {formatTaskRule(row.schedule?.rrule)}{item.status === 'skipped' && <> · {t.skipped}</>}{row.source_message_id && <> · <SourceMail id={row.source_message_id} /></>}</li>)}</ul></section> : null })}
+    {hasMore && <Button variant="secondary" onClick={() => { if (series.hasNextPage) void series.fetchNextPage(); if (occurrences.hasNextPage) void occurrences.fetchNextPage(); if (skippedActive && skipped.hasNextPage) void skipped.fetchNextPage() }}>{t.more}</Button>}
   </main>
 }
