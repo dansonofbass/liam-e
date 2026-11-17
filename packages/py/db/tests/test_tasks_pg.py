@@ -125,6 +125,58 @@ def test_parallel_reconcile_materializes_each_occurrence_once(pg_db):
     asyncio.run(run())
 
 
+def test_legacy_count_completion_replays_without_changing_existing_instances(pg_db):
+    async def run():
+        import json
+        from datetime import timedelta
+        from api.tasks.create import create
+        from api.tasks.reconcile import reconcile_batch
+        from api.tasks.recurrence import expand
+        from db.accessors import task_occurrence, task_schedule_revision
+        from db.engine import get_session_maker
+        from db.models.task_occurrence import TaskOccurrence
+
+        start = datetime(2024, 3, 30, 2, 30)
+        started = datetime(2024, 3, 20, tzinfo=UTC)
+        target = (started + timedelta(days=30)).isoformat()
+        async with get_session_maker()() as session:
+            series, _ = await create(session, creation_key='legacy-count', title='Example',
+                                     start=start, zone='Europe/Berlin', rule='FREQ=DAILY;COUNT=3')
+            revision = await task_schedule_revision.get_by_version(session, series.id, 1)
+            cursor = json.dumps({'revision': revision.id, 'target': target, 'position': 'done'})
+            revision.reconcile_target = target
+            revision.reconcile_cursor = cursor
+            session.add(revision)
+            old = []
+            for key in ('2024-03-30T02:30:00', '2024-04-01T02:30:00'):
+                row = TaskOccurrence(series_id=series.id, revision_id=revision.id,
+                                     occurrence_key=key, due_local=key, status='completed', version=2)
+                await task_occurrence.insert_once(session, row)
+                old.append(row.id)
+            await session.commit()
+        pages = 0
+        while True:
+            async with get_session_maker()() as session:
+                cursor, done = await reconcile_batch(session, scope='app', series_id=series.id,
+                    revision_id=revision.id, started_at=started, cursor=cursor, limit=1)
+                await session.commit()
+            pages += 1
+            assert pages <= 5
+            if done:
+                break
+        async with get_session_maker()() as session:
+            rows = await task_occurrence.list_page(session, scope='app', status=None,
+                                                  due_from=None, due_to=None, after=None, limit=100)
+            expected = expand(start, 'FREQ=DAILY;COUNT=3', datetime(2024, 4, 19), 'Europe/Berlin')
+            assert [row.occurrence_key for row in rows] == [v.replace(tzinfo=None).isoformat() for v in expected]
+            assert [(row.id, row.status, row.version) for row in rows[:2]] == [(identifier, 'completed', 2) for identifier in old]
+            assert rows[-1].status == 'open'
+            assert await reconcile_batch(session, scope='app', series_id=series.id,
+                revision_id=revision.id, started_at=started, cursor=cursor, limit=1) == (cursor, True)
+
+    asyncio.run(run())
+
+
 def test_creation_rolls_back_when_materialization_fails(pg_db, monkeypatch):
     from datetime import date
     from api.main import create_app

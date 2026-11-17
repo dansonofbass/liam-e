@@ -133,6 +133,13 @@ Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Rec
 in derselben Transaktion. Weitere Seiten werden nicht automatisch abgerufen. Serienrevision,
 Archivieren und Löschen sind noch offen.
 
+`COUNT` zählt nach RFC 5545 nur existierende Fälligkeiten: Nicht existierende lokale
+Uhrzeiten verbrauchen keinen Zählerplatz. Vorschau und Persistenz verwenden denselben
+Parser. Bereits abgeschlossene Abrufläufe zeitgebundener COUNT-Serien mit altem
+Abschlussmarker werden beim nächsten Reconcile seitenweise erneut ausgewertet;
+die ursprünglichen Instanzschlüssel verhindern Duplikate und erhalten den Zustand.
+So werden fehlende Endinstanzen ergänzt, ohne Datenmigration.
+
 ## Kalenderdomäne
 
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der

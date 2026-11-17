@@ -58,8 +58,14 @@ async def reconcile_batch(
     if revision.reconcile_target != target or revision.reconcile_cursor != cursor:
         raise ReconcileConflict('stale target or cursor')
     position = _position(cursor, revision_id, target)
-    if position == 'done':
+    if position == 'done:rfc5545':
         return cursor, True
+    if position == 'done':
+        if revision.timezone is None or not any(part.startswith('COUNT=') for part in (revision.rrule or '').split(';')):
+            return cursor, True
+        # Old COUNT runs may have stopped before the valid tail. Replay in bounded
+        # pages; original keys preserve existing occurrences and their state.
+        position = None
 
     timed = revision.timezone is not None
     parser = datetime.fromisoformat if timed else date.fromisoformat
@@ -75,7 +81,7 @@ async def reconcile_batch(
         await task_occurrence.insert_once(session, row)
     done = next_position is None
     new_cursor = json.dumps({'revision': revision_id, 'target': target,
-                             'position': 'done' if done else next_position.isoformat()},
+                             'position': 'done:rfc5545' if done else next_position.isoformat()},
                             sort_keys=True, separators=(',', ':'))
     revision.reconcile_cursor = new_cursor
     session.add(revision)

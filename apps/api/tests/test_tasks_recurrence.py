@@ -5,9 +5,9 @@ import pytest
 from api.tasks.recurrence import expand, expand_page
 
 
-def test_count_includes_skipped_gap_candidate():
+def test_count_excludes_nonexistent_wall_times():
     values = expand(datetime(2024, 3, 30, 2, 30), 'FREQ=DAILY;COUNT=3', datetime(2024, 4, 4), 'Europe/Berlin')
-    assert [(v.day, v.hour) for v in values] == [(30, 2), (1, 2)]
+    assert [(v.day, v.hour) for v in values] == [(30, 2), (1, 2), (2, 2)]
 
 
 def test_month_end_and_leap_year():
@@ -63,7 +63,7 @@ def test_pages_include_gap_in_cursor_and_match_preview():
         if cursor is None:
             break
     assert result == [v.replace(tzinfo=None) for v in expand(start, rule, end, 'Europe/Berlin')]
-    assert [v.day for v in result] == [30, 1, 2, 3]
+    assert [v.day for v in result] == [30, 1, 2, 3, 4]
 
 
 def test_page_rejects_non_candidate_cursor_and_invalid_limit():
