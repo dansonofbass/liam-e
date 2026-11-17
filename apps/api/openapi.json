@@ -707,6 +707,29 @@
             ],
             "title": "Prompt Revision Id"
           },
+          "task_source": {
+            "default": "none",
+            "enum": [
+              "none",
+              "all",
+              "unlinked",
+              "account"
+            ],
+            "title": "Task Source",
+            "type": "string"
+          },
+          "task_source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Source Account Id"
+          },
           "text": {
             "maxLength": 8000,
             "minLength": 1,
@@ -802,6 +825,29 @@
               }
             ],
             "title": "Prompt Revision Id"
+          },
+          "task_source": {
+            "default": "none",
+            "enum": [
+              "none",
+              "all",
+              "unlinked",
+              "account"
+            ],
+            "title": "Task Source",
+            "type": "string"
+          },
+          "task_source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Source Account Id"
           }
         },
         "required": [
@@ -928,6 +974,11 @@
           "revoked": {
             "title": "Revoked",
             "type": "boolean"
+          },
+          "task_scope_json": {
+            "default": "{\"source\":\"none\"}",
+            "title": "Task Scope Json",
+            "type": "string"
           }
         },
         "required": [
@@ -2405,7 +2456,8 @@
               "archive",
               "trash",
               "mark_read",
-              "unsubscribe"
+              "unsubscribe",
+              "task"
             ],
             "title": "Kind",
             "type": "string"
@@ -2423,6 +2475,41 @@
                 "type": "null"
               }
             ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "archive": "#/components/schemas/TaskArchiveCommand",
+                    "complete": "#/components/schemas/TaskStateCommand",
+                    "create": "#/components/schemas/TaskCreateCommand",
+                    "patch": "#/components/schemas/TaskPatchCommand",
+                    "reopen": "#/components/schemas/TaskStateCommand",
+                    "skip": "#/components/schemas/TaskStateCommand"
+                  },
+                  "propertyName": "action"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TaskCreateCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TaskArchiveCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TaskStateCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TaskPatchCommand"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task"
           }
         },
         "required": [
@@ -2452,6 +2539,16 @@
             },
             "title": "Selected Ids",
             "type": "array"
+          },
+          "task_edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskCreateCommand"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2592,6 +2689,17 @@
             },
             "title": "Manual",
             "type": "array"
+          },
+          "task_series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Series Id"
           },
           "undo_action_ids": {
             "items": {
@@ -3536,6 +3644,122 @@
         "title": "SyncOut",
         "type": "object"
       },
+      "TaskArchiveCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "archive",
+            "title": "Action",
+            "type": "string"
+          },
+          "display_rrule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Rrule"
+          },
+          "display_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Timezone"
+          },
+          "due_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Local"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "next_due": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Next Due",
+            "type": "array"
+          },
+          "occurrence_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Key"
+          },
+          "payload_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Payload Version",
+            "type": "integer"
+          },
+          "series_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Series Id",
+            "type": "string"
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_id",
+          "expected_version",
+          "action"
+        ],
+        "title": "TaskArchiveCommand",
+        "type": "object"
+      },
       "TaskCreate": {
         "properties": {
           "creation_key": {
@@ -3618,6 +3842,84 @@
           "start"
         ],
         "title": "TaskCreate",
+        "type": "object"
+      },
+      "TaskCreateCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "create",
+            "title": "Action",
+            "type": "string"
+          },
+          "payload_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Payload Version",
+            "type": "integer"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrule"
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "start": {
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "title",
+          "start",
+          "timezone"
+        ],
+        "title": "TaskCreateCommand",
         "type": "object"
       },
       "TaskCreated": {
@@ -3714,6 +4016,180 @@
         "title": "TaskPatch",
         "type": "object"
       },
+      "TaskPatchCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "patch",
+            "title": "Action",
+            "type": "string"
+          },
+          "display_rrule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Rrule"
+          },
+          "display_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Timezone"
+          },
+          "due_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Local"
+          },
+          "expected_occurrence_version": {
+            "minimum": 1.0,
+            "title": "Expected Occurrence Version",
+            "type": "integer"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "next_due": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Next Due",
+            "type": "array"
+          },
+          "occurrence_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Occurrence Id",
+            "type": "string"
+          },
+          "occurrence_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Key"
+          },
+          "payload_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Payload Version",
+            "type": "integer"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrule"
+          },
+          "rule_supplied": {
+            "default": false,
+            "title": "Rule Supplied",
+            "type": "boolean"
+          },
+          "scope": {
+            "enum": [
+              "occurrence",
+              "this_and_following"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "series_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Series Id",
+            "type": "string"
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "start": {
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_id",
+          "expected_version",
+          "occurrence_id",
+          "expected_occurrence_version",
+          "action",
+          "scope",
+          "start"
+        ],
+        "title": "TaskPatchCommand",
+        "type": "object"
+      },
       "TaskPatched": {
         "properties": {
           "id": {
@@ -3735,6 +4211,139 @@
           "revision_id"
         ],
         "title": "TaskPatched",
+        "type": "object"
+      },
+      "TaskStateCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "complete",
+              "skip",
+              "reopen"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "display_rrule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Rrule"
+          },
+          "display_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Timezone"
+          },
+          "due_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Local"
+          },
+          "expected_occurrence_version": {
+            "minimum": 1.0,
+            "title": "Expected Occurrence Version",
+            "type": "integer"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "next_due": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Next Due",
+            "type": "array"
+          },
+          "occurrence_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Occurrence Id",
+            "type": "string"
+          },
+          "occurrence_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Key"
+          },
+          "payload_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Payload Version",
+            "type": "integer"
+          },
+          "series_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Series Id",
+            "type": "string"
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_id",
+          "expected_version",
+          "occurrence_id",
+          "expected_occurrence_version",
+          "action"
+        ],
+        "title": "TaskStateCommand",
         "type": "object"
       },
       "TaskWindow": {

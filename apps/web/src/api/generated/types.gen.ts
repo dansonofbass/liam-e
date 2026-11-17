@@ -437,6 +437,14 @@ export type ChatStreamRequest = {
      */
     prompt_revision_id?: string | null;
     /**
+     * Task Source
+     */
+    task_source?: 'none' | 'all' | 'unlinked' | 'account';
+    /**
+     * Task Source Account Id
+     */
+    task_source_account_id?: string | null;
+    /**
      * Text
      */
     text: string;
@@ -484,6 +492,14 @@ export type ChatTurnRequest = {
      * Prompt Revision Id
      */
     prompt_revision_id?: string | null;
+    /**
+     * Task Source
+     */
+    task_source?: 'none' | 'all' | 'unlinked' | 'account';
+    /**
+     * Task Source Account Id
+     */
+    task_source_account_id?: string | null;
 };
 
 /**
@@ -570,6 +586,10 @@ export type ContextOut = {
      * Revoked
      */
     revoked: boolean;
+    /**
+     * Task Scope Json
+     */
+    task_scope_json?: string;
 };
 
 /**
@@ -1495,12 +1515,24 @@ export type Proposal = {
     /**
      * Kind
      */
-    kind: 'send' | 'archive' | 'trash' | 'mark_read' | 'unsubscribe';
+    kind: 'send' | 'archive' | 'trash' | 'mark_read' | 'unsubscribe' | 'task';
     /**
      * Reason
      */
     reason: string;
     result?: ProposalResult | null;
+    /**
+     * Task
+     */
+    task?: ({
+        action: 'create';
+    } & TaskCreateCommand) | ({
+        action: 'archive';
+    } & TaskArchiveCommand) | ({
+        action: 'complete' | 'reopen' | 'skip';
+    } & TaskStateCommand) | ({
+        action: 'patch';
+    } & TaskPatchCommand) | null;
 };
 
 /**
@@ -1515,6 +1547,7 @@ export type ProposalConfirmIn = {
      * Selected Ids
      */
     selected_ids: Array<string>;
+    task_edit?: TaskCreateCommand | null;
 };
 
 /**
@@ -1590,6 +1623,10 @@ export type ProposalResult = {
      * Manual
      */
     manual?: Array<ManualStep>;
+    /**
+     * Task Series Id
+     */
+    task_series_id?: string | null;
     /**
      * Undo Action Ids
      */
@@ -2132,6 +2169,60 @@ export type SyncOut = {
 };
 
 /**
+ * TaskArchiveCommand
+ */
+export type TaskArchiveCommand = {
+    /**
+     * Action
+     */
+    action: 'archive';
+    /**
+     * Display Rrule
+     */
+    display_rrule?: string | null;
+    /**
+     * Display Timezone
+     */
+    display_timezone?: string | null;
+    /**
+     * Due Local
+     */
+    due_local?: string | null;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Next Due
+     */
+    next_due?: Array<string>;
+    /**
+     * Occurrence Key
+     */
+    occurrence_key?: string | null;
+    /**
+     * Payload Version
+     */
+    payload_version?: 1;
+    /**
+     * Series Id
+     */
+    series_id: string;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Title
+     */
+    title?: string;
+};
+
+/**
  * TaskCreate
  */
 export type TaskCreate = {
@@ -2165,6 +2256,44 @@ export type TaskCreate = {
      * Required IANA timezone, including for date-only tasks; missing or invalid values return task_invalid.
      */
     timezone?: string | null;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * TaskCreateCommand
+ */
+export type TaskCreateCommand = {
+    /**
+     * Action
+     */
+    action: 'create';
+    /**
+     * Payload Version
+     */
+    payload_version?: 1;
+    /**
+     * Rrule
+     */
+    rrule?: string | null;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * Timezone
+     */
+    timezone: string;
     /**
      * Title
      */
@@ -2230,6 +2359,88 @@ export type TaskPatch = {
 };
 
 /**
+ * TaskPatchCommand
+ */
+export type TaskPatchCommand = {
+    /**
+     * Action
+     */
+    action: 'patch';
+    /**
+     * Display Rrule
+     */
+    display_rrule?: string | null;
+    /**
+     * Display Timezone
+     */
+    display_timezone?: string | null;
+    /**
+     * Due Local
+     */
+    due_local?: string | null;
+    /**
+     * Expected Occurrence Version
+     */
+    expected_occurrence_version: number;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Next Due
+     */
+    next_due?: Array<string>;
+    /**
+     * Occurrence Id
+     */
+    occurrence_id: string;
+    /**
+     * Occurrence Key
+     */
+    occurrence_key?: string | null;
+    /**
+     * Payload Version
+     */
+    payload_version?: 1;
+    /**
+     * Rrule
+     */
+    rrule?: string | null;
+    /**
+     * Rule Supplied
+     */
+    rule_supplied?: boolean;
+    /**
+     * Scope
+     */
+    scope: 'occurrence' | 'this_and_following';
+    /**
+     * Series Id
+     */
+    series_id: string;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
+    /**
+     * Title
+     */
+    title?: string;
+};
+
+/**
  * TaskPatched
  */
 export type TaskPatched = {
@@ -2245,6 +2456,68 @@ export type TaskPatched = {
      * Version
      */
     version: number;
+};
+
+/**
+ * TaskStateCommand
+ */
+export type TaskStateCommand = {
+    /**
+     * Action
+     */
+    action: 'complete' | 'skip' | 'reopen';
+    /**
+     * Display Rrule
+     */
+    display_rrule?: string | null;
+    /**
+     * Display Timezone
+     */
+    display_timezone?: string | null;
+    /**
+     * Due Local
+     */
+    due_local?: string | null;
+    /**
+     * Expected Occurrence Version
+     */
+    expected_occurrence_version: number;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Next Due
+     */
+    next_due?: Array<string>;
+    /**
+     * Occurrence Id
+     */
+    occurrence_id: string;
+    /**
+     * Occurrence Key
+     */
+    occurrence_key?: string | null;
+    /**
+     * Payload Version
+     */
+    payload_version?: 1;
+    /**
+     * Series Id
+     */
+    series_id: string;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Title
+     */
+    title?: string;
 };
 
 /**
