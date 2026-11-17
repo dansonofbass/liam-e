@@ -8,7 +8,7 @@ describe('bounded task reconciliation', () => {
   test('continues pages with the server cursor without starting a new horizon', async () => {
     const calls: ReconcileIn[] = []
     const values = [result('a', false), result('b', false), result('c', true)]
-    const final = await reconcileTask('series', { request: async body => { calls.push(body); return values[calls.length - 1] } })
+    const final = await reconcileTask('series', { request: async body => { calls.push(body); return values[calls.length - 1]! } })
     expect(final?.cursor).toBe('c')
     expect(calls.map(c => c.cursor)).toEqual([undefined, 'a', 'b'])
     expect(calls.some(c => c.advance)).toBe(false)
@@ -16,7 +16,7 @@ describe('bounded task reconciliation', () => {
   test('advances a previously completed horizon only once', async () => {
     const calls: ReconcileIn[] = []
     const values = [result('a', true), result('b', false), result('c', true)]
-    await reconcileTask('series', { request: async body => { calls.push(body); return values[calls.length - 1] } })
+    await reconcileTask('series', { request: async body => { calls.push(body); return values[calls.length - 1]! } })
     expect(calls.map(c => !!c.advance)).toEqual([false, true, false])
   })
   test('bounds work and resumes without a client cursor after interruption', async () => {
@@ -25,7 +25,7 @@ describe('bounded task reconciliation', () => {
     expect((await reconcileTask('series', { maxPages: 2, request }))?.complete).toBe(false)
     await reconcileTask('series', { maxPages: 1, request })
     expect(calls).toHaveLength(3)
-    expect(calls[2].cursor).toBeUndefined()
+    expect(calls[2]!.cursor).toBeUndefined()
   })
   test('does not replay failed writes', async () => {
     let calls = 0
