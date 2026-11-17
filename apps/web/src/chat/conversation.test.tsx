@@ -28,7 +28,7 @@ function setup(path = '/', historyGone = false, selection: string | null = null)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
   const start = createRoute({ getParentRoute: () => root, path: '/', component: StartRoute.options.component })
-  const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: () => <Conversation conversationId="c" /> })
+  const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: function ChatRoute() { const { conversationId } = chat.useParams(); return <Conversation conversationId={conversationId} /> } })
   const mail = createRoute({ getParentRoute: () => root, path: '/mail/$messageId', component: () => <p>Mail</p> })
   const router = createRouter({ routeTree: root.addChildren([start, chat, mail]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
@@ -284,6 +284,33 @@ test('a template deleted during the answer says so and offers a retry', async ()
   await send()
   const notice = (await screen.findByText(/Die Vorlage wurde gelöscht/)).closest('[role="alert"]') as HTMLElement
   expect(within(notice).getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
+})
+
+test('template selection errors do not follow a conversation switch', async () => {
+  spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'version_conflict' } } }) as never)
+  const { client, router } = setup('/chat/c')
+  await waitFor(() => expect(client.getQueryData(['conversations'])).toBeTruthy())
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Vorlage: Standard' }) as HTMLButtonElement).disabled).toBe(false))
+  const saved = client.getQueryData<Record<string, unknown>[]>(['conversations'])![0]!
+  act(() => { client.setQueryData(['conversations'], [saved, { ...saved, id: 'b' }]) })
+  fireEvent.click(screen.getByRole('button', { name: 'Vorlage: Standard' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Standard' }))
+  await screen.findByRole('button', { name: 'Aktuelle Fassung laden' })
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'b' } }) })
+  expect(screen.queryByRole('button', { name: 'Aktuelle Fassung laden' })).toBeNull()
+})
+
+test('restart after template removal preserves account and unsent text', async () => {
+  const { client, router } = setup('/chat/c', false, 'a')
+  await screen.findByRole('button', { name: 'Privat' })
+  const saved = client.getQueryData<Record<string, unknown>[]>(['conversations'])![0]!
+  act(() => { client.setQueryData(['conversations'], [{ ...saved, prompt_revision_id: 'removed' }]) })
+  const input = screen.getByPlaceholderText('Frag etwas zu deinen Mails …')
+  fireEvent.change(input, { target: { value: 'Noch offen' } })
+  fireEvent.click(await screen.findByRole('button', { name: 'Neue Unterhaltung ohne bisherigen Kontext' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect(await screen.findByRole('button', { name: 'Privat' })).toBeTruthy()
+  expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Noch offen')
 })
 
 test('unknown model refusal renders its explanation', async () => {

@@ -556,7 +556,7 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 - **Kopf:** Auf `desktop` und `tablet` steht über dem Verlauf eine Leiste mit „Chat“ und, in
   einer Unterhaltung, „/ Titel“. Ein langer Titel endet mit Auslassung, der volle steht im
   Tooltip. Rechts stehen das Modellmenü und „Neue Unterhaltung“ (`plus`). Auf `mobile`
-  tragen die Kopfzeile (§7.3) Titel und Plus; darunter steht nur das Modellmenü.
+  tragen die Kopfzeile (§7.3) Titel und Plus; darunter stehen Modellmenü und Vorlagen-Chip.
 - **Modellmenü:** ein Chip mit dem Namen des Modells und `chevron-down`, Tooltip „Modell
   für diese Unterhaltung wählen“. Die Einträge zeigen „Name · Beschreibung“. In einer
   Unterhaltung wird die Wahl gespeichert und gilt für ihre nächsten Antworten, auf der
