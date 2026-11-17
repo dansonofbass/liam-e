@@ -11,6 +11,7 @@ from mistralai.client.models import DeltaMessage, FunctionCall, ToolCall
 from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
 from db.models.mail_message import MailMessage
+from db.models.calendar_occurrence import CalendarOccurrence
 from support.fake_mistral import FakeMistral
 from api.mail import agent, actions, connectors, newsletters, send
 from db.accessors import chat_conversation, chat_message, mail_message, mail_insight
@@ -55,6 +56,39 @@ async def run(store, monkeypatch, streams, **kw):
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     events = [e async for e in agent.run_turn_events(conversation_id=None, text='Hallo', **kw)]
     return events, fake
+
+
+@pytest.mark.parametrize('case', ['in_scope', 'outside_scope', 'paused', 'unknown'])
+async def test_calendar_context_reference_only_reaches_model_when_visible_and_in_scope(store, monkeypatch, case):
+    occurrence = CalendarOccurrence(id='occurrence-test', source_id='calendar-test', event_id='event-test',
+        external_id='external-test', title='Synthetic private title', start_date=date(2026, 11, 13), end_date=date(2026, 11, 14))
+    scope = ['other-calendar'] if case == 'outside_scope' else [occurrence.source_id]
+    snapshot = NS(id='calendar-context', account_scope_json=json.dumps({'account_ids': [store.account.id]}),
+        calendar_scope_json=json.dumps(scope), revoked=False)
+    conversation = await store.create()
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(return_value={snapshot.id: snapshot}))
+    # The accessor hides paused sources as well as missing identities (covered by its PG contract).
+    visible = AsyncMock(return_value=None if case in ('paused', 'unknown') else occurrence)
+    monkeypatch.setattr(agent.calendar_occurrence, 'get_visible', visible)
+    requested = 'unknown-occurrence' if case == 'unknown' else occurrence.id
+    events, fake = await run(store, monkeypatch, [['Antwort']], context_occurrence_id=requested,
+        calendar_source_ids=scope, resolved_context=(conversation, snapshot, None))
+    visible.assert_awaited_once_with(requested)
+    assert events[-1].event == 'done'
+    messages = fake.requests[0]['messages']
+    references = [message for message in messages if message.get('content', '').startswith('Strukturierter Terminbezug')]
+    if case == 'in_scope':
+        assert len(references) == 1
+        assert references[0]['role'] == 'user'
+        assert json.loads(references[0]['content'].split(': ', 1)[1]) == {
+            'occurrence_id': occurrence.id, 'source_id': occurrence.source_id,
+        }
+    else:
+        assert references == []
+        assert requested not in json.dumps(messages)
+    assert occurrence.title not in json.dumps(messages)
+    assert not any(event.event == 'calendars' and event.calendars for event in events)
+    assert all(requested not in row.content and requested not in row.extras_json for row in store.rows)
 
 
 async def test_turn_streams_text_deltas_in_order(store, monkeypatch):
