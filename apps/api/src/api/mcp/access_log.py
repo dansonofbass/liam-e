@@ -23,14 +23,14 @@ class RedactAgentReadQuery(logging.Filter):
             # Keep the argument shape (uvicorn's formatter unpacks its 5-tuple) and redact every
             # facade path among the arguments, wherever a format puts it.
             record.args = tuple(_redact(item) if isinstance(item, str) and PREFIX in item else item for item in args)
-            return True
-        # Any other shape (a mapping, or a message without arguments): redact the rendered line
-        # instead of letting a facade query string through unchanged.
+        # Then check the rendered line: a query can still appear when a format splits path and
+        # query into separate arguments, carries the path in the message itself or passes a
+        # mapping. Only such lines lose their arguments; uvicorn's own line no longer matches.
         try:
             message = record.getMessage()
         except Exception:
             return True
-        if PREFIX in message:
+        if _QUERY.search(message):
             record.msg, record.args = _redact(message), None
         return True
 

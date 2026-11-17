@@ -94,7 +94,7 @@ def test_uvicorn_access_log_hides_query_without_changing_other_routes():
     record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %s',
                                ("client", "GET", BASE + "/messages?query=private-text", "1.1", 200), None)
     assert redact.filter(record)
-    assert "private-text" not in record.getMessage()
+    assert "private-text" not in record.getMessage() and len(record.args) == 5
     other = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %s',
                               ("client", "GET", "/api/health?x=1", "1.1", 200), None)
     assert redact.filter(other) and "?x=1" in other.getMessage()
@@ -115,6 +115,12 @@ def test_access_log_redacts_query_in_an_unexpected_record_shape():
     moved = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '"%s %s" %s - %s %s',
                               ("GET", BASE + "/summary?account_ids=private", 200, "client", "1.1"), None)
     assert redact.filter(moved) and "private" not in moved.getMessage() and len(moved.args) == 5
+    split = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '"%s?%s" %s', (BASE + "/summary", "account_ids=private", 200), None)
+    assert redact.filter(split) and "private" not in split.getMessage()
+    rendered = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, "GET " + BASE + "/messages?query=private %s", (200,), None)
+    assert redact.filter(rendered) and "private" not in rendered.getMessage() and rendered.getMessage().endswith(" 200")
+    raw = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, "%s %s", ((BASE + "/messages?query=private").encode(), 200), None)
+    assert redact.filter(raw) and "private" not in raw.getMessage()
 
 
 def test_default_denies_before_any_service(indexed, monkeypatch):
