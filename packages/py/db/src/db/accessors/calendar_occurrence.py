@@ -10,9 +10,9 @@ from db.models.calendar_source import CalendarSource
 
 
 def timed_overlap(start: datetime, end: datetime):
-    """SQL overlap for half-open intervals and points in [start, end)."""
-    return and_(CalendarOccurrence.start_at < end,
-                or_(CalendarOccurrence.end_at > start, CalendarOccurrence.start_at == start))
+    """Match half-open intervals and points in [start, end), using the end_at index."""
+    return and_(CalendarOccurrence.start_at < end, CalendarOccurrence.end_at >= start,
+                or_(CalendarOccurrence.end_at > start, CalendarOccurrence.start_at == CalendarOccurrence.end_at))
 
 
 async def get_visible(occurrence_id: str) -> CalendarOccurrence | None:

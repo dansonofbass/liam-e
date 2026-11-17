@@ -10,6 +10,30 @@ from sqlalchemy.exc import IntegrityError
 pytestmark = pytest.mark.skipif(not os.getenv("RUN_PG_CONTRACT"), reason="RUN_PG_CONTRACT is not set")
 
 
+def test_unfiltered_window_uses_end_at_index(pg_db):
+    async def run():
+        from sqlalchemy import and_, or_, select, text
+        from sqlalchemy.dialects import postgresql
+        from db.accessors.calendar_occurrence import timed_overlap
+        from db.engine import get_session_maker
+        from db.models.calendar_occurrence import CalendarOccurrence
+        from db.models.calendar_source import CalendarSource
+
+        start, end = datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC)
+        stmt = (select(CalendarOccurrence).join(CalendarSource, CalendarOccurrence.source_id == CalendarSource.id)
+                .where(CalendarSource.is_active.is_(True),
+                       or_(timed_overlap(start, end),
+                           and_(CalendarOccurrence.start_date < end.date(),
+                                CalendarOccurrence.end_date > start.date()))))
+        sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        async with get_session_maker()() as session:
+            await session.execute(text("SET LOCAL enable_seqscan = off"))
+            plan = "\n".join((await session.execute(text("EXPLAIN " + sql))).scalars())
+            assert "ix_calendar_occurrence_end_at" in plan, plan
+            assert "Seq Scan on calendar_occurrence" not in plan, plan
+    asyncio.run(run())
+
+
 def test_points_constraint_window_and_replacement(pg_db):
     async def run():
         from sqlalchemy import select

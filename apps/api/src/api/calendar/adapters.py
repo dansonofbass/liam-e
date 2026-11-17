@@ -41,8 +41,8 @@ class Adapter(Protocol):
 
 
 def timed_overlaps(start: datetime, end: datetime, window_start: datetime, window_end: datetime) -> bool:
-    """Intervals overlap half-open windows; points belong at their start, not their end."""
-    return start < window_end and (end > window_start or start == window_start)
+    """Match half-open intervals and points in [window_start, window_end)."""
+    return start < window_end and end >= window_start and (end > window_start or start == end)
 
 
 def normalize(row: Occurrence) -> Occurrence:
