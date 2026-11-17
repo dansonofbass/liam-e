@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from db.accessors import calendar_occurrence, calendar_source
+from fastapi import HTTPException
 from api.routers.api.v1.calendar.occurrences import _decode, _encode
 from api.routers.api.v1.calendar.schemas import OccurrenceOut
 from api.routers.api.v1.calendar.sources import source_out
@@ -36,7 +37,7 @@ async def read_calendar(name, arguments, source_ids, timezone):
             query = arguments.get('query', '')
             if not isinstance(query, str) or len(query) > 200:
                 raise ValueError()
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, HTTPException):
             return {'error': 'calendar_window_invalid'}, []
         rows = await calendar_occurrence.page_visible(start=start, end=end, start_date=first, end_date=last,
             source_ids=[s.id for s in selected], after=after, limit=51) if selected else []

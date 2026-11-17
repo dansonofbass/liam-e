@@ -63,6 +63,17 @@ async def test_paused_or_deleted_source_never_yields_old_reference(calendar, mon
     calendar_tools.calendar_occurrence.get_visible.assert_not_called()
 
 
+async def test_invalid_cursor_returns_window_error(calendar):
+    source, _ = calendar
+    ctx = TurnContext('test-only', None, date.today(), calendar_source_ids=[source.id])
+    outcome = await execute_tool('search_calendar', {
+        'from': '2026-11-13', 'to': '2026-11-14', 'cursor': 'invalid',
+    }, ctx)
+    assert json.loads(outcome.content) == {'error': 'calendar_window_invalid'}
+    assert not outcome.calendars
+    calendar_tools.calendar_occurrence.page_visible.assert_not_called()
+
+
 async def test_window_limit_and_timezone_are_used(calendar):
     source, _ = calendar
     ctx = TurnContext('test-only', None, date.today(), calendar_source_ids=[source.id], calendar_timezone='America/Los_Angeles')
