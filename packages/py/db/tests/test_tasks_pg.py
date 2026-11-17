@@ -359,6 +359,91 @@ def test_occurrence_list_scope_filters_and_cursor(pg_db):
     asyncio.run(run())
 
 
+def test_series_reads_are_scoped_paginated_and_never_write_even_after_source_removal(pg_db):
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+    from api.main import create_app
+    from fastapi.testclient import TestClient
+    from mistralai_capabilities.fastapi.hooks import FastAPIHooks
+
+    async def seed():
+        from datetime import date
+        from api.tasks.create import create
+        from api.tasks.reconcile import reconcile_current
+        from db.accessors import task_series
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+        from db.models.mail_message import MailMessage
+        from db.models.task_series import TaskSeries
+
+        account = MailAccount(provider='imap', auth_type='imap_password', email_address='source@example.org')
+        message = MailMessage(account_id=account.id, provider_uid='synthetic')
+        async with get_session_maker()() as session:
+            session.add(account)
+            session.add(message)
+            await session.flush()
+            linked, _ = await create(session, creation_key='linked', title='Linked', start=date(2024, 1, 1),
+                zone='UTC', rule='FREQ=DAILY', source_account_id=account.id, source_message_id=message.id)
+            unlinked, _ = await create(session, creation_key='unlinked', title='Unlinked', start=date(2024, 1, 1), zone='UTC')
+            later, _ = await create(session, creation_key='later', title='Later', start=date(2025, 1, 1), zone='UTC')
+            hidden = TaskSeries(scope='other', creation_key='hidden', creation_hash='hash', title='Hidden')
+            await task_series.create_once(session, hidden)
+            await reconcile_current(session, series_id=linked.id, now=datetime(2024, 1, 1, tzinfo=UTC))
+            unlinked.archived = True
+            session.add(unlinked)
+            await session.delete(message)
+            await session.delete(account)
+            await session.commit()
+            identifiers = linked.id, unlinked.id, later.id, hidden.id, account.id, message.id
+        from db.engine import dispose_engine
+        await dispose_engine()
+        return identifiers
+
+    linked, unlinked, later, hidden, account, message = asyncio.run(seed())
+    statements = []
+
+    def read_only(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+        assert statement.lstrip().upper().startswith('SELECT'), 'GET attempted a write'
+        assert 'FOR UPDATE' not in statement.upper(), 'GET attempted to lock rows'
+
+    app = create_app(hooks=FastAPIHooks.empty())
+    window = {'due_from': '2024-01-01', 'due_to': '2024-01-31'}
+    with TestClient(app) as client:
+        event.listen(Engine, 'before_cursor_execute', read_only)
+        try:
+            first = client.get('/api/v1/tasks', params={**window, 'limit': 1}).json()
+            assert len(first['items']) == 1 and first['next_cursor']
+            second = client.get('/api/v1/tasks', params={**window, 'limit': 1, 'cursor': first['next_cursor']}).json()
+            assert second['next_cursor'] is None
+            assert {first['items'][0]['id'], second['items'][0]['id']} == {linked, unlinked}
+            result = client.get('/api/v1/tasks', params={**window, 'source': 'account', 'source_account_id': account}).json()
+            assert [row['id'] for row in result['items']] == [linked]
+            assert result['items'][0]['complete']
+            assert result['items'][0]['source_message_id'] == message
+            assert client.get('/api/v1/tasks', params={**window, 'source': 'account'}).status_code == 422
+            result = client.get('/api/v1/tasks', params={**window, 'source': 'unlinked', 'status': 'archived'}).json()
+            assert [row['id'] for row in result['items']] == [unlinked]
+            assert not result['items'][0]['complete']
+            result = client.get('/api/v1/tasks', params={**window, 'status': 'active'}).json()
+            assert [row['id'] for row in result['items']] == [linked]
+            detail = client.get(f'/api/v1/tasks/{linked}', params={**window, 'limit': 2}).json()
+            assert detail['series']['complete'] and len(detail['occurrences']['items']) == 2
+            next_page = client.get(f'/api/v1/tasks/{linked}', params={**window, 'limit': 2,
+                'cursor': detail['occurrences']['next_cursor']}).json()
+            assert next_page['occurrences']['items'][0]['due_local'] == '2024-01-03'
+            empty = client.get(f'/api/v1/tasks/{linked}', params={**window, 'status': 'completed'}).json()
+            assert empty['occurrences']['items'] == [] and empty['series']['complete']
+            outside = client.get(f'/api/v1/tasks/{linked}', params={**window, 'due_to': '2024-02-01'}).json()
+            assert not outside['series']['complete']
+            assert client.get(f'/api/v1/tasks/{hidden}', params=window).status_code == 404
+            assert client.get('/api/v1/tasks/missing', params=window).status_code == 404
+            assert client.get('/api/v1/tasks', params={**window, 'due_to': '2026-01-01'}).status_code == 422
+            assert statements
+        finally:
+            event.remove(Engine, 'before_cursor_execute', read_only)
+
+
 def test_domain_state_transitions_and_conflicts(pg_db):
     async def run():
         from api.tasks.state import StateConflict, transition

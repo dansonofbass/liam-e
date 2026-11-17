@@ -1,6 +1,6 @@
 """Request and response shapes for personal tasks."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -80,3 +80,45 @@ class OccurrenceOut(BaseModel):
 class OccurrencePage(BaseModel):
     items: list[OccurrenceOut]
     next_cursor: str | None
+
+
+class TaskWindow(BaseModel):
+    due_from: date
+    due_to: date
+
+
+class ScheduleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    version: int
+    start_local: str
+    timezone: str | None
+    rrule: str | None
+    end_key: str | None
+    reconcile_target: str | None
+    reconcile_cursor: str | None
+
+
+class SeriesOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    title: str
+    description: str
+    source_account_id: str | None
+    source_message_id: str | None
+    version: int
+    archived: bool
+    schedule: ScheduleOut | None
+    complete: bool
+
+
+class SeriesPage(BaseModel):
+    window: TaskWindow
+    items: list[SeriesOut]
+    next_cursor: str | None
+
+
+class SeriesDetail(BaseModel):
+    window: TaskWindow
+    series: SeriesOut
+    occurrences: OccurrencePage

@@ -19,8 +19,11 @@ async def insert_once(session: AsyncSession, row: TaskOccurrence) -> bool:
 
 
 async def list_page(session: AsyncSession, *, scope: str, status: str | None, due_from: str | None,
-                    due_to: str | None, after: tuple[str, str] | None, limit: int) -> list[TaskOccurrence]:
+                    due_to: str | None, after: tuple[str, str] | None, limit: int,
+                    series_id: str | None = None) -> list[TaskOccurrence]:
     query = select(TaskOccurrence).join(TaskSeries, TaskOccurrence.series_id == TaskSeries.id).where(TaskSeries.scope == scope)
+    if series_id is not None:
+        query = query.where(TaskOccurrence.series_id == series_id)
     if status is not None:
         query = query.where(TaskOccurrence.status == status)
     if due_from is not None:

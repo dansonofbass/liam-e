@@ -120,6 +120,8 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}/original` | `mail_message_original` |
 | Mail / Übersicht | GET | `/api/v1/mail/summary` | `mail_summary` |
 | Mail / Abruf | POST | `/api/v1/mail/sync` | `mail_sync_all` |
+| Aufgaben | GET | `/api/v1/tasks` | `tasks_list` |
+| Aufgaben | GET | `/api/v1/tasks/{series_id}` | `tasks_get` |
 | Aufgaben | POST | `/api/v1/tasks` | `tasks_create` |
 | Aufgaben | POST | `/api/v1/tasks/preview` | `tasks_preview` |
 | Aufgaben | POST | `/api/v1/tasks/reconcile` | `tasks_reconcile` |
@@ -133,7 +135,22 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 `api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
 Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite
 in derselben Transaktion. Weitere Seiten werden ausdrücklich über `POST /tasks/reconcile`
-abgerufen. Serienrevision, Archivieren, Löschen sowie Serienliste und -detail sind noch offen.
+abgerufen. Serienrevision, Archivieren und Löschen sind noch offen.
+
+`GET /tasks` und `GET /tasks/{series_id}` lesen ausschließlich gespeicherte Daten im
+serverseitigen Scope `app`. Beide benötigen das inklusive lokale Datumsfenster
+`due_from`/`due_to` (höchstens 366 Tage). Die Liste ist nach Serien-ID paginiert
+(`limit` 1–100, `cursor`) und filtert `status=active|archived` sowie
+`source=all|unlinked|account`; `account` braucht `source_account_id`, `unlinked`
+bedeutet ohne Quellmail. Quellreferenzen werden nicht mit lebenden Mail-/Kontenzeilen
+verknüpft: Entfernte Quellen lassen Aufgaben und ihre Filterzuordnung bestehen.
+Die Liste enthält Serien mit überlappender Regelgültigkeit oder gespeicherter Fälligkeit
+im Fenster; eine passende Serie muss nicht an jedem Tag eine Fälligkeit haben.
+Das Detail liefert die aktuelle Revision und eine eigene paginierte Instanzliste,
+optional mit Instanzstatus. `complete` gilt je Serie ausschließlich für das ausgewiesene
+Fenster, unabhängig von der Instanz-Pagination oder dem Statusfilter. Es wird konservativ
+aus gespeichertem Fortschritt abgeleitet; ein zeitgebundener Tag gilt erst vollständig,
+wenn der ganze lokale Tag abgedeckt ist. GET materialisiert nichts und ruft kein Modell auf.
 
 Reconcile nimmt eine Serien-ID, optional Revisions-ID und Cursor, `limit` (1–100) und
 `advance`. Ohne Cursor setzt der Aufruf unter Sperre den gespeicherten Fortschritt fort;
@@ -292,7 +309,7 @@ in der Probe HTTP 401.
 - Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
 - Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus, sofern der Turn-Kontext beim Claim nicht widerrufen ist. `.../cancel` verwirft sie auch nach Widerruf.
 - CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
-- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `tasks_occurrences_list`
+- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
   `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
   `mail_message_original` ruft die Mail beim Anbieter ab (lesend, ohne sie als gelesen zu markieren) und speichert nichts.
   Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.

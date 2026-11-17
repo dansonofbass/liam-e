@@ -1353,6 +1353,44 @@ export type ReconcileOut = {
 };
 
 /**
+ * ScheduleOut
+ */
+export type ScheduleOut = {
+    /**
+     * End Key
+     */
+    end_key: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Reconcile Cursor
+     */
+    reconcile_cursor: string | null;
+    /**
+     * Reconcile Target
+     */
+    reconcile_target: string | null;
+    /**
+     * Rrule
+     */
+    rrule: string | null;
+    /**
+     * Start Local
+     */
+    start_local: string;
+    /**
+     * Timezone
+     */
+    timezone: string | null;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * SendDraft
  */
 export type SendDraft = {
@@ -1388,6 +1426,69 @@ export type SendDraft = {
      * To
      */
     to: Array<string>;
+};
+
+/**
+ * SeriesDetail
+ */
+export type SeriesDetail = {
+    occurrences: ApiRoutersApiV1TasksSchemasOccurrencePage;
+    series: SeriesOut;
+    window: TaskWindow;
+};
+
+/**
+ * SeriesOut
+ */
+export type SeriesOut = {
+    /**
+     * Archived
+     */
+    archived: boolean;
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    schedule: ScheduleOut | null;
+    /**
+     * Source Account Id
+     */
+    source_account_id: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id: string | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * SeriesPage
+ */
+export type SeriesPage = {
+    /**
+     * Items
+     */
+    items: Array<SeriesOut>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+    window: TaskWindow;
 };
 
 /**
@@ -1586,6 +1687,20 @@ export type TaskCreated = {
      * Version
      */
     version: number;
+};
+
+/**
+ * TaskWindow
+ */
+export type TaskWindow = {
+    /**
+     * Due From
+     */
+    due_from: string;
+    /**
+     * Due To
+     */
+    due_to: string;
 };
 
 /**
@@ -2893,6 +3008,60 @@ export type PromptUpdateResponses = {
 
 export type PromptUpdateResponse = PromptUpdateResponses[keyof PromptUpdateResponses];
 
+export type TasksListData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Due From
+         */
+        due_from: string;
+        /**
+         * Due To
+         */
+        due_to: string;
+        /**
+         * Status
+         */
+        status?: 'active' | 'archived' | null;
+        /**
+         * Source
+         */
+        source?: 'all' | 'unlinked' | 'account';
+        /**
+         * Source Account Id
+         */
+        source_account_id?: string | null;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tasks';
+};
+
+export type TasksListErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksListError = TasksListErrors[keyof TasksListErrors];
+
+export type TasksListResponses = {
+    /**
+     * Successful Response
+     */
+    200: SeriesPage;
+};
+
+export type TasksListResponse = TasksListResponses[keyof TasksListResponses];
+
 export type TasksCreateData = {
     body: TaskCreate;
     path?: never;
@@ -3103,3 +3272,54 @@ export type TasksReconcileResponses = {
 };
 
 export type TasksReconcileResponse = TasksReconcileResponses[keyof TasksReconcileResponses];
+
+export type TasksGetData = {
+    body?: never;
+    path: {
+        /**
+         * Series Id
+         */
+        series_id: string;
+    };
+    query: {
+        /**
+         * Due From
+         */
+        due_from: string;
+        /**
+         * Due To
+         */
+        due_to: string;
+        /**
+         * Status
+         */
+        status?: 'open' | 'completed' | 'skipped' | 'cancelled' | null;
+        /**
+         * Cursor
+         */
+        cursor?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tasks/{series_id}';
+};
+
+export type TasksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksGetError = TasksGetErrors[keyof TasksGetErrors];
+
+export type TasksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SeriesDetail;
+};
+
+export type TasksGetResponse = TasksGetResponses[keyof TasksGetResponses];

@@ -2232,6 +2232,89 @@
         "title": "ReconcileOut",
         "type": "object"
       },
+      "ScheduleOut": {
+        "properties": {
+          "end_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Key"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reconcile_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconcile Cursor"
+          },
+          "reconcile_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconcile Target"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrule"
+          },
+          "start_local": {
+            "title": "Start Local",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "start_local",
+          "timezone",
+          "rrule",
+          "end_key",
+          "reconcile_target",
+          "reconcile_cursor"
+        ],
+        "title": "ScheduleOut",
+        "type": "object"
+      },
       "SendDraft": {
         "properties": {
           "account_id": {
@@ -2297,6 +2380,131 @@
           "reply_to_message_id"
         ],
         "title": "SendDraft",
+        "type": "object"
+      },
+      "SeriesDetail": {
+        "properties": {
+          "occurrences": {
+            "$ref": "#/components/schemas/api__routers__api__v1__tasks__schemas__OccurrencePage"
+          },
+          "series": {
+            "$ref": "#/components/schemas/SeriesOut"
+          },
+          "window": {
+            "$ref": "#/components/schemas/TaskWindow"
+          }
+        },
+        "required": [
+          "window",
+          "series",
+          "occurrences"
+        ],
+        "title": "SeriesDetail",
+        "type": "object"
+      },
+      "SeriesOut": {
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "source_account_id",
+          "source_message_id",
+          "version",
+          "archived",
+          "schedule",
+          "complete"
+        ],
+        "title": "SeriesOut",
+        "type": "object"
+      },
+      "SeriesPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "window": {
+            "$ref": "#/components/schemas/TaskWindow"
+          }
+        },
+        "required": [
+          "window",
+          "items",
+          "next_cursor"
+        ],
+        "title": "SeriesPage",
         "type": "object"
       },
       "SourceOut": {
@@ -2643,6 +2851,26 @@
           "created"
         ],
         "title": "TaskCreated",
+        "type": "object"
+      },
+      "TaskWindow": {
+        "properties": {
+          "due_from": {
+            "format": "date",
+            "title": "Due From",
+            "type": "string"
+          },
+          "due_to": {
+            "format": "date",
+            "title": "Due To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "due_from",
+          "due_to"
+        ],
+        "title": "TaskWindow",
         "type": "object"
       },
       "UndoIn": {
@@ -4605,6 +4833,135 @@
       }
     },
     "/api/v1/tasks": {
+      "get": {
+        "operationId": "tasks_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "due_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Due From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Due To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "archived"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "unlinked",
+                "account"
+              ],
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Account Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List task series in a local date window"
+      },
       "post": {
         "operationId": "tasks_create",
         "requestBody": {
@@ -4972,6 +5329,110 @@
           }
         },
         "summary": "Materialize one bounded task page"
+      }
+    },
+    "/api/v1/tasks/{series_id}": {
+      "get": {
+        "operationId": "tasks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Due From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Due To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open",
+                    "completed",
+                    "skipped",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 1024,
+              "title": "Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read a task series and a page of its occurrences"
       }
     }
   }
