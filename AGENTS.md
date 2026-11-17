@@ -256,6 +256,16 @@ Die Oberfläche unter `/calendar` zeigt die gemeinsame Agenda; `/calendar/$occur
 in der Verwaltung und als Hinweis angezeigt, ihre Termine bleiben bis zur Aktivierung
 verborgen. Sie tragen nicht zu einer Aussage „Keine Termine“ bei und bleiben auch für
 Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
+`CalendarSetup` in `apps/web/src/calendar/CalendarSources.tsx` ist der Anschluss für
+spätere geprüfte Providerformulare. Aktuell zeigt er nur die fehlende Verfügbarkeit;
+er registriert keinen Adapter und bietet keine Verbindungsaktion an. Ein späteres
+Formular muss nach erfolgreicher Einrichtung die Query-Gruppe `calendar` invalidieren.
+Die Agenda verwendet UTC-Tagesgrenzen wie der Index-Endpunkt und nennt UTC an Uhrzeiten.
+Ein Stand älter als 24 Stunden bekommt einen Altershinweis; beim Öffnen wird einmal je
+Quelle über den expliziten Verwaltungsendpunkt ein Abruf angefragt. Das verspricht keine
+Aktualität beim Anbieter. `seed_calendars` ergänzt fünf synthetische Quellen für Google-/ICS-
+Darstellung, Ganztag, langen Titel, alten Stand, fehlende Abdeckung und Pause. Ihre festen
+IDs werden vor dem Einreihen und vor der Adapterausführung übersprungen.
 
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
 Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen

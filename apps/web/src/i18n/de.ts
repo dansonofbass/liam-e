@@ -27,6 +27,7 @@ export const de = {
     paused: 'Pausiert. Termine erscheinen wieder, wenn du den Kalender aktivierst.',
     unknown: 'Für diesen Zeitraum lässt sich noch nicht sagen, ob Termine fehlen.',
     queued: 'Abruf eingereiht. Der gespeicherte Stand kann noch unverändert sein.',
+    notQueued: 'Kein neuer Abruf eingereiht. Ein Abruf läuft bereits oder diese Quelle enthält nur Beispieldaten.',
     refreshError: 'Der Abruf konnte nicht eingereiht werden. Versuch es später noch mal.',
     activate: 'Aktivieren', pause: 'Pausieren', remove: 'Entfernen', cancel: 'Abbrechen', removeTitle: 'Kalender entfernen?',
     removeNote: 'Dieser Kalender und die gespeicherten Termine werden entfernt. Frühere Chatnachrichten und der Kalender beim Anbieter bleiben erhalten.',

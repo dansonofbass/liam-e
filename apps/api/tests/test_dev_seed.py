@@ -1,6 +1,8 @@
 """Tests for the local development seed's database safety guard."""
 
 import json
+from unittest.mock import AsyncMock
+from db.accessors import calendar_seed
 
 import pytest
 
@@ -130,6 +132,7 @@ async def test_seed_is_repeatable_and_preserves_other_rows(fake_store, monkeypat
     async def skip_tasks(_now):
         pass
     monkeypatch.setattr(dev_seed, "seed_tasks", skip_tasks)
+    monkeypatch.setattr(calendar_seed, "replace", AsyncMock())
     now = datetime(2026, 11, 13, 12, 30, tzinfo=UTC)
     for _ in range(2):
         result = await dev_seed.seed(now)

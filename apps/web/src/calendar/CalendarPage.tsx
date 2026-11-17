@@ -1,7 +1,7 @@
 // i18n-exempt: route paths, CSS classes and UTC are technical identifiers.
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { calendarPageQuery, calendarSourcesQuery, calendarDetailQuery } from '../api/queries'
 import { calendarSourceSync } from '../api/generated/sdk.gen'
 import type { SourceOut } from '../api/generated/types.gen'
@@ -28,8 +28,8 @@ export function CalendarDetail({ id }: { id: string }) {
   return <article className="le-calendar-detail">
     <Link className="le-link" to="/calendar">{de.calendar.back}</Link>
     {detail.isPending && <p role="status">{de.calendar.loading}</p>}
-    {detail.isError && <Notice tone="danger">{de.calendar.missing}</Notice>}
-    {row && <><h1 className="title">{row.title}</h1><p>{calendarDate(occurrenceDay(row))} · {row.start_date ? de.calendar.allDay : `${calendarTime(row.start_at!)} UTC`}</p>
+    {(detail.isError || sources.isError || (sources.isSuccess && row && !source?.is_active)) && <Notice tone="danger">{de.calendar.missing}</Notice>}
+    {row && !detail.isError && !sources.isError && source?.is_active && <><h1 className="title">{row.title}</h1><p>{calendarDate(occurrenceDay(row))} · {row.start_date ? de.calendar.allDay : `${calendarTime(row.start_at!)} UTC`}</p>
       {row.end_date && <p>{de.calendar.to}: {calendarDate(row.end_date)}</p>}
       {row.end_at && <p>{calendarDate(row.end_at)} · {calendarTime(row.end_at)} UTC</p>}
       {source && <SourceStatus source={source} />}
@@ -45,24 +45,30 @@ export function CalendarAgenda() {
   const valid = validWindow(from, to)
   const page = useQuery({ ...calendarPageQuery(from, to, sourceId, cursor), enabled: valid && selected.length > 0 })
   const complete = selected.length > 0 && selected.every(s => covers(s, from, to))
-  const refresh = async () => {
+  const attempted = useRef(new Set<string>())
+  const refreshSources = async (targets: SourceOut[]) => {
     setRefreshing(true)
-    await Promise.all(selected.map(async source => {
+    await Promise.all(targets.map(async source => {
       try {
         const result = await calendarSourceSync({ path: { source_id: source.id } })
         if (result.error || !result.response?.ok) throw new Error()
-        setNotices(current => ({ ...current, [source.id]: de.calendar.queued }))
+        setNotices(current => ({ ...current, [source.id]: result.data?.queued ? de.calendar.queued : de.calendar.notQueued }))
       } catch { setNotices(current => ({ ...current, [source.id]: de.calendar.refreshError })) }
     }))
     setRefreshing(false)
     void sources.refetch(); void page.refetch()
   }
-  const rows = page.data?.items ?? []
+  useEffect(() => {
+    const due = (sources.data ?? []).filter(s => s.is_active && oldSource(s) && !attempted.current.has(s.id))
+    for (const source of due) attempted.current.add(source.id)
+    if (due.length) void refreshSources(due)
+  }, [sources.data])
+  const rows = page.isSuccess ? page.data.items : []
   return <section className="le-calendar-agenda" aria-label={de.calendar.title}>
     <h1 className="title">{de.calendar.title}</h1>
     <div className="le-calendar-controls">
       <Button variant="secondary" onClick={() => { setFrom(todayUTC()); setTo(addDays(todayUTC(), 7)); setCursor(undefined) }}>{de.calendar.today}</Button>
-      <Button variant="ghost" icon="refresh-cw" disabled={!selected.length || refreshing} onClick={() => { void refresh() }}>{de.calendar.refresh}</Button>
+      <Button variant="ghost" icon="refresh-cw" disabled={!selected.length || refreshing} onClick={() => { void refreshSources(selected) }}>{de.calendar.refresh}</Button>
       <Link className="le-link" to="/accounts">{de.calendar.manage}</Link>
       <TextField label={de.calendar.from} type="date" value={from} onChange={e => { setFrom(e.target.value); setCursor(undefined) }} />
       <TextField label={de.calendar.to} type="date" value={to} onChange={e => { setTo(e.target.value); setCursor(undefined) }} />

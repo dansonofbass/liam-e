@@ -226,7 +226,46 @@ async def seed(now: datetime | None = None) -> SeedResult:
         kind="unsubscribe", reason="Du hast sie seit über drei Monaten nicht geöffnet.", items=items))
     for conversation in (third, fourth):
         await chat_access.add_message(conversation_id=conversation.id, role="user", content=conversation.title)
+    await seed_calendars(local_now)
     return SeedResult(len(accounts), len(messages), sum(not m.is_read for m in messages), 1, len(conversations), 1)
+
+
+async def seed_calendars(now: datetime) -> None:
+    """Install synthetic Google/ICS presentations without registering adapters."""
+    from db.accessors import calendar_seed
+    from db.models.calendar_source import CalendarSource
+    from db.models.calendar_event import CalendarEvent
+    from db.models.calendar_occurrence import CalendarOccurrence
+    from db.models.calendar_sync_state import CalendarSyncState
+    from api.calendar.seed_ids import SEED_CALENDAR_KEYS
+
+    require_local_database()
+    today = datetime.combine(now.astimezone(UTC).date(), time.min, UTC)
+    sources, events, occurrences, states = [], [], [], []
+    names = ("Arbeit", "Verein", "Alter Stand", "Ohne Abdeckung", "Pausierter Kalender")
+    for index, (key, name) in enumerate(zip(SEED_CALENDAR_KEYS, names, strict=True)):
+        source_id = seed_id("calendar", key)
+        sources.append(CalendarSource(id=source_id, provider="google" if index == 0 else "ics",
+            connection_ref="test-only", external_id=key, name=name, timezone="Europe/Berlin",
+            capabilities_json='["read"]', is_active=key != "paused"))
+        states.append(CalendarSyncState(source_id=source_id,
+            coverage_start=None if key == "uncovered" else today - timedelta(days=30),
+            coverage_end=None if key == "uncovered" else today + timedelta(days=60),
+            last_success_at=None if key == "uncovered" else now.astimezone(UTC) - timedelta(days=7 if key == "old" else 0),
+            incomplete=key == "uncovered"))
+        if key == "uncovered":
+            continue
+        title = "Planung" if index < 2 else "Gemeinsame Vorbereitung des Sommerfestes mit dem Team und allen Helfenden aus dem Verein"
+        event_id = seed_id("calendar-event", key)
+        events.append(CalendarEvent(id=event_id, source_id=source_id, external_id=key, title=title))
+        occurrences.append(CalendarOccurrence(id=seed_id("calendar-occurrence", key), source_id=source_id,
+            event_id=event_id, external_id=key, title=title,
+            start_date=today.date() if key == "old" else None,
+            end_date=(today + timedelta(days=1)).date() if key == "old" else None,
+            start_at=None if key == "old" else today + timedelta(hours=10),
+            end_at=None if key == "old" else today + timedelta(hours=11),
+            timezone=None if key == "old" else "Europe/Berlin"))
+    await calendar_seed.replace(sources, events, occurrences, states)
 
 
 def main() -> None:

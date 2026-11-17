@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from db.accessors import calendar_seed
 from db.accessors.mail_message import NewsletterRow
 from db.models.chat_message import ChatMessage
 
@@ -52,6 +53,7 @@ async def seeded(fake_store, monkeypatch):
         return chats[id]
 
     monkeypatch.setattr(dev_seed.seed_access, "replace_mail_data", replace)
+    monkeypatch.setattr(calendar_seed, "replace", AsyncMock())
     monkeypatch.setattr(dev_seed.seed_access, "replace_conversations", AsyncMock())
     # The task seed writes through real sessions; its own tests cover it (test_dev_seed.py).
     monkeypatch.setattr(dev_seed, "seed_tasks", AsyncMock())
