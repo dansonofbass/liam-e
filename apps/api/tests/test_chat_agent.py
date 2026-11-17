@@ -41,6 +41,7 @@ async def store(fake_store, monkeypatch):
         return c, NS(id='test-context', account_scope_json=json.dumps({'account_ids': [account.id]})), None
     monkeypatch.setattr(agent, 'resolve_context', resolve)
     monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(return_value=True))
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(side_effect=lambda ids: {id: NS(revoked=False) for id in ids}))
     return NS(conversations=conversations, rows=rows, mail=fake_store, account=account, create=create)
 
 

@@ -54,6 +54,34 @@ def test_revisions_concurrent_updates_and_revocation(pg_db):
     asyncio.run(run())
 
 
+def test_context_batch_is_one_query(pg_db):
+    async def run():
+        from sqlalchemy import event
+        from db.engine import get_engine, get_session_maker
+        from db.accessors import chat_context
+        from db.models.chat_context import ChatContext
+        async with get_session_maker()() as session:
+            rows = [ChatContext(conversation_id='c', app_prompt_version='1', account_scope_json='{}', revoked=i == 1) for i in range(8)]
+            session.add_all(rows)
+            await session.commit()
+        queries = []
+        engine = get_engine().sync_engine
+        def before_execute(conn, cursor, statement, parameters, context, executemany):
+            queries.append(statement)
+        event.listen(engine, 'before_cursor_execute', before_execute)
+        try:
+            found = await chat_context.get_contexts({row.id for row in rows} | {'missing'})
+            assert len(queries) == 1
+            assert ' IN ' in queries[0].upper()
+            assert len(found) == 8 and found[rows[1].id].revoked
+            queries.clear()
+            assert await chat_context.get_contexts(set()) == {}
+            assert queries == []
+        finally:
+            event.remove(engine, 'before_cursor_execute', before_execute)
+    asyncio.run(run())
+
+
 def test_account_scope_and_unknown_history(pg_db):
     async def run():
         from db.accessors import mail_account as accounts, chat_context as c
