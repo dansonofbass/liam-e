@@ -143,8 +143,9 @@ vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich 
 Mitternacht UTC seines ersten Tages. Der Cursor trägt Startzeit und ID der letzten Instanz.
 Vollständige Snapshot-Fenster erweitern die Abdeckung nur, wenn sie die bisherige Abdeckung
 überlappen oder berühren; sonst ersetzen sie sie. Jede gespeicherte Instanz überlappt die
-Abdeckung (auch wenn sie über deren Rand hinausreicht); andere Instanzen und nicht mehr
-referenzierte Ereignisse werden entfernt. `stale` bedeutet, dass noch kein erfolgreicher
+Abdeckung (auch wenn sie über deren Rand hinausreicht); andere Instanzen werden entfernt.
+Ereignisse werden nur entfernt, wenn sie im aktuellen Snapshot fehlen und keine verbliebene
+Instanz sie referenziert; enthaltene Ereignisse bleiben auch ohne Instanzen erhalten. `stale` bedeutet, dass noch kein erfolgreicher
 Snapshot vorliegt oder der Index unvollständig ist; ohne periodischen Abruf sagt das Alter des
 letzten Erfolgs allein nichts über die Aktualität beim Anbieter aus.
 

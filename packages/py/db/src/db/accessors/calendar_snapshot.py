@@ -3,7 +3,7 @@
 import json
 from datetime import date, datetime
 
-from sqlalchemy import String, all_, and_, bindparam, delete, func, or_, select
+from sqlalchemy import String, and_, bindparam, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import ARRAY, insert
 
 from db.engine import get_session_maker
@@ -67,7 +67,10 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
                       and_(CalendarOccurrence.start_date < end_date, CalendarOccurrence.end_date > start_date))
         delete_stmt = delete(CalendarOccurrence).where(CalendarOccurrence.source_id == source_id, overlap)
         if occurrences:
-            delete_stmt = delete_stmt.where(CalendarOccurrence.external_id != all_(bindparam("retained_ids", [row.external_id for row in occurrences], type_=ARRAY(String))))
+            retained = func.unnest(bindparam("retained_ids", [row.external_id for row in occurrences],
+                                            type_=ARRAY(String))).table_valued("id").render_derived()
+            delete_stmt = delete_stmt.where(~select(1).select_from(retained).where(
+                retained.c.id == CalendarOccurrence.external_id).exists())
         await session.execute(delete_stmt)
         for offset in range(0, len(occurrences), 500):
             batch = []
@@ -84,7 +87,13 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
                                                                ~func.coalesce(covered, False)))
         referenced = select(CalendarOccurrence.id).where(CalendarOccurrence.event_id == CalendarEvent.id,
                                                         CalendarOccurrence.source_id == source_id).exists()
-        await session.execute(delete(CalendarEvent).where(CalendarEvent.source_id == source_id, ~referenced))
+        delete_events = delete(CalendarEvent).where(CalendarEvent.source_id == source_id, ~referenced)
+        if events:
+            retained_events = func.unnest(bindparam("retained_event_ids", [event.external_id for event in events],
+                                                   type_=ARRAY(String))).table_valued("id").render_derived()
+            delete_events = delete_events.where(~select(1).select_from(retained_events).where(
+                retained_events.c.id == CalendarEvent.external_id).exists())
+        await session.execute(delete_events)
         state = CalendarSyncState(source_id=source_id, coverage_start=coverage_start, coverage_end=coverage_end,
                                   last_success_at=utcnow(), incomplete=False)
         values = state.model_dump()
