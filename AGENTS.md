@@ -251,6 +251,12 @@ lokalen Tag. Eine neue Serienrevision kann die Zeitzone ausdrücklich setzen.
 
 ## Kalenderdomäne
 
+Die Oberfläche unter `/calendar` zeigt die gemeinsame Agenda; `/calendar/$occurrenceId`
+öffnet eine stabile Instanz. `is_active` bleibt die Freigabe: Pausierte Quellen werden
+in der Verwaltung und als Hinweis angezeigt, ihre Termine bleiben bis zur Aktivierung
+verborgen. Sie tragen nicht zu einer Aussage „Keine Termine“ bei und bleiben auch für
+Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
+
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
 Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen
 vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich auf den Index zu.

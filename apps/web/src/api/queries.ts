@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
-import { promptsList, promptGet, mailSummary, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList } from './generated/sdk.gen'
+import { promptsList, promptGet, mailSummary, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
 import type { MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData } from './generated/types.gen'
 import { dataOr404, unwrap } from './unwrap'
 
@@ -31,3 +31,8 @@ export const uiSettingsQuery = () => queryOptions({ queryKey: ['ui-settings'], r
 export const taskListQuery = (query: Omit<TasksListData['query'], 'cursor'>) => infiniteQueryOptions({ queryKey: ['tasks', 'list', query], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(tasksList({ query: { ...query, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.next_cursor ?? undefined })
 export const taskOccurrencesQuery = (query: Omit<NonNullable<TasksOccurrencesListData['query']>, 'cursor'>) => infiniteQueryOptions({ queryKey: ['tasks', 'occurrences', query], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(tasksOccurrencesList({ query: { ...query, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.next_cursor ?? undefined })
 export const taskDetailQuery = (id: string, query: Omit<TasksGetData['query'], 'cursor'>) => infiniteQueryOptions({ queryKey: ['tasks', 'detail', id, query], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(tasksGet({ path: { series_id: id }, query: { ...query, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.occurrences.next_cursor ?? undefined })
+
+// Calendar reads use the index only; refreshes are explicit management operations.
+export const calendarSourcesQuery = () => queryOptions({ queryKey: ['calendar', 'sources'], queryFn: () => unwrap(calendarSourcesList({ throwOnError: true })) })
+export const calendarPageQuery = (from: string, to: string, source?: string, cursor?: string) => queryOptions({ queryKey: ['calendar', 'occurrences', from, to, source, cursor], queryFn: () => unwrap(calendarOccurrencesList({ query: { from, to, source_ids: source ? [source] : undefined, cursor, limit: 50 }, throwOnError: true })) })
+export const calendarDetailQuery = (id: string) => queryOptions({ queryKey: ['calendar', 'occurrence', id], queryFn: () => unwrap(calendarOccurrenceGet({ path: { occurrence_id: id }, throwOnError: true })) })
