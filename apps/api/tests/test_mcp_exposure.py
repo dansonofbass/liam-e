@@ -40,6 +40,8 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "mail_message_action",
         "mail_sync_all",
         "tasks_create",
+        "tasks_preview",
+        "tasks_reconcile",
         "tasks_occurrence_complete",
         "tasks_occurrence_reopen",
         "tasks_occurrence_skip",

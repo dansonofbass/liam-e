@@ -1605,6 +1605,123 @@
         "title": "OAuthAuthorizeOut",
         "type": "object"
       },
+      "PreviewException": {
+        "properties": {
+          "local": {
+            "title": "Local",
+            "type": "string"
+          },
+          "monthday": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthday"
+          },
+          "reason": {
+            "enum": [
+              "invalid_date",
+              "nonexistent_time"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "local",
+          "reason",
+          "monthday"
+        ],
+        "title": "PreviewException",
+        "type": "object"
+      },
+      "PreviewIn": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 100,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrule"
+          },
+          "start": {
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Start",
+            "type": "string"
+          },
+          "through": {
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Through",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "through",
+          "timezone"
+        ],
+        "title": "PreviewIn",
+        "type": "object"
+      },
+      "PreviewOut": {
+        "properties": {
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "exceptions": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewException"
+            },
+            "title": "Exceptions",
+            "type": "array"
+          },
+          "occurrences": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Occurrences",
+            "type": "array"
+          },
+          "through": {
+            "title": "Through",
+            "type": "string"
+          }
+        },
+        "required": [
+          "occurrences",
+          "exceptions",
+          "through",
+          "complete"
+        ],
+        "title": "PreviewOut",
+        "type": "object"
+      },
       "PromptCreate": {
         "properties": {
           "name": {
@@ -2032,6 +2149,87 @@
           }
         },
         "title": "ProposalResult",
+        "type": "object"
+      },
+      "ReconcileIn": {
+        "additionalProperties": false,
+        "properties": {
+          "advance": {
+            "default": false,
+            "title": "Advance",
+            "type": "boolean"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "limit": {
+            "default": 100,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "series_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Series Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_id"
+        ],
+        "title": "ReconcileIn",
+        "type": "object"
+      },
+      "ReconcileOut": {
+        "properties": {
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "cursor": {
+            "title": "Cursor",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "target": {
+            "format": "date-time",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id",
+          "cursor",
+          "target",
+          "complete"
+        ],
+        "title": "ReconcileOut",
         "type": "object"
       },
       "SendDraft": {
@@ -4698,6 +4896,82 @@
           }
         },
         "summary": "Skip an occurrence"
+      }
+    },
+    "/api/v1/tasks/preview": {
+      "post": {
+        "operationId": "tasks_preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview a task schedule without writes"
+      }
+    },
+    "/api/v1/tasks/reconcile": {
+      "post": {
+        "operationId": "tasks_reconcile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Materialize one bounded task page"
       }
     }
   }

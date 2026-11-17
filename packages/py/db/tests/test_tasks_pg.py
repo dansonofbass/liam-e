@@ -177,6 +177,120 @@ def test_legacy_count_completion_replays_without_changing_existing_instances(pg_
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('local_start,rule,started', [
+    ('2024-03-30T02:30:00', 'FREQ=DAILY;COUNT=3', datetime(2024, 3, 10, tzinfo=UTC)),
+    ('2024-10-26T02:30:00', 'FREQ=DAILY;COUNT=3', datetime(2024, 10, 10, tzinfo=UTC)),
+    ('2024-01-31', 'FREQ=MONTHLY;COUNT=3', datetime(2024, 5, 10, tzinfo=UTC)),
+    ('2023-12-29', 'FREQ=MONTHLY;COUNT=4', datetime(2024, 3, 10, tzinfo=UTC)),
+    ('2024-01-01', 'FREQ=DAILY;UNTIL=20240103', datetime(2024, 1, 1, tzinfo=UTC)),
+])
+def test_preview_and_persistence_share_calendar_fixtures(pg_db, local_start, rule, started):
+    async def run():
+        from datetime import date, timedelta
+        from zoneinfo import ZoneInfo
+        from api.tasks.create import create
+        from api.tasks.preview import preview
+        from api.tasks.reconcile import reconcile_current
+        from db.accessors import task_occurrence
+        from db.engine import get_session_maker
+
+        timed = 'T' in local_start
+        start = datetime.fromisoformat(local_start) if timed else date.fromisoformat(local_start)
+        through = (started + timedelta(days=30)).astimezone(ZoneInfo('Europe/Berlin'))
+        end = through.replace(tzinfo=None) if timed else through.date()
+        expected = preview(start, rule, end, 'Europe/Berlin')['occurrences']
+        async with get_session_maker()() as session:
+            series, _ = await create(session, creation_key='parity', title='Example', start=start,
+                                     rule=rule, zone='Europe/Berlin')
+            await session.commit()
+        cursor = None
+        for _ in range(10):
+            async with get_session_maker()() as session:
+                _, cursor, done = await reconcile_current(session, series_id=series.id, cursor=cursor, limit=2, now=started)
+                await session.commit()
+            if done:
+                break
+        assert done
+        async with get_session_maker()() as session:
+            rows = await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=100)
+            assert [row.occurrence_key for row in rows] == expected
+            assert all((row.due_at is not None) == timed for row in rows)
+
+    asyncio.run(run())
+
+
+def test_reconcile_rollback_resume_advance_and_stale_cursor(pg_db):
+    async def run():
+        from datetime import date
+        from api.tasks.create import create
+        from api.tasks.reconcile import ReconcileConflict, reconcile_current
+        from db.accessors import task_occurrence, task_schedule_revision
+        from db.engine import get_session_maker
+
+        now = datetime(2024, 1, 1, tzinfo=UTC)
+        async with get_session_maker()() as session:
+            series, _ = await create(session, creation_key='resume', title='Example',
+                                     start=date(2024, 1, 1), zone='UTC', rule='FREQ=DAILY')
+            await session.commit()
+        async with get_session_maker()() as session:
+            await reconcile_current(session, series_id=series.id, now=now, limit=7)
+            await session.rollback()
+        async with get_session_maker()() as session:
+            revision = await task_schedule_revision.current(session, series.id)
+            assert revision.reconcile_cursor is None
+            assert await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=100) == []
+            _, first, done = await reconcile_current(session, series_id=series.id, now=now, limit=7)
+            assert not done
+            await session.commit()
+        async with get_session_maker()() as session:
+            with pytest.raises(ReconcileConflict):
+                await reconcile_current(session, series_id=series.id, cursor=first, advance=True,
+                                        now=datetime(2024, 2, 10, tzinfo=UTC))
+            await session.rollback()
+        # Omitted cursors recover the durable position after client restarts.
+        for _ in range(10):
+            async with get_session_maker()() as session:
+                _, cursor, done = await reconcile_current(session, series_id=series.id, limit=7)
+                await session.commit()
+            if done:
+                break
+        assert done
+        async with get_session_maker()() as session:
+            with pytest.raises(ReconcileConflict):
+                await reconcile_current(session, series_id=series.id, cursor=first)
+            await session.rollback()
+            _, advanced, done = await reconcile_current(session, series_id=series.id, cursor=cursor,
+                advance=True, now=datetime(2024, 2, 10, tzinfo=UTC), limit=7)
+            assert not done and advanced != cursor
+            await session.commit()
+        async with get_session_maker()() as session:
+            with pytest.raises(ReconcileConflict):
+                await reconcile_current(session, series_id=series.id, cursor=cursor, advance=True,
+                                        now=datetime(2024, 2, 10, tzinfo=UTC))
+            await session.rollback()
+        for _ in range(10):
+            async with get_session_maker()() as session:
+                _, cursor, done = await reconcile_current(session, series_id=series.id, limit=7)
+                await session.commit()
+            if done:
+                break
+        assert done
+        async with get_session_maker()() as session:
+            rows = await task_occurrence.list_page(session, scope='app', status=None,
+                due_from=None, due_to=None, after=None, limit=100)
+            assert len(rows) == 71
+            assert len({row.occurrence_key for row in rows}) == 71
+            assert rows[-1].due_local == '2024-03-11'
+            with pytest.raises(ReconcileConflict):
+                await reconcile_current(session, series_id=series.id, revision_id='other')
+            with pytest.raises(ReconcileConflict):
+                await reconcile_current(session, series_id='other')
+
+    asyncio.run(run())
+
+
 def test_creation_rolls_back_when_materialization_fails(pg_db, monkeypatch):
     from datetime import date
     from api.main import create_app

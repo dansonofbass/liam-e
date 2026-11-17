@@ -996,6 +996,72 @@ export type OAuthAuthorizeOut = {
 };
 
 /**
+ * PreviewException
+ */
+export type PreviewException = {
+    /**
+     * Local
+     */
+    local: string;
+    /**
+     * Monthday
+     */
+    monthday: number | null;
+    /**
+     * Reason
+     */
+    reason: 'invalid_date' | 'nonexistent_time';
+};
+
+/**
+ * PreviewIn
+ */
+export type PreviewIn = {
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Rrule
+     */
+    rrule?: string | null;
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * Through
+     */
+    through: string;
+    /**
+     * Timezone
+     */
+    timezone: string;
+};
+
+/**
+ * PreviewOut
+ */
+export type PreviewOut = {
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Exceptions
+     */
+    exceptions: Array<PreviewException>;
+    /**
+     * Occurrences
+     */
+    occurrences: Array<string>;
+    /**
+     * Through
+     */
+    through: string;
+};
+
+/**
  * PromptCreate
  */
 export type PromptCreate = {
@@ -1236,6 +1302,54 @@ export type ProposalResult = {
      * Undo Action Ids
      */
     undo_action_ids?: Array<string>;
+};
+
+/**
+ * ReconcileIn
+ */
+export type ReconcileIn = {
+    /**
+     * Advance
+     */
+    advance?: boolean;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Revision Id
+     */
+    revision_id?: string | null;
+    /**
+     * Series Id
+     */
+    series_id: string;
+};
+
+/**
+ * ReconcileOut
+ */
+export type ReconcileOut = {
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Cursor
+     */
+    cursor: string;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Target
+     */
+    target: string;
 };
 
 /**
@@ -2939,3 +3053,53 @@ export type TasksOccurrenceSkipResponses = {
 };
 
 export type TasksOccurrenceSkipResponse = TasksOccurrenceSkipResponses[keyof TasksOccurrenceSkipResponses];
+
+export type TasksPreviewData = {
+    body: PreviewIn;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tasks/preview';
+};
+
+export type TasksPreviewErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksPreviewError = TasksPreviewErrors[keyof TasksPreviewErrors];
+
+export type TasksPreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: PreviewOut;
+};
+
+export type TasksPreviewResponse = TasksPreviewResponses[keyof TasksPreviewResponses];
+
+export type TasksReconcileData = {
+    body: ReconcileIn;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tasks/reconcile';
+};
+
+export type TasksReconcileErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TasksReconcileError = TasksReconcileErrors[keyof TasksReconcileErrors];
+
+export type TasksReconcileResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReconcileOut;
+};
+
+export type TasksReconcileResponse = TasksReconcileResponses[keyof TasksReconcileResponses];

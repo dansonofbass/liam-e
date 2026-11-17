@@ -17,6 +17,44 @@ class TaskCreate(BaseModel):
     source_message_id: str | None = Field(default=None, max_length=200)
 
 
+class PreviewIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    start: str = Field(min_length=10, max_length=26)
+    through: str = Field(min_length=10, max_length=26)
+    timezone: str = Field(min_length=1, max_length=100)
+    rrule: str | None = Field(default=None, max_length=500)
+    limit: int = Field(default=100, ge=1, le=100)
+
+
+class PreviewException(BaseModel):
+    local: str
+    reason: Literal['invalid_date', 'nonexistent_time']
+    monthday: int | None
+
+
+class PreviewOut(BaseModel):
+    occurrences: list[str]
+    exceptions: list[PreviewException]
+    through: str
+    complete: bool
+
+
+class ReconcileIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    series_id: str = Field(min_length=1, max_length=200)
+    revision_id: str | None = Field(default=None, max_length=200)
+    cursor: str | None = Field(default=None, max_length=1024)
+    advance: bool = False
+    limit: int = Field(default=100, ge=1, le=100)
+
+
+class ReconcileOut(BaseModel):
+    revision_id: str
+    cursor: str
+    target: datetime
+    complete: bool
+
+
 class TaskCreated(BaseModel):
     id: str
     version: int

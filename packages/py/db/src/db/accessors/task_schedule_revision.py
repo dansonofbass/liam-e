@@ -18,6 +18,11 @@ async def get_by_version(session: AsyncSession, series_id: str, version: int) ->
     return (await session.execute(query)).scalar_one_or_none()
 
 
+async def current(session: AsyncSession, series_id: str) -> TaskScheduleRevision | None:
+    query = select(TaskScheduleRevision).where(TaskScheduleRevision.series_id == series_id).order_by(TaskScheduleRevision.version.desc()).limit(1)
+    return (await session.execute(query)).scalar_one_or_none()
+
+
 async def get(session: AsyncSession, revision_id: str, *, lock: bool = False) -> TaskScheduleRevision | None:
     query = select(TaskScheduleRevision).where(TaskScheduleRevision.id == revision_id)
     if lock:

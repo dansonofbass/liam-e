@@ -121,6 +121,8 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Mail / Übersicht | GET | `/api/v1/mail/summary` | `mail_summary` |
 | Mail / Abruf | POST | `/api/v1/mail/sync` | `mail_sync_all` |
 | Aufgaben | POST | `/api/v1/tasks` | `tasks_create` |
+| Aufgaben | POST | `/api/v1/tasks/preview` | `tasks_preview` |
+| Aufgaben | POST | `/api/v1/tasks/reconcile` | `tasks_reconcile` |
 | Aufgaben | GET | `/api/v1/tasks/occurrences` | `tasks_occurrences_list` |
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/complete` | `tasks_occurrence_complete` |
 | Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/skip` | `tasks_occurrence_skip` |
@@ -130,8 +132,22 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 
 `api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
 Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite
-in derselben Transaktion. Weitere Seiten werden nicht automatisch abgerufen. Serienrevision,
-Archivieren und Löschen sind noch offen.
+in derselben Transaktion. Weitere Seiten werden ausdrücklich über `POST /tasks/reconcile`
+abgerufen. Serienrevision, Archivieren, Löschen sowie Serienliste und -detail sind noch offen.
+
+Reconcile nimmt eine Serien-ID, optional Revisions-ID und Cursor, `limit` (1–100) und
+`advance`. Ohne Cursor setzt der Aufruf unter Sperre den gespeicherten Fortschritt fort;
+ein mitgelieferter veralteter Cursor ergibt 409. Die Antwort nennt Revisions-ID, Cursor,
+Zielzeitpunkt und `complete` (nur für das feste Fenster ab Serienbeginn bis zum Ziel).
+`advance: true` startet erst nach Abschluss mit dessen exaktem Cursor einen neuen Lauf
+bis Serverzeit plus 30 Tage. Die letzte geprüfte Position bleibt im Abschlusscursor;
+Fortschritt und Einfügen erfolgen gemeinsam in der Transaktion des Aufrufers.
+
+`POST /tasks/preview` schreibt nichts und benötigt Start, Ende und Zeitzone. Das Fenster
+ist auf 366 Tage und die Seite auf 100 Kandidaten begrenzt; `complete: false` bedeutet,
+dass die Vorschau nicht das ganze Fenster zeigt. Sie nennt entfallene lokale Uhrzeiten
+und unmögliche Monatstage monatlicher Regeln. Auch dieser lesende POST bleibt gemäß
+der MCP-Inventur außerhalb freigegebener Agentenoberflächen.
 
 `COUNT` zählt nach RFC 5545 nur existierende Fälligkeiten: Nicht existierende lokale
 Uhrzeiten verbrauchen keinen Zählerplatz. Vorschau und Persistenz verwenden denselben

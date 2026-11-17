@@ -1,6 +1,6 @@
 """Local task boundaries; legacy date-only schedules use UTC without rewriting data."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 
@@ -10,7 +10,7 @@ def is_future(due_local: str, zone: str | None, now: datetime) -> bool:
         raise ValueError('current time must be timezone-aware')
     local_now = now.astimezone(ZoneInfo(zone or 'UTC'))
     if 'T' in due_local.upper():
-        return datetime.fromisoformat(due_local).replace(tzinfo=local_now.tzinfo, fold=0) > local_now
+        return datetime.fromisoformat(due_local).replace(tzinfo=local_now.tzinfo, fold=0).astimezone(UTC) > now.astimezone(UTC)
     return date.fromisoformat(due_local) > local_now.date()
 
 
@@ -19,5 +19,5 @@ def is_overdue(due_local: str, zone: str | None, now: datetime) -> bool:
         raise ValueError('current time must be timezone-aware')
     local_now = now.astimezone(ZoneInfo(zone or 'UTC'))
     if 'T' in due_local.upper():
-        return datetime.fromisoformat(due_local).replace(tzinfo=local_now.tzinfo, fold=0) < local_now
+        return datetime.fromisoformat(due_local).replace(tzinfo=local_now.tzinfo, fold=0).astimezone(UTC) < now.astimezone(UTC)
     return date.fromisoformat(due_local) < local_now.date()

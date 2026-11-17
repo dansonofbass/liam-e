@@ -86,6 +86,9 @@ def test_date_zone_does_not_change_expansion_and_legacy_boundaries_use_utc():
     assert not is_future('2024-01-02', 'Europe/Berlin', now)
     with pytest.raises(ValueError):
         expand(start, 'FREQ=DAILY', end, 'Not/AZone')
+    overlap = datetime(2024, 10, 27, 1, 15, tzinfo=UTC)
+    assert is_overdue('2024-10-27T02:30:00', 'Europe/Berlin', overlap)
+    assert not is_future('2024-10-27T02:30:00', 'Europe/Berlin', overlap)
 
 
 def test_invalid_start_and_zone():
