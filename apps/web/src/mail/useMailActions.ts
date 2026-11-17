@@ -141,11 +141,11 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         if (!options?.silent) notify(de.proposalErrors.item_gone)
       } else if (result.response?.status === 409) {
         rollback()
-        if (!options?.silent) notify(de.inbox.actionUnavailable)
+        if (!options?.silent) notify(de.proposalErrors.action_unsupported)
         return changes.length > 0
       } else if (!result.data || result.response?.status !== 200) {
         rollback()
-        if (!options?.silent) notify(result.response?.status === 502 && errorCode(result.error) === 'provider_failed' ? de.errors.provider_failed : de.inbox.actionUncertain)
+        if (!options?.silent) notify(result.response?.status === 502 && errorCode(result.error) === 'provider_failed' ? de.errors.provider_failed : de.errors.action_uncertain)
         return changes.length > 0
       } else {
         if (removal) reconcile.current = true
@@ -159,7 +159,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       }
     } catch {
       rollback()
-      if (!options?.silent) notify(de.inbox.actionUncertain)
+      if (!options?.silent) notify(de.errors.action_uncertain)
       return changes.length > 0
     } finally {
       if (!options?.silent) { reservations.current--; setReserved(reservations.current) }
