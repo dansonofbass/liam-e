@@ -56,3 +56,13 @@ test('the phone plus outside a conversation leaves the start selection and draft
   expect(start.dataset.scope).toBe('a')
   expect(start.dataset.draft).toBe('Bleibt')
 })
+// The router matches paths case-insensitively; the phone plus reads the conversation from the match.
+test('the phone plus carries state from a conversation path in any spelling', async () => {
+  const router = setup('/CHAT/one')
+  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  const start = await screen.findByTestId('start')
+  expect(start.dataset.scope).toBe('a')
+  expect(start.dataset.draft).toBe('Noch offen')
+})

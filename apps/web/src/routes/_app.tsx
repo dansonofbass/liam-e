@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
+import { createFileRoute, Outlet, useLocation, useParams } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { mailSyncAll } from '../api/generated/sdk.gen'
@@ -31,7 +31,8 @@ export function Shell() {
   }, [client, summary])
   const path = useLocation({ select: location => location.pathname })
   // The phone bar restarts from the open conversation only; every other page keeps the start page as it is.
-  const conversationId = /^\/chat\/([^/]+)$/u.exec(path)?.[1]
+  // The id comes from the matched route, so any spelling the router accepts (`/CHAT/<id>`) carries state.
+  const { conversationId } = useParams({ strict: false }) as { conversationId?: string }
   useEffect(() => {
     if (started) return
     started = true
