@@ -1,3 +1,5 @@
+.le-feed-form { display: flex; flex-direction: column; gap: var(--space-3); }
+.le-feed-form > * { min-width: 0; flex-shrink: 0; }
 .le-calendar { display: flex; min-height: 0; flex: 1; overflow: hidden; }
 .le-calendar-agenda, .le-calendar-detail { min-width: 0; overflow-y: auto; padding: var(--space-5); flex: 1; }
 .le-calendar-agenda > *, .le-calendar-detail > * { margin-bottom: var(--space-4); }

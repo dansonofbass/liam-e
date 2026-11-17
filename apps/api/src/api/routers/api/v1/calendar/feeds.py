@@ -43,7 +43,7 @@ class SubscribeInput(FeedInput):
     validation_id: str = Field(repr=False, min_length=40, max_length=100)
 
 
-class PreviewOut(BaseModel):
+class FeedPreviewOut(BaseModel):
     validation_id: str
     name: str
     coverage_start: datetime
@@ -61,10 +61,10 @@ def config(body: FeedInput):
 
 
 @router.post("/validate", operation_id="calendar_feed_validate")
-async def validate(body: FeedInput) -> PreviewOut:
+async def validate(body: FeedInput) -> FeedPreviewOut:
     normalized = config(body)
     try:
-        return PreviewOut(**await feeds.validate(normalized))
+        return FeedPreviewOut(**await feeds.validate(normalized))
     except feeds.FeedError:
         raise HTTPException(422, "calendar_feed_unavailable") from None
 

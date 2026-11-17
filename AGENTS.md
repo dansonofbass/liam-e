@@ -87,6 +87,9 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages` | `liam_mail_search` |
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages/{message_id}` | `liam_mail_read` |
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/summary` | `liam_mail_summary` |
+| Kalender | POST | `/api/v1/calendar/feeds/validate` | `calendar_feed_validate` |
+| Kalender | POST | `/api/v1/calendar/feeds` | `calendar_feed_subscribe` |
+| Kalender | DELETE | `/api/v1/calendar/feeds/validations/{validation_id}` | `calendar_feed_validation_discard` |
 | Kalender | GET | `/api/v1/calendar/sources` | `calendar_sources_list` |
 | Kalender | PATCH | `/api/v1/calendar/sources/{source_id}` | `calendar_source_update` |
 | Kalender | DELETE | `/api/v1/calendar/sources/{source_id}` | `calendar_source_delete` |
@@ -256,10 +259,12 @@ Die Oberfläche unter `/calendar` zeigt die gemeinsame Agenda; `/calendar/$occur
 in der Verwaltung und als Hinweis angezeigt, ihre Termine bleiben bis zur Aktivierung
 verborgen. Sie tragen nicht zu einer Aussage „Keine Termine“ bei und bleiben auch für
 Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
-`CalendarSetup` in `apps/web/src/calendar/CalendarSources.tsx` ist der Anschluss für
-spätere geprüfte Providerformulare. Aktuell zeigt er nur die fehlende Verfügbarkeit;
-er registriert keinen Adapter und bietet keine Verbindungsaktion an. Ein späteres
-Formular muss nach erfolgreicher Einrichtung die Query-Gruppe `calendar` invalidieren.
+`CalendarSetup` in `apps/web/src/calendar/CalendarSources.tsx` öffnet das ICS-Formular
+`FeedSetup`: Name, private Kalenderadresse und ausdrücklich angezeigte Fallbackzone.
+`webcal` wird sichtbar zu `https`; die Serverprüfung normalisiert unabhängig nochmals.
+Adresse und Prüftoken bleiben nur im Dialogzustand, nie im Browser-Storage oder Query-Cache.
+Änderungen verwerfen die Prüfung; Abonnieren und Adresswechsel invalidieren die Query-Gruppe
+`calendar`. Google-Einrichtung ist weiterhin nicht freigegeben.
 Die Agenda gruppiert und zeigt Zeitpunkte in der Browser-Zeitzone; Ganztägiges bleibt
 bei seinem Datum. Lokale Tagesgrenzen werden in Zeitpunkte umgerechnet. Weil der
 Index-Endpunkt nur ganze UTC-Daten akzeptiert, wird das Abfragefenster nach außen
@@ -300,14 +305,39 @@ Termindaten. Ort und Beschreibung fehlen im Indexvertrag und werden nicht vorget
 Die autogenerierte Migration ergänzt die Spalte mit Serverstandard und führt die bestehenden
 Migrationsköpfe zusammen; sie wurde nicht von Hand geändert.
 
-Für ICS-Abonnements stehen die privaten Tabellen `calendar_feed_config` und
-`calendar_feed_validation` bereit. Prüfungen werden in der Transaktion der späteren
-Anlage per `DELETE RETURNING` einmalig verbraucht, an Kontext, Konfiguration und Ablauf
-gebunden. `feed_secrets.py` verwendet den bestehenden Fernet-Schlüssel; nur ein Hash
+ICS-Abonnements verwenden die privaten Tabellen `calendar_feed_config` und
+`calendar_feed_validation`. `POST /calendar/feeds/validate` verwendet denselben sicheren
+Abruf und isolierten Parser wie Jobs. Erst nach vollständiger Prüfung wird die gesamte
+Konfiguration verschlüsselt gespeichert; die redigierte Vorschau enthält nur den selbst
+gewählten Namen, Fenster und Anzahl. Prüftokens gelten genau zehn Minuten und werden
+per `DELETE RETURNING` in der Anlagetransaktion einmalig verbraucht. Der feste serverseitige
+Scope ist `installation`; Konfiguration einschließlich Ersatzquelle und Quellenrevision
+ist gebunden. `feed_secrets.py` nutzt den bestehenden Fernet-Schlüssel; nur ein Hash
 zufälliger Prüftokens wird gespeichert, Konfigurationsprüfsummen sind mit dem Token
-gekeyt. Diese Speicherbausteine geben noch keine Abonnement-Endpunkte frei.
-Quellenrevisionen sperren veraltete Snapshot-Commits auch nach Pausieren und erneutem
-Aktivieren. Entfernen löscht die private Konfiguration in derselben Transaktion.
+gekeyt. Abbruch verwirft die Prüfung ausdrücklich; der Worker bereinigt Ablauf jede Minute
+sowie bei weiteren Prüfungen/Anlagen. Schemafehler geben keine Eingabewerte zurück.
+`POST /calendar/feeds` legt die Quelle und den ersten Job atomar an; mit geprüfter
+`source_id`/`expected_revision` ersetzt derselbe Endpunkt die alte Adresse atomar.
+Die bestehende Generation bleibt bis zum erfolgreichen Abruf erhalten; alte Validatoren
+werden beim Adresswechsel entfernt. Verwaltungsoperationen sind keine Agenten-Lesetools.
+
+`StoredICSAdapter` wird im gemeinsamen Dispatch registriert. Jobpayloads enthalten nur
+`source_id`; Fenster werden zur Ausführung als heute −30 bis +180 Tage bestimmt.
+HTTP-Validatoren sind verschlüsselt und werden mit dem vollständig validierten Snapshot
+atomar aktiviert. 304 expandiert gespeicherte Komponenten erneut, auch für ein neues Fenster.
+Ein gültiger leerer Snapshot leert den Bestand; Fehler erhalten Generation und Abdeckung.
+Quellenrevisionen sperren veraltete Snapshot-Commits auch nach Pause/Resume oder Adresswechsel.
+Ein gemeinsames transaktionales Advisory-Lock serialisiert Queue, Ersatz, Entfernen und
+Snapshotaktivierung; Entfernen löscht Jobs, Index, Status und private Konfiguration.
+Historische Chattexte bleiben bestehen; aktive Quellenscope-Prüfungen sperren entfernte Quellen.
+
+`CALENDAR_SYNC_INTERVAL_MINUTES` ist standardmäßig 30. Der gemeinsame Worker prüft jede Minute
+aktive ICS-Quellen, unabhängig von der Mailperiodik. Beim Öffnen fragt die Agenda über den
+Verwaltungsendpunkt mit `due_only=true` nur fällige Abrufe an. Manuelles Abrufen hat eine
+persistierte Minute Wartezeit. 429/5xx und Transportfehler erhalten begrenzten exponentiellen
+Backoff mit Jitter; nach drei Fehlern endet automatisches Wiederholen bis zum manuellen Abruf.
+401/403/404 fordern eine Adressprüfung und stoppen automatische Versuche sofort. Pausierte
+Quellen und Seeds werden nicht abgerufen; gestoppte Studio-Instanzen garantieren keine Periodik.
 
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
 Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen
@@ -324,7 +354,7 @@ Instanz sie referenziert; enthaltene Ereignisse bleiben auch ohne Instanzen erha
 Snapshot vorliegt oder der Index unvollständig ist; ohne periodischen Abruf sagt das Alter des
 letzten Erfolgs allein nichts über die Aktualität beim Anbieter aus.
 
-`ics_fetch.py` provides the unregistered HTTPS acquisition layer for ICS. It shares the
+`ics_fetch.py` provides the HTTPS acquisition layer for ICS. It shares the
 numeric-pinned streaming transport in `mail/netguard.py`, rejects non-public/mixed DNS
 answers and mapped/transition addresses, and permits only HTTPS:443 with three same-origin
 redirects within one 15-second deadline. Wire and decoded bodies each have a 5 MiB limit;
@@ -333,7 +363,8 @@ the HTTPS spelling (including private path/query data) for owner confirmation; n
 Fetch results hide body and validators from repr, and task-local filtering suppresses
 httpcore traces that could expose headers or protocol content.
 
-`ics.py` combines acquisition and isolated parsing in `ICSAdapter` (not registered). It
+`ics.py` combines acquisition and isolated parsing in `ICSAdapter`, used per request by
+`feed_jobs.StoredICSAdapter` and the privileged validation service. It
 accepts an explicit fallback IANA zone and UTC-midnight window; `default_window` supplies
 today −30 to +180 days. A 304 requires previously normalized events and re-expands them for
 the requested window; it never treats an old window as fresh coverage. `ics_parse.py` uses

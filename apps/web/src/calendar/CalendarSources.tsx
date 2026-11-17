@@ -10,6 +10,7 @@ import { Button, Notice } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
 import { de } from '../i18n/de'
 import { SourceStatus } from './CalendarPage'
+import { FeedSetup } from './FeedSetup'
 
 function RemoveSource({ source, close, removed }: { source: SourceOut; close: () => void; removed: () => void }) {
   const [pending, setPending] = useState(false), [error, setError] = useState(false)
@@ -32,14 +33,16 @@ function RemoveSource({ source, close, removed }: { source: SourceOut; close: ()
   </div></div>, document.body)
 }
 
-/** Provider setup belongs to adapter issues. Mount reviewed forms in CalendarSetup only. */
+/** ICS setup shares the calendar query group and agenda with all sources. */
 export function CalendarSetup() {
-  return <Notice tone="info">{de.calendar.unavailable}</Notice>
+  const [open, setOpen] = useState(false), client = useQueryClient()
+  return <><Button variant="secondary" onClick={() => setOpen(true)}>{de.calendar.subscribe}</Button>
+    {open && <FeedSetup close={() => setOpen(false)} saved={() => { setOpen(false); void client.invalidateQueries({ queryKey: ['calendar'] }) }} />}</>
 }
 export function CalendarSources() {
   const sources = useQuery(calendarSourcesQuery()), client = useQueryClient()
   const [pending, setPending] = useState<string[]>([]), [messages, setMessages] = useState<Record<string, string>>({})
-  const [removing, setRemoving] = useState<SourceOut>()
+  const [removing, setRemoving] = useState<SourceOut>(), [replacing, setReplacing] = useState<SourceOut>()
   const heading = useRef<HTMLHeadingElement>(null)
   const invalidate = () => { void client.invalidateQueries({ queryKey: ['calendar'] }) }
   const action = async (source: SourceOut, refresh: boolean) => {
@@ -47,7 +50,7 @@ export function CalendarSources() {
     try {
       const result = refresh ? await calendarSourceSync({ path: { source_id: source.id } }) : await calendarSourceUpdate({ path: { source_id: source.id }, body: { is_active: !source.is_active } })
       if (result.error || !result.response?.ok) throw new Error()
-      setMessages(current => ({ ...current, [source.id]: refresh ? (result.data && 'queued' in result.data && result.data.queued ? de.calendar.queued : de.calendar.notQueued) : '' }))
+      setMessages(current => ({ ...current, [source.id]: refresh ? (result.data && 'queued' in result.data && result.data.queued ? de.calendar.queued : source.provider === 'ics' ? de.calendar.feedNotQueued : de.calendar.notQueued) : '' }))
       invalidate()
     } catch { setMessages(current => ({ ...current, [source.id]: refresh ? de.calendar.refreshError : de.calendar.actionError })) }
     finally { setPending(current => current.filter(id => id !== source.id)) }
@@ -63,10 +66,12 @@ export function CalendarSources() {
       <div className="le-calendar-controls">
         <Button variant="secondary" disabled={pending.includes(source.id)} onClick={() => { void action(source, false) }}>{source.is_active ? de.calendar.pause : de.calendar.activate}</Button>
         {source.is_active && <Button variant="ghost" icon="refresh-cw" disabled={pending.includes(source.id)} onClick={() => { void action(source, true) }}>{de.calendar.refresh}</Button>}
+        {source.provider === 'ics' && <Button variant="ghost" disabled={pending.includes(source.id)} onClick={() => setReplacing(source)}>{de.calendar.replaceAddress}</Button>}
         <Button variant="ghost" disabled={pending.includes(source.id)} onClick={() => setRemoving(source)}>{de.calendar.remove}</Button>
       </div>
       {messages[source.id] && <Notice tone="info">{messages[source.id]}</Notice>}
     </section>)}
+    {replacing && <FeedSetup source={replacing} close={() => setReplacing(undefined)} saved={() => { setReplacing(undefined); invalidate() }} />}
     {removing && <RemoveSource source={removing} close={() => setRemoving(undefined)} removed={() => { setRemoving(undefined); invalidate(); heading.current?.focus() }} />}
   </section>
 }

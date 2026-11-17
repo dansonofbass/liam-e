@@ -58,9 +58,12 @@ async def remove(source_id: str) -> Response:
 
 
 @router.post("/{source_id}/sync", operation_id="calendar_source_sync")
-async def refresh(source_id: str) -> SyncOut:
+async def refresh(source_id: str, due_only: bool = False) -> SyncOut:
     source = await calendar_source.get(source_id)
     if source is None or not source.is_active:
         raise HTTPException(404, "source_not_found")
+    if source.provider == "ics":
+        from api.calendar.feed_jobs import enqueue
+        return SyncOut(queued=await enqueue(source_id, manual=not due_only))
     today = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)
     return SyncOut(queued=await sync.enqueue(source_id, today - timedelta(days=30), today + timedelta(days=60)))
