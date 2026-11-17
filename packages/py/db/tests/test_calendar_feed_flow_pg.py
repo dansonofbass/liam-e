@@ -66,6 +66,48 @@ def test_setup_ttl_binding_cleanup_and_replacement(pg_db, monkeypatch, caplog):
     asyncio.run(run())
 
 
+def test_seed_replacement_preserves_proof_and_never_writes_config(pg_db, monkeypatch):
+    async def run():
+        from api.calendar import feed_secrets, feeds, ics
+        from api.calendar.adapters import Snapshot
+        from api.calendar.seed_ids import SEED_CALENDAR_IDS
+        from db.engine import get_session_maker
+        from db.models.calendar_feed_config import CalendarFeedConfig
+        from db.models.calendar_feed_validation import CalendarFeedValidation
+        from db.models.calendar_source import CalendarSource
+        from db.models.mail_job import MailJob
+        from env.mail import env
+
+        monkeypatch.setattr(env, "mail_token_encryption_key", Fernet.generate_key().decode())
+
+        async def snapshot(*args):
+            return Snapshot([], [], True)
+
+        monkeypatch.setattr(ics.ICSAdapter, "snapshot", snapshot)
+        now = datetime(2026, 1, 1, tzinfo=UTC)
+        for source_id in SEED_CALENDAR_IDS:
+            source = CalendarSource(id=source_id, provider="ics", connection_ref="seed",
+                                    external_id=source_id, name="Example", timezone="UTC")
+            async with get_session_maker()() as session:
+                session.add(source)
+                await session.commit()
+            config = feeds.configuration(name="Replacement", url="https://calendar.example/test-only",
+                                         timezone="UTC", source_id=source_id, expected_revision=source.revision)
+            preview = await feeds.validate(config, clock=lambda: now)
+            with pytest.raises(feeds.FeedError, match="^calendar_validation_expired_or_changed$"):
+                await feeds.subscribe(preview["validation_id"], config, now=now)
+            async with get_session_maker()() as session:
+                proof = (await session.execute(select(CalendarFeedValidation).where(
+                    CalendarFeedValidation.token_digest == feed_secrets.token_digest(preview["validation_id"])
+                ))).scalar_one()
+                assert proof.expires_at == now + timedelta(minutes=10)
+                assert await session.get(CalendarFeedConfig, source_id) is None
+                unchanged = await session.get(CalendarSource, source_id)
+                assert unchanged.revision == source.revision and unchanged.name == "Example"
+                assert not (await session.execute(select(MailJob))).scalars().all()
+    asyncio.run(run())
+
+
 def test_feed_snapshots_304_empty_failure_and_remove_during_fetch(pg_db, monkeypatch):
     async def run():
         from api.calendar import feeds, ics, ics_fetch, sync

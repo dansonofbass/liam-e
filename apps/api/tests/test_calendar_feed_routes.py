@@ -36,6 +36,23 @@ def test_nonprintable_or_invalid_length_names_are_rejected(name):
         feeds.configuration(name=name, url="https://calendar.example/test-only", timezone="UTC")
 
 
+def test_seed_address_replacement_is_a_conflict_without_database_access(client, monkeypatch):
+    from api.calendar import feeds
+    from api.calendar.seed_ids import SEED_CALENDAR_IDS
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("Seed replacement must fail before touching private storage")
+
+    monkeypatch.setattr(feeds, "purge", unexpected)
+    monkeypatch.setattr(feeds.calendar_feed_subscription, "subscribe", unexpected)
+    response = client.post("/api/v1/calendar/feeds", json={
+        "name": "Replacement", "url": "https://calendar.example/test-only", "timezone": "UTC",
+        "source_id": next(iter(SEED_CALENDAR_IDS)), "expected_revision": 1,
+        "validation_id": "test-only-" * 5})
+    assert response.status_code == 409
+    assert response.json() == {"detail": "calendar_validation_expired_or_changed"}
+
+
 def test_discard_accepts_only_a_body_token(client, monkeypatch):
     from api.calendar import feeds
     calls = []

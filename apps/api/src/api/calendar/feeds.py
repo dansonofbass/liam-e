@@ -16,6 +16,7 @@ from db.models.calendar_feed_validation import CalendarFeedValidation
 from api.calendar import feed_secrets
 from api.calendar.ics import ICSAdapter, default_window
 from api.calendar.ics_fetch import normalize_url
+from api.calendar.seed_ids import SEED_CALENDAR_IDS
 
 CONTEXT = "installation"
 TTL = timedelta(minutes=10)
@@ -85,6 +86,8 @@ async def validate(config: dict, *, clock=None) -> dict:
 
 
 async def subscribe(token: str, config: dict, *, now: datetime | None = None):
+    if config["source_id"] in SEED_CALENDAR_IDS:
+        raise FeedError("calendar_validation_expired_or_changed")
     now = now or datetime.now(UTC)
     await purge(now)
     source = await calendar_feed_subscription.subscribe(
