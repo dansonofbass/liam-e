@@ -65,6 +65,23 @@ test('a failed instance request offers retry', async () => {
   expect(await screen.findByRole('link', { name: 'Planung' })).toBeTruthy()
 })
 
+test('an instance the index no longer has reads as unavailable without retry', async () => {
+  const { detail } = setup()
+  detail.mockRejectedValueOnce({ detail: 'occurrence_not_found' })
+  expect(await screen.findByText(de.calendar.missing)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: de.calendar.retry })).toBeNull()
+  expect(detail).toHaveBeenCalledTimes(1)
+})
+
+test('pausing the source after a failed instance request shows it as unavailable, not a dead retry', async () => {
+  const { client, detail } = setup()
+  detail.mockRejectedValueOnce(new Error('test-only'))
+  expect(await screen.findByText(de.calendar.error)).toBeTruthy()
+  act(() => client.setQueryData(['calendar', 'sources'], [{ ...source, is_active: false }]))
+  expect(await screen.findByText(de.calendar.missing)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: de.calendar.retry })).toBeNull()
+})
+
 test('calendar evidence links the exact instance with source and incomplete status', async () => {
   setup()
   expect((await screen.findByRole('link', { name: 'Planung' })).getAttribute('href')).toBe('/calendar/test-only-occurrence')
