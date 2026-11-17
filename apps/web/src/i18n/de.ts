@@ -22,7 +22,7 @@ export const de = {
     error: 'Kalender konnten nicht geladen werden. Versuch es noch mal.', empty: 'Keine Termine im gespeicherten Zeitraum.',
     unavailable: 'Kalender lassen sich noch nicht verbinden. Die Einrichtung für Google und abonnierte Kalender ist noch nicht verfügbar.',
     manage: 'Kalender verwalten', refresh: 'Abrufen', more: 'Weitere Termine laden', allDay: 'Ganztägig',
-    range: 'Wähle einen Zeitraum von 1 bis 90 Tagen.', select: 'Wähle einen Termin aus der Agenda.', back: 'Zur Agenda',
+    range: 'Wähle einen Zeitraum von 1 bis 90 Tagen.', select: 'Wähle einen Termin aus.', back: 'Zur Agenda',
     missing: 'Dieser Termin ist nicht mehr verfügbar oder sein Kalender ist nicht freigegeben.',
     readOnly: 'Nur lesen', ics: 'Abonnierter Kalender · Nur lesen', google: 'Google Kalender · Nur lesen',
     stored: 'Gespeicherter Stand', never: 'Noch kein erfolgreicher Abruf', incomplete: 'Der gespeicherte Stand ist unvollständig.',
