@@ -6,6 +6,10 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class ReadError(BaseModel):
+    detail: str
+
+
 class IndexStatus(BaseModel):
     account_id: str
     last_sync_at: datetime | None = Field(description="Time of the last stored sync attempt, not necessarily a success.")

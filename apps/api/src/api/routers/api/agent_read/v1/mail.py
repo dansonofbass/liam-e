@@ -5,13 +5,36 @@ import time
 from collections.abc import Awaitable
 from typing import Annotated, TypeVar
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 
 from api.mcp import mail as service
 from api.mcp.access import ReadGrant, require_read_access
-from api.mcp.schemas import AccountsResult, ReadResult, SearchResult, SummaryResult
+from api.mcp.schemas import AccountsResult, ReadError, ReadResult, SearchResult, SummaryResult
 
-router = APIRouter()
+
+class ReadRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def safe_handler(request: Request):
+            try:
+                return await handler(request)
+            except RequestValidationError:
+                # Do not reflect potentially huge or sensitive inputs in error responses.
+                return JSONResponse(status_code=422, content={"detail": "invalid_request"})
+
+        return safe_handler
+
+
+router = APIRouter(route_class=ReadRoute, responses={
+    401: {"model": ReadError, "description": "Missing or invalid access"},
+    403: {"model": ReadError, "description": "Insufficient account scope"},
+    404: {"model": ReadError, "description": "Message not found"},
+    422: {"model": ReadError, "description": "Invalid parameters"},
+})
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 

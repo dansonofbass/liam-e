@@ -152,6 +152,9 @@ def test_four_reads_scope_pagination_and_missing_state(authorized):
     assert client.get(BASE + "/messages", params={"query": "nothing"}).json()["untrusted_messages"] == []
     assert client.get(BASE + "/messages", params={"limit": 51}).status_code == 422
     assert client.get(BASE + "/messages", params={"limit": 0}).status_code == 422
+    invalid = client.get(BASE + "/messages", params={"query": "s" * 10000})
+    assert invalid.status_code == 422 and invalid.json() == {"detail": "invalid_request"}
+    assert len(invalid.content) < 100
     rows[0].body_text = ""
     rows[0].folder = "ARCHIVE"
     archived = client.get(BASE + "/messages/" + rows[0].id).json()
