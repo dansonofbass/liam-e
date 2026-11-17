@@ -37,8 +37,16 @@ SYNTHETIC_LOCAL_PART = re.compile(r"^(?:[a-z]|me|test|user|noreply|no-reply)$")
 
 ADDRESS = re.compile(r"(?<![\w.%+-])([A-Za-z0-9._%+-]+)@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?![\w.-]*\w)")
 HOME_PATH = re.compile(r"(?<![\w.~-])/(?:home|Users)/[A-Za-z_][\w.-]*(?![\w-])")
-WINDOWS_HOME = re.compile(r"(?i)(?<![\w])[a-z]:\\Users\\[^\\\s\"'<>]+")
-PRIVATE_LINK = re.compile(r"(?<![\w-])claude\.ai/(?:artifact|chat|code|project|public|share)/[A-Za-z0-9_-]+")
+# One or two backslashes: a plain path or one escaped in JSON or a string literal.
+WINDOWS_HOME = re.compile(r"(?i)(?<![\w])[a-z]:\\{1,2}Users\\{1,2}[^\\\s\"'<>]+")
+# The host must be claude.ai itself: right after a scheme, or standing alone (not a path segment
+# or the tail of another host). Hosts are case-insensitive.
+PRIVATE_LINK = re.compile(
+    r"(?i)(?:(?<=://)|(?<![\w./-]))(?:www\.)?claude\.ai/(?:artifact|chat|code|project|public|share)/[a-z0-9_-]+"
+)
+# Strings that look like a home path but are not one, such as a web route under "/home". Each
+# entry is the exact match and needs a comment saying where it occurs and why it is harmless.
+NOT_HOME_PATHS: frozenset[str] = frozenset()
 DEPLOYMENT_KEYS = ("organizationId", "workspaceId", "appId")
 
 
@@ -99,7 +107,8 @@ def test_no_links_to_private_claude_resources() -> None:
 
 
 def test_no_absolute_home_paths() -> None:
-    assert hits(HOME_PATH) + hits(WINDOWS_HOME) == [], "use repository-relative paths or a placeholder"
+    found = hits(HOME_PATH, keep=lambda match: match.group(0) not in NOT_HOME_PATHS) + hits(WINDOWS_HOME)
+    assert found == [], "use repository-relative paths or a placeholder; a route is listed in NOT_HOME_PATHS"
 
 
 def is_personal_address(match: re.Match[str]) -> bool:
@@ -144,6 +153,7 @@ def test_address_rule(address: str, personal: bool) -> None:
         ("/home" + "/_build/project", True),
         ("/Users" + "/someone/x", True),
         ("C:" + "\\Users\\Someone\\project", True),
+        ('{"path": "C:' + '\\\\Users\\\\Someone\\\\project"}', True),
         ("~/project", False),
         ("/home/", False),
         ("apps/home/view.tsx", False),
@@ -162,7 +172,11 @@ def test_home_path_rule(text: str, flagged: bool) -> None:
         ("https://claude" + ".ai/chat/00000000-0000-4000-8000-000000000000", True),
         ("https://claude" + ".ai/project/test-only", True),
         ("https://claude" + ".ai/share/test-only", True),
+        ("https://CLAUDE" + ".AI/chat/test-only", True),
+        ("(see claude" + ".ai/share/test-only)", True),
         ("https://notclaude" + ".ai/artifact/test-only", False),
+        ("https://example.org/claude" + ".ai/chat/test-only", False),
+        ("https://sub.claude" + ".ai.example/chat/test-only", False),
         ("https://claude" + ".ai/", False),
     ],
 )
