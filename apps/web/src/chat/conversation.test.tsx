@@ -373,6 +373,25 @@ test('a restored task choice never repeats an offered label', async () => {
   expect(names).toEqual(['Keine Aufgaben', 'Alle Aufgaben', 'Aufgaben dieses Kontos', 'Gespeichert: Alle Aufgaben'])
 })
 
+test('a restored account-and-personal choice without a mail account is marked as saved', async () => {
+  const { client } = setup('/chat/c')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context: restoredContext({ source: 'account_and_unlinked', account_id: 'a' }) }]) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Gespeichert: Alle Aufgaben' }))
+  const names = (await screen.findAllByRole('menuitemradio')).map(item => item.querySelector('.le-menu-title')?.textContent)
+  expect(new Set(names).size).toBe(names.length)
+})
+
+test('a restored account the menu does not offer shows its listed name', async () => {
+  const { client } = setup('/chat/c', false, 'a')
+  summary.accounts.push({ ...summary.accounts[0]!, id: 'b', display_name: 'Arbeit', email_address: 'work@example.org' })
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context: restoredContext({ source: 'account', account_id: 'b' }) }]) })
+  expect(await screen.findByRole('button', { name: 'Aufgaben: Arbeit' })).toBeTruthy()
+})
+
 test('a restored account choice waits for the account list before calling the account unavailable', async () => {
   let release = () => {}
   summaryGate = new Promise<void>(resolve => { release = resolve })
