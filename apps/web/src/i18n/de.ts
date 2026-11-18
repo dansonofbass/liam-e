@@ -71,6 +71,9 @@ export const de = {
     days: ['Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.', 'So.'],
   },
   calendar: {
+    month: 'Monat', week: 'Woche', day: 'Tag', list: 'Liste', previous: 'Vorheriger Zeitraum', next: 'Nächster Zeitraum',
+    capped: 'Nicht alle Termine wurden geladen. Wähle einen kürzeren Zeitraum.',
+    further: (count: number) => `+${count} weitere`, sourceDetails: 'Kalenderstand anzeigen',
     subscribe: 'Kalender abonnieren', subscribeConfirm: 'Abonnieren', replaceAddress: 'Adresse ersetzen',
     googleConnect: 'Google Kalender verbinden', googleLoading: 'Google-Kalender werden geladen …',
     googleChoose: 'Wähle die Kalender aus, die du in liam-e sehen möchtest. liam-e liest nur und ändert nichts bei Google.',

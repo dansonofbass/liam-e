@@ -20,6 +20,28 @@
 .le-calendar-detail > .le-link { display: inline-flex; align-items: center; }
 .le-calendar-back { display: inline-flex; align-items: center; }
 .le-calendar-placeholder { background: var(--surface-soft); border-radius: var(--radius-sm); height: var(--space-8); }
+.le-calendar-grid-page { min-width: 0; flex: 1; overflow: auto; padding: var(--space-5); }
+.le-calendar-grid-page > * { margin-bottom: var(--space-3); }
+.le-source-dot { display: inline-block; width: 8px; height: 8px; border-radius: var(--radius-pill); margin-right: var(--space-1); }
+.le-source-dot--1 { background: var(--acc-1); }
+.le-source-dot--2 { background: var(--acc-2); }
+.le-source-dot--3 { background: var(--acc-3); }
+.le-source-dot--4 { background: var(--acc-4); }
+.le-month-grid { border: 1px solid var(--line); }
+.le-month-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto repeat(3, minmax(24px, auto)) auto; }
+.le-month-cell { min-width: 0; border: 1px solid var(--line); }
+.le-month-cell--outside { background: var(--surface-soft); }
+.le-month-date { max-width: 100%; min-width: 0; z-index: 1; }
+.le-month-event, .le-time-all-day { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); background: var(--accent-soft); }
+.le-month-event, .le-month-more { z-index: 1; }
+.le-time-days, .le-time-columns { display: grid; }
+.le-time-days > div { min-width: 0; border: 1px solid var(--line); }
+.le-time-scroll { overflow: auto; max-height: 65vh; }
+.le-time-column { position: relative; min-width: 0; border: 1px solid var(--line); }
+.le-time-slot { position: absolute; left: 0; width: 100%; height: 48px; justify-content: flex-start; border-top: 1px solid var(--line); }
+.le-time-event { position: absolute; z-index: 1; overflow: hidden; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius-sm); }
+.le-time-now { position: absolute; left: 0; right: 0; border-top: 2px solid var(--danger); pointer-events: none; }
+@media (pointer: coarse) { .le-month-event, .le-time-all-day, .le-time-event { min-height: var(--control-height-lg); min-width: var(--control-height-lg); } }
 /* On the accounts page the sources are cards like the accounts above them. */
 .le-calendar-sources { display: flex; flex-direction: column; gap: var(--space-4); max-width: 1180px; margin-top: var(--space-6); }
 .le-calendar-sources > h2 { margin: 0; }
