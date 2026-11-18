@@ -41,6 +41,7 @@ class CandidateInput(BaseModel):
 
 
 class CandidateOut(BaseModel):
+    origin: Literal['explicit', 'extractor'] = 'explicit'
     id: str
     conversation_id: str
     source_message_id: str
@@ -64,7 +65,7 @@ async def view(session, row):
     previous, current, revision, account = await candidates.presentation(session, row)
     visible = row.status in {'pending', 'accepted'}
     source = await candidates.source(session, row.conversation_id, row.source_message_id) if visible else None
-    return CandidateOut(id=row.id, conversation_id=row.conversation_id, source_message_id=row.source_message_id,
+    return CandidateOut(origin=row.origin, id=row.id, conversation_id=row.conversation_id, source_message_id=row.source_message_id,
         source_text=source.content if source else None, key=row.key, scope=row.scope,
         account_name=(account.display_name or account.email_address) if account else None,
         value=row.value if visible else None, status=row.status, proposal_id=row.proposal_id,

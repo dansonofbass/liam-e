@@ -560,6 +560,15 @@
             "title": "Key",
             "type": "string"
           },
+          "origin": {
+            "default": "explicit",
+            "enum": [
+              "explicit",
+              "extractor"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
           "previous_value": {
             "anyOf": [
               {

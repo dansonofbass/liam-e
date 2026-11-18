@@ -113,7 +113,7 @@ async def expire_scope(session, key=None, scope=None, preference_id=None):
         await erase(session, row)
 
 
-async def create(session, *, conversation_id, source_message_id, key, scope, value):
+async def create(session, *, conversation_id, source_message_id, key, scope, value, origin='explicit'):
     """Idempotent per source and field. A replay never changes a rejected candidate."""
     await source(session, conversation_id, source_message_id)
     await preferences.validate(session, key, scope, value, 'active')
@@ -125,7 +125,7 @@ async def create(session, *, conversation_id, source_message_id, key, scope, val
     if previous:
         return previous
     row = PreferenceCandidate(conversation_id=conversation_id, source_message_id=source_message_id,
-                              key=key, scope=scope, value=value)
+                              key=key, scope=scope, value=value, origin=origin)
     await validate(session, row)
     await snapshot(session, row)
     await preferences._quota(session, key, scope, 'active', row.target_id)

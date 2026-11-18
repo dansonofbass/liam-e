@@ -79,6 +79,8 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         return
     user = await message_access.add_message(conversation_id=conversation.id, role='user', content=text, context_id=snapshot.id)
     model = conversation.model or mail_env.mail_chat_model
+    from api.preferences.extraction import schedule
+    schedule(conversation.id, user.id, model)
     all_text = ''
     mails, suggestions, calendars = [], [], []
     proposal_id = None

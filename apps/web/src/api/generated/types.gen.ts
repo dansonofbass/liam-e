@@ -350,6 +350,10 @@ export type CandidateOut = {
      */
     key: 'answer_length' | 'salutation' | 'signature';
     /**
+     * Origin
+     */
+    origin?: 'explicit' | 'extractor';
+    /**
      * Previous Value
      */
     previous_value?: string | null;
