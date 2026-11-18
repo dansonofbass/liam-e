@@ -1,0 +1,58 @@
+name: Report a bug
+description: Something behaves differently from AGENTS.md, DESIGN.md or an issue.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use only synthetic data or seed data from `api.mail.dev_seed`. No credentials,
+        tokens, real mail or appointments, Mistral IDs, local paths or raw provider responses.
+        Report suspected vulnerabilities privately (SECURITY.md), not here.
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What happens, with status code or displayed text, if available.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior and source
+      description: What should happen instead and where it is specified (AGENTS.md, DESIGN.md, issue, spec).
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Use seed data or invented values.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit or date, local or Studio deployment.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - UI (apps/web)
+        - API (apps/api)
+        - Sync and providers
+        - Agent and chat
+        - Database and migration
+        - CI and tools
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How a reviewer can tell the bug is fixed, and which test or command proves it.
+    validations:
+      required: true

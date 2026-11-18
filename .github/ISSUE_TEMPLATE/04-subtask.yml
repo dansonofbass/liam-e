@@ -1,0 +1,61 @@
+name: Subtask
+description: A bounded work package of a parent issue, implementable by one person or coding agent.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A subtask specifies scope, concrete work, acceptance, evidence and stop conditions. No credentials,
+        real data, Mistral IDs or local paths.
+  - type: input
+    id: parent
+    attributes:
+      label: Parent
+      description: e.g. "#10"
+    validations:
+      required: true
+  - type: textarea
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Subtasks to integrate first and required capability evidence as issue references; otherwise "none".
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Task and goal
+    validations:
+      required: true
+  - type: textarea
+    id: work
+    attributes:
+      label: Concrete work
+      description: Files and directories, tables, routes and contracts.
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Verifiable statements including at least one negative case.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Validation and delivery
+      description: Commands and suites to run, live evidence separately from tests with fakes.
+    validations:
+      required: true
+  - type: textarea
+    id: stop
+    attributes:
+      label: Stop conditions
+      description: When work ends with a finding rather than a solution.

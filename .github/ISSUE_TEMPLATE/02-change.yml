@@ -1,0 +1,50 @@
+name: Suggest a change
+description: New behavior or a change to existing behavior.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Synthetic examples only. No credentials, real mail, Mistral IDs or local paths.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing or troublesome today, grounded in the current code (file and function).
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Desired behavior from the user's perspective, with affected routes, tables and views.
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+  - type: checkboxes
+    id: contracts
+    attributes:
+      label: Affected contracts
+      options:
+        - label: API (OpenAPI specification and generated client)
+        - label: Tables (generated migration)
+        - label: MCP inventory (new mutating operation)
+        - label: Agent may propose new actions (confirmation through proposal card)
+        - label: UI text (DESIGN.md, text catalogue)
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Verifiable statements, one per line, including at least one negative case.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Tests or commands proving the criteria; explicitly identify what can only be verified live.
+    validations:
+      required: true
