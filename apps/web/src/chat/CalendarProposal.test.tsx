@@ -54,3 +54,17 @@ test('a definite refusal outside the conversation scope is not called unclear', 
   await screen.findByText(/nicht zur Kalenderauswahl/)
   expect(screen.queryByText(/noch unklar/)).toBeNull()
 })
+test('a confirm that never reached the server returns to the open card after a check', async () => {
+  spyOn(sdk, 'chatProposalConfirm').mockRejectedValue(new TypeError('test-only'))
+  const check = spyOn(sdk, 'chatProposalCheck').mockResolvedValue({ error: { detail: { error_code: 'proposal_not_pending' } }, response: { status: 409 } } as never)
+  mount()
+  await screen.findByText('Planung')
+  fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Prüfen' }))
+  // The server still has the card pending: confirm and cancel come back, with no stale error.
+  await screen.findByRole('button', { name: 'Bestätigen' })
+  expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Prüfen' })).toBeNull()
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(check).toHaveBeenCalledTimes(1)
+})

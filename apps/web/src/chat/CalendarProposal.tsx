@@ -36,6 +36,12 @@ export function CalendarProposal({ message }: { message: ChatMessageOut }) {
       const result = action === 'confirm' ? await chatProposalConfirm({ path, body: { selected_ids: [] } }) : action === 'cancel' ? await chatProposalCancel({ path }) : await chatProposalCheck({ path })
       if (!result.data || (result.response && result.response.status >= 400)) {
         const code = errorCode(result.error)
+        if (action === 'check' && result.response?.status === 409) {
+          // The server card is not open for a check, e.g. a confirm that never arrived left it
+          // pending. Drop the local guess and show the server's card again.
+          setUpdated(undefined); focus.current = true
+          return
+        }
         if (action === 'confirm' && (!result.response || result.response.status >= 500)) { setUpdated({ ...current, proposal_status: 'unknown' }); focus.current = true }
         setError(code === 'proposal_context_revoked' ? de.proposalErrors.proposal_context_revoked : code === 'proposal_not_pending' ? de.proposalErrors.proposal_not_pending : writeError(code))
         return
