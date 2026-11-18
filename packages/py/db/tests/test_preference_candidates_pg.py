@@ -213,6 +213,11 @@ def test_account_and_source_removal_erase_and_mail_replacement_keeps_candidates(
         from api.mail import proposals
         conversation, message = await setup_source()
         row, card = await candidate(conversation, message)
+        assert await m.cancel_open_proposals(conversation.id) == 1
+        async with get_session_maker()() as session:
+            await p.lock(session)
+            await c.open_card(session, await c.get(session, row.id))
+            await session.commit()
         archive = await proposals.create_proposal(conversation.id, proposals.Proposal(kind='archive', reason='', items=[]))
         assert (await m.get_message(card.id)).proposal_status == 'cancelled'
         async with get_session_maker()() as session:
