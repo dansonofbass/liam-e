@@ -608,10 +608,16 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
   für das Verbinden von Konten. Leere Listen nennen keine Prozentwerte. Quelle manueller Werte:
   „Von dir eingetragen“. Feld und Geltungsbereich sind Chips mit sichtbarer Beschriftung darüber.
   Bestätigte Chatwerte tragen „Von dir im Chat bestätigt“. Unter „Vorschläge“ stehen offene
-  Merke-dir-Kandidaten, noch keine aktiven Präferenzen. „Vorschlag prüfen“ öffnet eine Karte
+  Merke-dir-Kandidaten und eingeschaltete Vorschläge aus neuen eigenen Nachrichten,
+  noch keine aktiven Präferenzen. „Vorschlag prüfen“ öffnet eine Karte
   nur bei freiem Platz in der Unterhaltung; sonst erklärt ein Hinweis die offene Karte.
   Eine bereits zugehörige Karte wird mit „Karte öffnen“ verlinkt, niemals dupliziert.
-  Automatische Vorschläge bleiben als noch nicht verfügbar erklärt, ohne toten Button.
+  „Aus meinen Nachrichten Vorschläge machen“ schaltet automatische Vorschläge unabhängig
+  von der Verwendung ein oder aus. Daneben steht vor dem Einschalten: Ausgewählte neue
+  eigene Nachrichten werden an Mistral übermittelt und bleiben nicht nur in der App-Datenbank.
+  Frühere Nachrichten werden nicht nachgeholt. Der Zustand steht auch als Text da.
+  Automatische Vorschläge tragen „Aus deinem Chatbeitrag vorgeschlagen“, öffnen nie selbst
+  eine Karte und wirken erst nach Bestätigung und gesondertem Einschalten der Verwendung.
 - Präferenzkarten laden den Wert über ihre Kandidatenreferenz. Sie zeigen Feld, Konto und
   „Bisher“/„Vorschlag“, auf dem Handy untereinander. „Deine Bitte“ lässt sich aufklappen.
   Bei bestehendem Wert entscheiden „Ersetzen“ und „Bisherige behalten“; „Abbrechen“ verwirft

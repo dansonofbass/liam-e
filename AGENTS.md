@@ -112,7 +112,7 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Präferenzen | DELETE | `/api/v1/preferences/{id}` | `preference_delete` |
 | Präferenzen | GET | `/api/v1/preferences/contexts/{context_id}` | `preference_context_get` |
 | Einstellungen | GET | `/api/v1/settings` | `settings_get` |
-| Einstellungen | PATCH | `/api/v1/settings` | `settings_update` |
+| Einstellungen / unabhängige Präferenz-Opt-ins | PATCH | `/api/v1/settings` | `settings_update` |
 | Einstellungen | GET | `/api/v1/settings/ui` | `settings_ui_get` |
 | Einstellungen | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
@@ -501,7 +501,8 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `user_preference` — serverseitiger Eigentümer `installation`, Schlüssel, kanonischer Scope (`*` global oder Konto-ID), Status, Revisionszeiger und Objektversion; entfernte Zeilen bleiben als inhaltsfreie Unterdrückungsreferenz.
 - `preference_revision` — unveränderlicher Wert, damaliger Schlüssel/Scope, Quelle `manual` oder `confirmed_candidate` und Bestätigungszeit je Revision; beim Löschen wird der Wert entfernt und `removed` gesetzt.
 - `preference_candidate` — unbestätigter Wert mit eigener Quellnachricht, Unterhaltung, Feld/Scope, erwarteter Zielversion/-revision und optionaler Karten-ID; Status `pending|accepted|rejected|expired`. Abgelehnte und entwertete Kandidaten behalten nur inhaltsfreie Referenzen.
-- `personalization_settings` — serverseitiger Singleton mit `use_preferences`, `suggest_preferences` (beide standardmäßig false) und Version; Vorschläge können noch nicht aktiviert werden.
+- `personalization_settings` — serverseitiger Singleton mit unabhängigen `use_preferences` und `suggest_preferences` (beide standardmäßig false), Version sowie Kennung und Zeitpunkt der letzten Vorschlagsaktivierung.
+- `preference_extraction` — inhaltsfreie Einmal-Kennung je Quellnachricht und Extraktorversion; bindet die Aktivierung und verhindert erneute Modellaufrufe auch nach Fehlern oder Neustart.
 - `ui_settings` — die eine geräteübergreifende Bedienungskonfiguration mit festem serverseitigem Scope (`installation`, unique): `swipe_left`/`swipe_right` aus der Allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` für bedingte Updates und `updated_at`; Erstinitialisierung mit links `archive`, rechts `toggle_read`.
 
 ## Vorlagen und Turn-Kontext
@@ -545,8 +546,8 @@ Kalender- und Aufgaben-Scope-Prüfungen und die Bestätigungsmechanik bleiben un
 `GET /settings` liefert ausschließlich
 `{"personalization":{"use_preferences":false,"suggest_preferences":false,"version":1}}`.
 PATCH nimmt `{"personalization":{"expected_version":1,"use_preferences":true}}` und ändert
-nur ausdrücklich gelieferte Felder. `suggest_preferences: true`, null und fremde Abschnitte
-werden abgelehnt. `/settings/ui` behält seinen eigenen Vertrag und seine eigene Revision.
+nur ausdrücklich gelieferte Felder. `suggest_preferences` lässt sich unabhängig von
+`use_preferences` einschalten; null und fremde Abschnitte werden abgelehnt. `/settings/ui` behält seinen eigenen Vertrag und seine eigene Revision.
 Speichern einer Präferenz ist die manuelle Bestätigung, schaltet die Verwendung aber nie ein.
 POST nimmt `key=answer_length|salutation|signature`, `scope`, `value` und optional
 `status=active|paused`; PATCH nimmt `expected_version` und Änderungen von Wert, Scope oder Status.
@@ -619,13 +620,66 @@ Prüfung. Exakt gleiche Werte erzeugen keine neue Revision. Behalten und Abbrech
 den Kandidatenwert. Löschen einer Präferenz entfernt auch zugehörige Kandidatenwerte, selbst
 nach Annahme; die referenziellen Karten können keinen Inhalt wiederherstellen.
 Bestätigen ändert `use_preferences` nie. Ohne Nutzungsschalter bleibt die nächste Antwort
-ohne Präferenzinjektion. Automatische Extraktion und Aktivierung von `suggest_preferences`
-gehören nicht zu #39 und bleiben gesperrt.
+ohne Präferenzinjektion. Automatische Extraktion ist ein eigener, ausdrücklich einzuschaltender
+Ablauf aus #40; sie bestätigt keine Präferenz und öffnet keine Karte.
 
 Die GETs `preferences_list`, `preference_context_get`, `preference_candidates_list` und `settings_get` bleiben ausdrücklich in
 `BROWSER_ONLY_GET_OPERATIONS` der MCP-Inventur und außerhalb der Studio-Leseliste: lesend allein
 macht persönliche Werte nicht agentensicher. Die Schreiboperationen einschließlich `preference_candidate_propose` stehen in
 `MUTATING_OPERATIONS`. Neue Präferenzen werden nicht zu Werkzeugberechtigungen.
+
+### Vorschläge aus neuen eigenen Nachrichten (#40)
+
+`PATCH /settings` schaltet `suggest_preferences` mit `expected_version` unabhängig von der
+Verwendung ein. Jedes erneute Einschalten setzt eine neue zufällige Aktivierungskennung
+und Zeitgrenze. Nur danach gespeicherte eigene Nachrichten kommen infrage; weder Verlauf
+noch die ausgeschaltete Zwischenzeit werden nachgeholt. Die Oberfläche erklärt vor dem
+Einschalten, dass ausgewählte neue Nachrichten an Mistral gehen und nicht nur in der
+App-Datenbank bleiben.
+
+`api/preferences/extraction.py` startet direkt nach dem Speichern der eigenen Nachricht
+im Agenten eine nicht abgewartete Aufgabe. Eingabe ist ausschließlich deren Text, nie
+Verlauf, Mail-/Kalenderkontext, Werkzeugergebnisse oder Assistententext. Mehr als 2.000
+Zeichen werden übersprungen, nicht gekürzt. Das Modell entspricht der Auswahl des
+Chat-Turns (`conversation.model`, sonst `mail_chat_model`). Der bestehende private
+Mistral-Client verwendet JSON-Modus, keine Werkzeuge und höchstens 15 Sekunden Laufzeit.
+Es gibt keinen Scheduler und keine Wiederholung. Ein Prozessabbruch kann einen Vorschlag
+verlieren; ein bereits gespeicherter Claim bleibt trotzdem verbraucht.
+
+Extraktorversion 1 verlangt höchstens drei strikt validierte Einträge mit Feld,
+Geltungsbereich, Wert, ausdrücklicher Dauerhaftigkeit und wörtlichem Beleg aus genau dieser
+Nachricht. Ein konservativer Textfilter verlangt ein Dauerhaftigkeitssignal und lehnt
+unter anderem Zitate und hypothetische Formulierungen ab. Das ist kein Beweis semantischer
+Korrektheit und kann echte Wünsche übersehen. Vorschläge bleiben unbestätigt. Anrede und
+Signatur benötigen das genau ausgewählte vorhandene Mailkonto, das der Server aus dem
+Turn-Kontext liest, nie eine vom Modell erfundene Konto-ID.
+
+Claim und Ergebnisspeicherung laufen jeweils unter der gemeinsamen Präferenzsperre;
+während des Modellaufrufs ist keine Transaktion offen. Vor dem Schreiben werden Opt-in,
+Aktivierungskennung, eigene Quellnachricht, Konto, Lösch-/Ablehnungsmarker und exakte
+Duplikate erneut geprüft. Ausschalten während des Modellaufrufs verwirft dessen Ergebnis.
+Einmal-Kennungen gelten je Nachricht und Extraktorversion; der Ergebnisslot wird ebenfalls
+nur einmal verbraucht. Modell-, JSON-, Timeout- und Datenbankfehler betreffen nur diese
+Aufgabe. Logs nennen ausschließlich feste Fehlercodes, keine Inhalte oder Diagnosen.
+
+Kandidaten tragen serverseitig `origin=extractor` und `source_message_id`. Sie erscheinen
+in der vorhandenen Vorschlagsliste, beeinflussen keine Antwort und öffnen keine Karte.
+`Vorschlag prüfen` verwendet unverändert den #39-Endpunkt; Widersprüche bleiben zur
+manuellen Entscheidung sichtbar. Die Browserausgabe nennt `origin`; neue Endpunkte oder
+Agentenwerkzeuge gibt es nicht. Bestätigen aktiviert keinen der beiden Schalter.
+
+Die Migration wurde ausschließlich generiert. Der eng begrenzte Comparator in
+`db/migrations/env.py` entfernt reflektierte CHECKs nur von eigenen Modelltabellen, deren
+Metadaten gar keine CHECKs mehr enthalten. Er vergleicht keinen SQL-Text. Der generierte
+Downgrade stellt `NOT suggest_preferences` wieder her; vor einem solchen Downgrade müssen
+Vorschläge ausgeschaltet werden. Der PG-Vertrag prüft nach Migration auf `heads` einen
+leeren Autogenerate-Diff.
+
+Offline-Auswertung und offene Live-Probe:
+[Präferenzvorschläge vom 18.11.2026](docs/superpowers/probes/2026-11-18-praeferenz-vorschlaege.md).
+`bash tools/uv.sh run --no-sync python tools/preference_extraction_eval.py` prüft zwölf
+synthetische Fälle ohne Modell. Nur das ausdrücklich angehängte `--live` sendet diese
+zwölf Fixtures über den vorhandenen App-Client an Mistral; keine historischen Daten.
 
 ## Worker und periodischer Abruf
 
