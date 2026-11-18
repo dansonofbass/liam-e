@@ -35,6 +35,58 @@ def test_replace_window_sets_capabilities_in_the_same_transaction(pg_db):
     asyncio.run(run())
 
 
+def test_parallel_updates_on_one_event_one_call(pg_db, monkeypatch):
+    async def run():
+        import hashlib
+        import json
+        from uuid import uuid4
+        from api.calendar import writes
+        from api.mail import connectors
+        from db.engine import get_session_maker
+        from db.models.calendar_source import CalendarSource
+        from db.models.calendar_event import CalendarEvent
+        from db.models.calendar_occurrence import CalendarOccurrence
+        from db.models.calendar_sync_state import CalendarSyncState
+        source = CalendarSource(provider="google", connection_ref="google_calendar#" + hashlib.sha256(b"google_calendar:synthetic").hexdigest()[:16],
+            external_id="synthetic", name="Example", timezone="UTC", capabilities_json='["read","write"]')
+        event = CalendarEvent(source_id=source.id, external_id="synthetic-event")
+        start = datetime(2026, 12, 5, 9, tzinfo=UTC)
+        occurrence = CalendarOccurrence(source_id=source.id, event_id=event.id, external_id="synthetic-event",
+            start_at=start, end_at=start + timedelta(hours=1), timezone="UTC", editable=True)
+        async with get_session_maker()() as session:
+            session.add_all([source, event, occurrence, CalendarSyncState(source_id=source.id,
+                coverage_start=start - timedelta(days=1), coverage_end=start + timedelta(days=1))])
+            await session.commit()
+        entered, release = asyncio.Event(), asyncio.Event()
+        calls = []
+        async def fake(connector, tool, arguments, **kwargs):
+            if tool == "list_events": return json.dumps({"summary": "synthetic", "events": []})
+            raw = {"id": "synthetic-event", "summary": "Example", "updated": "old",
+                   "start": {"dateTime": start.isoformat()}, "end": {"dateTime": (start + timedelta(hours=1)).isoformat()}}
+            if tool == "update_event":
+                calls.append(tool)
+                entered.set()
+                await release.wait()
+                raw.update(summary="Changed", updated="new")
+            return json.dumps(raw)
+        monkeypatch.setattr(connectors, "_call_tool", fake)
+        def request():
+            return writes.WriteRequest(write_id=uuid4(), operation="update", source_id=source.id,
+                occurrence_id=occurrence.id, expected_revision="old", title="Changed")
+        first = asyncio.create_task(writes.execute(request()))
+        await asyncio.wait_for(entered.wait(), 5)
+        try:
+            with pytest.raises(writes.WriteError, match="calendar_write_in_progress"):
+                await writes.execute(request())
+        finally:
+            release.set()
+        assert (await first).status == "done"
+        assert calls == ["update_event"]
+        from db.accessors import calendar_occurrence
+        assert (await calendar_occurrence.get_visible(occurrence.id)).title == "Changed"
+    asyncio.run(run())
+
+
 def write_row(**changes):
     from db.models.calendar_write import CalendarWrite
     from uuid import uuid4
