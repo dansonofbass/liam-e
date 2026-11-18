@@ -322,7 +322,7 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   Anhalten · `sparkle` Assistent · `flag` Priorisieren · `newspaper` Newsletter · `clock`
   Frist · `paperclip` Anhang · `check`, `circle-alert`, `info` in Hinweisen · `menu` Menü
   öffnen · `x` Schließen · `arrow-left` Zurück · `plus` Neue Unterhaltung · `search` Suchen
-  · `chevron-down` Auswahl · `link` Connector · `key-round` Anmeldung beim Anbieter ·
+  · `chevron-down` Auswahl · `list-checks` Auswählen · `link` Connector · `key-round` Anmeldung beim Anbieter ·
   `sun-moon` Darstellung; `check` markiert außerdem die gewählte Zeile in einem Menü.
 - **Bausteine** (Klassen `le-*`, Beschreibung und Vorschau im Design-System): Button,
   IconButton, Chip (mit Tag, Badge, Punkt), Tooltip, Notice, AppShell, NavItem, Menu,
@@ -425,11 +425,12 @@ Anfang an mit.
 ### 7.4 Posteingang je Breakpoint
 
 - Aufbau der Liste: Auf `desktop` und `tablet` steht oben eine Leiste mit „Posteingang“,
-  Stand, Suchen (`search`) und Abrufen (`refresh-cw`). Darunter stehen die Filter-Chips:
+  Stand, Auswählen (`list-checks`), Suchen (`search`) und Abrufen (`refresh-cw`). Darunter stehen die Filter-Chips:
   Konto (Menü mit „Alle Konten“), „Ungelesen“, „Wichtig“ und „Mit Anhang“. Auf `mobile`
   trägt die Kopfzeile den Titel, und unter den Filtern stehen „47 ungelesen · Stand 08:57“
-  und die beiden Buttons. Suchen öffnet ein Feld „In allen Konten suchen …“. Die Liste
+  und die drei Buttons. Suchen öffnet ein Feld „In allen Konten suchen …“. Die Liste
   gruppiert nach Tagen: „Heute“, „Gestern“, „Diese Woche“ (ab Montag) und „Älter“.
+- Der Auswahlmodus ersetzt auf `desktop` und `tablet` die obere Leiste, auf `mobile` die Zeile mit Stand und Buttons. Er zeigt „Auswahl beenden“, die Anzahl, „Alle auswählen“ und Archivieren, Gelesen/Ungelesen, Papierkorb und Spam. Die Leiste darf für sich seitlich scrollen, nicht aber die Seite; auf `mobile` und bei grobem Zeiger sind die Ziele mindestens 44 px groß. Ein Tipp auf die Zeile wählt sie aus; der Avatar wählt auch außerhalb des Modus direkt aus. Mit Maus zeigt er beim Hover ein Auswahlkästchen, Umschalt-Klick wählt den Bereich. „Alle auswählen“ wählt höchstens 100 geladene Mails. Escape beendet die Auswahl. Wischen und Zeilenaktionen sind während der Auswahl ausgeschaltet.
 - `desktop`: Liste (`list-width`) und Lesebereich nebeneinander. Alle Aktionen der Mail
   stehen in der oberen Leiste des Lesebereichs: Archivieren, Gelesen/Ungelesen, Papierkorb
   und „Weitere Aktionen“, rechts davon „Im Chat fragen“ und „Antwort entwerfen“ als kleine
@@ -517,10 +518,7 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
   Tooltip.
 - Nach dem Klick ersetzt ein Hinweis die Karte, mit Ergebnis und „Rückgängig“, wo es geht.
   Nie automatisch bestätigen, nie zwei offene Karten gleichzeitig.
-- **Einzelaktionen im Posteingang** (eine Mail archivieren, gelesen/ungelesen, in den
-  Papierkorb, als Spam markieren) löst du selbst aus; sie wirken sofort und zeigen danach 10 Sekunden lang
-  einen Hinweis mit „Rückgängig“. Alles,
-  was mehrere Mails betrifft, läuft über den Chat und eine Bestätigungskarte.
+- **Selbst ausgelöste Aktionen im Posteingang** auf einer Mail oder mehreren ausgewählten Mails wirken sofort und zeigen danach 10 Sekunden lang einen Hinweis mit einem gemeinsamen „Rückgängig“. Vorschläge des Assistenten laufen weiterhin über die Bestätigungskarte.
 
 ### 9.3 Herkunft und Inhalte aus Mails
 
@@ -684,3 +682,7 @@ DESIGN.md folgt dem Aufbau und den Regeln einer älteren Design-Vorgabe des Owne
     Bedienelemente.
 11. **Freie Werte aufgeräumt:** Schriftgrößen nur über Tokens, Abstände auf dem
     4-px-Raster (§4, §5).
+
+## Entschieden (2026-11-18, Owner)
+
+1. **Mehrere Mails im Posteingang auswählen und sofort bearbeiten:** eine gemeinsame Rücknahme ohne Bestätigungsdialog; Vorschläge des Assistenten bleiben bestätigungspflichtig (§7.4, §9.2).

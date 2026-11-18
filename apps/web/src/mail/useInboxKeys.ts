@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useBreakpoint } from '../shell/useBreakpoint'
 
-type Handlers = { onNext(): void; onPrev(): void; onOpen(): void; onArchive(): void; onToggleRead(): void; onTrash(): void }
+type Handlers = { onNext(): void; onPrev(): void; onOpen(): void; onArchive(): void; onToggleRead(): void; onTrash(): void; onSelect?(): void; onEscape?(): void }
 
 export function useInboxKeys(handlers: Handlers) {
   const breakpoint = useBreakpoint()
@@ -14,7 +14,7 @@ export function useInboxKeys(handlers: Handlers) {
       // An open dialog blocks the list even when the focus is not inside it (its focused element was removed).
       if (document.querySelector('[aria-modal="true"]')) return
       if (event.key === 'Enter' && target?.closest('button, a')) return
-      const action = ({ j: handlers.onNext, k: handlers.onPrev, Enter: handlers.onOpen, e: handlers.onArchive, u: handlers.onToggleRead, '#': handlers.onTrash, Delete: handlers.onTrash } as Record<string, (() => void) | undefined>)[event.key]
+      const action = ({ j: handlers.onNext, k: handlers.onPrev, Enter: handlers.onOpen, e: handlers.onArchive, u: handlers.onToggleRead, '#': handlers.onTrash, Delete: handlers.onTrash, x: handlers.onSelect, Escape: handlers.onEscape } as Record<string, (() => void) | undefined>)[event.key]
       if (action) { event.preventDefault(); action() }
     }
     document.addEventListener('keydown', onKeyDown)

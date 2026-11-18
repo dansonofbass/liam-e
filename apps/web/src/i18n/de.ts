@@ -275,6 +275,15 @@ export const de = {
   },
   assistant: { name: 'liam-e' },
   inbox: {
+    startSelection: 'Auswählen', selectTip: 'Mails auswählen, um mehrere auf einmal zu bearbeiten', endSelection: 'Auswahl beenden', endSelectionTip: 'Beendet die Auswahl, ohne Mails zu ändern', selectAll: 'Alle auswählen', selectionCount: (n: number) => plural(n, { zero: 'Keine ausgewählt', one: '# ausgewählt', other: '# ausgewählt' }), selectMail: (subject: string) => `Auswählen: ${subjectText(subject)}`, selectLimit: 'Höchstens 100 Mails auf einmal.',
+    bulkTips: { archive: 'Archiviert die ausgewählten Mails (E)', mark_read: 'Markiert die ausgewählten Mails als gelesen (U)', mark_unread: 'Markiert die ausgewählten Mails als ungelesen (U)', trash: 'Legt die ausgewählten Mails in den Papierkorb (Entf)', spam: 'Markiert die ausgewählten Mails als Spam' },
+    bulkResult: (kind: 'archive' | 'trash' | 'spam' | 'mark_read' | 'mark_unread', done: number, total: number) => {
+      const ending = { archive: 'archiviert', trash: 'in den Papierkorb gelegt', spam: 'als Spam markiert', mark_read: 'als gelesen markiert', mark_unread: 'als ungelesen markiert' }[kind]
+      const failure = { archive: 'archivieren', trash: 'in den Papierkorb legen', spam: 'als Spam markieren', mark_read: 'als gelesen markieren', mark_unread: 'als ungelesen markieren' }[kind]
+      const mails = plural(total, { one: '# Mail', other: '# Mails' })
+      return done === total ? `${mails} ${ending}.` : `${done} von ${mails} ${ending}. ${plural(total - done, { one: '# ließ sich nicht', other: '# ließen sich nicht' })} ${failure}.`
+    },
+    bulkUndoFailed: (n: number) => plural(n, { one: '# Aktion ließ sich nicht rückgängig machen.', other: '# Aktionen ließen sich nicht rückgängig machen.' }),
     title: 'Posteingang', groups: { today: 'Heute', yesterday: 'Gestern', week: 'Diese Woche', older: 'Älter' },
     done: { archive: (subject: string) => `„${noticeSubject(subject)}“ archiviert.`, trash: (subject: string) => `„${noticeSubject(subject)}“ in den Papierkorb gelegt.`, spam: (subject: string) => `„${noticeSubject(subject)}“ als Spam markiert.`, mark_read: (subject: string) => `„${noticeSubject(subject)}“ als gelesen markiert.`, mark_unread: (subject: string) => `„${noticeSubject(subject)}“ als ungelesen markiert.` },
     doneShort: { archive: 'Mail archiviert.', trash: 'Mail in den Papierkorb gelegt.', spam: 'Mail als Spam markiert.', mark_read: 'Mail als gelesen markiert.', mark_unread: 'Mail als ungelesen markiert.' },

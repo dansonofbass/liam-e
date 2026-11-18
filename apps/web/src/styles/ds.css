@@ -79,6 +79,16 @@ small { font-size: var(--font-size-small); }
 .le-avatar--a1 { background: var(--acc-1); } .le-avatar--a2 { background: var(--acc-2); } .le-avatar--a3 { background: var(--acc-3); } .le-avatar--a4 { background: var(--acc-4); }
 .le-avatar--lg { width: 44px; height: 44px; font-size: var(--font-size-body); }
 .le-avatar--assistant { background: var(--accent); color: var(--on-accent); }
+.le-mailrow-avatar { position: relative; z-index: 2; border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: 50%; }
+.le-mailrow-avatar-check { position: absolute; inset: 0; display: none; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent); }
+.le-mailrow-avatar.is-selecting:not(.is-checked) .le-avatar { visibility: hidden; }
+.le-mailrow-avatar.is-selecting:not(.is-checked)::after { content: ''; position: absolute; width: 22px; height: 22px; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 2px solid var(--control-border); border-radius: var(--radius-sm); }
+.le-mailrow-avatar.is-checked .le-mailrow-avatar-check { display: grid; }
+@media (hover: hover) {
+  .le-mailrow-avatar:hover .le-mailrow-avatar-check, .le-mailrow-avatar:focus-visible .le-mailrow-avatar-check { display: grid; }
+  .le-mailrow-avatar:not(.is-checked):hover .le-mailrow-avatar-check, .le-mailrow-avatar:not(.is-checked):focus-visible .le-mailrow-avatar-check { background: var(--surface); border: 2px solid var(--control-border); color: transparent; }
+}
+@media (max-width: 639px), (pointer: coarse) { .le-mailrow-avatar { min-width: var(--control-height-lg); min-height: var(--control-height-lg); display: grid; place-items: center; } }
 
 /* App shell and navigation */
 .le-app { display: flex; gap: var(--space-3); padding: var(--space-3); height: 100dvh; overflow: hidden; box-sizing: border-box; background: var(--surface-ground); }

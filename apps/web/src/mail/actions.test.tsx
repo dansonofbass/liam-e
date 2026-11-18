@@ -5,6 +5,7 @@ import * as sdk from '../api/generated/sdk.gen'
 import type { MessageListItemOut, MessagePageOut } from '../api/generated/types.gen'
 import { MailActionsProvider, useMailActions, useMailActionsContext, type Clock } from './useMailActions'
 import { ActionToast } from './ActionToast'
+import { de } from '../i18n/de'
 
 const originalMatchMedia = window.matchMedia
 const rows = ['Erste', 'Zweite'].map((subject, i) => ({ id: String(i + 1), subject, is_read: false }) as MessageListItemOut)
@@ -22,8 +23,9 @@ function setup(mobile = false) {
   const time = makeClock()
   function Harness() {
     const { data } = useQuery<InfiniteData<MessagePageOut>>({ queryKey: key, queryFn: async () => client.getQueryData<InfiniteData<MessagePageOut>>(key)!, enabled: false })
-    const { run, undo, notify, toast, entries, capacityAvailable } = useMailActions({ clock: time.clock })
+    const { run, runBulk, undo, notify, toast, entries, capacityAvailable } = useMailActions({ clock: time.clock })
     return <><div>{data?.pages.flatMap(page => page.items).map(row => <div key={row.id}>{row.subject}:{String(row.is_read)}</div>)}</div>
+      <button onClick={() => { void runBulk(['1', '2'], 'archive') }}>bulk archive</button><button onClick={() => { void runBulk(['1', '2'], 'mark_read') }}>bulk read</button>
       <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'archive') }}>archive 2</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'spam') }}>spam 1</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button><button onClick={() => { void run('1', 'mark_unread') }}>unread 1</button>
       <button onClick={() => { void run('2', 'mark_read', { silent: true }) }}>silent read 2</button><button onClick={() => { void run('1', 'mark_read', { silent: true }) }}>silent read 1</button><button onClick={() => notify('refresh failed')}>notify</button><button onClick={() => { void undo() }}>force undo</button>
       <div data-testid="capacity">{String(capacityAvailable)}</div><div data-testid="entries">{entries.map(entry => <button key={entry.actionId} onClick={() => { void undo(entry.actionId) }}>{entry.actionId}</button>)}</div>
@@ -36,6 +38,48 @@ function success() {
   return spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => ({ data: { action_id: `action-${options?.path?.message_id}`, message: rows.find(row => row.id === options?.path?.message_id) }, response: { status: 200 } })) as never)
 }
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia })
+
+test('bulk notices use the proper plural and action wording', () => {
+  expect(de.inbox.selectionCount(0)).toBe('Keine ausgewählt')
+  expect(de.inbox.selectionCount(1)).toBe('1 ausgewählt')
+  expect(de.inbox.selectionCount(2)).toBe('2 ausgewählt')
+  expect(de.inbox.bulkResult('archive', 1, 1)).toBe('1 Mail archiviert.')
+  expect(de.inbox.bulkResult('archive', 0, 2)).toBe('0 von 2 Mails archiviert. 2 ließen sich nicht archivieren.')
+  expect(de.inbox.bulkResult('mark_read', 2, 2)).toBe('2 Mails als gelesen markiert.')
+  expect(de.inbox.bulkResult('mark_unread', 2, 2)).toBe('2 Mails als ungelesen markiert.')
+  expect(de.inbox.bulkResult('trash', 2, 2)).toBe('2 Mails in den Papierkorb gelegt.')
+  expect(de.inbox.bulkResult('spam', 2, 2)).toBe('2 Mails als Spam markiert.')
+})
+
+test('bulk partial failure rolls back only failed rows and keeps one group undo', async () => {
+  spyOn(sdk, 'mailMessagesBulkAction').mockImplementation((async () => ({ data: { results: [{ message_id: '1', status: 'done', action_id: 'a1', message: rows[0] }, { message_id: '2', status: 'unsupported', action_id: null, message: null }] }, response: { ok: true } })) as never)
+  const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['a1'], skipped: [], expired: [], failed: [] } })) as never)
+  setup(); fireEvent.click(screen.getByText('bulk archive'))
+  expect(await screen.findByText('1 von 2 Mails archiviert. 1 ließ sich nicht archivieren.')).toBeTruthy()
+  expect(screen.queryByText('Erste:false')).toBeNull()
+  expect(screen.getByText('Zweite:false')).toBeTruthy()
+  fireEvent.click(screen.getByText('Rückgängig'))
+  await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
+  expect(undo.mock.calls[0]?.[0]?.body).toEqual({ action_ids: ['a1'] })
+})
+
+test('bulk request failure restores all rows', async () => {
+  spyOn(sdk, 'mailMessagesBulkAction').mockImplementation((async () => { throw new Error('network') }) as never)
+  setup(); fireEvent.click(screen.getByText('bulk archive'))
+  expect(await screen.findByText('Das hat nicht geklappt. Lade den Posteingang neu, um zu sehen, wo die Mail jetzt liegt.')).toBeTruthy()
+  expect(screen.getByText('Erste:false')).toBeTruthy()
+  expect(screen.getByText('Zweite:false')).toBeTruthy()
+})
+
+test('partial group undo restores only reported actions', async () => {
+  spyOn(sdk, 'mailMessagesBulkAction').mockImplementation((async () => ({ data: { results: [{ message_id: '1', status: 'done', action_id: 'a1' }, { message_id: '2', status: 'done', action_id: 'a2' }] }, response: { ok: true } })) as never)
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['a2'], skipped: ['a1'], expired: [], failed: [] } })) as never)
+  setup(); fireEvent.click(screen.getByText('bulk archive'))
+  fireEvent.click(await screen.findByText('Rückgängig'))
+  expect(await screen.findByText('1 Aktion ließ sich nicht rückgängig machen.')).toBeTruthy()
+  expect(screen.queryByText('Erste:false')).toBeNull()
+  expect(screen.getByText('Zweite:false')).toBeTruthy()
+})
 
 test('archive removes immediately and toast expires after ten seconds', async () => {
   success(); const time = setup()

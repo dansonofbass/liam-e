@@ -8,13 +8,13 @@ import { inboxSearchSchema } from './filters'
 
 const originalMatchMedia = window.matchMedia
 const row = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', subject: 'Termin', snippet: '', internal_date: null, deadline: null, has_attachments: false, is_flagged: false, is_read: false, needs_reply: false }
-function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' = 'empty', path = '/mail', coarse = false) {
-  window.matchMedia = ((query: string) => ({ matches: query.includes('1024px') || (coarse && query.includes('pointer: coarse')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' | 'many' = 'empty', path = '/mail', coarse = false, mobile = false) {
+  window.matchMedia = ((query: string) => ({ matches: (!mobile && query.includes('1024px')) || (coarse && query.includes('pointer: coarse')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' }], unread_total: 1, last_sync_at: null } })) as never)
   const list = spyOn(sdk, 'mailMessagesList').mockImplementation((async () => {
     if (mode === 'loading') return await new Promise(() => {})
     if (mode === 'error') throw new Error('unavailable')
-    return { data: { items: mode === 'row' ? [row] : mode === 'rows' ? [row, { ...row, id: 'm2', subject: 'Zweite' }, { ...row, id: 'm3', subject: 'Dritte' }] : [], next_cursor: null } }
+    return { data: { items: mode === 'row' ? [row] : mode === 'rows' ? [row, { ...row, id: 'm2', subject: 'Zweite' }, { ...row, id: 'm3', subject: 'Dritte' }] : mode === 'many' ? Array.from({ length: 101 }, (_, i) => ({ ...row, id: `m${i}`, subject: `Mail ${i}` })) : [], next_cursor: null } }
   }) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><Outlet /></QueryClientProvider> })
@@ -267,4 +267,105 @@ test('a keyboard removal without focus in the row leaves the focus alone', async
   await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
   await waitFor(() => expect(screen.queryByText('Termin')).toBeNull())
   expect(document.activeElement).toBe(document.body)
+})
+
+test('selection mode, row tap, avatar range and escape', async () => {
+  const { router } = setup('rows')
+  await screen.findByText('Termin')
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+  expect(screen.getByText('Keine ausgewählt')).toBeTruthy()
+  fireEvent.click(screen.getByText('Termin'))
+  expect(screen.getByText('1 ausgewählt')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen: Dritte' }), { shiftKey: true })
+  expect(screen.getByText('3 ausgewählt')).toBeTruthy()
+  expect(router.state.location.pathname).toBe('/mail')
+  fireEvent.keyDown(document.body, { key: 'Escape' })
+  expect(screen.queryByText('3 ausgewählt')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen: Zweite' }))
+  expect(screen.getByText('1 ausgewählt')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Auswählen: Zweite' }).getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl beenden' }))
+  expect(screen.queryByText('1 ausgewählt')).toBeNull()
+})
+
+test('select all caps at 100 and coarse controls are large', async () => {
+  setup('many', '/mail', true)
+  await screen.findByText('Mail 0')
+  expect(screen.getByRole('button', { name: 'Auswählen' }).classList.contains('le-icon-btn--lg')).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+  for (const name of ['Auswahl beenden', 'Archivieren', 'Als gelesen markieren', 'In den Papierkorb', 'Als Spam markieren']) expect(screen.getByRole('button', { name }).classList.contains('le-icon-btn--lg')).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'Alle auswählen' }))
+  expect(screen.getByText('100 ausgewählt')).toBeTruthy()
+  expect(screen.getByText('Höchstens 100 Mails auf einmal.')).toBeTruthy()
+})
+
+test('mobile selection bar uses large icon targets', async () => {
+  setup('row', '/mail', false, true)
+  await screen.findByText('Termin')
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+  for (const name of ['Auswahl beenden', 'Archivieren', 'Als gelesen markieren', 'In den Papierkorb', 'Als Spam markieren']) expect(screen.getByRole('button', { name }).classList.contains('le-icon-btn--lg')).toBe(true)
+})
+
+test('keyboard selection and bulk archive remove optimistically and undo as a group', async () => {
+  let finish!: (value: unknown) => void
+  const action = spyOn(sdk, 'mailMessagesBulkAction').mockImplementation((() => new Promise(resolve => { finish = resolve })) as never)
+  const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['a1', 'a2'], skipped: [], expired: [], failed: [] } })) as never)
+  setup('rows')
+  await screen.findByText('Termin')
+  fireEvent.keyDown(document.body, { key: 'j' }); fireEvent.keyDown(document.body, { key: 'x' })
+  fireEvent.keyDown(document.body, { key: 'j' }); fireEvent.keyDown(document.body, { key: 'x' })
+  expect(screen.getByText('2 ausgewählt')).toBeTruthy()
+  fireEvent.keyDown(document.body, { key: 'e' })
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  expect(screen.queryByText('Termin')).toBeNull()
+  expect(screen.queryByText('Zweite')).toBeNull()
+  expect(action.mock.calls[0]?.[0]?.body).toEqual({ message_ids: ['m1', 'm2'], kind: 'archive' })
+  await act(async () => finish({ data: { results: [{ message_id: 'm1', status: 'done', action_id: 'a1', message: row }, { message_id: 'm2', status: 'done', action_id: 'a2', message: row }] }, response: { ok: true } }))
+  expect(await screen.findByText('2 Mails archiviert.')).toBeTruthy()
+  fireEvent.click(screen.getByText('Rückgängig'))
+  await waitFor(() => expect(undo).toHaveBeenCalledTimes(1))
+  expect(undo.mock.calls[0]?.[0]?.body).toEqual({ action_ids: ['a1', 'a2'] })
+})
+
+test('read action follows the selected read states', async () => {
+  const action = spyOn(sdk, 'mailMessagesBulkAction').mockImplementation((async () => ({ data: { results: [{ message_id: 'm1', status: 'done', action_id: 'a1', message: { ...row, is_read: true } }] }, response: { ok: true } })) as never)
+  const { client } = setup('row')
+  await screen.findByText('Termin')
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen: Termin' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Als gelesen markieren' }))
+  await waitFor(() => expect(action.mock.calls[0]?.[0]?.body.kind).toBe('mark_read'))
+  await screen.findByText('1 Mail als gelesen markiert.')
+  // Set the current cache explicitly, independent of the mocked server's refetch.
+  const matches = client.getQueriesData<{ pages: { items: (typeof row)[] }[] }>({ queryKey: ['messages'] })
+  for (const [key, data] of matches) if (data) client.setQueryData(key, { ...data, pages: data.pages.map(page => ({ ...page, items: page.items.map(item => ({ ...item, is_read: true })) })) })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Auswählen: Termin' })).toBeTruthy())
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen: Termin' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Als ungelesen markieren' }))
+  await waitFor(() => expect(action.mock.calls[1]?.[0]?.body.kind).toBe('mark_unread'))
+})
+
+test('changing filters clears the selection', async () => {
+  setup('row')
+  await screen.findByText('Termin')
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen: Termin' }))
+  expect(screen.getByText('1 ausgewählt')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Ungelesen' }))
+  await waitFor(() => expect(screen.queryByText('1 ausgewählt')).toBeNull())
+  expect(screen.getByRole('button', { name: 'Auswählen' })).toBeTruthy()
+})
+
+test('selection mode disables swipe and hides row actions', async () => {
+  spyOn(sdk, 'settingsUiGet').mockImplementation((async () => ({ data: { swipe_left: 'archive', swipe_right: 'toggle_read', revision: 1 }, response: { ok: true } })) as never)
+  const action = spyOn(sdk, 'mailMessageAction')
+  const { client } = setup('row', '/mail', true)
+  const element = (await screen.findByText('Termin')).closest<HTMLElement>('.le-mailrow')!
+  await waitFor(() => expect(client.getQueryState(['ui-settings'])?.status).toBe('success'))
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+  expect(element.querySelector('.le-mailrow-more')).toBeNull()
+  const event = new MouseEvent('pointerdown', { bubbles: true, clientX: 200, clientY: 100 })
+  Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: 'touch' }, isPrimary: { value: true } })
+  const capture = spyOn(element, 'setPointerCapture')
+  fireEvent(element, event)
+  expect(capture).not.toHaveBeenCalled()
+  expect(action).not.toHaveBeenCalled()
 })
