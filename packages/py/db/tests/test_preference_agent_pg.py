@@ -96,6 +96,31 @@ def test_revocation_reaches_only_turns_that_used_the_preference(pg_db):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('action', ['pause', 'delete'])
+def test_pause_and_delete_revoke_turns_of_every_revision(pg_db, action):
+    async def run():
+        from db.accessors import user_preference as p, mail_account as a, chat_context as c
+        one = await a.create_account(provider='imap', auth_type='imap_password', email_address='one@example.test')
+        await p.update_settings(1, use_preferences=True)
+        await p.create(key='signature', scope=one.id, value='test-only one')
+        async def turn(account):
+            return (await c.resolve(conversation_id=None, title='', model='', revision_id=None,
+                                    account_id=account, app_prompt_version='test'))[1]
+        unrelated = await turn(one.id)
+        row = await p.create(key='answer_length', value='test-only first')
+        old = await turn(None)
+        await p.change(row.id, 1, value='test-only second')
+        # A value edit applies from the next turn; it does not revoke the turn that used the first revision.
+        assert await c.is_live(old.id)
+        current = await turn(None)
+        assert json.loads(old.preference_revision_ids_json) != json.loads(current.preference_revision_ids_json)
+        if action == 'pause': await p.change(row.id, 2, status='paused')
+        else: await p.change(row.id, 2, delete=True)
+        assert not await c.is_live(old.id) and not await c.is_live(current.id)
+        assert await c.is_live(unrelated.id)
+    asyncio.run(run())
+
+
 def test_account_value_overrides_global_per_key(pg_db):
     async def run():
         from db.accessors import user_preference as p, mail_account as a, chat_context as c
