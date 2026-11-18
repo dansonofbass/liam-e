@@ -268,3 +268,15 @@ test('a version conflict blocks further actions until the current state is expli
   fireEvent.click(screen.getByRole('button', { name: 'Aktuellen Stand laden' }))
   await waitFor(() => expect((screen.getByRole('button', { name: 'Überspringen' }) as HTMLButtonElement).disabled).toBe(false))
 })
+
+test('the page follows the shared layout: page title, status filter as pressed chips, spaced button rows', async () => {
+  setup(false, false, false, '/tasks?status=completed')
+  const title = await screen.findByRole('heading', { level: 1, name: 'Aufgaben' })
+  expect(title.className).toBe('title')
+  for (const [name, pressed] of [['Offen', 'false'], ['Erledigt', 'true'], ['Archiviert', 'false']] as const) {
+    const chip = screen.getByRole('button', { name })
+    expect(chip.classList.contains('le-chip')).toBe(true)
+    expect(chip.getAttribute('aria-pressed')).toBe(pressed)
+  }
+  for (const name of ['Aufgabe anlegen', 'Früherer Zeitraum']) expect(screen.getByRole('button', { name }).parentElement!.className).toBe('le-tasks-controls')
+})

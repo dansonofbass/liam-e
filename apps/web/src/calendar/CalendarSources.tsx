@@ -10,7 +10,7 @@ import { Button, Notice } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
 import { de } from '../i18n/de'
 import { SourceStatus } from './CalendarPage'
-import { FeedSetup } from './FeedSetup'
+import { CalendarSetup, FeedSetup } from './FeedSetup'
 
 function RemoveSource({ source, close, removed }: { source: SourceOut; close: () => void; removed: () => void }) {
   const [pending, setPending] = useState(false), [error, setError] = useState(false)
@@ -34,11 +34,6 @@ function RemoveSource({ source, close, removed }: { source: SourceOut; close: ()
 }
 
 /** ICS setup shares the calendar query group and agenda with all sources. */
-export function CalendarSetup() {
-  const [open, setOpen] = useState(false), client = useQueryClient()
-  return <><Button variant="secondary" onClick={() => setOpen(true)}>{de.calendar.subscribe}</Button>
-    {open && <FeedSetup close={() => setOpen(false)} saved={() => { setOpen(false); void client.invalidateQueries({ queryKey: ['calendar'] }) }} />}</>
-}
 export function CalendarSources() {
   const sources = useQuery(calendarSourcesQuery()), client = useQueryClient()
   const [pending, setPending] = useState<string[]>([]), [messages, setMessages] = useState<Record<string, string>>({})
@@ -55,13 +50,13 @@ export function CalendarSources() {
     } catch { setMessages(current => ({ ...current, [source.id]: refresh ? de.calendar.refreshError : de.calendar.actionError })) }
     finally { setPending(current => current.filter(id => id !== source.id)) }
   }
-  return <section id="calendar-sources" aria-labelledby="calendar-sources-title">
+  return <section id="calendar-sources" className="le-calendar-sources" aria-labelledby="calendar-sources-title">
     <h2 className="heading" id="calendar-sources-title" tabIndex={-1} ref={heading}>{de.calendar.title}</h2>
-    <Link to="/calendar" className="le-link le-calendar-back">{de.calendar.back}</Link>
-    <CalendarSetup />
+    <div className="le-calendar-controls"><CalendarSetup /><Link to="/calendar" className="le-link le-calendar-back">{de.calendar.back}</Link></div>
     {sources.isPending && <p role="status">{de.calendar.loading}</p>}
     {sources.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void sources.refetch() } }}>{de.calendar.error}</Notice>}
-    {sources.data?.map(source => <section key={source.id} aria-label={source.name}>
+    {sources.isSuccess && sources.data.length === 0 && <p className="small le-muted">{de.calendar.noSources}</p>}
+    {Boolean(sources.data?.length) && <div className="le-calendar-source-list">{sources.data?.map(source => <section key={source.id} className="le-calendar-source" aria-label={source.name}>
       <SourceStatus source={source} />
       <div className="le-calendar-controls">
         <Button variant="secondary" disabled={pending.includes(source.id)} onClick={() => { void action(source, false) }}>{source.is_active ? de.calendar.pause : de.calendar.activate}</Button>
@@ -70,7 +65,7 @@ export function CalendarSources() {
         <Button variant="ghost" disabled={pending.includes(source.id)} onClick={() => setRemoving(source)}>{de.calendar.remove}</Button>
       </div>
       {messages[source.id] && <Notice tone="info">{messages[source.id]}</Notice>}
-    </section>)}
+    </section>)}</div>}
     {replacing && <FeedSetup source={replacing} close={() => setReplacing(undefined)} saved={() => { setReplacing(undefined); invalidate() }} />}
     {removing && <RemoveSource source={removing} close={() => setRemoving(undefined)} removed={() => { setRemoving(undefined); invalidate(); heading.current?.focus() }} />}
   </section>

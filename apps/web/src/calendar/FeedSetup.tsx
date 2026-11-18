@@ -1,6 +1,7 @@
 // i18n-exempt: CSS classes, browser API options, request keys and dialog roles.
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { calendarFeedSubscribe, calendarFeedValidate, calendarFeedValidationDiscard } from '../api/generated/sdk.gen'
 import type { CalendarFeedValidateResponse, SourceOut } from '../api/generated/types.gen'
 import { Button, Notice, TextField } from '../ds'
@@ -73,4 +74,11 @@ export function FeedSetup({ source, close, saved }: { source?: SourceOut; close:
         : <Button variant="primary" disabled={pending || !name.trim() || !url || !zone} onClick={() => { void check() }}>{de.calendar.feedCheck}</Button>}
     </div>
   </div></div>, document.body)
+}
+
+/** The one entry to a new subscription, on the accounts page and in the empty agenda. */
+export function CalendarSetup({ primary = false }: { primary?: boolean }) {
+  const [open, setOpen] = useState(false), client = useQueryClient()
+  return <><Button variant={primary ? 'primary' : 'secondary'} onClick={() => setOpen(true)}>{de.calendar.subscribe}</Button>
+    {open && <FeedSetup close={() => setOpen(false)} saved={() => { setOpen(false); void client.invalidateQueries({ queryKey: ['calendar'] }) }} />}</>
 }

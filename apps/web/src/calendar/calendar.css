@@ -6,15 +6,26 @@
 .le-calendar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .le-calendar-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
 .le-calendar-controls .le-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
-.le-calendar-status > .le-link { display: flex; align-items: center; min-height: var(--control-height-lg); }
-.le-calendar-controls .le-btn, .le-calendar-controls .le-chip, .le-calendar .le-link { min-height: var(--control-height-lg); }
+.le-calendar-status > .le-link { display: flex; align-items: center; }
 .le-calendar-row { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-sm); color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
 .le-calendar-row:hover { background: var(--surface-soft); }
 .le-calendar-row span, .le-calendar-status { color: var(--ink-muted); font-size: var(--font-size-small); }
 .le-calendar-status { display: flex; flex-direction: column; gap: var(--space-2); padding-block: var(--space-3); overflow-wrap: anywhere; }
 .le-calendar-detail { overflow-wrap: anywhere; }
-.le-calendar-detail > .le-link { display: inline-flex; align-items: center; min-height: var(--control-height-lg); min-width: var(--control-height-lg); }
-.le-calendar-back { display: inline-flex; align-items: center; min-height: var(--control-height-lg); min-width: var(--control-height-lg); }
+.le-calendar-detail > .le-link { display: inline-flex; align-items: center; }
+.le-calendar-back { display: inline-flex; align-items: center; }
 .le-calendar-placeholder { background: var(--surface-soft); border-radius: var(--radius-sm); height: var(--space-8); }
+/* On the accounts page the sources are cards like the accounts above them. */
+.le-calendar-sources { display: flex; flex-direction: column; gap: var(--space-4); max-width: 1180px; margin-top: var(--space-6); }
+.le-calendar-sources > h2 { margin: 0; }
+.le-calendar-source-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: var(--space-3); }
+.le-calendar-source { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-soft); }
+.le-calendar-source .le-calendar-status { padding-block: 0; }
+.le-calendar-source .le-notice--neutral { background: var(--surface); }
 @media (min-width: 1024px) { .le-calendar-agenda { flex: 0 0 var(--list-width); } }
 @media (max-width: 639px) { .le-calendar-agenda, .le-calendar-detail { padding: var(--space-4); } }
+/* DESIGN.md §7.2: links are not base controls, so the calendar gives them the touch size itself. */
+@media (pointer: coarse) {
+  .le-calendar .le-link, .le-calendar-status > .le-link, .le-calendar-detail > .le-link, .le-calendar-back { min-height: var(--control-height-lg); }
+  .le-calendar-detail > .le-link, .le-calendar-back { min-width: var(--control-height-lg); }
+}

@@ -76,12 +76,24 @@ test.each(['read', 'settings', 'identity'])('changing %s invalidates an existing
 
 test.each(['edge', 'button'])('start on %s never takes the gesture', async target => {
   const { element, action } = setup()
-  const start = target === 'button' ? element.querySelector('button')! : element
+  const start = target === 'button' ? element.querySelector('.le-mailrow-more button')! : element
   pointer(start, 'pointerdown', target === 'edge' ? 10 : 200)
   move(element, 310); up(element, 310)
   await act(async () => {})
   expect(action).not.toHaveBeenCalled()
   expect(screen.getByRole('status').textContent).toBe('')
+})
+
+test('the subject line belongs to the row: a drag there swipes once, a tap there opens once', async () => {
+  const { element, action, open } = setup()
+  const subject = element.querySelector('.le-mailrow-subject')!
+  pointer(subject, 'pointerdown', 200); move(element, 300); up(element, 300)
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  fireEvent.click(subject)
+  expect(open).not.toHaveBeenCalled()
+  pointer(subject, 'pointerdown', 200); pointer(subject, 'pointerup', 200); fireEvent.click(subject)
+  expect(open).toHaveBeenCalledTimes(1)
+  expect(action).toHaveBeenCalledTimes(1)
 })
 
 test('tap opens, while a drag suppresses its following click', () => {

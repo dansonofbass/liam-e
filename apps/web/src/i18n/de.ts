@@ -70,7 +70,7 @@ export const de = {
     title: 'Kalender', tip: 'Gespeicherte Termine ansehen', today: 'Heute', from: 'Von', to: 'Bis (ausschließlich)',
     all: 'Alle freigegebenen Kalender', loading: 'Termine werden geladen …', retry: 'Noch mal versuchen',
     error: 'Kalender konnten nicht geladen werden. Versuch es noch mal.', empty: 'Keine Termine im gespeicherten Zeitraum.',
-    unavailable: 'Kalender lassen sich noch nicht verbinden. Die Einrichtung für Google und abonnierte Kalender ist noch nicht verfügbar.',
+    noSources: 'Noch kein Kalender verbunden. Abonniere einen Kalender über seine private Adresse im iCal-Format. Bei Google Kalender steht sie in den Einstellungen des Kalenders unter „Kalender integrieren“. Direkt verbinden lässt sich Google Kalender noch nicht.',
     manage: 'Kalender verwalten', refresh: 'Abrufen', more: 'Weitere Termine laden', allDay: 'Ganztägig',
     range: 'Wähle einen Zeitraum von 1 bis 90 Tagen.', select: 'Wähle einen Termin aus.', back: 'Zur Agenda',
     missing: 'Dieser Termin ist nicht mehr verfügbar oder sein Kalender ist nicht freigegeben.',

@@ -10,6 +10,7 @@ import { de } from '../i18n/de'
 import { addDays, browserZone, calendarDate, calendarTime, covers, inLocalWindow, occurrenceDay, oldSource, todayLocal, validWindow } from './state'
 import './calendar.css'
 import { AskAboutCalendar } from '../chat/CalendarContext'
+import { CalendarSetup } from './FeedSetup'
 
 export function SourceStatus({ source, from, to }: { source: SourceOut; from?: string; to?: string }) {
   return <div className="le-calendar-status">
@@ -71,6 +72,13 @@ export function CalendarAgenda() {
   const unique = new Map(page.data?.pages.flatMap(p => p.items).map(row => [row.id, row]))
   const activeIds = new Set(selected.map(source => source.id))
   const rows = page.isSuccess ? [...unique.values()].filter(row => activeIds.has(row.source_id) && inLocalWindow(row, from, to, timeZone)).sort((a, b) => occurrenceDay(a, timeZone).localeCompare(occurrenceDay(b, timeZone)) || (a.start_at ?? '').localeCompare(b.start_at ?? '') || a.id.localeCompare(b.id)) : []
+  // Without any calendar there is nothing to page through or refresh: name the way to add one.
+  // Only after a successful load: a failed reload keeps the cached list and must show its error and retry.
+  if (sources.isSuccess && sources.data.length === 0) return <section className="le-calendar-agenda" aria-label={de.calendar.title}>
+    <h1 className="title">{de.calendar.title}</h1>
+    <Notice tone="info">{de.calendar.noSources}</Notice>
+    <div className="le-calendar-controls"><CalendarSetup primary /></div>
+  </section>
   return <section className="le-calendar-agenda" aria-label={de.calendar.title}>
     <h1 className="title">{de.calendar.title}</h1>
     <div className="le-calendar-controls">
@@ -89,7 +97,6 @@ export function CalendarAgenda() {
     </div>
     {sources.isPending && <p role="status">{de.calendar.loading}</p>}
     {sources.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void sources.refetch() } }}>{de.calendar.error}</Notice>}
-    {sources.data?.length === 0 && <Notice tone="info">{de.calendar.unavailable}</Notice>}
     {sources.data?.filter(s => !s.is_active || !sourceId || s.id === sourceId).map(s => <div key={s.id}><SourceStatus source={s} from={from} to={to} />{notices[s.id] && <Notice tone="info">{notices[s.id]}</Notice>}</div>)}
     {selected.length > 0 && valid && <>
       {page.isPending && <><p role="status">{de.calendar.loading}</p><div className="le-calendar-placeholder" aria-hidden="true" /></>}
