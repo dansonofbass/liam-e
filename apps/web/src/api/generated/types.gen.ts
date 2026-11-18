@@ -239,6 +239,49 @@ export type AttachmentOut = {
 };
 
 /**
+ * BulkMessageActionIn
+ */
+export type BulkMessageActionIn = {
+    /**
+     * Kind
+     */
+    kind: 'archive' | 'trash' | 'spam' | 'mark_read' | 'mark_unread';
+    /**
+     * Message Ids
+     */
+    message_ids: Array<string>;
+};
+
+/**
+ * BulkMessageActionOut
+ */
+export type BulkMessageActionOut = {
+    /**
+     * Results
+     */
+    results: Array<BulkMessageActionResult>;
+};
+
+/**
+ * BulkMessageActionResult
+ */
+export type BulkMessageActionResult = {
+    /**
+     * Action Id
+     */
+    action_id?: string | null;
+    message?: MessageListItemOut | null;
+    /**
+     * Message Id
+     */
+    message_id: string;
+    /**
+     * Status
+     */
+    status: 'done' | 'not_found' | 'unsupported' | 'failed';
+};
+
+/**
  * CalendarRefOut
  */
 export type CalendarRefOut = {
@@ -4005,6 +4048,31 @@ export type MailMessagesListResponses = {
 };
 
 export type MailMessagesListResponse = MailMessagesListResponses[keyof MailMessagesListResponses];
+
+export type MailMessagesBulkActionData = {
+    body: BulkMessageActionIn;
+    path?: never;
+    query?: never;
+    url: '/api/v1/mail/messages/actions';
+};
+
+export type MailMessagesBulkActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailMessagesBulkActionError = MailMessagesBulkActionErrors[keyof MailMessagesBulkActionErrors];
+
+export type MailMessagesBulkActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: BulkMessageActionOut;
+};
+
+export type MailMessagesBulkActionResponse = MailMessagesBulkActionResponses[keyof MailMessagesBulkActionResponses];
 
 export type MailMessageGetData = {
     body?: never;

@@ -132,6 +132,7 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Mail / Connectoren | POST | `/api/v1/mail/connectors/{name}/connect` | `mail_account_connect_connector` |
 | Mail / Connectoren | GET | `/api/v1/mail/connectors/{name}/tools` | `mail_connector_tools_list` |
 | Mail / Nachrichten | GET | `/api/v1/mail/messages` | `mail_messages_list` |
+| Mail / Nachrichten | POST | `/api/v1/mail/messages/actions` | `mail_messages_bulk_action` |
 | Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}` | `mail_message_get` |
 | Mail / Nachrichten | POST | `/api/v1/mail/messages/{message_id}/actions` | `mail_message_action` |
 | Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}/insight` | `mail_message_insight` |

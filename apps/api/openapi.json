@@ -355,6 +355,98 @@
         "title": "AttachmentOut",
         "type": "object"
       },
+      "BulkMessageActionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "archive",
+              "trash",
+              "spam",
+              "mark_read",
+              "mark_unread"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Message Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "message_ids",
+          "kind"
+        ],
+        "title": "BulkMessageActionIn",
+        "type": "object"
+      },
+      "BulkMessageActionOut": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BulkMessageActionResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "BulkMessageActionOut",
+        "type": "object"
+      },
+      "BulkMessageActionResult": {
+        "properties": {
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MessageListItemOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "not_found",
+              "unsupported",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "status"
+        ],
+        "title": "BulkMessageActionResult",
+        "type": "object"
+      },
       "CalendarRefOut": {
         "properties": {
           "occurrence_id": {
@@ -6814,6 +6906,45 @@
           }
         },
         "summary": "List the synced inbox"
+      }
+    },
+    "/api/v1/mail/messages/actions": {
+      "post": {
+        "description": "Apply actions independently, with bounded provider concurrency.",
+        "operationId": "mail_messages_bulk_action",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkMessageActionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkMessageActionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply an undoable action to messages"
       }
     },
     "/api/v1/mail/messages/{message_id}": {

@@ -1,8 +1,9 @@
 """Response schemas for the indexed inbox."""
 
 from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.mail.actions import ActionKind
 
@@ -71,6 +72,31 @@ class MessageActionIn(BaseModel):
 class MessageActionOut(BaseModel):
     action_id: str
     message: MessageListItemOut
+
+
+class BulkMessageActionIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message_ids: list[str] = Field(min_length=1, max_length=100)
+    kind: Literal["archive", "trash", "spam", "mark_read", "mark_unread"]
+
+    @field_validator("message_ids")
+    @classmethod
+    def unique_ids(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("Duplicate message IDs")
+        return value
+
+
+class BulkMessageActionResult(BaseModel):
+    message_id: str
+    status: Literal["done", "not_found", "unsupported", "failed"]
+    action_id: str | None = None
+    message: MessageListItemOut | None = None
+
+
+class BulkMessageActionOut(BaseModel):
+    results: list[BulkMessageActionResult]
 
 
 class UndoIn(BaseModel):
