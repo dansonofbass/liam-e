@@ -32,10 +32,9 @@ export function moveSwipe(state: SwipeState, x: number, y: number, basis: SwipeB
   const next = { ...state, dx }
   return { ...next, phase: Math.abs(dx) >= state.threshold && actionFor(next) ? 'armed' : 'preview' }
 }
-/** iOS WebKit gives a horizontal drag to vertical scrolling once the finger drifts about 10 px; the row keeps every touch that leans horizontal. */
-export function blocksScroll(state: SwipeState, x: number, y: number): boolean {
-  if (state.phase === 'preview' || state.phase === 'armed') return true
-  return state.phase === 'undecided' && Math.abs(x - state.x) > Math.abs(y - state.y)
+/** iOS WebKit gives a horizontal drag to vertical scrolling once the finger drifts about 10 px, so a decided swipe keeps its touch; an undecided one may still become a scroll. */
+export function blocksScroll(state: SwipeState): boolean {
+  return state.phase === 'preview' || state.phase === 'armed'
 }
 export function endSwipe(state: SwipeState, basis: SwipeBasis): { id: string; action: Action } | undefined {
   if (state.phase !== 'armed' || !sameBasis(state.basis, basis)) return undefined

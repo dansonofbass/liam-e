@@ -110,24 +110,43 @@ test('a drag without a following click does not swallow a later mouse click', ()
 
 // iOS WebKit hands a horizontal drag to vertical scrolling once the finger drifts about 10 px, cancels the
 // pointer and the row snaps back; only a prevented touchmove keeps the touch with the row.
-function touchMove(element: Element, x: number, y = 100) {
+function touchMove(element: Element, x: number, y = 100, fingers = 1) {
   const event = new Event('touchmove', { bubbles: true, cancelable: true })
-  Object.defineProperty(event, 'touches', { value: [{ clientX: x, clientY: y }] })
+  Object.defineProperty(event, 'touches', { value: Array.from({ length: fingers }, (_, i) => ({ clientX: x + 40 * i, clientY: y })) })
   fireEvent(element, event)
   return event.defaultPrevented
 }
 
-test('a swipe drifting like a thumb arc keeps its touch from native scrolling and still runs once', async () => {
+test('a swipe drifting like a thumb arc keeps its touch from native scrolling once it is decided and still runs once', async () => {
   const { element, action } = setup()
   const subject = element.querySelector('.le-mailrow-subject')!
   expect(touchMove(subject, 230)).toBe(false)
   pointer(subject, 'pointerdown', 200)
-  move(element, 204, 101); expect(touchMove(subject, 204, 101)).toBe(true)
+  // Leaning horizontal is not a swipe yet; the row only keeps the touch once the swipe is decided.
+  move(element, 204, 101); expect(touchMove(subject, 204, 101)).toBe(false)
   move(element, 230, 110); expect(touchMove(subject, 230, 110)).toBe(true)
   move(element, 300, 140); expect(touchMove(subject, 300, 140)).toBe(true)
   up(element, 300)
   await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
   expect(touchMove(subject, 300, 140)).toBe(false)
+})
+
+test('a touch that starts leaning horizontal and then scrolls is never kept from scrolling', () => {
+  const { element, action } = setup()
+  down(element)
+  move(element, 204, 101); expect(touchMove(element, 204, 101)).toBe(false)
+  move(element, 218, 113); expect(touchMove(element, 218, 113)).toBe(false)
+  move(element, 220, 160); expect(touchMove(element, 220, 160)).toBe(false)
+  move(element, 330, 160); expect(touchMove(element, 330, 160)).toBe(false)
+  up(element, 330)
+  expect(action).not.toHaveBeenCalled()
+})
+
+test('a second finger on a decided swipe is left to pinch-zoom', () => {
+  const { element } = setup()
+  down(element)
+  move(element, 230); expect(touchMove(element, 230)).toBe(true)
+  expect(touchMove(element, 240, 100, 2)).toBe(false)
 })
 
 test.each(['vertical', 'mouse', 'second'])('a %s gesture leaves native scrolling alone', mode => {
