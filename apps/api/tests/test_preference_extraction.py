@@ -64,8 +64,9 @@ def test_literal_values_must_appear_in_the_quoted_wish(index, value):
     assert len(ex.validate_output(json.dumps({'candidates': [spaced]}), case['text'])) == 1
 
 
-def test_quote_anywhere_suppresses_an_otherwise_durable_wish():
-    text = CASES[0]['text'] + ' Das gilt auch für „Notizen“.'
+@pytest.mark.parametrize('tail', [' Das gilt auch für „Notizen“.', ' Falls es eilt, auch länger.', ' Sofern nötig, mit Liste.'])
+def test_quote_or_condition_anywhere_suppresses_an_otherwise_durable_wish(tail):
+    text = CASES[0]['text'] + tail
     item = dict(CASES[0]['candidates'][0])
     with pytest.raises(ValueError):
         ex.validate_output(json.dumps({'candidates': [item]}), text)

@@ -637,8 +637,9 @@ noch die ausgeschaltete Zwischenzeit werden nachgeholt. Die Oberfläche erklärt
 Einschalten, dass ausgewählte neue Nachrichten an Mistral gehen und nicht nur in der
 App-Datenbank bleiben.
 
-`api/preferences/extraction.py` startet direkt nach dem Speichern der eigenen Nachricht
-im Agenten eine nicht abgewartete Aufgabe. Eingabe ist ausschließlich deren Text, nie
+`api/preferences/extraction.py` startet im Agenten eine nicht abgewartete Aufgabe, sobald die
+eigene Nachricht gespeichert ist und der Turn seine Umfangsprüfungen bestanden hat. Ein Turn,
+der an einer Mail-, Kalender- oder Aufgabengrenze abbricht, gibt seine Nachricht nicht weiter. Eingabe ist ausschließlich deren Text, nie
 Verlauf, Mail-/Kalenderkontext, Werkzeugergebnisse oder Assistententext. Mehr als 2.000
 Zeichen werden übersprungen, nicht gekürzt. Das Modell entspricht der Auswahl des
 Chat-Turns (`conversation.model`, sonst `mail_chat_model`). Der bestehende private
@@ -649,11 +650,16 @@ verlieren; ein bereits gespeicherter Claim bleibt trotzdem verbraucht.
 Extraktorversion 1 verlangt höchstens drei strikt validierte Einträge mit Feld,
 Geltungsbereich, Wert, ausdrücklicher Dauerhaftigkeit und wörtlichem Beleg aus genau dieser
 Nachricht. Ein konservativer Textfilter verlangt ein Dauerhaftigkeitssignal und lehnt
-unter anderem Zitate und hypothetische Formulierungen ab. Das ist kein Beweis semantischer
-Korrektheit und kann echte Wünsche übersehen. Vorschläge bleiben unbestätigt. Anrede und
+unter anderem Zitate sowie hypothetische und bedingte Formulierungen ab. Das ist kein Beweis
+semantischer Korrektheit und kann echte Wünsche übersehen. Eine ohne Anführungszeichen oder
+Zitatzeichen eingefügte fremde Mail ist davon nicht zu unterscheiden; deren Bitte kann als
+unbestätigter Vorschlag erscheinen, den nur der Eigentümer bestätigen kann. Vorschläge bleiben unbestätigt. Anrede und
 Signatur benötigen das genau ausgewählte vorhandene Mailkonto, das der Server aus dem
 Turn-Kontext liest, nie eine vom Modell erfundene Konto-ID.
 
+Bei ausgeschalteten Vorschlägen endet der Claim nach einem Lesen ohne Sperre. Ist der Schalter
+an, wird er unter der Sperre erneut gelesen, sodass ein zwischenzeitliches Ausschalten keine
+Nachricht mehr an das Modell schickt.
 Claim und Ergebnisspeicherung laufen jeweils unter der gemeinsamen Präferenzsperre;
 während des Modellaufrufs ist keine Transaktion offen. Vor dem Schreiben werden Opt-in,
 Aktivierungskennung, eigene Quellnachricht, Konto, Lösch-/Ablehnungsmarker und exakte

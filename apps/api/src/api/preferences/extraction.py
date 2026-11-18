@@ -59,7 +59,7 @@ def validate_output(content, text):
         if (not item.value.strip() or item.evidence not in text
                 or (item.key != 'answer_length' and _words(item.value) not in _words(item.evidence))
                 or not re.search(r'(?i)\b(immer|künftig|dauerhaft|grundsätzlich|in Zukunft|ab jetzt|standardmäßig|merke? dir)\b', item.evidence)
-                or re.search(r'(?i)["„“»«>]|\b(wenn|würde|angenommen|hypothetisch|zitiert|Zitat|schreibt|sagte)\b', text)
+                or re.search(r'(?i)["„“»«>]|\b(wenn|falls|sofern|würde|angenommen|hypothetisch|zitiert|Zitat|schreibt|sagte)\b', text)
                 or (item.key != 'answer_length' and item.scope != 'account')):
             raise ValueError('preference_extraction_invalid')
     return result.candidates

@@ -79,8 +79,6 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         return
     user = await message_access.add_message(conversation_id=conversation.id, role='user', content=text, context_id=snapshot.id)
     model = conversation.model or mail_env.mail_chat_model
-    from api.preferences.extraction import schedule
-    schedule(conversation.id, user.id, model)
     all_text = ''
     mails, suggestions, calendars = [], [], []
     proposal_id = None
@@ -114,6 +112,9 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                     or prior_account != json.loads(snapshot.account_scope_json).get('selection')):
                 yield ErrorEvent(code='context_revoked')
                 return
+        # Only a turn that passed its scope checks may hand its message to the extractor.
+        from api.preferences.extraction import schedule
+        schedule(conversation.id, user.id, model)
         history = [row for row in history if not row.context_id or
                    (row.role not in ('tool', 'proposal', 'draft') and not row.tool_payload_json) or
                    (row.context_id in contexts and not contexts[row.context_id].revoked)]

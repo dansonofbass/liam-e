@@ -51,6 +51,27 @@ def test_activation_boundaries_and_independent_switches(pg_db):
     asyncio.run(run())
 
 
+def test_switch_off_while_claim_waits_for_the_lock_sends_nothing(pg_db, monkeypatch):
+    """The unlocked pre-read saw the switch on; the locked check must see it off again."""
+    async def run():
+        await toggle(suggest_preferences=True)
+        ids = await source()
+        real_lock, armed = preferences.lock, [True]
+
+        async def switch_off_first(session):
+            # The switch takes the same lock, so only the claim's own call switches first.
+            if armed and armed.pop():
+                await toggle(suggest_preferences=False)
+            await real_lock(session)
+
+        monkeypatch.setattr(ex.preferences, 'lock', switch_off_first)
+        assert await ex.claim(*ids, 1) is None
+        monkeypatch.setattr(ex.preferences, 'lock', real_lock)
+        async with get_session_maker()() as session:
+            assert await session.get(ex.PreferenceExtraction, (ids[1], 1)) is None
+    asyncio.run(run())
+
+
 def test_concurrent_claims_and_results_store_only_one_set(pg_db):
     async def run():
         await toggle(suggest_preferences=True)

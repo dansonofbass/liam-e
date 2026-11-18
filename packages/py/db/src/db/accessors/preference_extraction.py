@@ -27,9 +27,11 @@ async def eligible(session, conversation_id, message_id):
 async def claim(conversation_id, message_id, version):
     async with get_session_maker()() as session:
         # Every chat turn calls this; with suggestions off, skip the shared preference lock.
-        # A message stored before a concurrent opt-in never qualifies, so this read is safe.
-        current = await session.get(PersonalizationSettings, OWNER_SCOPE)
-        if current is None or not current.suggest_preferences:
+        # A message stored before a concurrent opt-in never qualifies. The column read keeps
+        # the row out of the identity map, so the locked check below reads it again.
+        enabled = (await session.execute(select(PersonalizationSettings.suggest_preferences).where(
+            PersonalizationSettings.owner_scope == OWNER_SCOPE))).scalar()
+        if not enabled:
             return None
         await preferences.lock(session)
         result = await eligible(session, conversation_id, message_id)
