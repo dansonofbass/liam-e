@@ -70,3 +70,31 @@ def test_persistent_interval_pause_manual_throttle_and_bounded_failures(pg_db):
         # The owner can still trigger a manual check after an address error.
         assert await enqueue(now + timedelta(days=2), True)
     asyncio.run(run())
+
+
+def test_resume_during_the_cooldown_restores_polling_after_an_address_error(pg_db):
+    async def run():
+        from db.accessors import calendar_feed_sync, calendar_source, mail_job
+        from db.engine import get_session_maker
+        from db.models.calendar_source import CalendarSource
+        source = CalendarSource(provider="ics", connection_ref="private", external_id="test-only", name="Example", timezone="UTC")
+        async with get_session_maker()() as session:
+            session.add(source)
+            await session.commit()
+        now = datetime(2026, 1, 1, tzinfo=UTC)
+        async def enqueue(at, manual=False):
+            return await calendar_feed_sync.enqueue(source.id, now=at, interval=30, manual=manual)
+        assert await enqueue(now)
+        claim = await mail_job.claim_next(now, stale_after=timedelta(minutes=5))
+        await mail_job.finish(claim.id, claim.attempts)
+        revision = (await calendar_source.get(source.id)).revision
+        failed = now + timedelta(minutes=5)
+        await calendar_feed_sync.failure(source.id, revision=revision, now=failed, code="address_check", delay_seconds=None)
+        # Pause and resume within the minute after the failure, as the source controls do.
+        await calendar_source.set_active(source.id, False)
+        await calendar_source.set_active(source.id, True)
+        assert not await enqueue(failed + timedelta(seconds=20), manual=True)
+        assert not await enqueue(failed + timedelta(seconds=59))
+        # The resume lifted the address stop, so the scheduler fetches once the cooldown ends.
+        assert await enqueue(failed + timedelta(minutes=1))
+    asyncio.run(run())

@@ -38,6 +38,14 @@ async def enqueue(source_id: str, *, now: datetime, interval: int, manual: bool)
         if state:
             if manual:
                 if state.last_checked_at and now < state.last_checked_at + timedelta(minutes=1):
+                    # A manual request or resume inside the cooldown still lifts an address stop;
+                    # the scheduler fetches as soon as the cooldown ends.
+                    if state.last_error == "address_check":
+                        state.last_error = None
+                        state.failure_count = 0
+                        state.next_attempt_at = state.last_checked_at + timedelta(minutes=1)
+                        session.add(state)
+                        await session.commit()
                     return False
             else:
                 if state.last_error == "address_check":

@@ -377,7 +377,8 @@ Backoff mit Jitter; nach drei Fehlern endet die kurze Wiederholung und die Quell
 regulären Intervall ab `last_checked_at` zurück. Weitere Fehler starten keine neue kurze
 Wiederholung; ein Erfolg setzt den Fehlerzustand zurück.
 401/403/404 fordern eine Adressprüfung und stoppen automatische Versuche bis zu manuellem
-Abruf, Resume oder Adressersatz. Pausierte
+Abruf, Resume oder Adressersatz. Fällt ein manueller Abruf oder ein Resume in die Wartezeit
+von einer Minute, hebt er die Sperre trotzdem auf; der Abruf folgt nach Ablauf der Minute. Pausierte
 Quellen und Seeds werden nicht abgerufen; gestoppte Studio-Instanzen garantieren keine Periodik.
 
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
