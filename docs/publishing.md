@@ -2,7 +2,7 @@
 
 As of 2026-11-17. The repository is private and should be publishable later. This list names
 what still needs to be decided and configured for that. The ongoing rules are in
-[AGENTS.md](../AGENTS.md), section “Veröffentlichung und private Daten”.
+[AGENTS.md](../AGENTS.md), section “Publication and private data”.
 
 ## Findings from 2026-11-17
 

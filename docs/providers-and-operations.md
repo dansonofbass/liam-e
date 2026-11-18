@@ -116,5 +116,5 @@ In the Studio probe on 13.11.2026 the same process was still running at the end 
 
 Studio provides the app and its API. Releasing operations as MCP tools is a separate step.
 The full OpenAPI also includes operations that perform actions. For HTTP connectors follow
-the read-only allowlist in the [agent rules](../AGENTS.md#sicherheit) and the
+the read-only allowlist in the [agent rules](../AGENTS.md#security) and the
 [MCP inventory](../apps/api/tests/test_mcp_exposure.py).

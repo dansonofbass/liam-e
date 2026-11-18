@@ -15,8 +15,8 @@ real mail or appointments, Mistral organization, workspace or app IDs, or absolu
 
 ## What counts
 
-liam-e promises a narrow boundary (AGENTS.md, sections “Sicherheit” and “Veröffentlichung und
-private Daten”). Reports of a broken promise are in scope, for example:
+liam-e promises a narrow boundary (AGENTS.md, sections “Security” and “Publication and private
+data”). Reports of a broken promise are in scope, for example:
 
 - The agent sends, replies to, forwards or changes a mail without a confirmed proposal card,
   including when triggered by a crafted mail or template.

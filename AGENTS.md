@@ -1,120 +1,119 @@
-# liam-e — universelle Mail-App in Mistral Studio
+# liam-e — universal mail app in Mistral Studio
 
-Eine Mistral-App (siehe `mistral.json`), mit der **alle Mail-Konten an einer Stelle** verwaltet
-werden — Gmail, Outlook, iCloud, Yahoo und beliebige andere Provider — und über die per **Chat
-mit einem KI-Agenten** über alle Konten hinweg gesucht, gelesen, zusammengefasst und (nach
-Bestätigung) geantwortet/versendet werden kann.
+A Mistral app (see `mistral.json`) that manages **all mail accounts in one place** — Gmail,
+Outlook, iCloud, Yahoo and any other providers — and enables searching, reading, summarizing and
+(after confirmation) replying/sending across all accounts through **chat with an AI agent**.
 
-## Beschlossene Anforderungen (mit dem Nutzer abgestimmt am 2026-11-13)
+## Agreed requirements (agreed with the user on 2026-11-13)
 
-| Thema | Entscheidung |
+| Topic | Decision |
 | --- | --- |
-| Anbindung der Provider | Provider, die als **Mistral-Studio-Connector** existieren (z.B. `gmail`), werden über den bestehenden Connector angebunden (`api/mail/connectors.py`, REST `/v1/connectors/...` mit dem App-Key — die OAuth-Credentials liegen in Mistral, keine eigene OAuth-App nötig). Übrige: Gmail & Outlook per **eigenem OAuth2**, iCloud, Yahoo und alle anderen per **IMAP/SMTP mit App-Passwort** |
-| Datenhaltung | **Sync in die managed Postgres**: Credentials verschlüsselt at rest, Mail-Index (Metadaten + Body-Texte), Chat-Verlauf |
-| Senden von Mails | Agent darf frei suchen/lesen/zusammenfassen; **Senden/Antworten/Weiterleiten nur nach expliziter Bestätigung** des Entwurfs im Chat |
-| Scope | Feature in `apps/api` + `apps/web`; Deploy über das bestehende `mistral.json` nach Mistral Studio; **Einzel-Nutzer**; UI auf Deutsch |
+| Provider connections | Providers available as **Mistral Studio connectors** (e.g. `gmail`) use the existing connector (`api/mail/connectors.py`, REST `/v1/connectors/...` with the app key — OAuth credentials are in Mistral, no own OAuth app needed). Others: Gmail & Outlook through **own OAuth2**, iCloud, Yahoo and all others through **IMAP/SMTP with an app password** |
+| Data storage | **Sync to managed Postgres**: credentials encrypted at rest, mail index (metadata + body texts), chat history |
+| Sending mail | Agent may freely search/read/summarize; **send/reply/forward only after explicit confirmation** of the draft in chat |
+| Scope | Feature in `apps/api` + `apps/web`; deploy via existing `mistral.json` to Mistral Studio; **single user**; UI in German |
 
-## Architektur
+## Architecture
 
 ```
-apps/web  (TanStack Start, Port 3001)                   Browser-UI: /, /chat/$conversationId, /mail, /accounts
-   │  typisierter hey-api-Client (src/api/generated, generiert — nie per Hand editieren)
+apps/web  (TanStack Start, Port 3001)                   Browser UI: /, /chat/$conversationId, /mail, /accounts
+   │  typed hey-api client (src/api/generated, generated — never edit by hand)
    ▼  same-origin /api
-apps/api  (FastAPI, Port 3000, Route "/api")            Router-Baum = URL-Baum, Gruppen mit Access-Rule
-   │  api/mail/                                         Mail-, Chat- und Worker-Logik
+apps/api  (FastAPI, Port 3000, Route "/api")            Router tree = URL tree, groups with access rule
+   │  api/mail/                                         Mail, chat and worker logic
    ▼
-packages/py/db   SQLModel-Modelle (drop-in in db/models/) + Accessors (db/accessors/) + Alembic
-packages/py/env  Settings-Module (env/<name>.py), Workspace-Secrets via WorkspaceSecret
-managed Postgres (Modul in mistral.json)                Mail-Index, Credentials, Chat-Verlauf
+packages/py/db   SQLModel models (drop-in in db/models/) + accessors (db/accessors/) + Alembic
+packages/py/env  Settings modules (env/<name>.py), workspace secrets via WorkspaceSecret
+managed Postgres (module in mistral.json)              Mail index, credentials, chat history
 ```
 
-### Oberflächenrouten
+### UI routes
 
-- `/` — Chat-Start mit Begrüßung, Kontostand, Schnellaktionen und Composer; optional mit Mailbezug.
-- `/chat/$conversationId` — Unterhaltung mit Verlauf, Antworten und Vorschlagskarten.
-- `/mail` — Posteingang mit Liste und Filtern; `/mail/$messageId` — geöffnete Mail mit Lesebereich.
-- `/accounts` — Kontenübersicht, Verbinden, erneutes Anmelden und Entfernen.
-- `/tasks` und `/tasks/$taskId` — Aufgabenliste, manuelle Anlage und Fälligkeiten mit Verlauf.
-- `/settings` und `/settings/prompts` — Einstellungen mit Vorlagenbibliothek; `settingsSections` ist der Navigationseinstieg für weitere implementierte Bereiche.
-- `/settings/prompts/new` und `/settings/prompts/$promptId` — Vorlage anlegen oder bearbeiten, auf allen Bildschirmgrößen als eigene Ansicht.
-- `/settings/preferences`, `/settings/preferences/new` und `/settings/preferences/$preferenceId` — Präferenzen, Verwendungsschalter und eigene Anlege-/Bearbeitungsansichten, auch mobil.
+- `/` — chat start with greeting, account status, quick actions and composer; optionally with mail context.
+- `/chat/$conversationId` — conversation with history, replies and proposal cards.
+- `/mail` — inbox with list and filters; `/mail/$messageId` — opened mail with reading pane.
+- `/accounts` — account overview, connect, sign in again and remove.
+- `/tasks` and `/tasks/$taskId` — task list, manual creation and due dates with history.
+- `/settings` and `/settings/prompts` — settings with template library; `settingsSections` is the navigation entry point for further implemented areas.
+- `/settings/prompts/new` and `/settings/prompts/$promptId` — create or edit a template in a separate view at all screen sizes.
+- `/settings/preferences`, `/settings/preferences/new` and `/settings/preferences/$preferenceId` — preferences, usage toggle and separate create/edit views, including on mobile.
 
-### Mail-Domäne (`apps/api/src/api/mail/`)
+### Mail domain (`apps/api/src/api/mail/`)
 
-- `agent.py` — gestreamter Chat-Turn, Tool-Loop und gespeicherter Verlauf.
-- `agent_tools.py` — lesende Agentenwerkzeuge und Erstellen von Vorschlägen. Aufgabenwerkzeuge delegieren an `api/tasks/chat.py`; typisierte Aufgabenbefehle und ihre lokale Ausführung liegen in `api/tasks/proposals.py`.
-- `agent_prompt.py` — deutsche Systemanweisungen für den Agenten.
-- `chat_events.py` — typisierte Streaming-Ereignisse; `chat_schemas.py` — Chat-Ausgabemodelle.
-- `actions.py` — Indexänderungen und einmaliges Rückgängigmachen; `action_backends.py` — Provider-Aktionen.
-- `proposals.py` — Vorschläge speichern, bestätigen, abbrechen und nach Bestätigung ausführen.
-- `newsletters.py` — Newsletter erkennen und unterstützte Abbestellwege ausführen.
-- `insights.py` — Kurzfassungen und Fristen erzeugen und zwischenspeichern; ohne Mailtext gibt es keinen Modellaufruf, sondern eine leere Kurzfassung.
-- `original.py` — Kopfzeilen und Quelltext einer Mail lesend beim Anbieter abrufen; nichts davon wird gespeichert.
-- `jobs.py` — dauerhafte Jobs und periodisches Einreihen von Abrufen.
-- `sync.py` — inkrementelle Änderungen im Index anwenden und veraltete Body-Texte nachlesen; `sync_connector.py`, `sync_gmail.py`,
-  `sync_graph.py`, `sync_imap.py` — Abruf, Parsing und Nachlesen (`fetch_bodies`) je Provider; `sync_types.py` — gemeinsame Sync-Typen und Helfer,
-  darunter `body_text`/`html_to_text` (eine Textfassung für alle Provider: `text/plain` zuerst, außer es ist nur ein kurzer
-  Platzhalter neben längerem HTML; sonst HTML ohne Stile, Skripte, Kommentare und unsichtbare Füllzeichen, mit Absätzen und
-  Listenpunkten), `BODY_VERSION` und `reread_http` (Nachlesen über REST, je Mail ausgewertet).
-- `send.py` — Versand über SMTP, Gmail, Graph oder Connector nach Bestätigung.
-- `connectors.py` — Zugriff auf Mistral-Studio-Connectoren und deren Werkzeuge.
-- `providers.py` — Provider-Registry, OAuth-Endpunkte und IMAP/SMTP-Voreinstellungen.
-- `service.py` — Konten- und Credential-Verwaltung; `crypto.py` — Fernet-Verschlüsselung.
-- `secrets.py` — Workspace-Secrets zur Laufzeit auflösen.
-- `netguard.py` — ausgehende HTTPS-Aufrufe gegen private Ziele und DNS-Rebinding absichern.
-- `transport.py` — Mail-Host-Policy und TLS-Transporte.
-- `headers.py` — Adress- und Abbestell-Header verarbeiten.
-- `state.py` — Kontostatus und Farben aus Konten, Sync-Status und Jobs ableiten.
-- `models_catalog.py` — verfügbare Chat-Modelle kurzzeitig cachen.
-- `dev_seed.py` — lokale Datenbank mit den Beispieldaten der Designboards füllen. Seed-Konten erreichen nie einen Anbieter: Senden und Abbestellen werden abgelehnt, Aktionen ändern nur den Index, Abrufe werden übersprungen, und Kurzfassungen entstehen nie per Modell (nur die gesäten sind abrufbar, sonst `503 insight_unavailable`).
+- `agent.py` — streamed chat turn, tool loop and stored history.
+- `agent_tools.py` — read-only agent tools and proposal creation. Task tools delegate to `api/tasks/chat.py`; typed task commands and their local execution live in `api/tasks/proposals.py`.
+- `agent_prompt.py` — German system instructions for the agent.
+- `chat_events.py` — typed streaming events; `chat_schemas.py` — chat output models.
+- `actions.py` — index changes and one-time undo; `action_backends.py` — provider actions.
+- `proposals.py` — store, confirm, cancel and execute proposals after confirmation.
+- `newsletters.py` — detect newsletters and execute supported unsubscribe methods.
+- `insights.py` — generate and cache summaries and deadlines; without mail text there is no model call, but an empty summary.
+- `original.py` — retrieve mail headers and source read-only from the provider; none is stored.
+- `jobs.py` — durable jobs and periodic sync scheduling.
+- `sync.py` — apply incremental index changes and reread outdated body text; `sync_connector.py`, `sync_gmail.py`,
+  `sync_graph.py`, `sync_imap.py` — fetching, parsing and rereading (`fetch_bodies`) per provider; `sync_types.py` — shared sync types and helpers,
+  including `body_text`/`html_to_text` (one text version for all providers: `text/plain` first, unless it is only a short
+  placeholder alongside longer HTML; otherwise HTML without styles, scripts, comments and invisible padding characters, with paragraphs and
+  bullets), `BODY_VERSION` and `reread_http` (rereading via REST, evaluated per mail).
+- `send.py` — sending via SMTP, Gmail, Graph or connector after confirmation.
+- `connectors.py` — access to Mistral Studio connectors and their tools.
+- `providers.py` — provider registry, OAuth endpoints and IMAP/SMTP presets.
+- `service.py` — account and credential management; `crypto.py` — Fernet encryption.
+- `secrets.py` — resolve workspace secrets at runtime.
+- `netguard.py` — secure outgoing HTTPS calls against private destinations and DNS rebinding.
+- `transport.py` — mail host policy and TLS transports.
+- `headers.py` — process address and unsubscribe headers.
+- `state.py` — derive account status and colors from accounts, sync status and jobs.
+- `models_catalog.py` — briefly cache available chat models.
+- `dev_seed.py` — populate the local database with sample data from the design boards. Seed accounts never reach a provider: sending and unsubscribing are rejected, actions only change the index, syncs are skipped, and summaries are never generated by a model (only seeded ones are retrievable; otherwise `503 insight_unavailable`).
 
-Datenfluss: Ein Konto wird per Connector, OAuth2-Redirect oder IMAP-App-Passwort verbunden.
-OAuth-Credentials bzw. die IMAP-Secret-Referenz landen **Fernet-verschlüsselt** in
-`mail_credential`; Connector-Konten brauchen dort keinen Credential-Eintrag. Ein Abruf-Job füllt
-`mail_message`. `POST /api/v1/chat` oder `/api/v1/chat/stream` lässt den Agenten auf dem Index
-arbeiten. Er legt für Veränderungen und Versand Vorschläge an; `POST /api/v1/chat/proposals/{proposal_id}/confirm`
-führt ausgewählte Einträge nach Bestätigung aus, `.../cancel` verwirft sie. Der Agent verändert
-oder versendet nichts ohne bestätigte Karte. Vom Nutzer selbst ausgelöste Einzelaktionen im
-Posteingang laufen dagegen direkt über die Mail-Aktionsendpunkte.
+Data flow: An account connects through a connector, OAuth2 redirect or IMAP app password.
+OAuth credentials or the IMAP secret reference are stored **Fernet-encrypted** in
+`mail_credential`; connector accounts need no credential entry there. A sync job fills
+`mail_message`. `POST /api/v1/chat` or `/api/v1/chat/stream` lets the agent work on the index.
+It creates proposals for changes and sending; `POST /api/v1/chat/proposals/{proposal_id}/confirm`
+executes selected entries after confirmation, `.../cancel` discards them. The agent changes or
+sends nothing without a confirmed card. Individual inbox actions initiated by the user instead
+run directly through the mail action endpoints.
 
-### API-Endpunkte
+### API endpoints
 
-Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operation_id`.
+Inventory from `apps/api/openapi.json`; each row names method, path and `operation_id`.
 
-| Routergruppe | Methode | Pfad | `operation_id` |
+| Router group | Method | Path | `operation_id` |
 | --- | --- | --- | --- |
 | Health | GET | `/api/health` | `health` |
-| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/accounts` | `liam_mail_accounts` |
-| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages` | `liam_mail_search` |
-| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages/{message_id}` | `liam_mail_read` |
-| Agent-Lesefassade | GET | `/api/agent-read/v1/mail/summary` | `liam_mail_summary` |
-| Kalender | GET | `/api/v1/calendar/connections/google/calendars` | `calendar_google_calendars_list` |
-| Kalender | POST | `/api/v1/calendar/connections/google` | `calendar_google_connect` |
-| Kalender | POST | `/api/v1/calendar/feeds/validate` | `calendar_feed_validate` |
-| Kalender | POST | `/api/v1/calendar/feeds` | `calendar_feed_subscribe` |
-| Kalender | POST | `/api/v1/calendar/feeds/validations/discard` | `calendar_feed_validation_discard` |
-| Kalender | GET | `/api/v1/calendar/sources` | `calendar_sources_list` |
-| Kalender | PATCH | `/api/v1/calendar/sources/{source_id}` | `calendar_source_update` |
-| Kalender | DELETE | `/api/v1/calendar/sources/{source_id}` | `calendar_source_delete` |
-| Kalender | POST | `/api/v1/calendar/sources/{source_id}/sync` | `calendar_source_sync` |
-| Kalender | GET | `/api/v1/calendar/occurrences` | `calendar_occurrences_list` |
-| Kalender | GET | `/api/v1/calendar/occurrences/{occurrence_id}` | `calendar_occurrence_get` |
-| Vorlagen | GET | `/api/v1/prompts` | `prompts_list` |
-| Vorlagen | POST | `/api/v1/prompts` | `prompt_create` |
-| Vorlagen | GET | `/api/v1/prompts/{id}` | `prompt_get` |
-| Vorlagen | PATCH | `/api/v1/prompts/{id}` | `prompt_update` |
-| Vorlagen | DELETE | `/api/v1/prompts/{id}` | `prompt_delete` |
-| Präferenzen | GET | `/api/v1/preferences` | `preferences_list` |
-| Präferenzen | GET | `/api/v1/preferences/candidates` | `preference_candidates_list` |
-| Präferenzen | POST | `/api/v1/preferences/candidates/{candidate_id}/propose` | `preference_candidate_propose` |
-| Präferenzen | POST | `/api/v1/preferences` | `preference_create` |
-| Präferenzen | PATCH | `/api/v1/preferences/{id}` | `preference_update` |
-| Präferenzen | DELETE | `/api/v1/preferences/{id}` | `preference_delete` |
-| Präferenzen | GET | `/api/v1/preferences/contexts/{context_id}` | `preference_context_get` |
-| Einstellungen | GET | `/api/v1/settings` | `settings_get` |
-| Einstellungen / unabhängige Präferenz-Opt-ins | PATCH | `/api/v1/settings` | `settings_update` |
-| Einstellungen | GET | `/api/v1/settings/ui` | `settings_ui_get` |
-| Einstellungen | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
+| Agent read facade | GET | `/api/agent-read/v1/mail/accounts` | `liam_mail_accounts` |
+| Agent read facade | GET | `/api/agent-read/v1/mail/messages` | `liam_mail_search` |
+| Agent read facade | GET | `/api/agent-read/v1/mail/messages/{message_id}` | `liam_mail_read` |
+| Agent read facade | GET | `/api/agent-read/v1/mail/summary` | `liam_mail_summary` |
+| Calendar | GET | `/api/v1/calendar/connections/google/calendars` | `calendar_google_calendars_list` |
+| Calendar | POST | `/api/v1/calendar/connections/google` | `calendar_google_connect` |
+| Calendar | POST | `/api/v1/calendar/feeds/validate` | `calendar_feed_validate` |
+| Calendar | POST | `/api/v1/calendar/feeds` | `calendar_feed_subscribe` |
+| Calendar | POST | `/api/v1/calendar/feeds/validations/discard` | `calendar_feed_validation_discard` |
+| Calendar | GET | `/api/v1/calendar/sources` | `calendar_sources_list` |
+| Calendar | PATCH | `/api/v1/calendar/sources/{source_id}` | `calendar_source_update` |
+| Calendar | DELETE | `/api/v1/calendar/sources/{source_id}` | `calendar_source_delete` |
+| Calendar | POST | `/api/v1/calendar/sources/{source_id}/sync` | `calendar_source_sync` |
+| Calendar | GET | `/api/v1/calendar/occurrences` | `calendar_occurrences_list` |
+| Calendar | GET | `/api/v1/calendar/occurrences/{occurrence_id}` | `calendar_occurrence_get` |
+| Templates | GET | `/api/v1/prompts` | `prompts_list` |
+| Templates | POST | `/api/v1/prompts` | `prompt_create` |
+| Templates | GET | `/api/v1/prompts/{id}` | `prompt_get` |
+| Templates | PATCH | `/api/v1/prompts/{id}` | `prompt_update` |
+| Templates | DELETE | `/api/v1/prompts/{id}` | `prompt_delete` |
+| Preferences | GET | `/api/v1/preferences` | `preferences_list` |
+| Preferences | GET | `/api/v1/preferences/candidates` | `preference_candidates_list` |
+| Preferences | POST | `/api/v1/preferences/candidates/{candidate_id}/propose` | `preference_candidate_propose` |
+| Preferences | POST | `/api/v1/preferences` | `preference_create` |
+| Preferences | PATCH | `/api/v1/preferences/{id}` | `preference_update` |
+| Preferences | DELETE | `/api/v1/preferences/{id}` | `preference_delete` |
+| Preferences | GET | `/api/v1/preferences/contexts/{context_id}` | `preference_context_get` |
+| Settings | GET | `/api/v1/settings` | `settings_get` |
+| Settings / independent preference opt-ins | PATCH | `/api/v1/settings` | `settings_update` |
+| Settings | GET | `/api/v1/settings/ui` | `settings_ui_get` |
+| Settings | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
 | Chat | POST | `/api/v1/chat/stream` | `chat_stream` |
 | Chat | GET | `/api/v1/chat/conversations` | `chat_conversations_list` |
@@ -123,319 +122,290 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Chat | GET | `/api/v1/chat/models` | `chat_models_list` |
 | Chat | POST | `/api/v1/chat/proposals/{proposal_id}/confirm` | `chat_proposal_confirm` |
 | Chat | POST | `/api/v1/chat/proposals/{proposal_id}/cancel` | `chat_proposal_cancel` |
-| Mail / Konten | GET | `/api/v1/mail/accounts` | `mail_accounts_list` |
-| Mail / Konten | POST | `/api/v1/mail/accounts/imap` | `mail_account_connect_imap` |
-| Mail / Konten | GET | `/api/v1/mail/accounts/oauth/{provider}/authorize` | `mail_account_oauth_authorize` |
-| Mail / Konten | GET | `/api/v1/mail/accounts/oauth/{provider}/callback` | `mail_account_oauth_callback` |
-| Mail / Konten | GET | `/api/v1/mail/accounts/options` | `mail_account_options` |
-| Mail / Konten | DELETE | `/api/v1/mail/accounts/{account_id}` | `mail_account_delete` |
-| Mail / Konten | PATCH | `/api/v1/mail/accounts/{account_id}` | `mail_account_update` |
-| Mail / Konten | POST | `/api/v1/mail/accounts/{account_id}/sync` | `mail_account_sync` |
-| Mail / Aktionen | POST | `/api/v1/mail/actions/undo` | `mail_actions_undo` |
-| Mail / Connectoren | GET | `/api/v1/mail/connectors` | `mail_connectors_list` |
-| Mail / Connectoren | POST | `/api/v1/mail/connectors/{name}/connect` | `mail_account_connect_connector` |
-| Mail / Connectoren | GET | `/api/v1/mail/connectors/{name}/tools` | `mail_connector_tools_list` |
-| Mail / Nachrichten | GET | `/api/v1/mail/messages` | `mail_messages_list` |
-| Mail / Nachrichten | POST | `/api/v1/mail/messages/actions` | `mail_messages_bulk_action` |
-| Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}` | `mail_message_get` |
-| Mail / Nachrichten | POST | `/api/v1/mail/messages/{message_id}/actions` | `mail_message_action` |
-| Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}/insight` | `mail_message_insight` |
-| Mail / Nachrichten | GET | `/api/v1/mail/messages/{message_id}/original` | `mail_message_original` |
-| Mail / Übersicht | GET | `/api/v1/mail/summary` | `mail_summary` |
-| Mail / Abruf | POST | `/api/v1/mail/sync` | `mail_sync_all` |
-| Aufgaben | GET | `/api/v1/tasks` | `tasks_list` |
-| Aufgaben | GET | `/api/v1/tasks/{series_id}` | `tasks_get` |
-| Aufgaben | PATCH | `/api/v1/tasks/{series_id}` | `tasks_update` |
-| Aufgaben | POST | `/api/v1/tasks/{series_id}/archive` | `tasks_archive` |
-| Aufgaben | DELETE | `/api/v1/tasks/{series_id}` | `tasks_delete` |
-| Aufgaben | POST | `/api/v1/tasks` | `tasks_create` |
-| Aufgaben | POST | `/api/v1/tasks/preview` | `tasks_preview` |
-| Aufgaben | POST | `/api/v1/tasks/reconcile` | `tasks_reconcile` |
-| Aufgaben | GET | `/api/v1/tasks/occurrences` | `tasks_occurrences_list` |
-| Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/complete` | `tasks_occurrence_complete` |
-| Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/skip` | `tasks_occurrence_skip` |
-| Aufgaben | POST | `/api/v1/tasks/occurrences/{occurrence_id}/reopen` | `tasks_occurrence_reopen` |
+| Mail / accounts | GET | `/api/v1/mail/accounts` | `mail_accounts_list` |
+| Mail / accounts | POST | `/api/v1/mail/accounts/imap` | `mail_account_connect_imap` |
+| Mail / accounts | GET | `/api/v1/mail/accounts/oauth/{provider}/authorize` | `mail_account_oauth_authorize` |
+| Mail / accounts | GET | `/api/v1/mail/accounts/oauth/{provider}/callback` | `mail_account_oauth_callback` |
+| Mail / accounts | GET | `/api/v1/mail/accounts/options` | `mail_account_options` |
+| Mail / accounts | DELETE | `/api/v1/mail/accounts/{account_id}` | `mail_account_delete` |
+| Mail / accounts | PATCH | `/api/v1/mail/accounts/{account_id}` | `mail_account_update` |
+| Mail / accounts | POST | `/api/v1/mail/accounts/{account_id}/sync` | `mail_account_sync` |
+| Mail / actions | POST | `/api/v1/mail/actions/undo` | `mail_actions_undo` |
+| Mail / connectors | GET | `/api/v1/mail/connectors` | `mail_connectors_list` |
+| Mail / connectors | POST | `/api/v1/mail/connectors/{name}/connect` | `mail_account_connect_connector` |
+| Mail / connectors | GET | `/api/v1/mail/connectors/{name}/tools` | `mail_connector_tools_list` |
+| Mail / messages | GET | `/api/v1/mail/messages` | `mail_messages_list` |
+| Mail / messages | POST | `/api/v1/mail/messages/actions` | `mail_messages_bulk_action` |
+| Mail / messages | GET | `/api/v1/mail/messages/{message_id}` | `mail_message_get` |
+| Mail / messages | POST | `/api/v1/mail/messages/{message_id}/actions` | `mail_message_action` |
+| Mail / messages | GET | `/api/v1/mail/messages/{message_id}/insight` | `mail_message_insight` |
+| Mail / messages | GET | `/api/v1/mail/messages/{message_id}/original` | `mail_message_original` |
+| Mail / summary | GET | `/api/v1/mail/summary` | `mail_summary` |
+| Mail / sync | POST | `/api/v1/mail/sync` | `mail_sync_all` |
+| Tasks | GET | `/api/v1/tasks` | `tasks_list` |
+| Tasks | GET | `/api/v1/tasks/{series_id}` | `tasks_get` |
+| Tasks | PATCH | `/api/v1/tasks/{series_id}` | `tasks_update` |
+| Tasks | POST | `/api/v1/tasks/{series_id}/archive` | `tasks_archive` |
+| Tasks | DELETE | `/api/v1/tasks/{series_id}` | `tasks_delete` |
+| Tasks | POST | `/api/v1/tasks` | `tasks_create` |
+| Tasks | POST | `/api/v1/tasks/preview` | `tasks_preview` |
+| Tasks | POST | `/api/v1/tasks/reconcile` | `tasks_reconcile` |
+| Tasks | GET | `/api/v1/tasks/occurrences` | `tasks_occurrences_list` |
+| Tasks | POST | `/api/v1/tasks/occurrences/{occurrence_id}/complete` | `tasks_occurrence_complete` |
+| Tasks | POST | `/api/v1/tasks/occurrences/{occurrence_id}/skip` | `tasks_occurrence_skip` |
+| Tasks | POST | `/api/v1/tasks/occurrences/{occurrence_id}/reopen` | `tasks_occurrence_reopen` |
 
-## Agent-Lesefassade
+## Agent read facade
 
-`api/mcp/registry.py` zählt die vier ausdrücklich freigegebenen Mail-Leseoperationen auf;
-`api/mcp/mail.py` liest ausschließlich den vorhandenen INBOX-Index über Accessors. Der Scope
-stammt aus einem `ReadGrant`, nie aus Requestparametern. Der Standard-Verifier in
-`api/mcp/access.py` lehnt alle Anfragen mit 401 ab. Ein späterer nativer Transport muss nach
-positivem Zugriffsnachweis einen eigenen `ReadAccessVerifier` an `get_read_access_verifier`
-anbinden und dieselben Services mit dessen geprüftem Grant aufrufen. Grants sind auf 100
-Konto-IDs begrenzt; fremde Auswahlen ergeben 403, unbekannte und fremde Mail-IDs jeweils 404.
-Auch das Lesen per ID bleibt im INBOX-Index: Eine inzwischen verschobene Mail antwortet wie eine
-fehlende. Ein leerer Grant liefert leere Ergebnisse, nie alle Konten.
-Relative Links `/mail/<uuid>` vermeiden eine unkonfigurierte externe Origin. Maildaten sind
-fremder Inhalt, keine Anweisungen. Der Indexstand wird ausgewiesen, Provideraktualität bleibt
-unbekannt. Ein erfolgreicher Abruf kann nur eine begrenzte Seite enthalten; ohne gespeicherten
-Vollständigkeitsmarker bleibt der Index auch bei Status `ok` konservativ unvollständig. Der
-Zeitstempel bezeichnet den letzten Versuch, nicht zwingend einen Erfolg. Die reduzierte Spec ist
-keine Runtime-Autorisierung; produktive Exposition bleibt
-bis zum Zugriffsnachweis gesperrt. Der Uvicorn-Access-Log entfernt Querystrings dieser
-Routen, auch wenn sich das Format des Logeintrags ändert; Gateway- und Proxy-Logs müssen vor einer Freischaltung unabhängig ebenso geschützt werden.
-Der Export wird mit `bunx nx run api:gen-agent-openapi` reproduziert.
+`api/mcp/registry.py` enumerates the four explicitly approved mail read operations;
+`api/mcp/mail.py` reads only the existing INBOX index through accessors. The scope comes from a
+`ReadGrant`, never request parameters. The default verifier in `api/mcp/access.py` rejects all
+requests with 401. A future native transport must, after positive proof of access, bind its own
+`ReadAccessVerifier` to `get_read_access_verifier` and call the same services with its verified
+grant. Grants are limited to 100 account IDs; foreign selections return 403, unknown and foreign
+mail IDs both return 404. Reading by ID also remains within the INBOX index: a mail moved since
+then responds like a missing one. An empty grant returns empty results, never all accounts.
+Relative links `/mail/<uuid>` avoid an unconfigured external origin. Mail data is foreign content,
+not instructions. The index state is reported; provider freshness remains unknown. A successful
+sync may contain only a limited page; without a stored completeness marker, the index remains
+conservatively incomplete even with status `ok`. The timestamp denotes the last attempt, not
+necessarily a success. The reduced spec is not runtime authorization; production exposure remains
+blocked until access is proven. The Uvicorn access log removes query strings for these routes even
+if the log entry format changes; gateway and proxy logs must independently receive the same
+protection before release. The export is reproduced with `bunx nx run api:gen-agent-openapi`.
 
-## Aufgabendomäne
+## Task domain
 
-Die Oberfläche unter `apps/web/src/tasks/` verwendet die generierten Task-Endpunkte. Die
-Anlage zeigt eine serverseitige Vorschau; `reconcile.ts` begrenzt jeden Abruf auf einen
-festen Horizont und setzt den gespeicherten Fortschritt beim nächsten Öffnen fort.
+The UI under `apps/web/src/tasks/` uses the generated task endpoints. Creation shows a
+server-side preview; `reconcile.ts` limits each fetch to a fixed horizon and resumes stored
+progress on the next opening.
 
-`api/tasks/` enthält die Serienanlage, RRULE-Auswertung, Reconcile und Zustandswechsel. Die
-Aufgabenrouter legen Serien an und materialisieren dabei die erste begrenzte Reconcile-Seite
-in derselben Transaktion. Weitere Seiten werden ausdrücklich über `POST /tasks/reconcile`
-abgerufen. PATCH unterstützt Einzeländerungen und neue Zeitplanrevisionen.
+`api/tasks/` contains series creation, RRULE evaluation, reconciliation and state transitions.
+The task routers create series and materialize the first bounded reconcile page in the same
+transaction. Further pages are explicitly fetched via `POST /tasks/reconcile`. PATCH supports
+individual changes and new schedule revisions.
 
-`PATCH /tasks/{series_id}` benötigt die Serienversion `expected_version`, die gewählte
-`occurrence_id`, deren `expected_occurrence_version`, `scope` und den neuen lokalen
-Start `start`. Das aktuelle Schema bearbeitet Fälligkeiten, nicht Titel oder Notizen;
-Textfelder werden abgelehnt, damit historische Instanzen nicht implizit umbenannt werden.
-`scope=occurrence` verschiebt nur eine offene Instanz und erhält deren ursprünglichen
-Schlüssel; Genauigkeit (Datum/Uhrzeit), Zeitzone und Regel bleiben gleich. Beide Versionen
-steigen. `scope=this_and_following` wählt eine zukünftige offene Instanz der aktuellen
-Revision; ihre tatsächliche Fälligkeit und ihr ursprünglicher Schlüssel müssen noch in
-der Zukunft liegen. Bereits fällige Instanzen werden nicht als Trennstelle verwendet.
-Der gespeicherte Abruffortschritt muss die Vollständigkeit der alten Revision bis zur
-exklusiven Trennstelle belegen; sonst wird die Teilung mit `409 task_version_conflict`
-abgelehnt und muss nach weiterem Reconcile erneut versucht werden. Die alte Regel endet exklusiv vor dem
-ursprünglichen Schlüssel; offene zukünftige Instanzen ab dort werden ersetzt. Vergangene,
-erledigte und übersprungene Instanzen bleiben erhalten, auch bereits verschobene
-Vergangenheitsausnahmen. Die neue Revision darf Datum/Uhrzeit und Zeitzone ändern,
-startet aber nicht vor dem lokalen Trenn-Tag; der Start muss zur neuen Regel passen.
-Ohne `rrule` bleibt die alte Regel;
-explizites `rrule: null` erzeugt eine Einzelaufgabe. Eine neue Revision braucht eine
-Zeitzone, auch wenn die alte Datumsrevision noch `null` trägt.
-Kollisionen mit erledigten Instanzen werden mit derselben COUNT-/DST-Auswertung wie bei
-der Materialisierung geprüft, auch außerhalb der ersten Abrufseite; sie liefern
-`409 task_revision_conflict` ohne Aufgabenänderung. Andere Versions-/Zustandskonflikte
-liefern `409 task_version_conflict`. Alle Änderungen und die erste neue Reconcile-Seite
-liegen in der Transaktion des Aufrufers; alte Revisionscursor werden zurückgewiesen.
+`PATCH /tasks/{series_id}` requires the series version `expected_version`, the selected
+`occurrence_id`, its `expected_occurrence_version`, `scope` and the new local start `start`.
+The current schema edits due dates, not titles or notes; text fields are rejected so historical
+occurrences are not implicitly renamed. `scope=occurrence` moves only one open occurrence and
+retains its original key; precision (date/time), timezone and rule remain unchanged. Both
+versions increase. `scope=this_and_following` selects a future open occurrence of the current
+revision; its actual due date and original key must both still be in the future. Already due
+occurrences are not used as split points. Stored fetch progress must prove completeness of the
+old revision up to the exclusive split point; otherwise the split is rejected with
+`409 task_version_conflict` and must be retried after further reconciliation. The old rule ends
+exclusively before the original key; open future occurrences from there are replaced. Past,
+completed and skipped occurrences remain, including already moved past exceptions. The new
+revision may change date/time and timezone but does not start before the local split day; the
+start must match the new rule. Without `rrule` the old rule remains; explicit `rrule: null`
+creates a one-off task. A new revision needs a timezone even if the old date revision still has
+`null`. Collisions with completed occurrences are checked using the same COUNT/DST evaluation as
+materialization, including outside the first fetch page; they return `409 task_revision_conflict`
+without changing tasks. Other version/state conflicts return `409 task_version_conflict`. All
+changes and the first new reconcile page are in the caller's transaction; old revision cursors
+are rejected.
 
-Archivieren und endgültiges Löschen benötigen `expected_version` der Serie.
-Archivieren sperrt neue Materialisierung und storniert in einem bedingten Update nur
-offene zukünftige Instanzen; heute fällige Datumsaufgaben sowie bereits fällige und
-abgeschlossene Instanzen bleiben erhalten. Wiederöffnen zukünftiger Instanzen einer
-archivierten Serie ist gesperrt. DELETE benötigt zusätzlich ausdrücklich
-`confirm_history_loss: true` im JSON-Body und entfernt Serie, Revisionen und Instanzen
-in derselben Transaktion. Beide Dienste nehmen eine Session und committen nicht selbst.
-Seriensperren serialisieren diese Aktionen mit Reconcile und Zustandswechseln;
-veraltete Versionen ergeben 409, fehlende Serien 404.
+Archiving and permanent deletion require the series `expected_version`. Archiving blocks new
+materialization and cancels only open future occurrences in a conditional update; date-only tasks
+due today and already due and completed occurrences remain. Reopening future occurrences of an
+archived series is blocked. DELETE additionally requires explicit `confirm_history_loss: true`
+in the JSON body and removes series, revisions and occurrences in the same transaction. Both
+services take a session and do not commit themselves. Series locks serialize these actions with
+reconcile and state transitions; stale versions yield 409, missing series 404.
 
-`GET /tasks` und `GET /tasks/{series_id}` lesen ausschließlich gespeicherte Daten im
-serverseitigen Scope `app`. Beide benötigen das inklusive lokale Datumsfenster
-`due_from`/`due_to` (höchstens 366 Tage). Die Liste ist nach Serien-ID paginiert
-(`limit` 1–100, `cursor`) und filtert `status=active|archived` sowie
-`source=all|unlinked|account`; `account` braucht `source_account_id`, `unlinked`
-bedeutet ohne Quellmail. Quellreferenzen werden nicht mit lebenden Mail-/Kontenzeilen
-verknüpft: Entfernte Quellen lassen Aufgaben und ihre Filterzuordnung bestehen.
-Die Liste enthält Serien mit überlappender Regelgültigkeit oder gespeicherter Fälligkeit
-im Fenster; eine passende Serie muss nicht an jedem Tag eine Fälligkeit haben.
-Das Detail liefert die aktuelle Revision und eine eigene paginierte Instanzliste,
-optional mit Instanzstatus. `complete` gilt je Serie ausschließlich für das ausgewiesene
-Fenster, unabhängig von der Instanz-Pagination oder dem Statusfilter. Es wird konservativ
-aus gespeichertem Fortschritt abgeleitet; ein zeitgebundener Tag gilt erst vollständig,
-wenn der ganze lokale Tag abgedeckt ist. GET materialisiert nichts und ruft kein Modell auf.
+`GET /tasks` and `GET /tasks/{series_id}` read only stored data in the server-side scope `app`.
+Both require the inclusive local date window `due_from`/`due_to` (at most 366 days). The list is
+paginated by series ID (`limit` 1–100, `cursor`) and filters `status=active|archived` and
+`source=all|unlinked|account`; `account` requires `source_account_id`, `unlinked` means without a
+source mail. Source references are not joined to live mail/account rows: removed sources leave
+tasks and their filter association intact. The list contains series with overlapping rule validity
+or a stored due date in the window; a matching series need not have a due date every day. Detail
+returns the current revision and its own paginated occurrence list, optionally with occurrence
+status. Per series, `complete` applies exclusively to the indicated window, independently of
+occurrence pagination or status filter. It is derived conservatively from stored progress; a timed
+day is complete only when the entire local day is covered. GET materializes nothing and calls no
+model.
 
-Reconcile nimmt eine Serien-ID, optional Revisions-ID und Cursor, `limit` (1–100) und
-`advance`. Ohne Cursor setzt der Aufruf unter Sperre den gespeicherten Fortschritt fort;
-ein mitgelieferter veralteter Cursor ergibt 409. Die Antwort nennt Revisions-ID, Cursor,
-Zielzeitpunkt und `complete` (nur für das feste Fenster ab Serienbeginn bis zum Ziel).
-`advance: true` startet erst nach Abschluss mit dessen exaktem Cursor einen neuen Lauf
-bis Serverzeit plus 30 Tage. Die letzte geprüfte Position bleibt im Abschlusscursor;
-Fortschritt und Einfügen erfolgen gemeinsam in der Transaktion des Aufrufers.
+Reconcile takes a series ID, optional revision ID and cursor, `limit` (1–100) and `advance`.
+Without a cursor, the call resumes stored progress under lock; a supplied stale cursor yields 409.
+The response names revision ID, cursor, target time and `complete` (only for the fixed window from
+series start to target). Only after completion, `advance: true` with its exact cursor starts a new
+run up to server time plus 30 days. The last checked position remains in the completion cursor;
+progress and insertion happen together in the caller's transaction.
 
-`POST /tasks/preview` schreibt nichts und benötigt Start, Ende und Zeitzone. Das Fenster
-ist auf 366 Tage und die Seite auf 100 Kandidaten begrenzt; `complete: false` bedeutet,
-dass die Vorschau nicht das ganze Fenster zeigt. Sie nennt entfallene lokale Uhrzeiten
-und unmögliche Monatstage monatlicher Regeln. Auch dieser lesende POST bleibt gemäß
-der MCP-Inventur außerhalb freigegebener Agentenoberflächen.
+`POST /tasks/preview` writes nothing and requires start, end and timezone. The window is limited
+to 366 days and the page to 100 candidates; `complete: false` means the preview does not show the
+whole window. It reports skipped local times and impossible month days of monthly rules. Under the
+MCP inventory this read-only POST also remains outside approved agent interfaces.
 
-`COUNT` zählt nach RFC 5545 nur existierende Fälligkeiten: Nicht existierende lokale
-Uhrzeiten verbrauchen keinen Zählerplatz. Vorschau und Persistenz verwenden denselben
-Parser. Bereits abgeschlossene Abrufläufe zeitgebundener COUNT-Serien mit altem
-Abschlussmarker werden beim nächsten Reconcile seitenweise erneut ausgewertet;
-die ursprünglichen Instanzschlüssel verhindern Duplikate und erhalten den Zustand.
-So werden fehlende Endinstanzen ergänzt, ohne Datenmigration.
+Under RFC 5545, `COUNT` counts only existing due dates: nonexistent local times do not consume a
+count. Preview and persistence use the same parser. Previously completed fetch runs of timed COUNT
+series with an old completion marker are reevaluated page by page on the next reconcile; original
+occurrence keys prevent duplicates and preserve state. This adds missing final occurrences without
+a data migration.
 
-Neue Aufgaben brauchen auch ohne Uhrzeit eine gültige IANA-Zeitzone; fehlt sie,
-antwortet die Anlage mit `422 task_invalid`. Das Datum bleibt ein Datum. Alte
-Datumsrevisionen mit `timezone: null` verwenden für Tagesgrenzen UTC, ohne die
-Daten umzuschreiben. Heute gilt als bereits fällig, überfällig erst ab dem nächsten
-lokalen Tag. Eine neue Serienrevision kann die Zeitzone ausdrücklich setzen.
+New tasks require a valid IANA timezone even without a time; if missing, creation returns
+`422 task_invalid`. The date remains a date. Old date revisions with `timezone: null` use UTC for
+day boundaries without rewriting the data. Today is already due; overdue begins only the next local
+day. A new series revision can explicitly set the timezone.
 
-### Aufgaben im Chat
+### Tasks in chat
 
-`task_source=none|all|unlinked|account|account_and_unlinked` und gegebenenfalls
-`task_source_account_id` bilden im Composer einen eigenen sichtbaren Umfang. Bei gewähltem
-Mailkonto X gibt es „Keine Aufgaben“, „Aufgaben dieses Kontos“ und „Alle Aufgaben“.
-Letzteres speichert ausdrücklich `{"source":"account_and_unlinked","account_id":X}`
-und erlaubt nur Aufgaben von X plus persönliche Aufgaben ohne Konto- und Mailbezug, nie andere Konten
-(auch nicht deren Aufgaben ohne Quellmail).
-Lesen, Vorschlagen und Bestätigen prüfen dieselbe Grenze. Ohne Mailkontoauswahl bleiben
-`none|all|unlinked|account` unverändert; `account_and_unlinked` braucht ein gewähltes Mailkonto. Der Umfang steht
-je Turn in `chat_context.task_scope_json`; Altverlauf erhält durch den Serverstandard
-`{"source":"none"}` keinen Zugriff. Jede Änderung verlangt bei vorhandenem Verlauf eine neue
-Unterhaltung. Resolver und Agent prüfen alle historischen Kontexte vor Modellanfragen erneut.
-`search_tasks`/`get_task` lesen ohne Reconcile, mit inklusivem Datumsfenster bis 90 Tage,
-Serien- und Instanzcursor sowie Vollständigkeit je Serie/Fenster; Texte stehen in
-`untrusted_task_data`. `propose_task` erzeugt eine Karte für Anlage, Fälligkeitsänderung,
-Erledigen, Überspringen, Wiederöffnen oder Archivieren, niemals für endgültiges Löschen.
-Quellen und Darstellungsdaten stammen aus serverseitigen Reads. Das gemeinsame Proposal-Modell
-bindet Zielversionen und Quelle; neue Aufgaben lassen sich in der Karte bearbeiten, ohne die
-Quelle zu wechseln. Confirm nimmt dafür ausschließlich einen typisierten `task_edit` der Anlage.
-Die Vorschau wird bei Zeitplanänderungen neu gelesen. Claim, erneute Quellen-/Versionsprüfung,
-Aufgabenmutation und erfolgreicher Abschluss liegen in genau einer DB-Transaktion. Fehler vor
-Commit lassen die Karte `pending`; ein zweiter Confirm nach Commit liefert wie im Mailpfad
-409 `proposal_not_pending`, ohne zweite Wirkung. Mail-/Versandaktionen behalten ihren bisherigen
-Providerpfad. Eine entfernte Quellmail wird nicht ersetzt. „Weitere Aktionen → Aufgabe
-vorschlagen“ an der geöffneten Mail startet eine neue Unterhaltung mit ausdrücklichem Mail- und Aufgaben-Kontoumfang; Mailtexte werden nicht als
-Aufgabenbeschreibung kopiert. Nach Confirm invalidiert die Karte die Query-Gruppe `tasks`.
+`task_source=none|all|unlinked|account|account_and_unlinked` and, where applicable,
+`task_source_account_id` form a separate visible scope in the composer. With mail account X
+selected, the options are “Keine Aufgaben”, “Aufgaben dieses Kontos” and “Alle Aufgaben” (UI
+text). The last explicitly stores `{"source":"account_and_unlinked","account_id":X}` and permits
+only tasks of X plus personal tasks without account or mail association, never other accounts
+(including their tasks without source mail). Reading, proposing and confirming enforce the same
+boundary. Without a mail account selection, `none|all|unlinked|account` remain unchanged;
+`account_and_unlinked` requires a selected mail account. The scope is in
+`chat_context.task_scope_json` per turn; legacy history receives no access through the server
+default `{"source":"none"}`. Any change requires a new conversation when history exists. Resolver
+and agent recheck all historical contexts before model requests.
+`search_tasks`/`get_task` read without reconcile, with an inclusive date window up to 90 days,
+series and occurrence cursors and completeness per series/window; text is in
+`untrusted_task_data`. `propose_task` creates a card for creation, due-date changes, completion,
+skipping, reopening or archiving, never permanent deletion. Sources and display data come from
+server-side reads. The shared proposal model binds target versions and source; new tasks can be
+edited in the card without changing the source. Confirm accepts only a typed creation `task_edit`
+for this. The preview is reread when the schedule changes. Claim, renewed source/version check,
+task mutation and successful completion are in exactly one DB transaction. Errors before commit
+leave the card `pending`; a second confirm after commit returns 409 `proposal_not_pending`, as in
+the mail path, without a second effect. Mail/sending actions retain their existing provider path.
+A removed source mail is not replaced. “Weitere Aktionen → Aufgabe vorschlagen” on an open mail
+starts a new conversation with explicit mail and task account scope; mail text is not copied as a
+task description. After confirm the card invalidates the `tasks` query group.
 
-## Kalenderdomäne
+## Calendar domain
 
-Die Oberfläche unter `/calendar` zeigt die gemeinsame Agenda; `/calendar/$occurrenceId`
-öffnet eine stabile Instanz. `is_active` bleibt die Freigabe: Pausierte Quellen werden
-in der Verwaltung und als Hinweis angezeigt, ihre Termine bleiben bis zur Aktivierung
-verborgen. Sie tragen nicht zu einer Aussage „Keine Termine“ bei und bleiben auch für
-Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
-`CalendarSetup` in `apps/web/src/calendar/FeedSetup.tsx` bietet „Kalender abonnieren“
-(`FeedSetup`: Name, private Kalenderadresse und ausdrücklich angezeigte Fallbackzone) sowie
-„Google Kalender verbinden“ (`GoogleSetup`: aktuelle Kalenderliste mit Checkboxen, keine
-Neuauswahl vorgewählt, bestehende Verbindungen angehakt und gesperrt). Der Google-Dialog
-hält die Liste nur lokal und liest sie beim nächsten Öffnen erneut. Nach dem Verbinden wird
-die Query-Gruppe `calendar` invalidiert.
-`webcal` wird sichtbar zu `https`; die Serverprüfung normalisiert unabhängig nochmals.
-Adresse und Prüftoken bleiben nur im Dialogzustand, nie im Browser-Storage oder Query-Cache.
-Änderungen verwerfen die Prüfung; Abonnieren und Adresswechsel invalidieren die Query-Gruppe
-`calendar`.
+The UI at `/calendar` shows the shared agenda; `/calendar/$occurrenceId` opens a stable
+occurrence. `is_active` remains the permission: paused sources appear in management and as a
+notice, but their appointments remain hidden until activation. They do not contribute to a “Keine Termine” claim and remain blocked for chat tools and old references (decision for #22: option A).
+`CalendarSetup` in `apps/web/src/calendar/FeedSetup.tsx` offers “Kalender abonnieren”
+(`FeedSetup`: name, private calendar address and explicitly displayed fallback zone) and “Google
+Kalender verbinden” (`GoogleSetup`: current calendar list with checkboxes, no new selections
+preselected, existing connections checked and disabled). Quoted labels here are UI text. The
+Google dialog keeps the list locally only and rereads it on next opening. After connecting, the
+`calendar` query group is invalidated. `webcal` visibly becomes `https`; server validation
+normalizes independently again. Address and validation token remain only in dialog state, never
+browser storage or query cache. Changes discard validation; subscribing and changing the address
+invalidate the `calendar` query group.
 
-Google-Kalender werden ausschließlich lesend über den Studio-Connector `google_calendar`
-angebunden, ohne eigenen OAuth-Fallback. `api/calendar/google.py` enthält die gemeinsame
-Pagination und das Mapping für Produktionsadapter und Offline-Probe. Nur `list_calendars`
-und `list_events` sind dort erlaubt; die Mail-Allowlisten bleiben unverändert. Die Verwaltung
-liest alle Kalenderseiten (höchstens zehn), zeigt keine Beschreibungen und legt ausgewählte
-Quellen mit `capabilities=["read"]` samt erstem Abrufjob atomar an. Wiederholungen lassen
-bestehende Quellen unverändert. `calendar_google_calendars_list` bleibt wegen des Provideraufrufs
-und privater Kalendernamen browser-only und gehört nicht in die Studio-Leseliste.
-Die Verbindung bindet `connection_ref` an `google_calendar#<fingerprint>`: SHA-256 aus
-`google_calendar:` plus der obersten `summary` einer Hauptkalender-Terminliste, gekürzt auf
-16 Hexzeichen. Vor und nach jedem Snapshot-Listing wird diese Identität mit einem kleinen Hauptkalenderfenster
-erneut geprüft; ein fehlender Kalender wird bei geänderter Identität ebenfalls als
-`reconnect_required` gemeldet. Abweichungen sperren den Abruf, ohne den Index zu ändern. Ein
-Kontowechsel genau zwischen der letzten Prüfung und dem Speichern bleibt ohne Unterstützung des
-Anbieters möglich.
-Ein anderes verbundenes Google-Konto erzeugt neue Quellen, übernimmt nie alte Quellen.
-Dies ist das verfügbare Identitätssignal des Connectors, keine unveränderliche Google-Account-ID;
-eine geänderte Hauptkalenderbezeichnung kann daher ebenfalls ein erneutes Verbinden erfordern,
-und zwei Konten mit gleicher Hauptkalenderbezeichnung sind nicht unterscheidbar.
-Snapshots lesen alle Seiten des festen Fensters heute −30 bis +180 Tage, höchstens 40 Seiten
-und 10.000 Instanzen. Fehlende Seiten, Fehler und Grenzen liefern nie einen Teilsnapshot.
-Instanz-ID und `recurringEventId` erhalten verschobene Instanzen und Serienbezug;
-fehlende abgesagte Instanzen verschwinden erst beim vollständigen Snapshotwechsel.
-Revision-Fence und `replace_all` gelten wie bei ICS. Erfolg setzt die Abrufplanung ausdrücklich
-mit `reset_schedule` zurück, unabhängig von verschlüsselten ICS-HTTP-Validatoren.
-`CALENDAR_GOOGLE_SYNC_INTERVAL_MINUTES` ist standardmäßig 5. Der gemeinsame Worker prüft
-Google und ICS jede Minute. `reconnect_required` und `calendar_unavailable` stoppen automatische
-Versuche bis zu manuellem Abruf oder Resume; `provider_unavailable` nutzt den begrenzten Backoff.
-Entfernen räumt nur lokal auf, nie bei Google. Schreiben bleibt gesperrt:
-#23 ist `BLOCKED: calendar_write_capability_missing` (keine Versionsvorbedingung, keine idempotente Anlage).
-Belege und offene Live-Fragen stehen in `docs/superpowers/probes/2026-11-18-google-kalender.md`.
-Die Agenda gruppiert und zeigt Zeitpunkte in der Browser-Zeitzone; Ganztägiges bleibt
-bei seinem Datum. Lokale Tagesgrenzen werden in Zeitpunkte umgerechnet. Weil der
-Index-Endpunkt nur ganze UTC-Daten akzeptiert, wird das Abfragefenster nach außen
-aufgerundet und umfasst zusätzlich die Ganztagsdaten. Fenster über 90 UTC-Tagen werden
-in angrenzende Teilfenster aufgeteilt, die wie Cursorseiten nur ausdrücklich nachgeladen
-werden. Randtreffer außerhalb der gewählten lokalen Starttage werden ausgeblendet,
-doppelte Instanz-IDs aus angrenzenden Fenstern zusammengeführt. Eine leere Teilseite
-behauptet nicht „Keine Termine“, solange weitere Seiten oder Teilfenster fehlen.
-Ein Stand älter als 24 Stunden bekommt einen Altershinweis; beim Öffnen wird einmal je
-Quelle über den expliziten Verwaltungsendpunkt ein Abruf angefragt. Das verspricht keine
-Aktualität beim Anbieter. `seed_calendars` ergänzt fünf synthetische Quellen für Google-/ICS-
-Darstellung, Ganztag, langen Titel, alten Stand, fehlende Abdeckung und Pause. Ihre festen
-IDs werden vor dem Einreihen und vor der Adapterausführung übersprungen.
+Google calendars connect exclusively read-only through the Studio connector `google_calendar`,
+with no own OAuth fallback. `api/calendar/google.py` contains shared pagination and mapping for
+the production adapter and offline probe. Only `list_calendars` and `list_events` are allowed
+there; mail allowlists remain unchanged. Management reads all calendar pages (at most ten),
+shows no descriptions and atomically creates selected sources with `capabilities=["read"]` and
+an initial sync job. Repeats leave existing sources unchanged. Because it calls the provider and
+returns private calendar names, `calendar_google_calendars_list` remains browser-only and does
+not belong in the Studio read list.
+The connection binds `connection_ref` to `google_calendar#<fingerprint>`: SHA-256 of
+`google_calendar:` plus the top-level `summary` of a primary calendar event listing, shortened to
+16 hexadecimal characters. Before and after each snapshot listing this identity is rechecked with
+a small primary-calendar window; a missing calendar is also reported as `reconnect_required`
+when identity changed. Mismatches block sync without changing the index. An account switch
+exactly between the final check and storage remains possible without provider support.
+A different connected Google account creates new sources, never takes over old ones. This is the
+connector's available identity signal, not an immutable Google account ID; a changed primary
+calendar name can therefore also require reconnection, and two accounts with the same primary
+calendar name cannot be distinguished.
+Snapshots read every page of the fixed window today −30 to +180 days, at most 40 pages and
+10,000 occurrences. Missing pages, errors and limits never produce a partial snapshot.
+Occurrence ID and `recurringEventId` preserve moved occurrences and series association; missing
+cancelled occurrences disappear only on a complete snapshot replacement. Revision fence and
+`replace_all` apply as for ICS. Success explicitly resets scheduling with `reset_schedule`,
+independently of encrypted ICS HTTP validators. `CALENDAR_GOOGLE_SYNC_INTERVAL_MINUTES` defaults
+to 5. The shared worker checks Google and ICS every minute. `reconnect_required` and
+`calendar_unavailable` stop automatic attempts until manual sync or resume;
+`provider_unavailable` uses bounded backoff. Removal cleans up only locally, never at Google.
+Writing remains blocked: #23 is `BLOCKED: calendar_write_capability_missing` (no version
+precondition, no idempotent creation). Evidence and open live questions are in
+`docs/superpowers/probes/2026-11-18-google-kalender.md`.
+The agenda groups and displays instants in the browser timezone; all-day entries stay on their
+date. Local day boundaries are converted to instants. Because the index endpoint accepts only
+whole UTC dates, the query window is rounded outward and also includes all-day dates. Windows
+exceeding 90 UTC days are split into adjacent subwindows, which like cursor pages are loaded only
+explicitly. Boundary results outside selected local start days are hidden and duplicate occurrence
+IDs from adjacent windows merged. An empty partial page does not claim “Keine Termine” while more
+pages or subwindows are missing. A state older than 24 hours gets an age notice; on opening, one
+sync per source is requested via the explicit management endpoint. This does not promise provider
+freshness. `seed_calendars` adds five synthetic sources for Google/ICS display, all-day, long title,
+old state, missing coverage and pause. Their fixed IDs are skipped before enqueueing and before
+adapter execution.
 
-„Im Chat fragen“ öffnet eine neue Unterhaltung mit `context_occurrence_id` und ausdrücklich
-gewählter Quelle. Der Kalenderumfang (`calendar_source_ids`, maximal 50) steht getrennt vom
-Mailkonto im Composer und wird als JSON-Liste in `chat_context.calendar_scope_json` gespeichert.
-Der Datenbankstandard `[]` gibt Altverlauf keinen Kalenderzugriff. Jede Änderung der Auswahl,
-auch eine Erweiterung, benötigt bei vorhandenem Verlauf eine neue Unterhaltung (409
-`conversation_scope_change_requires_new`); historische Texte bleiben erhalten. Diese konservative
-Regel vermeidet eine unbelegte Neuzuordnung alter Nutzer-, Werkzeug- oder Assistententexte.
-Der Resolver prüft alle historischen Nachrichtenkontexte; der Agent prüft dieselbe Herkunft
-nochmals vor dem Aufbau der Modellnachrichten. Pausieren/Entfernen macht einen Turn mit dieser
-Quelle bei der nächsten Live-Prüfung ungültig, auch vor weiteren Modell- und Werkzeugaufrufen.
-Bereits übertragene Modellanfragen können nicht zurückgeholt werden. Beim Neustart übernimmt die
-Oberfläche nur Kalender, die sie noch als aktiv kennt; ohne belegte Auswahl bleibt der Umfang leer.
+“Im Chat fragen” opens a new conversation with `context_occurrence_id` and an explicitly selected
+source. Calendar scope (`calendar_source_ids`, maximum 50) is separate from the mail account in
+the composer and stored as a JSON list in `chat_context.calendar_scope_json`. The database
+default `[]` gives legacy history no calendar access. Any selection change, including expansion,
+requires a new conversation when history exists (409 `conversation_scope_change_requires_new`);
+historical text remains. This conservative rule avoids an unsupported reassignment of old user,
+tool or assistant text. The resolver checks all historical message contexts; the agent rechecks
+the same provenance before building model messages. Pausing/removing invalidates a turn with that
+source at the next live check, including before further model and tool calls. Already transmitted
+model requests cannot be recalled. On restart the UI carries over only calendars it still knows
+to be active; without an evidenced selection the scope remains empty.
 
-`api/mail/calendar_tools.py` stellt `search_calendar` und `get_calendar_occurrence` bereit:
-Indexzugriff ohne Provider, lokale Datumsfenster bis 90 Tage und Cursorseiten bis 50 Instanzen;
-Werkzeugparameter können den Turn-Umfang nur einschränken. Kalendertexte und Quellennamen stehen
-in `untrusted_calendar_data`, einschließlich Stand und Abdeckung. Kalender-Schreibwerkzeuge fehlen;
-der Prompt untersagt auch Ersatzaktionen als Mailvorschlag, Kalenderkopie oder Aufgabe.
-`calendar_timezone` kommt aus dem Browser; ältere Clients ohne Angabe behalten Europe/Berlin.
-Chat-Extras und das SSE-Ereignis `calendars` enthalten nur `source_id`/`occurrence_id`, keine Titel
-oder privaten Verbindungsreferenzen. Belege lesen ihre Darstellung erneut über die freigegebene
-Quelle und stabile Instanzroute; pausierte, entfernte oder nicht passende Quellen zeigen keine
-Termindaten. Ort und Beschreibung fehlen im Indexvertrag und werden nicht vorgetäuscht.
-Die autogenerierte Migration ergänzt die Spalte mit Serverstandard und führt die bestehenden
-Migrationsköpfe zusammen; sie wurde nicht von Hand geändert.
+`api/mail/calendar_tools.py` provides `search_calendar` and `get_calendar_occurrence`: index
+access without a provider, local date windows up to 90 days and cursor pages up to 50 occurrences;
+tool parameters can only restrict the turn scope. Calendar text and source names appear in
+`untrusted_calendar_data`, including state and coverage. Calendar write tools are absent; the
+prompt also prohibits substitute actions as a mail proposal, calendar copy or task.
+`calendar_timezone` comes from the browser; older clients without it retain Europe/Berlin. Chat
+extras and the SSE event `calendars` contain only `source_id`/`occurrence_id`, no titles or private
+connection references. Citations reread their display through the authorized source and stable
+occurrence route; paused, removed or mismatched sources show no appointment data. Location and
+description are absent from the index contract and are not pretended. The autogenerated migration
+adds the column with a server default and merges the existing migration heads; it was not edited
+by hand.
 
-ICS-Abonnements verwenden die privaten Tabellen `calendar_feed_config` und
-`calendar_feed_validation`. `POST /calendar/feeds/validate` verwendet denselben sicheren
-Abruf und isolierten Parser wie Jobs. Erst nach vollständiger Prüfung wird die gesamte
-Konfiguration verschlüsselt gespeichert; die redigierte Vorschau enthält nur den selbst
-gewählten Namen, Fenster und Anzahl. Prüftokens gelten genau zehn Minuten und werden
-per `DELETE RETURNING` in der Anlagetransaktion einmalig verbraucht. Der feste serverseitige
-Scope ist `installation`; Konfiguration einschließlich Ersatzquelle und Quellenrevision
-ist gebunden. `feed_secrets.py` nutzt den bestehenden Fernet-Schlüssel; nur ein Hash
-zufälliger Prüftokens wird gespeichert, Konfigurationsprüfsummen sind mit dem Token
-gekeyt. Abbruch verwirft die Prüfung ausdrücklich über `POST /calendar/feeds/validations/discard`:
-Der Prüftoken steht ausschließlich als `validation_id` im JSON-Body, nie in Pfad oder Query;
-die Antwort ist 204 mit `Cache-Control: no-store`. Der Worker bereinigt Ablauf jede Minute
-sowie bei weiteren Prüfungen/Anlagen. Schemafehler geben keine Eingabewerte zurück.
-`POST /calendar/feeds` legt die Quelle und den ersten Job atomar an; mit geprüfter
-`source_id`/`expected_revision` ersetzt derselbe Endpunkt die alte Adresse atomar.
-Die bestehende Generation bleibt bis zum erfolgreichen Abruf erhalten; alte Validatoren
-werden beim Adresswechsel entfernt. Verwaltungsoperationen sind keine Agenten-Lesetools.
+ICS subscriptions use the private tables `calendar_feed_config` and
+`calendar_feed_validation`. `POST /calendar/feeds/validate` uses the same safe fetch and isolated
+parser as jobs. Only after complete validation is the entire configuration stored encrypted; the
+redacted preview contains only the chosen name, window and count. Validation tokens are valid for
+exactly ten minutes and consumed once via `DELETE RETURNING` in the creation transaction. The
+fixed server-side scope is `installation`; configuration including replacement source and source
+revision is bound. `feed_secrets.py` uses the existing Fernet key; only a hash of random
+validation tokens is stored, configuration checksums are keyed by the token. Cancellation
+explicitly discards validation via `POST /calendar/feeds/validations/discard`: the token appears
+only as `validation_id` in the JSON body, never in path or query; the response is 204 with
+`Cache-Control: no-store`. The worker cleans up expiration every minute and on further
+validations/creations. Schema errors do not return input values. `POST /calendar/feeds` creates
+the source and first job atomically; with verified `source_id`/`expected_revision` the same
+endpoint atomically replaces the old address. The existing generation remains until successful
+sync; old validators are removed on address change. Management operations are not agent read tools.
 
-`StoredICSAdapter` wird im gemeinsamen Dispatch registriert. Jobpayloads enthalten nur
-`source_id`; Fenster werden zur Ausführung als heute −30 bis +180 Tage bestimmt.
-HTTP-Validatoren sind verschlüsselt und werden mit dem vollständig validierten Snapshot
-atomar aktiviert. 304 expandiert gespeicherte Komponenten erneut, auch für ein neues Fenster.
-Ein gültiger leerer Snapshot leert den Bestand; Fehler erhalten Generation und Abdeckung.
-Quellenrevisionen sperren veraltete Snapshot-Commits auch nach Pause/Resume oder Adresswechsel.
-Ein gemeinsames transaktionales Advisory-Lock serialisiert Queue, Ersatz, Entfernen und
-Snapshotaktivierung; Entfernen löscht Jobs, Index, Status und private Konfiguration.
-Historische Chattexte bleiben bestehen; aktive Quellenscope-Prüfungen sperren entfernte Quellen.
+`StoredICSAdapter` is registered in the shared dispatch. Job payloads contain only `source_id`;
+windows are determined at execution as today −30 to +180 days. HTTP validators are encrypted and
+activated atomically with the fully validated snapshot. A 304 re-expands stored components, even
+for a new window. A valid empty snapshot clears the inventory; errors preserve generation and
+coverage. Source revisions block stale snapshot commits even after pause/resume or address change.
+A shared transactional advisory lock serializes queue, replacement, removal and snapshot activation;
+removal deletes jobs, index, status and private configuration. Historical chat text remains; active
+source-scope checks block removed sources.
 
-`CALENDAR_SYNC_INTERVAL_MINUTES` ist standardmäßig 30. Der gemeinsame Worker prüft jede Minute
-aktive ICS- und Google-Quellen, unabhängig von der Mailperiodik. Beim Öffnen fragt die Agenda über den
-Verwaltungsendpunkt mit `due_only=true` nur fällige Abrufe an. Manuelles Abrufen hat eine
-persistierte Minute Wartezeit. 429/5xx und Transportfehler erhalten begrenzten exponentiellen
-Backoff mit Jitter; nach drei Fehlern endet die kurze Wiederholung und die Quelle kehrt zum
-regulären Intervall ab `last_checked_at` zurück. Weitere Fehler starten keine neue kurze
-Wiederholung; ein Erfolg setzt den Fehlerzustand zurück.
-401/403/404 fordern eine Adressprüfung und stoppen automatische Versuche bis zu manuellem
-Abruf, Resume oder Adressersatz. Fällt ein manueller Abruf oder ein Resume in die Wartezeit
-von einer Minute, hebt er die Sperre trotzdem auf; der Abruf folgt nach Ablauf der Minute. Pausierte
-Quellen und Seeds werden nicht abgerufen; gestoppte Studio-Instanzen garantieren keine Periodik.
+`CALENDAR_SYNC_INTERVAL_MINUTES` defaults to 30. The shared worker checks active ICS and Google
+sources every minute, independently of mail periodicity. On opening, the agenda requests only due
+syncs through the management endpoint with `due_only=true`. Manual sync has a persisted one-minute
+wait. 429/5xx and transport errors receive bounded exponential backoff with jitter; after three
+failures the short retry ends and the source returns to the regular interval from `last_checked_at`.
+Further errors do not start another short retry; success resets the error state. 401/403/404 require
+an address check and stop automatic attempts until manual sync, resume or address replacement. If a
+manual sync or resume falls within the one-minute wait, it still lifts the block; sync follows after
+the minute. Paused sources and seeds are not synced; stopped Studio instances do not guarantee periodicity.
 
-`api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
-Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen
-vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich auf den Index zu.
-`GET /api/v1/calendar/occurrences` nimmt ein Fenster von höchstens 90 Tagen und beliebig viele
-`source_ids` (höchstens 50) und liefert die Instanzen zeitlich geordnet; Ganztägiges zählt ab
-Mitternacht UTC seines ersten Tages. Der Cursor trägt Startzeit und ID der letzten Instanz.
-Zeitpunkte ohne Dauer gehören zum Fenster, wenn ihr Zeitpunkt am Anfang oder innerhalb, aber nicht am Ende liegt.
-Vollständige Snapshot-Fenster erweitern die Abdeckung nur, wenn sie die bisherige Abdeckung
-überlappen oder berühren; sonst ersetzen sie sie. Jede gespeicherte Instanz überlappt die
-Abdeckung (auch wenn sie über deren Rand hinausreicht); andere Instanzen werden entfernt.
-Ereignisse werden nur entfernt, wenn sie im aktuellen Snapshot fehlen und keine verbliebene
-Instanz sie referenziert; enthaltene Ereignisse bleiben auch ohne Instanzen erhalten. `stale` bedeutet, dass noch kein erfolgreicher
-Snapshot vorliegt oder der Index unvollständig ist; ohne periodischen Abruf sagt das Alter des
-letzten Erfolgs allein nichts über die Aktualität beim Anbieter aus.
+`api/calendar/` contains the adapter contract, snapshot dispatch and a source-scope check. The
+calendar index stores sources, events, occurrences and coverage; provider adapters must deliver
+complete snapshots. Read endpoints access only the index. `GET /api/v1/calendar/occurrences` takes
+a window of at most 90 days and any number of `source_ids` (at most 50) and returns occurrences in
+time order; all-day entries count from midnight UTC of their first day. The cursor carries start time
+and ID of the last occurrence. Instants without duration belong to the window when their instant is
+at the beginning or inside, but not at the end. Complete snapshot windows extend coverage only when
+they overlap or touch existing coverage; otherwise they replace it. Every stored occurrence overlaps
+coverage (even if it extends beyond its edge); other occurrences are removed. Events are removed only
+when absent from the current snapshot and not referenced by any remaining occurrence; included events
+remain even without occurrences. `stale` means no successful snapshot exists yet or the index is
+incomplete; without periodic sync, the age of the last success alone says nothing about provider freshness.
 
 `ics_fetch.py` provides the HTTPS acquisition layer for ICS. It shares the
 numeric-pinned streaming transport in `mail/netguard.py`, rejects non-public/mixed DNS
@@ -485,348 +455,324 @@ Duplicate masters/exceptions/supported properties, orphan exceptions, unresolved
 whose DTSTART does not match also fail. VTODO, VALARM, attachments and external URLs are
 never executed or loaded; instructions in descriptions remain plain data.
 
-## Domänenmodell (Tabellen in Postgres)
+## Domain model (tables in Postgres)
 
-- `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — Kalenderquelle mit Verbindungsreferenz und Freigabe (`is_active`), Serienstamm je Quelle, Instanz als halboffenes Intervall oder Zeitpunkt ohne Dauer (ganztägig als Datum mit positivem Intervall, sonst UTC mit Zeitzone; eindeutig je Quelle und `external_id`) sowie Abdeckung, letzter Erfolg und Unvollständigkeit je Quelle.
-- `calendar_feed_config`, `calendar_feed_validation` — verschlüsselte Feedkonfiguration und kurzlebige, einmalig verbrauchbare Prüfungen; keine öffentlichen Ausgabemodelle.
-- `task_series`, `task_schedule_revision`, `task_occurrence` — Aufgabenserie, Zeitplanrevision und materialisierte Fälligkeit; Erstellungskennung und Instanzschlüssel sind eindeutig.
-- `mail_account` — verbundenes Konto: `provider` z.B. `google`, `microsoft`, `imap` oder Connector-Name wie `gmail`; `auth_type` ist `oauth2`, `imap_password` oder `mistral_connector`.
-- `mail_credential` — verschlüsseltes Payload pro Konto+Art (`oauth2_tokens` | `imap_password`), unique (`account_id`, `kind`).
-- `mail_message` — Mail-Index mit `folder`, `provider_uid`, `thread_id`, `subject`, `sender`, `sender_address`, `recipients_json`, `cc_json`, `reply_to_json` (Reply-To-Adressen; Antworten gehen daran statt an den Absender, der Gmail-Connector liefert sie nicht), `snippet`, `body_text`, `body_version` (Version der Textfassung, 0 = vor der Versionierung), `internal_date`, Lese-/Prioritätsflags, `labels_json`, `attachments_json`, `list_unsubscribe` und `list_unsubscribe_post`; unique (`account_id`, `folder`, `provider_uid`), Volltextindex `search_tsv`.
-- `mail_sync_state` — Cursor, Status, Fehler und letzter Abruf je Konto.
-- `mail_action` — ausgeführte Aktion mit `previous_json` und `undone_at` für Rückgängig.
-- `mail_insight` — Kurzfassung (`points_json`), Frist, Antwortbedarf, Folgevorschläge und Modell je Mail.
-- `mail_job` — dauerhafte Sync-/Insight-Warteschlange mit Status, Deduplizierung, Versuchen und Sperrzeit.
-- `chat_conversation`, `chat_message` — Verlauf; Vorschläge in `proposal_json` mit `proposal_status`, Mailreferenzen/Vorschläge/Modell in `extras_json`; ältere Entwürfe tragen `draft_json`.
-- `user_preference` — serverseitiger Eigentümer `installation`, Schlüssel, kanonischer Scope (`*` global oder Konto-ID), Status, Revisionszeiger und Objektversion; entfernte Zeilen bleiben als inhaltsfreie Unterdrückungsreferenz.
-- `preference_revision` — unveränderlicher Wert, damaliger Schlüssel/Scope, Quelle `manual` oder `confirmed_candidate` und Bestätigungszeit je Revision; beim Löschen wird der Wert entfernt und `removed` gesetzt.
-- `preference_candidate` — unbestätigter Wert mit eigener Quellnachricht, Unterhaltung, Feld/Scope, erwarteter Zielversion/-revision und optionaler Karten-ID; Status `pending|accepted|rejected|expired`. Abgelehnte und entwertete Kandidaten behalten nur inhaltsfreie Referenzen.
-- `personalization_settings` — serverseitiger Singleton mit unabhängigen `use_preferences` und `suggest_preferences` (beide standardmäßig false), Version sowie Kennung und Zeitpunkt der letzten Vorschlagsaktivierung.
-- `preference_extraction` — inhaltsfreie Einmal-Kennung je Quellnachricht und Extraktorversion; bindet die Aktivierung und verhindert erneute Modellaufrufe auch nach Fehlern oder Neustart.
-- `ui_settings` — die eine geräteübergreifende Bedienungskonfiguration mit festem serverseitigem Scope (`installation`, unique): `swipe_left`/`swipe_right` aus der Allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` für bedingte Updates und `updated_at`; Erstinitialisierung mit links `archive`, rechts `toggle_read`.
+- `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — calendar source with connection reference and permission (`is_active`), series master per source, occurrence as half-open interval or instant without duration (all-day as date with positive interval, otherwise UTC with timezone; unique per source and `external_id`) and coverage, last success and incompleteness per source.
+- `calendar_feed_config`, `calendar_feed_validation` — encrypted feed configuration and short-lived, single-use validations; no public output models.
+- `task_series`, `task_schedule_revision`, `task_occurrence` — task series, schedule revision and materialized due date; creation ID and occurrence key are unique.
+- `mail_account` — connected account: `provider` e.g. `google`, `microsoft`, `imap` or connector name such as `gmail`; `auth_type` is `oauth2`, `imap_password` or `mistral_connector`.
+- `mail_credential` — encrypted payload per account+kind (`oauth2_tokens` | `imap_password`), unique (`account_id`, `kind`).
+- `mail_message` — mail index with `folder`, `provider_uid`, `thread_id`, `subject`, `sender`, `sender_address`, `recipients_json`, `cc_json`, `reply_to_json` (Reply-To addresses; replies go there instead of the sender; the Gmail connector does not provide them), `snippet`, `body_text`, `body_version` (text version, 0 = before versioning), `internal_date`, read/priority flags, `labels_json`, `attachments_json`, `list_unsubscribe` and `list_unsubscribe_post`; unique (`account_id`, `folder`, `provider_uid`), full-text index `search_tsv`.
+- `mail_sync_state` — cursor, status, error and last sync per account.
+- `mail_action` — executed action with `previous_json` and `undone_at` for undo.
+- `mail_insight` — summary (`points_json`), deadline, reply need, follow-up suggestions and model per mail.
+- `mail_job` — durable sync/insight queue with status, deduplication, attempts and lock time.
+- `chat_conversation`, `chat_message` — history; proposals in `proposal_json` with `proposal_status`, mail references/proposals/model in `extras_json`; older drafts carry `draft_json`.
+- `user_preference` — server-side owner `installation`, key, canonical scope (`*` global or account ID), status, revision pointer and object version; removed rows remain as content-free suppression references.
+- `preference_revision` — immutable value, key/scope at the time, source `manual` or `confirmed_candidate` and confirmation time per revision; deletion removes the value and sets `removed`.
+- `preference_candidate` — unconfirmed value with own source message, conversation, field/scope, expected target version/revision and optional card ID; status `pending|accepted|rejected|expired`. Rejected and invalidated candidates retain only content-free references.
+- `personalization_settings` — server-side singleton with independent `use_preferences` and `suggest_preferences` (both default false), version and ID and time of the last suggestion activation.
+- `preference_extraction` — content-free one-time ID per source message and extractor version; binds activation and prevents repeated model calls even after errors or restart.
+- `ui_settings` — the single cross-device interaction configuration with fixed server-side scope (`installation`, unique): `swipe_left`/`swipe_right` from allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` for conditional updates and `updated_at`; initial initialization with left `archive`, right `toggle_read`.
 
-## Vorlagen und Turn-Kontext
+## Templates and turn context
 
-Vorlagen gehören dem festen serverseitigen Scope `installation`; der Zugriff auf die
-Single-Owner-App wird vom Deployment beschränkt, nicht durch eine neue App-Identität.
-`prompt_template` hält Name, Version, aktuelle Revision und das Änderungsdatum `updated_at` (bei Altbeständen unbekannt und `null`); Bearbeiten erzeugt eine neue
-`prompt_revision`. Auswahlen in `chat_conversation.prompt_revision_id` bleiben angeheftet.
-Conversation-PATCH benötigt `expected_version`; `null` als Revision wählt den Standard.
-Vorlagen-POST nimmt `name` und `text`, PATCH zusätzlich `expected_version`, DELETE
-`expected_version` als Queryparameter. GET einer Vorlage liefert auch `revisions`
-(neueste zuerst), damit ältere Revisionen ausdrücklich gewählt werden können.
-Neue Turns speichern Revisionsreferenz/Hash, App-Prompt-Version und den aufgelösten
-Kontoumfang in `chat_context`; `chat_message.context_id` verbindet den Verlauf damit.
-Der JSON-Kontoumfang enthält `account_ids`, `selection` (Konto-ID oder `null` für alle)
-und bei unbelegtem Altverlauf `legacy_mixed: true`.
-`preference_revision_id` bleibt für Altclients leer; die tatsächlich verwendeten Präferenzrevisionen stehen jetzt in `preference_revision_ids_json` mit `preference_resolver_version` und `preferences_enabled`. Text wird nur als
-Nutzerinhalt an das Modell gegeben, nie als App-Regel oder Chat-Extra gespeichert.
-Löschen entfernt Vorlageninhalt und Revisionsinhalt, hinterlässt `removed`-Markierungen,
-widerruft Kontexte und setzt aktive Auswahlen zurück. Bereits gesendete Modellanfragen
-lassen sich nicht zurückholen. Vorschläge widerrufener Kontexte bleiben offen und können abgebrochen,
-aber nicht bestätigt werden (`409 proposal_context_revoked`). Entscheidend ist der atomare Claim:
-Ein danach wirksamer Widerruf macht eine bereits angenommene Bestätigung nicht rückgängig.
-Der Agent prüft den Widerruf unmittelbar vor jedem Modellaufruf und Werkzeug sowie während des
-Streams nach jeweils zehn Deltas; ein widerrufener Stream wird geschlossen und meldet `context_revoked`.
-Für einen Verlauf werden die zugehörigen Kontexte jeweils in einer Datenbankabfrage geladen.
-Rückgängig-Anfragen im Posteingang werden nach 15 Sekunden abgebrochen; bei unklarem Ergebnis
-bleibt die Aktion für einen erneuten Versuch noch zehn Sekunden verfügbar.
-Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
+Templates belong to fixed server-side scope `installation`; access to the single-owner app is
+restricted by deployment, not a new app identity. `prompt_template` holds name, version, current
+revision and modification date `updated_at` (unknown and `null` for legacy data); editing creates
+a new `prompt_revision`. Selections in `chat_conversation.prompt_revision_id` remain pinned.
+Conversation PATCH requires `expected_version`; `null` as revision selects the default. Template
+POST accepts `name` and `text`, PATCH additionally `expected_version`, DELETE `expected_version`
+as query parameter. GET of a template also returns `revisions` (newest first), so older revisions
+can be explicitly selected. New turns store revision reference/hash, app prompt version and the
+resolved account scope in `chat_context`; `chat_message.context_id` links history to it. The JSON
+account scope contains `account_ids`, `selection` (account ID or `null` for all) and, for
+unproven legacy history, `legacy_mixed: true`. `preference_revision_id` remains empty for old
+clients; actually used preference revisions are now in `preference_revision_ids_json` with
+`preference_resolver_version` and `preferences_enabled`. Text is given to the model only as user
+content, never stored as an app rule or chat extra. Deletion removes template and revision content,
+leaves `removed` markers, revokes contexts and resets active selections. Already sent model requests
+cannot be recalled. Proposals from revoked contexts remain open and can be cancelled, but not
+confirmed (`409 proposal_context_revoked`). The atomic claim is decisive: a revocation effective
+thereafter does not undo an already accepted confirmation. The agent checks revocation immediately
+before each model call and tool and every ten deltas during streaming; a revoked stream is closed
+and reports `context_revoked`. For a history, associated contexts are loaded in one database query.
+Inbox undo requests are aborted after 15 seconds; if the result is unclear, the action remains
+available for another attempt for ten more seconds. Account switching with history requires a new
+conversation; “Alle Konten” (UI text) remains the same selection even when accounts are added or removed.
 
-## Explizite Präferenzen (#38)
+## Explicit preferences (#38)
 
-Die festen App-Regeln und autorisierten Zugriffe stehen über der aktuellen Bitte, diese über
-der gewählten Vorlage und diese über passenden aktiven Präferenzen. Werte kommen ausschließlich
-als Nutzerinhalt an das Modell, nicht als App-Regel und nicht in Chat-Extras oder Traces.
-Antwortlänge darf global oder für ein Konto gelten; ein Kontowert überschreibt für dieses Feld
-die globale Vorgabe. Anrede und Signatur brauchen genau ein vorhandenes Konto. Bei „Alle Konten“
-werden nur globale Werte aufgelöst, nie Kontosignaturen vermischt. Die bestehenden Mail-,
-Kalender- und Aufgaben-Scope-Prüfungen und die Bestätigungsmechanik bleiben unverändert.
+Fixed app rules and authorized access take precedence over the current request, which takes
+precedence over the selected template, which takes precedence over matching active preferences.
+Values reach the model exclusively as user content, not as app rules or in chat extras or traces.
+Answer length may apply globally or to one account; an account value overrides the global default
+for this field. Salutation and signature require exactly one existing account. With “Alle Konten”
+(UI text), only global values are resolved; account signatures are never mixed. Existing mail,
+calendar and task scope checks and confirmation mechanics remain unchanged.
 
-`GET /settings` liefert ausschließlich
+`GET /settings` returns only
 `{"personalization":{"use_preferences":false,"suggest_preferences":false,"version":1}}`.
-PATCH nimmt `{"personalization":{"expected_version":1,"use_preferences":true}}` und ändert
-nur ausdrücklich gelieferte Felder. `suggest_preferences` lässt sich unabhängig von
-`use_preferences` einschalten; null und fremde Abschnitte werden abgelehnt. `/settings/ui` behält seinen eigenen Vertrag und seine eigene Revision.
-Speichern einer Präferenz ist die manuelle Bestätigung, schaltet die Verwendung aber nie ein.
-POST nimmt `key=answer_length|salutation|signature`, `scope`, `value` und optional
-`status=active|paused`; PATCH nimmt `expected_version` und Änderungen von Wert, Scope oder Status.
-DELETE braucht `expected_version` als Queryparameter. Grenzen: 50 gespeicherte (ohne entfernte),
-20 aktive Werte, 500 Zeichen je Wert. Ein partieller Unique-Index sichert einen aktiven Wert je
-Eigentümer/Schlüssel/Scope, auch bei globalem, nicht-null Scope. Versions- und Quotenkonflikte
-antworten mit 409 ohne Eingabewerte im Fehlertext.
+PATCH accepts `{"personalization":{"expected_version":1,"use_preferences":true}}` and changes
+only explicitly supplied fields. `suggest_preferences` can be enabled independently of
+`use_preferences`; null and foreign sections are rejected. `/settings/ui` retains its own contract
+and revision. Saving a preference is manual confirmation but never enables usage. POST accepts
+`key=answer_length|salutation|signature`, `scope`, `value` and optional `status=active|paused`;
+PATCH accepts `expected_version` and changes to value, scope or status. DELETE requires
+`expected_version` as query parameter. Limits: 50 stored (excluding removed), 20 active values,
+500 characters per value. A partial unique index secures one active value per owner/key/scope,
+including global non-null scope. Version and quota conflicts return 409 without input values in
+error text.
 
-Der vorhandene Turn-Resolver bindet exakte Revisions-IDs und Resolver-Version 1. Neue Revisionen
-wirken ab dem nächsten Turn; der historische Dialog liest nur diese IDs, niemals heutige Werte.
-Ohne Opt-in oder mit ausdrücklich gesetztem `without_preferences: true` gibt es keine Injektion.
-Ein Ladefehler liefert `preferences_unavailable` vor dem Modellaufruf; erst die bewusste Aktion
-„Ohne Präferenzen fortfahren“ setzt den Schalter für den erneuten Versuch. Es gibt keinen stillen
-Fallback. Ausschalten, Pausieren, Scopewechsel und Löschen widerrufen betroffene Kontexte in
-derselben Transaktion: Ausschalten alle Turns mit mindestens einer verwendeten Revision, die
-anderen Aktionen die Turns mit einer Revision der geänderten Präferenz. Turns ohne verwendete
-Präferenz bleiben gültig, auch ihre offenen Vorschläge. Die Rangfolge steht in den festen
-App-Regeln (`agent_prompt.py`, `APP_PROMPT_VERSION` 7). Die vorhandenen Live-Prüfungen vor Modell-/Werkzeugaufrufen und nach zehn
-Deltas bleiben maßgeblich; bereits gesendete Anfragen sind nicht rückholbar.
+The existing turn resolver binds exact revision IDs and resolver version 1. New revisions take
+effect from the next turn; historical dialogue reads only those IDs, never today's values. Without
+opt-in or with explicitly set `without_preferences: true`, there is no injection. A load failure
+returns `preferences_unavailable` before the model call; only the deliberate action “Ohne Präferenzen fortfahren” sets the flag for retry. There is no silent fallback. Disabling, pausing,
+changing scope and deleting revoke affected contexts in the same transaction: disabling revokes
+all turns with at least one used revision, the other actions turns with a revision of the changed
+preference. Turns without a used preference remain valid, including open proposals. Precedence is
+in the fixed app rules (`agent_prompt.py`, `APP_PROMPT_VERSION` 7). Existing live checks before
+model/tool calls and after ten deltas remain authoritative; already sent requests cannot be recalled.
 
-Die gemeinsame transaktionale Präferenzsperre serialisiert Quoten, Änderungen, Auflösung und
-Kontolöschung. `mail_account.delete_account` entfernt Kontopräferenzen in der Kontotransaktion;
-`mail/service.py` ist im aktuellen Stand nicht der Löschpfad. Löschen entfernt alle Revisionswerte,
-erhält inhaltsfreie Referenzen und widerruft laufende Kontexte. Historische Anzeige:
-„Präferenz entfernt“. Ursprüngliche Chatnachrichten und Antworten bleiben bestehen.
-Entfernte `user_preference`-Zeilen mit Schlüssel, Scope und `removed_at` sind die
-Unterdrückungsreferenz: Nachrichten vor dem Entfernen dürfen den Wert nicht wiederherstellen;
-eine neue ausdrückliche Bitte bleibt möglich. Altdaten aus #38 ohne Löschzeitpunkt bekommen
-beim ersten regulären Turn unter der Präferenzsperre einen konservativen Grenzzeitpunkt,
-noch bevor dessen eigene Nachricht gespeichert wird. Ältere Quellen bleiben gesperrt;
-neue Bitten nach dieser Grenze sind möglich. Entfernte Revisionen werden nie aufgelöst.
+The shared transactional preference lock serializes quotas, changes, resolution and account
+deletion. `mail_account.delete_account` removes account preferences in the account transaction;
+`mail/service.py` is currently not the deletion path. Deletion removes all revision values,
+retains content-free references and revokes running contexts. Historical display: “Präferenz entfernt”. Original chat messages and answers remain. Removed `user_preference` rows with key,
+scope and `removed_at` are the suppression reference: messages before removal must not restore
+the value; a new explicit request remains possible. Legacy data from #38 without a deletion time
+gets a conservative cutoff at the first regular turn under the preference lock, before that turn's
+own message is saved. Older sources stay blocked; new requests after that boundary are possible.
+Removed revisions are never resolved.
 
-### Bestätigte Merke-dir-Karten (#39)
+### Confirmed remember cards (#39)
 
-`propose_preference` ist das einzige neue Werkzeug. Es bindet die vom Server gespeicherte
-aktuelle eigene Nachricht an die Unterhaltung, begrenzt Werte auf 500 Zeichen und prüft Feld,
-Kontoumfang sowie die Quoten aus #38. Ein konservativer Eingang verlangt eine direkte Bitte
-mit „Merke dir“, „Bitte merke dir“ oder „Speichere dauerhaft/als Präferenz“ am Anfang.
-Zitate, hypothetische Beispiele und fremde Nachrichten allein öffnen diesen Ablauf nicht;
-bei unklarer Formulierung bittet der Agent um eine neue direkte Bitte. Die Textprüfung ist
-kein semantischer Klassifikator und ersetzt niemals die Bestätigung. Zusätzliche Argumente
-wie `confirmed` oder `origin` werden abgelehnt.
+`propose_preference` is the only new tool. It binds the server-stored current own message to the
+conversation, limits values to 500 characters and checks field, account scope and quotas from
+#38. A conservative entry requires a direct request beginning with “Merke dir”, “Bitte merke dir”
+or “Speichere dauerhaft/als Präferenz”. Quotations, hypothetical examples and foreign messages
+alone do not open this flow; for unclear wording the agent asks for a new direct request. The text
+check is not a semantic classifier and never replaces confirmation. Extra arguments such as
+`confirmed` or `origin` are rejected.
 
-Die gemeinsame Präferenzsperre serialisiert Kandidatenanlage, Quoten, Bestätigung und Löschen.
-Es gibt höchstens 50 offene Kandidaten. Quelle/Feld/Scope ist eindeutig, auch nach Ablehnung;
-Wiederholen schreibt keinen neuen Text in einen abgelehnten Kandidaten. Karten enthalten nur
-eine Kandidaten-ID. Auch gespeicherte Werkzeugargumente enthalten keine Wertkopie.
-Ein offener Mail-/Aufgabenvorschlag bleibt beim Präferenzvorschlag unverändert; der Kandidat
-bleibt ohne Karte unter Einstellungen → Präferenzen → Vorschläge prüfbar. Das bestehende
-Ersetzen einer offenen Karte durch Mail-/Aufgabenwerkzeuge bleibt erhalten. Eine verdrängte
-Präferenzkarte gilt nicht als Ablehnung: Ihr Kandidat bleibt offen, verliert nur die Kartenreferenz
-und lässt sich über „Vorschlag prüfen“ erneut öffnen, sobald keine andere Karte offen ist.
-Abbrechen wirkt nur auf die aktuelle Karte des Kandidaten; eine verdrängte oder veraltete Karte
-(etwa aus einem anderen Tab) ergibt 409 `proposal_not_pending` und lässt die neue Karte offen.
+The shared preference lock serializes candidate creation, quotas, confirmation and deletion.
+There are at most 50 open candidates. Source/field/scope is unique, including after rejection;
+repetition writes no new text into a rejected candidate. Cards contain only a candidate ID. Stored
+tool arguments also contain no copy of the value. An open mail/task proposal remains unchanged
+when proposing a preference; the candidate remains reviewable without a card under Einstellungen
+→ Präferenzen → Vorschläge (UI text). Existing replacement of an open card by mail/task tools is
+retained. A displaced preference card is not rejection: its candidate stays open, loses only its
+card reference and can be reopened through “Vorschlag prüfen” once no other card is open. Cancel
+applies only to the candidate's current card; a displaced or stale card (e.g. from another tab)
+returns 409 `proposal_not_pending` and leaves the new card open.
 
-`GET /preferences/candidates` liest offene Kandidaten; mit `candidate_id` eine genaue Referenz,
-auch für historische Karten. Quelle und Bisher/Vorschlag werden aus aktuellen zugreifbaren
-Zeilen geladen. Fehlende Quellen und Konten entwerten die Referenz und entfernen den Wert. Der vorhandene
-Löschpfad für Seed-Unterhaltungen entfernt Kandidatenwerte in derselben Transaktion; beim
-Nachlesen werden auch anderweitig fehlende Quellen inhaltsfrei markiert.
-`POST /preferences/candidates/{candidate_id}/propose` öffnet idempotent eine Karte, nur wenn
-der gemeinsame Slot frei ist. Eine bestehende Karten-ID wird wiederverwendet.
-`refresh: true` bedeutet ausdrücklich erneute Prüfung nach einem Versionskonflikt, nicht
-Bestätigung. Die Oberfläche verlinkt die Karte in ihrer Unterhaltung.
+`GET /preferences/candidates` reads open candidates; with `candidate_id` it reads an exact reference,
+including historical cards. Source and previous/proposed values are loaded from current accessible
+rows. Missing sources and accounts invalidate the reference and remove the value. The existing seed
+conversation deletion path removes candidate values in the same transaction; on reread sources
+missing for other reasons are also marked content-free. `POST /preferences/candidates/{candidate_id}/propose`
+idempotently opens a card only when the shared slot is free. An existing card ID is reused.
+`refresh: true` explicitly means rechecking after a version conflict, not confirmation. The UI links
+the card in its conversation.
 
-Confirm/Cancel verwenden ausschließlich die bestehenden Chat-Endpunkte. Confirm nimmt nur
-für Präferenzen `preference_decision` mit `choice=replace|keep`, `expected_version` und
-`expected_revision_id`. Claim, erneute Quellen-/Versions-/Quotenprüfung, unveränderliche
-Revision und Kartenabschluss liegen in einer Transaktion. Ein 409 liefert den aktuellen
-Stand ausschließlich an den Browser; die Oberfläche sperrt Bestätigen bis zur erneuten
-Prüfung. Exakt gleiche Werte erzeugen keine neue Revision. Behalten und Abbrechen entfernen
-den Kandidatenwert. Löschen einer Präferenz entfernt auch zugehörige Kandidatenwerte, selbst
-nach Annahme; die referenziellen Karten können keinen Inhalt wiederherstellen.
-Bestätigen ändert `use_preferences` nie. Ohne Nutzungsschalter bleibt die nächste Antwort
-ohne Präferenzinjektion. Automatische Extraktion ist ein eigener, ausdrücklich einzuschaltender
-Ablauf aus #40; sie bestätigt keine Präferenz und öffnet keine Karte.
+Confirm/Cancel use only the existing chat endpoints. Confirm accepts `preference_decision` with
+`choice=replace|keep`, `expected_version` and `expected_revision_id` only for preferences. Claim,
+renewed source/version/quota check, immutable revision and card completion are in one transaction.
+A 409 returns current state only to the browser; the UI disables confirmation until rechecked.
+Exactly equal values create no new revision. Keep and cancel remove the candidate value. Deleting a
+preference also removes associated candidate values, even after acceptance; referential cards cannot
+restore content. Confirmation never changes `use_preferences`. Without the usage toggle, the next
+answer remains without preference injection. Automatic extraction is a separate, explicitly enabled
+flow from #40; it neither confirms a preference nor opens a card.
 
-Die GETs `preferences_list`, `preference_context_get`, `preference_candidates_list` und `settings_get` bleiben ausdrücklich in
-`BROWSER_ONLY_GET_OPERATIONS` der MCP-Inventur und außerhalb der Studio-Leseliste: lesend allein
-macht persönliche Werte nicht agentensicher. Die Schreiboperationen einschließlich `preference_candidate_propose` stehen in
-`MUTATING_OPERATIONS`. Neue Präferenzen werden nicht zu Werkzeugberechtigungen.
+The GETs `preferences_list`, `preference_context_get`, `preference_candidates_list` and `settings_get`
+explicitly remain in `BROWSER_ONLY_GET_OPERATIONS` of the MCP inventory and outside the Studio read
+list: read-only alone does not make personal values agent-safe. Write operations including
+`preference_candidate_propose` are in `MUTATING_OPERATIONS`. New preferences do not become tool permissions.
 
-### Vorschläge aus neuen eigenen Nachrichten (#40)
+### Suggestions from new own messages (#40)
 
-`PATCH /settings` schaltet `suggest_preferences` mit `expected_version` unabhängig von der
-Verwendung ein. Jedes erneute Einschalten setzt eine neue zufällige Aktivierungskennung
-und Zeitgrenze. Nur danach gespeicherte eigene Nachrichten kommen infrage; weder Verlauf
-noch die ausgeschaltete Zwischenzeit werden nachgeholt. Die Oberfläche erklärt vor dem
-Einschalten, dass ausgewählte neue Nachrichten an Mistral gehen und nicht nur in der
-App-Datenbank bleiben.
+`PATCH /settings` enables `suggest_preferences` with `expected_version` independently of usage.
+Each re-enablement sets a new random activation ID and time boundary. Only own messages stored
+afterwards are eligible; neither history nor the disabled interval is backfilled. Before enabling,
+the UI explains that selected new messages go to Mistral and do not remain only in the app database.
 
-`api/preferences/extraction.py` startet im Agenten eine nicht abgewartete Aufgabe, sobald die
-eigene Nachricht gespeichert ist und der Turn seine Umfangsprüfungen bestanden hat. Ein Turn,
-der an einer Mail-, Kalender- oder Aufgabengrenze abbricht, gibt seine Nachricht nicht weiter. Eingabe ist ausschließlich deren Text, nie
-Verlauf, Mail-/Kalenderkontext, Werkzeugergebnisse oder Assistententext. Mehr als 2.000
-Zeichen werden übersprungen, nicht gekürzt. Das Modell entspricht der Auswahl des
-Chat-Turns (`conversation.model`, sonst `mail_chat_model`). Der bestehende private
-Mistral-Client verwendet JSON-Modus, keine Werkzeuge und höchstens 15 Sekunden Laufzeit.
-Es gibt keinen Scheduler und keine Wiederholung. Ein Prozessabbruch kann einen Vorschlag
-verlieren; ein bereits gespeicherter Claim bleibt trotzdem verbraucht.
+`api/preferences/extraction.py` starts an unawaited task in the agent once the own message is
+stored and the turn has passed its scope checks. A turn aborted at a mail, calendar or task
+boundary does not forward its message. Input is exclusively that message's text, never history,
+mail/calendar context, tool results or assistant text. More than 2,000 characters are skipped,
+not truncated. The model matches the chat turn selection (`conversation.model`, otherwise
+`mail_chat_model`). The existing private Mistral client uses JSON mode, no tools and at most 15
+seconds runtime. There is no scheduler and no retry. A process termination can lose a suggestion;
+an already stored claim remains consumed nonetheless.
 
-Extraktorversion 1 verlangt höchstens drei strikt validierte Einträge mit Feld,
-Geltungsbereich, Wert, ausdrücklicher Dauerhaftigkeit und wörtlichem Beleg aus genau dieser
-Nachricht. Ein konservativer Textfilter verlangt ein Dauerhaftigkeitssignal und lehnt
-unter anderem Zitate sowie hypothetische und bedingte Formulierungen ab. Das ist kein Beweis
-semantischer Korrektheit und kann echte Wünsche übersehen. Eine ohne Anführungszeichen oder
-Zitatzeichen eingefügte fremde Mail ist davon nicht zu unterscheiden; deren Bitte kann als
-unbestätigter Vorschlag erscheinen, den nur der Eigentümer bestätigen kann. Vorschläge bleiben unbestätigt. Anrede und
-Signatur benötigen das genau ausgewählte vorhandene Mailkonto, das der Server aus dem
-Turn-Kontext liest, nie eine vom Modell erfundene Konto-ID.
+Extractor version 1 requires at most three strictly validated entries with field, scope, value,
+explicit permanence and a verbatim quotation from exactly this message. A conservative text filter
+requires a permanence signal and rejects, among other things, quotations and hypothetical and
+conditional wording. This is not proof of semantic correctness and may miss genuine wishes. A
+foreign mail pasted without quotation marks or quote markers is indistinguishable; its request may
+appear as an unconfirmed suggestion that only the owner can confirm. Suggestions remain unconfirmed.
+Salutation and signature require the exactly selected existing mail account, read by the server
+from the turn context, never an account ID invented by the model.
 
-Bei ausgeschalteten Vorschlägen endet der Claim nach einem Lesen ohne Sperre. Ist der Schalter
-an, wird er unter der Sperre erneut gelesen, sodass ein zwischenzeitliches Ausschalten keine
-Nachricht mehr an das Modell schickt.
-Claim und Ergebnisspeicherung laufen jeweils unter der gemeinsamen Präferenzsperre;
-während des Modellaufrufs ist keine Transaktion offen. Vor dem Schreiben werden Opt-in,
-Aktivierungskennung, eigene Quellnachricht, Konto, Lösch-/Ablehnungsmarker und exakte
-Duplikate erneut geprüft. Ausschalten während des Modellaufrufs verwirft dessen Ergebnis.
-Einmal-Kennungen gelten je Nachricht und Extraktorversion; der Ergebnisslot wird ebenfalls
-nur einmal verbraucht. Modell-, JSON-, Timeout- und Datenbankfehler betreffen nur diese
-Aufgabe. Logs nennen ausschließlich feste Fehlercodes, keine Inhalte oder Diagnosen.
+When suggestions are disabled, the claim ends after one unlocked read. If enabled, it is reread
+under the lock so intervening disabling sends no further message to the model. Claim and result
+storage each run under the shared preference lock; no transaction is open during the model call.
+Before writing, opt-in, activation ID, own source message, account, deletion/rejection markers and
+exact duplicates are rechecked. Disabling during the model call discards its result. One-time IDs
+apply per message and extractor version; the result slot is also consumed only once. Model, JSON,
+timeout and database errors affect only this task. Logs contain fixed error codes only, no content
+or diagnostics.
 
-Kandidaten tragen serverseitig `origin=extractor` und `source_message_id`. Sie erscheinen
-in der vorhandenen Vorschlagsliste, beeinflussen keine Antwort und öffnen keine Karte.
-`Vorschlag prüfen` verwendet unverändert den #39-Endpunkt; Widersprüche bleiben zur
-manuellen Entscheidung sichtbar. Die Browserausgabe nennt `origin`; neue Endpunkte oder
-Agentenwerkzeuge gibt es nicht. Bestätigen aktiviert keinen der beiden Schalter.
+Candidates carry server-side `origin=extractor` and `source_message_id`. They appear in the existing
+suggestion list, influence no answer and open no card. `Vorschlag prüfen` (UI text) uses the #39
+endpoint unchanged; contradictions remain visible for manual decision. Browser output names `origin`;
+there are no new endpoints or agent tools. Confirmation enables neither toggle.
 
-Die Migration wurde ausschließlich generiert. Der eng begrenzte Comparator in
-`db/migrations/env.py` entfernt reflektierte CHECKs nur von eigenen Modelltabellen, deren
-Metadaten gar keine CHECKs mehr enthalten. Er vergleicht keinen SQL-Text. Der generierte
-Downgrade stellt `NOT suggest_preferences` wieder her; vor einem solchen Downgrade müssen
-Vorschläge ausgeschaltet werden. Der PG-Vertrag prüft nach Migration auf `heads` einen
-leeren Autogenerate-Diff.
+The migration was exclusively generated. The narrowly scoped comparator in `db/migrations/env.py`
+removes reflected CHECKs only from own model tables whose metadata no longer contains any CHECKs.
+It compares no SQL text. The generated downgrade restores `NOT suggest_preferences`; suggestions
+must be disabled before such a downgrade. The PG contract checks an empty autogenerate diff after
+migration to `heads`.
 
-Offline- und Live-Auswertung:
-[Präferenzvorschläge vom 18.11.2026](docs/superpowers/probes/2026-11-18-praeferenz-vorschlaege.md).
-`bash tools/uv.sh run --no-sync python tools/preference_extraction_eval.py` prüft zwölf
-synthetische Fälle ohne Modell. Nur das ausdrücklich angehängte `--live` sendet diese
-zwölf Fixtures über den vorhandenen App-Client an Mistral; keine historischen Daten.
-Live lag das Modell in zwei Läufen in 7 bzw. 6 von 12 Fällen richtig; die übrigen hat die
-Validierung verworfen, sodass beide Male in allen zwölf Fällen das Erwartete gespeichert würde.
-Anrede und Signatur müssen wörtlich in der zitierten Belegstelle stehen; Antwortlängen sind
-Umschreibungen und nur über die Belegstelle an die Nachricht gebunden. Die Validierung ist
-also tragend und darf nicht gelockert werden, ohne die Auswertung zu wiederholen.
+Offline and live evaluation:
+[Preference suggestions of 18.11.2026](docs/superpowers/probes/2026-11-18-praeferenz-vorschlaege.md).
+`bash tools/uv.sh run --no-sync python tools/preference_extraction_eval.py` checks twelve synthetic
+cases without a model. Only explicitly appending `--live` sends those twelve fixtures through the
+existing app client to Mistral; no historical data. Live, the model was right in 7 and 6 of 12 cases
+respectively in two runs; validation rejected the others, so in both runs the expected result would
+be stored in all twelve cases. Salutation and signature must appear verbatim in the cited evidence;
+answer lengths are paraphrases bound to the message only through the evidence. Validation is thus
+load-bearing and must not be relaxed without repeating the evaluation.
 
-## Worker und periodischer Abruf
+## Worker and periodic sync
 
-`api/mail/jobs.py` verarbeitet die dauerhafte Warteschlange `mail_job` im **API-Prozess**.
-`MAIL_WORKER_ENABLED` (Standard `true`) startet den Worker beim API-Start;
-`MAIL_WORKER_POLL_SECONDS` (Standard `2`) regelt die Wartezeit zwischen Prüfungen.
-`MAIL_SYNC_INTERVAL_MINUTES` (Standard `5`, bei `0` kein periodischer Abruf) steuert das
-Einreihen aktiver Konten; kürzlich abgerufene Konten und Konten mit letztem Fehler
-`auth_expired` werden dabei übersprungen. Manueller Abruf und der OAuth-Callback nach erneutem
-Verbinden reihen auch solche Konten ein; zur Ausführung muss der Worker laufen. `MAIL_SYNC_STALE_MINUTES` (Standard
-`10`) bestimmt, wann ein gesperrter Job als veraltet gilt. Nach einem erfolgreichen Abruf mit
-neuen Mails wird ein Insight-Job eingereiht, der fehlende Kurzfassungen auffüllt.
+`api/mail/jobs.py` processes the durable `mail_job` queue in the **API process**.
+`MAIL_WORKER_ENABLED` (default `true`) starts the worker at API startup;
+`MAIL_WORKER_POLL_SECONDS` (default `2`) controls the wait between checks.
+`MAIL_SYNC_INTERVAL_MINUTES` (default `5`, `0` disables periodic sync) controls enqueueing
+active accounts; recently synced accounts and accounts whose last error was `auth_expired` are
+skipped. Manual sync and the OAuth callback after reconnection enqueue these accounts too; the
+worker must be running to execute them. `MAIL_SYNC_STALE_MINUTES` (default `10`) determines
+when a locked job is stale. After a successful sync with new mails, an insight job is enqueued
+to fill in missing summaries.
 
-Ändert sich die Textfassung (`body_text` in `sync_types.py`), wird `BODY_VERSION` erhöht. Jeder
-Abruf liest danach bis zu 25 INBOX-Mails mit älterer Version beim Anbieter nach (ohne sie als
-gelesen zu markieren) und überschreibt Text und Vorschau in derselben Zeile; ihre Kurzfassung wird
-verworfen, wenn sich der Text ändert oder leer bleibt. Kennt der Anbieter die Mail nicht mehr oder
-liefert er sie unter anderer Message-ID, bleibt der alte Text und nur die Version steigt. Eine Mail,
-die gerade nicht lesbar ist (Serverfehler, Ratenlimit, Verbindungsabbruch), wird später erneut
-gefragt, die übrigen gelten trotzdem. Ihre Wartezeit verdoppelt sich je Fehlschlag, von einer Stunde
-bis zu einem Tag (im API-Prozess gemerkt, ein Neustart vergisst sie), damit wenige unlesbare Mails
-die übrigen nicht aufhalten. Eine Kurzfassung wird nur gespeichert, solange die Mail noch den Text hat,
-den das Modell gelesen hat; neuer Text und das Verwerfen der alten Kurzfassung gehen in einer
-Transaktion. Ein Fehler beim Nachlesen lässt den Abruf selbst erfolgreich.
+When the text version (`body_text` in `sync_types.py`) changes, `BODY_VERSION` is incremented.
+Each subsequent sync rereads up to 25 INBOX mails with an older version from the provider
+(without marking them read) and overwrites text and snippet in the same row; its summary is
+discarded if the text changes or remains empty. If the provider no longer knows the mail or
+returns it under a different message ID, the old text remains and only the version increases.
+A mail that cannot currently be read (server error, rate limit, connection loss) is retried
+later; the others still count. Its wait doubles per failure, from one hour to one day (remembered
+in the API process, forgotten on restart), so a few unreadable mails do not hold up the others.
+A summary is stored only while the mail still has the text read by the model; new text and
+discarding the old summary occur in one transaction. A reread error leaves the sync itself
+successful.
 
-Stoppt Studio eine inaktive Instanz, pausiert auch der Worker und damit das Polling, bis eine
-neue Anfrage die Instanz wieder startet. Gemessen wurden 31 Minuten Leerlauf **ohne** Stopp;
-für längere Zeit ist das Verhalten nicht gemessen.
+If Studio stops an inactive instance, the worker and thus polling also pause until a new request
+restarts the instance. 31 minutes of idle time were measured **without** a stop; behavior for
+longer periods has not been measured.
 
-## Studio-Proben
+## Studio probes
 
-Details und Messwerte: [Studio-Proben vom 13.11.2026](docs/superpowers/probes/2026-11-13-studio-proben.md).
-Apps werden nicht automatisch zu MCP-Tools; erst der OpenAPI-Import als HTTP-Connector macht
-Operationen zu Tools. App-Module haben keine Zeitpläne (Workflows schon). Bei jeweils 20 Aufrufen
-lief dieselbe Instanz, auch nach 31 Minuten Leerlauf; ein späterer Stopp wurde nicht geprüft.
-SSE kam durch das Gateway vor Ende des Streams an, mit einer einmaligen kurzen Stockung in der
-ersten Messung. Der Gmail-Connector liefert bei `get_thread` keine vollständigen Kopfzeilen;
-Newsletter-Erkennung nutzt daher bei Connector-Konten auch das Label `CATEGORY_PROMOTIONS` (`CATEGORY_UPDATES` zählt nicht, es enthält auch Bestellbestätigungen und Kontohinweise). `TRASH` ist als
-System-Label unterstützt, `send_email` nimmt `replyToMessageId`; der Outlook-Connector lieferte
-in der Probe HTTP 401.
+Details and measurements: [Studio probes of 13.11.2026](docs/superpowers/probes/2026-11-13-studio-proben.md).
+Apps do not automatically become MCP tools; only importing OpenAPI as an HTTP connector turns
+operations into tools. App modules have no schedules (workflows do). The same instance ran for
+20 calls each, including after 31 minutes idle; a later stop was not checked. SSE arrived through
+the gateway before the stream ended, with one short pause in the first measurement. The Gmail
+connector does not return complete headers in `get_thread`; newsletter detection therefore also
+uses the label `CATEGORY_PROMOTIONS` for connector accounts (`CATEGORY_UPDATES` does not count,
+as it also contains order confirmations and account notices). `TRASH` is supported as a system
+label, `send_email` takes `replyToMessageId`; the Outlook connector returned HTTP 401 in the probe.
 
-## Stack & Befehle
+## Stack & commands
 
-- **Python:** `uv`-Workspace (Root `pyproject.toml`), FastAPI + SQLModel/Alembic. Tests: `bash tools/uv.sh run --no-sync pytest <pfad>`; Live-PG-Suiten: `bunx nx run db:test-pg-contract`
+- **Python:** `uv` workspace (root `pyproject.toml`), FastAPI + SQLModel/Alembic. Tests: `bash tools/uv.sh run --no-sync pytest <pfad>`; live PG suites: `bunx nx run db:test-pg-contract`
 - **TypeScript:** bun 1.4 + Nx + TanStack Start/Router/Query + Tailwind 4, Vite 8
-- Wichtigste Kommandos (Root):
-  - `bun run install-all` — installiert alles inkl. generierten API-Client (`tools/gen-types.sh`)
-  - `bunx nx run api:serve` — API lokal starten; `bun run dev:web` — Web lokal (Port 3001)
-  - `bun run build` / `bun run test` / `bun run check` — Nx über alle Projekte
-  - `bunx nx run api:gen-openapi` + `bash tools/gen-types.sh` — OpenAPI-Spec + TS-Client neu generieren (nach jeder API-Änderung; `gen-types.sh --check` ist der Drift-Gate)
-  - `bunx nx run db:revision --message "..."` — Alembic-Revision autogenerieren; `bunx nx run db:migrate` — anwenden (`heads`, nicht `head`)
-  - `bash tools/uv.sh run --no-sync python -m api.mail.dev_seed` — lokale Datenbank mit den Beispieldaten der Designboards füllen. Der Seed verweigert Datenbank-Hosts außer `localhost`, `127.0.0.1` und `::1`; Wiederholungen ersetzen nur Seed-Zeilen und zugehörige Insight-/Sync-/Chat-Zeilen. Beim visuellen Prüfen die API mit `MAIL_WORKER_ENABLED=false` starten, damit die Seed-Konten nicht abgerufen werden.
+- Main commands (root):
+  - `bun run install-all` — installs everything including generated API client (`tools/gen-types.sh`)
+  - `bunx nx run api:serve` — start API locally; `bun run dev:web` — web locally (port 3001)
+  - `bun run build` / `bun run test` / `bun run check` — Nx across all projects
+  - `bunx nx run api:gen-openapi` + `bash tools/gen-types.sh` — regenerate OpenAPI spec + TS client (after every API change; `gen-types.sh --check` is the drift gate)
+  - `bunx nx run db:revision --message "..."` — autogenerate Alembic revision; `bunx nx run db:migrate` — apply (`heads`, not `head`)
+  - `bash tools/uv.sh run --no-sync python -m api.mail.dev_seed` — fill the local database with the design-board sample data. The seed rejects database hosts other than `localhost`, `127.0.0.1` and `::1`; repeated runs replace only seed rows and associated insight/sync/chat rows. For visual checks start the API with `MAIL_WORKER_ENABLED=false` so seed accounts are not synced.
 
-## Konventionen
+## Conventions
 
 ### Python
-- **Settings:** neue Settings als eigenes Modul `packages/py/env/src/env/<name>.py` (`class Env(BaseEnv)` + `env = Env()`); jeder Name **leer** in der Root-`.env.example` deklarieren. Secrets mit `Annotated[str | None, WorkspaceSecret()] = None` markieren (in Studio aus den Workspace-Secrets, lokal aus `.env`).
-- **DB:** ein Model pro Datei in `packages/py/db/src/db/models/<table>.py` (drop-in, Loader entdeckt automatisch; **keine Cross-Table-Foreign-Keys**, Referenzen als String-Spalten), ein Accessor-Modul pro Tabelle in `db/accessors/` — ORM-Queries nur in Accessors. Migrationen: eine Branch pro Owner, `branch_labels` gesetzt, `down_revision = None` an der Wurzel.
-- **Router:** Verzeichnisbaum = URL-Baum unter `apps/api/src/api/routers/`. Jedes Modul mit `router` serviert; jedes Paket braucht eine Access-Rule (`dependencies` in der `__init__.py`, `()` = anonym — nie weglassen, sonst Import-Fehler). `operation_id` ist eindeutig und wird in Studio zum MCP-Toolnamen. `[name]` in Datei/Verzeichnis = Pfadparameter `{name}`; `route.py` = Index.
-- **Code/Kommentare/Docstrings auf Englisch** (Repo-Konvention); **UI-Texte auf Deutsch**.
-- nie Secrets loggen oder committen; `.env` ist gitignored.
+- **Settings:** each new setting belongs in its own module `packages/py/env/src/env/<name>.py` (`class Env(BaseEnv)` + `env = Env()`); declare every name **empty** in the root `.env.example`. Mark secrets with `Annotated[str | None, WorkspaceSecret()] = None` (in Studio from workspace secrets, locally from `.env`).
+- **DB:** one model per file in `packages/py/db/src/db/models/<table>.py` (drop-in, automatically discovered by the loader; **no cross-table foreign keys**, references as string columns), one accessor module per table in `db/accessors/` — ORM queries only in accessors. Migrations: one branch per owner, `branch_labels` set, `down_revision = None` at the root.
+- **Router:** directory tree = URL tree under `apps/api/src/api/routers/`. Every module with `router` is served; every package needs an access rule (`dependencies` in `__init__.py`, `()` = anonymous — never omit it, or imports fail). `operation_id` is unique and becomes the MCP tool name in Studio. `[name]` in a file/directory = path parameter `{name}`; `route.py` = index.
+- **Code/comments/docstrings in English** (repository convention); **UI text in German**.
+- Never log or commit secrets; `.env` is gitignored.
 
 ### TypeScript (apps/web)
-- TanStack Router: eine Datei pro Route unter `src/routes/`; Landing-Page über `staticData: { landing: <rank> }` claimen. Nach neuen Routen `bunx nx run web:gen-routes`.
-- API-Zugriff nur über den generierten Client (`src/api/generated/`, git-committed, nie manuell editieren) + `unwrap`/`dataOr404` aus `src/api/unwrap.ts`; `VITE_API_URL` konfiguriert die Base-URL. Aufrufe, deren Ergebnis vom HTTP-Status abhängt (404/409/502 bei Mail-Aktionen, Abrufen und Konten), dürfen den generierten Client ohne `unwrap` aufrufen und selbst nach Status verzweigen.
-- Styling mit Tailwind 4; Pfade/englische Literale mit `// i18n-exempt` markieren. Tests: `bun test` (jsdom-Setup in `src/test/setup.js`).
-- Tooltips und Menüs hängen im `<body>` und werden nie per CSS positioniert oder über einen Vorfahren gestaltet (kein `top`/`left`/`right`/`bottom` an `.le-menu`/`.le-tooltip`, kein `.le-x .le-menu`); die Lage kommt aus `src/ds/floating.ts` (`pos` bzw. `placement` ist nur die Wunschseite). `src/ds/floating.test.tsx` prüft das. Siehe DESIGN.md §5, „Schwebendes“.
+- TanStack Router: one file per route under `src/routes/`; claim the landing page via `staticData: { landing: <rank> }`. After new routes run `bunx nx run web:gen-routes`.
+- API access only through the generated client (`src/api/generated/`, committed to git, never edit manually) + `unwrap`/`dataOr404` from `src/api/unwrap.ts`; `VITE_API_URL` configures the base URL. Calls whose result depends on HTTP status (404/409/502 for mail actions, syncs and accounts) may call the generated client without `unwrap` and branch on status themselves.
+- Styling with Tailwind 4; mark paths/English literals with `// i18n-exempt`. Tests: `bun test` (jsdom setup in `src/test/setup.js`).
+- Tooltips and menus are attached to `<body>` and are never positioned by CSS or styled through an ancestor (no `top`/`left`/`right`/`bottom` on `.le-menu`/`.le-tooltip`, no `.le-x .le-menu`); positioning comes from `src/ds/floating.ts` (`pos` or `placement` is only the preferred side). `src/ds/floating.test.tsx` checks this. See DESIGN.md §5, “Schwebendes”.
 
-## Sicherheit
-- OAuth-Client-Secrets und `MAIL_TOKEN_ENCRYPTION_KEY` sind **Workspace-Secrets** (`WorkspaceSecret`), nie im Code; lokal nur in `.env`. **Secret-Namen in Mistral Studio sind lowercase** — die Auflösung ist case-insensitiv: Secret `mail_token_encryption_key` füllt `MAIL_TOKEN_ENCRYPTION_KEY` (siehe Docstring von `env/_mistral_secrets.py`).
-- **Pro IMAP-Konto (iCloud, Yahoo, …) genau ein eigenes Workspace-Secret** mit dem App-Passwort, z.B. `yahoo-app-password`, `icloud-app-password` (lowercase). Beim Connect wird statt des Passworts der Secret-Name übergeben (`password_secret`); die App löst ihn zur Laufzeit über `GET /v1/secrets/values` auf (`api/mail/secrets.py`) und speichert in `mail_credential` nur die **Referenz** (verschlüsselt), nie den Wert — Rotation in Studio wirkt ohne Reconnect.
-- Mail-Credentials werden vor dem Schreiben in `mail_credential` mit Fernet verschlüsselt (`api/mail/crypto.py`); der Key wird nie persistiert.
-- Der Agent verändert oder sendet **nie ohne Bestätigung**: `create_draft` und Aktionswerkzeuge erzeugen Vorschläge; erst `POST /api/v1/chat/proposals/{proposal_id}/confirm` führt die Auswahl aus, sofern der Turn-Kontext beim Claim nicht widerrufen ist. `.../cancel` verwirft sie auch nach Widerruf.
-- CORS bleibt auf die eigene Origin beschränkt (`CORS_ORIGIN`).
-- liam-e nie als HTTP-Connector in Studio importieren, oder nur mit den lesenden Operationen: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `liam_mail_accounts`, `liam_mail_read`, `liam_mail_search`, `liam_mail_summary`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `settings_ui_get`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
-  `mail_message_insight` erzeugt eine fehlende Kurzfassung mit dem Modell und speichert sie in `mail_insight` (Modellkosten, keine Änderung an Mails; für Seed-Konten nie, dort gibt es nur gesäte Kurzfassungen).
-  `mail_message_original` ruft die Mail beim Anbieter ab (lesend, ohne sie als gelesen zu markieren) und speichert nichts.
-  `settings_ui_get` legt beim allerersten Lesen einmalig die Standardbelegung in `ui_settings` an; eine bestehende Belegung ändert es nie.
-  Jeder Import der OpenAPI macht aus jeder Operation ein MCP-Tool; ein Studio-Agent könnte sonst Vorschläge bestätigen, Aktionen ausführen oder Konten verbinden, ohne dass der Eigentümer es sieht — einzelne Tools lassen sich in Studio nach dem Import abschalten.
-  Neue verändernde Operationen gehören bewusst in `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, sonst scheitert der Inventur-Test.
+## Security
+- OAuth client secrets and `MAIL_TOKEN_ENCRYPTION_KEY` are **workspace secrets** (`WorkspaceSecret`), never in code; locally only in `.env`. **Secret names in Mistral Studio are lowercase** — resolution is case-insensitive: secret `mail_token_encryption_key` fills `MAIL_TOKEN_ENCRYPTION_KEY` (see the docstring of `env/_mistral_secrets.py`).
+- **Exactly one separate workspace secret per IMAP account (iCloud, Yahoo, …)** contains the app password, e.g. `yahoo-app-password`, `icloud-app-password` (lowercase). On connect, the secret name is passed instead of the password (`password_secret`); the app resolves it at runtime via `GET /v1/secrets/values` (`api/mail/secrets.py`) and stores only the **reference** (encrypted), never the value, in `mail_credential` — rotation in Studio works without reconnecting.
+- Mail credentials are Fernet-encrypted before writing to `mail_credential` (`api/mail/crypto.py`); the key is never persisted.
+- The agent **never changes or sends without confirmation**: `create_draft` and action tools create proposals; only `POST /api/v1/chat/proposals/{proposal_id}/confirm` executes the selection, provided the turn context has not been revoked at claim time. `.../cancel` discards it even after revocation.
+- CORS remains restricted to the app's own origin (`CORS_ORIGIN`).
+- Never import liam-e as an HTTP connector in Studio, or import only these read-only operations: `calendar_occurrence_get`, `calendar_occurrences_list`, `calendar_sources_list`, `chat_conversations_list`, `chat_history`, `chat_models_list`, `health`, `liam_mail_accounts`, `liam_mail_read`, `liam_mail_search`, `liam_mail_summary`, `mail_account_options`, `mail_accounts_list`, `mail_connector_tools_list`, `mail_connectors_list`, `mail_message_get`, `mail_message_insight`, `mail_message_original`, `mail_messages_list`, `mail_summary`, `prompt_get`, `prompts_list`, `settings_ui_get`, `tasks_get`, `tasks_list`, `tasks_occurrences_list`
+  `mail_message_insight` generates a missing summary with the model and stores it in `mail_insight` (model cost, no mail changes; never for seed accounts, where only seeded summaries are available).
+  `mail_message_original` fetches the mail from the provider read-only, without marking it read, and stores nothing.
+  `settings_ui_get` creates the default assignment in `ui_settings` once on the very first read; it never changes an existing assignment.
+  Every OpenAPI import turns every operation into an MCP tool; otherwise a Studio agent could confirm proposals, perform actions or connect accounts without the owner seeing it — individual tools can be disabled in Studio after import.
+  New mutating operations must deliberately be added to `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, otherwise the inventory test fails.
 
-## Veröffentlichung und private Daten
+## Publication and private data
 
-liam-e soll veröffentlicht werden können. Alles, was in Git landet (Dateien und
-Commit-Nachrichten), und alles auf GitHub (Issues, PRs, Reviews, Kommentare) gilt deshalb schon
-jetzt als öffentlich.
+liam-e should be publishable. Everything that goes into Git (files and commit messages), and
+anything on GitHub (issues, PRs, reviews, comments), therefore already counts as public.
 
-- **Nichts über den Owner oder seine Umgebung:** keine echten Namen, Mailadressen, Mail- oder
-  Kalenderinhalte, Kontakte, Hostnamen, internen Domains, IP-Adressen, absoluten lokalen Pfade,
-  Benutzer- oder Gerätenamen und keine Namen der eigenen Infrastruktur oder Werkzeuge. Pfade
-  relativ zum Repo angeben.
-- **Mistral-Tenant:** Organisations-, Workspace- und App-ID stehen nur in `mistral.json`, weil
-  `mistral deploy` sie dort braucht. Überall sonst `<organization-id>`, `<workspace-id>` und
-  `<app-id>`; App- und Gateway-URLs des Deployments nicht aufschreiben.
-- **Keine Links auf private Ressourcen:** Claude-Artefakte, Sitzungen und private Dokumente beim
-  Namen nennen statt verlinken (etwa Design-System „liam-e“). Ausgenommen ist nur die
-  Attributionszeile `Claude-Session` in Commits und PR-Beschreibungen.
-- **Testdaten sind synthetisch:** Adressen unter `example.org`, `example.com`, `example.net`,
-  `*.example` oder `*.test`, erfundene Namen und Inhalte. Provider-Voreinstellungen (`gmail.com`,
-  `icloud.com` …) sind Konfiguration; Tests dazu nehmen Platzhalter wie `me@` oder `x@`. Nie eine
-  echte Mail, einen echten Termin oder echte Kopfzeilen als Fixture übernehmen, auch nicht
-  gekürzt. Screenshots nur mit den Seed-Daten aus `api.mail.dev_seed`.
-- **Credentials nie im Klartext:** keine Passwörter, App-Passwörter, Tokens, API-Keys,
-  OAuth-Codes, Cookies oder Fernet-Schlüssel, weder in Code, Tests, Doku, `.env.example`,
-  Issues, PRs, Commit-Nachrichten und Logs noch in Aufträgen an andere Modelle. Werte gibt es nur
-  als Workspace-Secret in Studio oder lokal in `.env` (gitignored). Agents lesen `.env` nicht und
-  geben keine Werte daraus aus; Secret-*Namen* wie `yahoo-app-password` sind unkritisch. Tests
-  nehmen sichtbare Wegwerfwerte (`test-only`) oder zur Laufzeit erzeugte Schlüssel.
-- **Ein committetes Geheimnis gilt als verbrannt:** zuerst rotieren, dann entfernen; die
-  Historie behält es. Nie über eine Allowlist in `.gitleaks.toml`, über `.gitleaksignore` oder
-  einen Kommentar `gitleaks:allow` „lösen“ (die CI ignoriert solche Kommentare).
-- **Logs und Fehlertexte** enthalten keine Mailinhalte, Adressen, Vorlagentexte, Tokens oder
-  Secret-Werte.
-- **Lokaler Agent-Zustand** (`.superpowers/`, `.codegraph/`, `.remember/`,
-  `.claude/settings.local.json`, `.claude/worktrees/`, Playwright-Ausgaben) bleibt ungetrackt;
-  `.gitignore` deckt ihn ab.
-- **Durchsetzung:** CI-Job `secrets` (gitleaks über die ganze Historie mit `.gitleaks.toml`) und
-  `tests/test_public_repo_hygiene.py` (Tenant-IDs außerhalb von `mistral.json`, private Links,
-  Home-Pfade, echt wirkende Mailadressen). Die Allowlist ist leer; eine Ausnahme braucht einen
-  geprüften Fehlalarm, gilt nur für die Regel, die Datei und den konkreten Wert und nennt die
-  Begründung im Eintrag. CI-Actions sind auf Commit-SHAs gepinnt.
-- Was vor einer Veröffentlichung noch zu tun ist, steht in
-  [docs/publishing.md](docs/publishing.md).
+- **Nothing about the owner or their environment:** no real names, email addresses, mail or
+  calendar contents, contacts, hostnames, internal domains, IP addresses, absolute local paths,
+  user or device names, or names of their own infrastructure or tools. Give paths relative to
+  the repository.
+- **Mistral tenant:** organization, workspace and app IDs appear only in `mistral.json`, because
+  `mistral deploy` needs them there. Everywhere else use `<organization-id>`, `<workspace-id>`
+  and `<app-id>`; do not write down the deployment's app or gateway URLs.
+- **No links to private resources:** name Claude artifacts, sessions and private documents instead
+  of linking them (e.g. the “liam-e” design system). The only exception is the `Claude-Session`
+  attribution line in commits and PR descriptions.
+- **Test data is synthetic:** addresses under `example.org`, `example.com`, `example.net`,
+  `*.example` or `*.test`, invented names and content. Provider presets (`gmail.com`,
+  `icloud.com` …) are configuration; tests for them use placeholders such as `me@` or `x@`.
+  Never use a real mail, appointment or headers as a fixture, even shortened. Screenshots only
+  with seed data from `api.mail.dev_seed`.
+- **Credentials never in plaintext:** no passwords, app passwords, tokens, API keys, OAuth codes,
+  cookies or Fernet keys in code, tests, docs, `.env.example`, issues, PRs, commit messages and
+  logs, or in assignments to other models. Values exist only as workspace secrets in Studio or
+  locally in `.env` (gitignored). Agents do not read `.env` or output values from it; secret
+  *names* such as `yahoo-app-password` are uncritical. Tests use visible disposable values
+  (`test-only`) or keys generated at runtime.
+- **A committed secret is considered burned:** rotate first, then remove it; history retains it.
+  Never “solve” it through an allowlist in `.gitleaks.toml`, through `.gitleaksignore` or a
+  `gitleaks:allow` comment (CI ignores such comments).
+- **Logs and error messages** contain no mail contents, addresses, template text, tokens or
+  secret values.
+- **Local agent state** (`.superpowers/`, `.codegraph/`, `.remember/`,
+  `.claude/settings.local.json`, `.claude/worktrees/`, Playwright output) remains untracked;
+  `.gitignore` covers it.
+- **Enforcement:** CI job `secrets` (gitleaks over the entire history with `.gitleaks.toml`) and
+  `tests/test_public_repo_hygiene.py` (tenant IDs outside `mistral.json`, private links, home
+  paths, realistic-looking email addresses). The allowlist is empty; an exception requires a
+  reviewed false positive, applies only to the rule, file and specific value, and gives the
+  justification in the entry. CI actions are pinned to commit SHAs.
+- What remains before publication is in [docs/publishing.md](docs/publishing.md).
 
-## Arbeitsweise für Agents
+## Working practices for agents
 - Documentation, issues, pull requests and commit messages are English. UI wording follows the locale catalogues (see #65); until then the UI is German.
-- Vor jeder Arbeit an der Oberfläche (`apps/web`, Texte, auch Antworttexte des Assistenten) `DESIGN.md` lesen; sie regelt Tokens, Bausteine, Responsive-Verhalten und wie Texte klingen.
-- Minimale Diffs, bestehende Patterns kopieren (siehe Modul-Docstrings — sie dokumentieren die Konventionen jeweils lokal).
-- Nach API-Änderungen immer `gen-types` laufen lassen und `apps/api/openapi.json` + `apps/web/src/api/generated` mit committen.
-- Änderungen an Tabellen immer mit Migration (`db:revision` + `db:migrate`), nie von Hand editierte `versions/`-Dateien.
-- Vor dem Commit: `bun run check` (baut alles, prüft die Typen der Oberfläche mit `tsc` und den generierten Client) und die betroffenen Test-Suiten laufen lassen.
-- Issues und PRs über die Vorlagen in `.github/` (`ISSUE_TEMPLATE/`, `pull_request_template.md`). Eine Aufgabe ergibt
-  genau einen Branch und einen PR, auch wenn sie mehrere Issues umfasst; jedes Issue bekommt eigene Commits und ein
-  eigenes Schließwort (`Closes #12. Closes #13.`). Was nicht geprüft wurde, steht im PR ausdrücklich als nicht geprüft.
+- Before any work on the UI (`apps/web`, text, including assistant response text), read `DESIGN.md`; it governs tokens, components, responsive behavior and how text sounds.
+- Minimal diffs; copy existing patterns (see module docstrings — they document the conventions locally).
+- After API changes always run `gen-types` and commit `apps/api/openapi.json` + `apps/web/src/api/generated`.
+- Table changes always require a migration (`db:revision` + `db:migrate`), never hand-edited `versions/` files.
+- Before committing: run `bun run check` (builds everything, checks UI types with `tsc` and the generated client) and the affected test suites.
+- Use the templates in `.github/` (`ISSUE_TEMPLATE/`, `pull_request_template.md`) for issues and PRs. One task produces exactly one branch and one PR, even when it covers several issues; each issue gets its own commits and closing keyword (`Closes #12. Closes #13.`). State explicitly in the PR what was not checked.
 
 <!-- OPENWIKI:START -->
 

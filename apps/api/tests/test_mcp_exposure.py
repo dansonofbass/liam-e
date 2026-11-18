@@ -87,7 +87,7 @@ BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
 )
 
 AGENTS_MD = Path(__file__).resolve().parents[3] / "AGENTS.md"
-READ_ONLY_LIST_MARKER = "lesenden Operationen:"
+READ_ONLY_LIST_MARKER = "read-only operations:"
 
 
 @pytest.fixture(scope="module")
@@ -136,7 +136,7 @@ def test_mutating_operation_inventory(app: FastAPI) -> None:
     assert not added and not removed, (
         f"new mutating operations: {added}; gone: {removed}. "
         "Register the operation in MUTATING_OPERATIONS in apps/api/tests/test_mcp_exposure.py "
-        "and update the read-only rule in AGENTS.md (section Sicherheit)."
+        "and update the read-only rule in AGENTS.md (section Security)."
     )
 
 
@@ -154,5 +154,5 @@ def test_agents_md_read_only_list_matches_get_operations(app: FastAPI) -> None:
         "AGENTS.md lists the read-only operations differently from the served OpenAPI: "
         f"missing {sorted(_read_only_get_ids(app) - set(listed))}, "
         f"unexpected {sorted(set(listed) - _read_only_get_ids(app))}, "
-        "or out of alphabetical order. Update the rule in AGENTS.md (section Sicherheit)."
+        "or out of alphabetical order. Update the rule in AGENTS.md (section Security)."
     )

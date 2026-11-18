@@ -1,6 +1,6 @@
 """Tracked files stay publishable: no private identifiers of the owner or of the environment.
 
-liam-e is meant to become public (AGENTS.md, section "Veröffentlichung und private Daten"). These
+liam-e is meant to become public (AGENTS.md, section "Publication and private data"). These
 checks cover what a secret scanner does not look for: the Mistral tenant IDs outside the
 `mistral.json` that deploys need, links to private claude.ai resources, absolute home paths, and
 mail addresses that could belong to a real person. Credentials are the job of gitleaks
