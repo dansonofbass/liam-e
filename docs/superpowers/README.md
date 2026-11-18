@@ -27,3 +27,4 @@ observations at the time, not necessarily the current implementation.
 | [2026-11-18: Google Calendar writes](probes/2026-11-18-google-calendar-write-probe.md) | Write probe on an empty test calendar and an end-to-end run of the write service. |
 | [2026-11-18: Preference suggestions](probes/2026-11-18-praeferenz-vorschlaege.md) | Offline and live evaluation of preference extraction. |
 | [2026-11-18: Studio prompts](probes/2026-11-18-studio-prompts.md) | Findings from probing prompts in Studio. |
+| [2026-11-19: Audio capabilities](probes/2026-11-19-audio-capabilities.md) | Synthetic workspace inference, Chromium formats and the audio release gates. |

@@ -239,6 +239,14 @@ export type AttachmentOut = {
 };
 
 /**
+ * AudioCapabilitiesOut
+ */
+export type AudioCapabilitiesOut = {
+    stt: TranscriptionCapabilityOut;
+    tts: SpeechCapabilityOut;
+};
+
+/**
  * BulkMessageActionIn
  */
 export type BulkMessageActionIn = {
@@ -2685,6 +2693,55 @@ export type SourcePatch = {
 };
 
 /**
+ * SpeechCapabilityOut
+ */
+export type SpeechCapabilityOut = {
+    app_limits: SpeechLimitsOut | null;
+    /**
+     * Checked At
+     */
+    checked_at?: string | null;
+    /**
+     * Formats
+     */
+    formats: Array<'audio/mpeg'>;
+    /**
+     * Model
+     */
+    model: string | null;
+    /**
+     * Reason
+     */
+    reason: 'invalid_model_configuration' | 'verification_missing_or_invalid' | 'verification_failed' | null;
+    /**
+     * Resolved Model
+     */
+    resolved_model?: string | null;
+    /**
+     * Status
+     */
+    status: 'available' | 'unavailable' | 'unknown';
+};
+
+/**
+ * SpeechLimitsOut
+ */
+export type SpeechLimitsOut = {
+    /**
+     * Max Input Characters
+     */
+    max_input_characters: number;
+    /**
+     * Max Response Bytes
+     */
+    max_response_bytes: number;
+    /**
+     * Timeout Seconds
+     */
+    timeout_seconds: number;
+};
+
+/**
  * StartEvent
  */
 export type StartEvent = {
@@ -3201,6 +3258,55 @@ export type TaskWindow = {
 };
 
 /**
+ * TranscriptionCapabilityOut
+ */
+export type TranscriptionCapabilityOut = {
+    app_limits?: TranscriptionLimitsOut;
+    /**
+     * Checked At
+     */
+    checked_at?: string | null;
+    /**
+     * Formats
+     */
+    formats: Array<'audio/webm;codecs=opus' | 'audio/mp4;codecs=mp4a.40.2'>;
+    /**
+     * Model
+     */
+    model: string | null;
+    /**
+     * Reason
+     */
+    reason: 'invalid_model_configuration' | 'verification_missing_or_invalid' | 'verification_failed' | null;
+    /**
+     * Resolved Model
+     */
+    resolved_model?: string | null;
+    /**
+     * Status
+     */
+    status: 'available' | 'unavailable' | 'unknown';
+};
+
+/**
+ * TranscriptionLimitsOut
+ */
+export type TranscriptionLimitsOut = {
+    /**
+     * Max Concurrent Requests
+     */
+    max_concurrent_requests?: number;
+    /**
+     * Max Duration Seconds
+     */
+    max_duration_seconds?: number;
+    /**
+     * Max Upload Bytes
+     */
+    max_upload_bytes?: number;
+};
+
+/**
  * UiSettingsOut
  */
 export type UiSettingsOut = {
@@ -3641,6 +3747,29 @@ export type HealthResponses = {
 };
 
 export type HealthResponse2 = HealthResponses[keyof HealthResponses];
+
+export type AudioCapabilitiesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/capabilities';
+};
+
+export type AudioCapabilitiesGetErrors = {
+    /**
+     * Owner access could not be verified
+     */
+    401: unknown;
+};
+
+export type AudioCapabilitiesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AudioCapabilitiesOut;
+};
+
+export type AudioCapabilitiesGetResponse = AudioCapabilitiesGetResponses[keyof AudioCapabilitiesGetResponses];
 
 export type CalendarGoogleConnectData = {
     body: GoogleConnectInput;
