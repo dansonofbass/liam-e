@@ -37,6 +37,7 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `/tasks` und `/tasks/$taskId` — Aufgabenliste, manuelle Anlage und Fälligkeiten mit Verlauf.
 - `/settings` und `/settings/prompts` — Einstellungen mit Vorlagenbibliothek; `settingsSections` ist der Navigationseinstieg für weitere implementierte Bereiche.
 - `/settings/prompts/new` und `/settings/prompts/$promptId` — Vorlage anlegen oder bearbeiten, auf allen Bildschirmgrößen als eigene Ansicht.
+- `/settings/preferences`, `/settings/preferences/new` und `/settings/preferences/$preferenceId` — Präferenzen, Verwendungsschalter und eigene Anlege-/Bearbeitungsansichten, auch mobil.
 
 ### Mail-Domäne (`apps/api/src/api/mail/`)
 
@@ -101,6 +102,13 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Vorlagen | GET | `/api/v1/prompts/{id}` | `prompt_get` |
 | Vorlagen | PATCH | `/api/v1/prompts/{id}` | `prompt_update` |
 | Vorlagen | DELETE | `/api/v1/prompts/{id}` | `prompt_delete` |
+| Präferenzen | GET | `/api/v1/preferences` | `preferences_list` |
+| Präferenzen | POST | `/api/v1/preferences` | `preference_create` |
+| Präferenzen | PATCH | `/api/v1/preferences/{id}` | `preference_update` |
+| Präferenzen | DELETE | `/api/v1/preferences/{id}` | `preference_delete` |
+| Präferenzen | GET | `/api/v1/preferences/contexts/{context_id}` | `preference_context_get` |
+| Einstellungen | GET | `/api/v1/settings` | `settings_get` |
+| Einstellungen | PATCH | `/api/v1/settings` | `settings_update` |
 | Einstellungen | GET | `/api/v1/settings/ui` | `settings_ui_get` |
 | Einstellungen | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
@@ -448,6 +456,9 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `mail_insight` — Kurzfassung (`points_json`), Frist, Antwortbedarf, Folgevorschläge und Modell je Mail.
 - `mail_job` — dauerhafte Sync-/Insight-Warteschlange mit Status, Deduplizierung, Versuchen und Sperrzeit.
 - `chat_conversation`, `chat_message` — Verlauf; Vorschläge in `proposal_json` mit `proposal_status`, Mailreferenzen/Vorschläge/Modell in `extras_json`; ältere Entwürfe tragen `draft_json`.
+- `user_preference` — serverseitiger Eigentümer `installation`, Schlüssel, kanonischer Scope (`*` global oder Konto-ID), Status, Revisionszeiger und Objektversion; entfernte Zeilen bleiben als inhaltsfreie Unterdrückungsreferenz.
+- `preference_revision` — unveränderlicher Wert, damaliger Schlüssel/Scope, Quelle `manual` und Bestätigungszeit je Revision; beim Löschen wird der Wert entfernt und `removed` gesetzt.
+- `personalization_settings` — serverseitiger Singleton mit `use_preferences`, `suggest_preferences` (beide standardmäßig false) und Version; Vorschläge können noch nicht aktiviert werden.
 - `ui_settings` — die eine geräteübergreifende Bedienungskonfiguration mit festem serverseitigem Scope (`installation`, unique): `swipe_left`/`swipe_right` aus der Allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` für bedingte Updates und `updated_at`; Erstinitialisierung mit links `archive`, rechts `toggle_read`.
 
 ## Vorlagen und Turn-Kontext
@@ -464,7 +475,7 @@ Neue Turns speichern Revisionsreferenz/Hash, App-Prompt-Version und den aufgelö
 Kontoumfang in `chat_context`; `chat_message.context_id` verbindet den Verlauf damit.
 Der JSON-Kontoumfang enthält `account_ids`, `selection` (Konto-ID oder `null` für alle)
 und bei unbelegtem Altverlauf `legacy_mixed: true`.
-`preference_revision_id` bleibt als Erweiterungspunkt leer. Text wird nur als
+`preference_revision_id` bleibt für Altclients leer; die tatsächlich verwendeten Präferenzrevisionen stehen jetzt in `preference_revision_ids_json` mit `preference_resolver_version` und `preferences_enabled`. Text wird nur als
 Nutzerinhalt an das Modell gegeben, nie als App-Regel oder Chat-Extra gespeichert.
 Löschen entfernt Vorlageninhalt und Revisionsinhalt, hinterlässt `removed`-Markierungen,
 widerruft Kontexte und setzt aktive Auswahlen zurück. Bereits gesendete Modellanfragen
@@ -477,6 +488,52 @@ Für einen Verlauf werden die zugehörigen Kontexte jeweils in einer Datenbankab
 Rückgängig-Anfragen im Posteingang werden nach 15 Sekunden abgebrochen; bei unklarem Ergebnis
 bleibt die Aktion für einen erneuten Versuch noch zehn Sekunden verfügbar.
 Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
+
+## Explizite Präferenzen (#38)
+
+Die festen App-Regeln und autorisierten Zugriffe stehen über der aktuellen Bitte, diese über
+der gewählten Vorlage und diese über passenden aktiven Präferenzen. Werte kommen ausschließlich
+als Nutzerinhalt an das Modell, nicht als App-Regel und nicht in Chat-Extras oder Traces.
+Antwortlänge darf global oder für ein Konto gelten; ein Kontowert überschreibt für dieses Feld
+die globale Vorgabe. Anrede und Signatur brauchen genau ein vorhandenes Konto. Bei „Alle Konten“
+werden nur globale Werte aufgelöst, nie Kontosignaturen vermischt. Die bestehenden Mail-,
+Kalender- und Aufgaben-Scope-Prüfungen und die Bestätigungsmechanik bleiben unverändert.
+
+`GET /settings` liefert ausschließlich
+`{"personalization":{"use_preferences":false,"suggest_preferences":false,"version":1}}`.
+PATCH nimmt `{"personalization":{"expected_version":1,"use_preferences":true}}` und ändert
+nur ausdrücklich gelieferte Felder. `suggest_preferences: true`, null und fremde Abschnitte
+werden abgelehnt. `/settings/ui` behält seinen eigenen Vertrag und seine eigene Revision.
+Speichern einer Präferenz ist die manuelle Bestätigung, schaltet die Verwendung aber nie ein.
+POST nimmt `key=answer_length|salutation|signature`, `scope`, `value` und optional
+`status=active|paused`; PATCH nimmt `expected_version` und Änderungen von Wert, Scope oder Status.
+DELETE braucht `expected_version` als Queryparameter. Grenzen: 50 gespeicherte (ohne entfernte),
+20 aktive Werte, 500 Zeichen je Wert. Ein partieller Unique-Index sichert einen aktiven Wert je
+Eigentümer/Schlüssel/Scope, auch bei globalem, nicht-null Scope. Versions- und Quotenkonflikte
+antworten mit 409 ohne Eingabewerte im Fehlertext.
+
+Der vorhandene Turn-Resolver bindet exakte Revisions-IDs und Resolver-Version 1. Neue Revisionen
+wirken ab dem nächsten Turn; der historische Dialog liest nur diese IDs, niemals heutige Werte.
+Ohne Opt-in oder mit ausdrücklich gesetztem `without_preferences: true` gibt es keine Injektion.
+Ein Ladefehler liefert `preferences_unavailable` vor dem Modellaufruf; erst die bewusste Aktion
+„Ohne Präferenzen fortfahren“ setzt den Schalter für den erneuten Versuch. Es gibt keinen stillen
+Fallback. Ausschalten, Pausieren, Scopewechsel und Löschen widerrufen betroffene Kontexte in
+derselben Transaktion. Die vorhandenen Live-Prüfungen vor Modell-/Werkzeugaufrufen und nach zehn
+Deltas bleiben maßgeblich; bereits gesendete Anfragen sind nicht rückholbar.
+
+Die gemeinsame transaktionale Präferenzsperre serialisiert Quoten, Änderungen, Auflösung und
+Kontolöschung. `mail_account.delete_account` entfernt Kontopräferenzen in der Kontotransaktion;
+`mail/service.py` ist im aktuellen Stand nicht der Löschpfad. Löschen entfernt alle Revisionswerte,
+erhält inhaltsfreie Referenzen und widerruft laufende Kontexte. Historische Anzeige:
+„Präferenz entfernt“. Ursprüngliche Chatnachrichten und Antworten bleiben bestehen.
+Für #39 sind entfernte `user_preference`-Zeilen mit Schlüssel und Scope die Unterdrückungsreferenz;
+Kandidaten müssen diese vor Vorschlägen prüfen und dürfen entfernte Revisionen nie auflösen.
+Kandidaten, „Merke dir“-Werkzeuge und Vorschlagskarten gehören nicht zu diesem Schnitt.
+
+Die GETs `preferences_list`, `preference_context_get` und `settings_get` bleiben ausdrücklich in
+`BROWSER_ONLY_GET_OPERATIONS` der MCP-Inventur und außerhalb der Studio-Leseliste: lesend allein
+macht persönliche Werte nicht agentensicher. Die vier Schreiboperationen stehen in
+`MUTATING_OPERATIONS`. Neue Präferenzen werden nicht zu Werkzeugberechtigungen.
 
 ## Worker und periodischer Abruf
 
