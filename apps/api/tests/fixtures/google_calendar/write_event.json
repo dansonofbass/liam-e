@@ -1,0 +1,11 @@
+{
+  "id": "synthetic-event", "summary": "Example appointment", "status": "confirmed",
+  "start": {"dateTime": "2026-12-05T09:00:00+01:00", "timeZone": "Europe/Berlin"},
+  "end": {"dateTime": "2026-12-05T10:00:00+01:00", "timeZone": "Europe/Berlin"},
+  "created": "2026-11-18T08:00:00Z", "updated": "2026-11-18T08:00:01Z",
+  "htmlLink": "https://calendar.example.org/event/synthetic-event",
+  "organizer": {"self": true, "email": "organizer@example.org"},
+  "creator": {"self": true, "email": "organizer@example.org"},
+  "attendees": [], "recurringEventId": null, "recurrence": null, "eventType": "default",
+  "description": "Synthetic description", "location": "Example room"
+}

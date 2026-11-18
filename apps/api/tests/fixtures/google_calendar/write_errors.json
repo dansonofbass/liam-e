@@ -1,0 +1,7 @@
+[
+  "Google Calendar request failed (HTTP 404, reason notFound, not applied): Not Found.",
+  "Google Calendar request failed (HTTP 400, reason timeRangeEmpty, not applied): Empty range.",
+  "Google Calendar request failed (HTTP 403, reason forbidden, not applied): Forbidden.",
+  "Google Calendar request failed (HTTP 503, reason unavailable, not applied): Unavailable.",
+  "1 validation error for call[create_event]"
+]
