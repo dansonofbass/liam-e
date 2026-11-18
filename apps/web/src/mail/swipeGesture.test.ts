@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { beginSwipe, moveSwipe, endSwipe, cancelSwipe, type SwipeBasis } from './swipeGesture'
+import { beginSwipe, blocksScroll, moveSwipe, endSwipe, cancelSwipe, type SwipeBasis } from './swipeGesture'
 
 const basis: SwipeBasis = { id: 'mail-1', isRead: false, revision: 1, left: 'archive', right: 'toggle_read' }
 const start = () => beginSwipe(basis, 200, 100, 300)
@@ -29,5 +29,19 @@ describe('swipe gesture', () => {
     expect(endSwipe(moveSwipe(beginSwipe(basis, 200, 0, 100), 128, 0, basis), basis)).toEqual({ id: 'mail-1', action: 'archive' })
     expect(endSwipe(moveSwipe(beginSwipe(basis, 200, 0, 1000), 89, 0, basis), basis)).toBeUndefined()
     expect(endSwipe(moveSwipe(beginSwipe(basis, 200, 0, 1000), 88, 0, basis), basis)).toEqual({ id: 'mail-1', action: 'archive' })
+  })
+  test('keeps a horizontal touch from native scrolling, but never a vertical one', () => {
+    expect(blocksScroll(start(), 200, 100)).toBe(false)
+    expect(blocksScroll(start(), 204, 101)).toBe(true)
+    expect(blocksScroll(start(), 201, 105)).toBe(false)
+    const preview = moveSwipe(start(), 230, 110, basis)
+    expect(preview.phase).toBe('preview')
+    // A thumb arc drifts far from the row's line once the swipe is decided; the row keeps the touch.
+    expect(blocksScroll(preview, 120, 180)).toBe(true)
+    expect(blocksScroll(moveSwipe(start(), 300, 140, basis), 300, 140)).toBe(true)
+    const scroll = moveSwipe(start(), 203, 120, basis)
+    expect(scroll.phase).toBe('scrolling')
+    expect(blocksScroll(scroll, 320, 120)).toBe(false)
+    expect(blocksScroll(cancelSwipe(preview), 230, 110)).toBe(false)
   })
 })
