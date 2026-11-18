@@ -54,6 +54,12 @@ async def apply(*, source_id: str, upsert: tuple[CalendarEvent, CalendarOccurren
         return True
 
 
+async def event_metadata(event_id: str) -> str:
+    async with get_session_maker()() as session:
+        event = await session.get(CalendarEvent, event_id)
+        return event.recurrence_json if event else "{}"
+
+
 async def find(source_id: str, external_id: str) -> CalendarOccurrence | None:
     async with get_session_maker()() as session:
         return (await session.execute(select(CalendarOccurrence).where(CalendarOccurrence.source_id == source_id,

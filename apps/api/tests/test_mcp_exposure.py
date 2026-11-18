@@ -21,6 +21,10 @@ from conftest import build_app
 MUTATING_OPERATIONS: frozenset[str] = frozenset(
     {
         "calendar_google_connect",
+        "calendar_event_create",
+        "calendar_event_update",
+        "calendar_event_delete",
+        "calendar_write_check",
         "calendar_feed_validate",
         "calendar_feed_subscribe",
         "calendar_feed_validation_discard",
@@ -70,6 +74,8 @@ BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
     {
         # Provider calls expose private calendar names; never an agent discovery tool.
         "calendar_google_calendars_list",
+        "calendar_occurrence_live",
+        "calendar_write_get",
         "preferences_list",
         "preference_candidates_list",  # Private candidate values and own source messages.
         "preference_context_get",

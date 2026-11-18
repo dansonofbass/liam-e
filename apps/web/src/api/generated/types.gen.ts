@@ -870,6 +870,112 @@ export type ErrorEvent = {
 };
 
 /**
+ * EventCreateIn
+ */
+export type EventCreateIn = {
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * End Local
+     */
+    end_local?: string | null;
+    /**
+     * Location
+     */
+    location?: string | null;
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Start Date
+     */
+    start_date?: string | null;
+    /**
+     * Start Local
+     */
+    start_local?: string | null;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Write Id
+     */
+    write_id: string;
+};
+
+/**
+ * EventDeleteIn
+ */
+export type EventDeleteIn = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: string;
+    /**
+     * Write Id
+     */
+    write_id: string;
+};
+
+/**
+ * EventUpdateIn
+ */
+export type EventUpdateIn = {
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * End Local
+     */
+    end_local?: string | null;
+    /**
+     * Expected Revision
+     */
+    expected_revision: string;
+    /**
+     * Location
+     */
+    location?: string | null;
+    /**
+     * Start Date
+     */
+    start_date?: string | null;
+    /**
+     * Start Local
+     */
+    start_local?: string | null;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Write Id
+     */
+    write_id: string;
+};
+
+/**
  * FeedInput
  */
 export type FeedInput = {
@@ -1169,6 +1275,72 @@ export type ItemProblem = {
      * Id
      */
     id: string;
+};
+
+/**
+ * LiveEvent
+ */
+export type LiveEvent = {
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Description Was Html
+     */
+    description_was_html?: boolean;
+    /**
+     * Editable
+     */
+    editable?: boolean;
+    /**
+     * End At
+     */
+    end_at?: string | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * Html Link
+     */
+    html_link?: string | null;
+    /**
+     * Location
+     */
+    location?: string | null;
+    /**
+     * Occurrence Id
+     */
+    occurrence_id?: string | null;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+    /**
+     * Revision
+     */
+    revision?: string | null;
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Start At
+     */
+    start_at?: string | null;
+    /**
+     * Start Date
+     */
+    start_date?: string | null;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
+    /**
+     * Title
+     */
+    title: string;
 };
 
 /**
@@ -3066,6 +3238,33 @@ export type VersionIn = {
 };
 
 /**
+ * WriteOutcome
+ */
+export type WriteOutcome = {
+    current?: LiveEvent | null;
+    /**
+     * Error Code
+     */
+    error_code?: string | null;
+    /**
+     * Occurrence Id
+     */
+    occurrence_id?: string | null;
+    /**
+     * Revision
+     */
+    revision?: string | null;
+    /**
+     * Status
+     */
+    status: 'done' | 'failed' | 'unknown' | 'not_applied' | 'running';
+    /**
+     * Write Id
+     */
+    write_id: string;
+};
+
+/**
  * OccurrenceOut
  */
 export type ApiRoutersApiV1CalendarSchemasOccurrenceOut = {
@@ -3411,6 +3610,31 @@ export type CalendarGoogleCalendarsListResponses = {
 
 export type CalendarGoogleCalendarsListResponse = CalendarGoogleCalendarsListResponses[keyof CalendarGoogleCalendarsListResponses];
 
+export type CalendarEventCreateData = {
+    body: EventCreateIn;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/events';
+};
+
+export type CalendarEventCreateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarEventCreateError = CalendarEventCreateErrors[keyof CalendarEventCreateErrors];
+
+export type CalendarEventCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: WriteOutcome;
+};
+
+export type CalendarEventCreateResponse = CalendarEventCreateResponses[keyof CalendarEventCreateResponses];
+
 export type CalendarFeedSubscribeData = {
     body: SubscribeInput;
     path?: never;
@@ -3532,6 +3756,36 @@ export type CalendarOccurrencesListResponses = {
 
 export type CalendarOccurrencesListResponse = CalendarOccurrencesListResponses[keyof CalendarOccurrencesListResponses];
 
+export type CalendarEventDeleteData = {
+    body: EventDeleteIn;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/occurrences/{occurrence_id}';
+};
+
+export type CalendarEventDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarEventDeleteError = CalendarEventDeleteErrors[keyof CalendarEventDeleteErrors];
+
+export type CalendarEventDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: WriteOutcome;
+};
+
+export type CalendarEventDeleteResponse = CalendarEventDeleteResponses[keyof CalendarEventDeleteResponses];
+
 export type CalendarOccurrenceGetData = {
     body?: never;
     path: {
@@ -3561,6 +3815,66 @@ export type CalendarOccurrenceGetResponses = {
 };
 
 export type CalendarOccurrenceGetResponse = CalendarOccurrenceGetResponses[keyof CalendarOccurrenceGetResponses];
+
+export type CalendarEventUpdateData = {
+    body: EventUpdateIn;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/occurrences/{occurrence_id}';
+};
+
+export type CalendarEventUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarEventUpdateError = CalendarEventUpdateErrors[keyof CalendarEventUpdateErrors];
+
+export type CalendarEventUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: WriteOutcome;
+};
+
+export type CalendarEventUpdateResponse = CalendarEventUpdateResponses[keyof CalendarEventUpdateResponses];
+
+export type CalendarOccurrenceLiveData = {
+    body?: never;
+    path: {
+        /**
+         * Occurrence Id
+         */
+        occurrence_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/occurrences/{occurrence_id}/live';
+};
+
+export type CalendarOccurrenceLiveErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarOccurrenceLiveError = CalendarOccurrenceLiveErrors[keyof CalendarOccurrenceLiveErrors];
+
+export type CalendarOccurrenceLiveResponses = {
+    /**
+     * Successful Response
+     */
+    200: LiveEvent;
+};
+
+export type CalendarOccurrenceLiveResponse = CalendarOccurrenceLiveResponses[keyof CalendarOccurrenceLiveResponses];
 
 export type CalendarSourcesListData = {
     body?: never;
@@ -3674,6 +3988,66 @@ export type CalendarSourceSyncResponses = {
 };
 
 export type CalendarSourceSyncResponse = CalendarSourceSyncResponses[keyof CalendarSourceSyncResponses];
+
+export type CalendarWriteGetData = {
+    body?: never;
+    path: {
+        /**
+         * Write Id
+         */
+        write_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/writes/{write_id}';
+};
+
+export type CalendarWriteGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarWriteGetError = CalendarWriteGetErrors[keyof CalendarWriteGetErrors];
+
+export type CalendarWriteGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WriteOutcome;
+};
+
+export type CalendarWriteGetResponse = CalendarWriteGetResponses[keyof CalendarWriteGetResponses];
+
+export type CalendarWriteCheckData = {
+    body?: never;
+    path: {
+        /**
+         * Write Id
+         */
+        write_id: string;
+    };
+    query?: never;
+    url: '/api/v1/calendar/writes/{write_id}/check';
+};
+
+export type CalendarWriteCheckErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarWriteCheckError = CalendarWriteCheckErrors[keyof CalendarWriteCheckErrors];
+
+export type CalendarWriteCheckResponses = {
+    /**
+     * Successful Response
+     */
+    200: WriteOutcome;
+};
+
+export type CalendarWriteCheckResponse = CalendarWriteCheckResponses[keyof CalendarWriteCheckResponses];
 
 export type ChatTurnData = {
     body: ChatTurnRequest;

@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from db.accessors import calendar_index_write, calendar_occurrence, calendar_source, calendar_write
+from db.accessors import calendar_index_write, calendar_occurrence, calendar_source, calendar_write, calendar_sync_state
 from db.models.calendar_event import CalendarEvent
 from db.models.calendar_occurrence import CalendarOccurrence
 from db.models.calendar_write import CalendarWrite
@@ -153,6 +153,8 @@ async def live(occurrence_id: str) -> LiveEvent:
     if row is None:
         raise WriteError("calendar_event_gone", 404)
     source = await _source(row.source_id, writable=False)
+    if source.id in SEED_CALENDAR_IDS and source.provider == "google":
+        return _live(await _seed_raw(row), source, row.id)
     if source.provider != "google" or source.id in SEED_CALENDAR_IDS:
         return LiveEvent(occurrence_id=row.id, source_id=source.id, title=row.title,
             start_at=row.start_at, end_at=row.end_at, start_date=row.start_date, end_date=row.end_date,
@@ -196,12 +198,37 @@ def _matches(raw: dict, args: dict) -> bool:
         return False
 
 
+async def _seed_raw(row):
+    metadata = json.loads(await calendar_index_write.event_metadata(row.event_id))
+    raw = metadata.get("seed_event", {})
+    return {**raw, "id": row.external_id, "summary": row.title, "updated": raw.get("updated", "seed-0"),
+        "start": {"date": str(row.start_date)} if row.start_date else {"dateTime": row.start_at.isoformat()},
+        "end": {"date": str(row.end_date)} if row.end_date else {"dateTime": row.end_at.isoformat()}}
+
+
+async def _seed_execute(record, request, source, target):
+    raw = await _seed_raw(target) if target else {"id": f"seed-{record.id}"}
+    if target and raw["updated"] != request.expected_revision:
+        current = _live(raw, source, target.id)
+        return _out(await calendar_write.finish(record.id, status="not_applied", error_code="calendar_event_changed"), current=current)
+    args = _arguments(request)
+    for field in ("summary", "location", "description"):
+        if field in args: raw[field] = args[field]
+    if "startTime" in args:
+        for field, key in (("start", "startTime"), ("end", "endTime")):
+            raw[field] = {"date": args[key][:10]} if args.get("allDay") else {"dateTime": args[key], "timeZone": request.timezone}
+    state = await calendar_sync_state.get(source.id)
+    raw["updated"] = f"seed-{(state.data_revision if state else 0) + 1}"
+    return await _done(record, source, raw, source.revision)
+
+
 async def _done(record, source, raw, revision):
     upsert = None
     target = record.target_external_id
     if record.operation != "delete":
         row = google.map_event(raw, None, source.timezone)
-        event = CalendarEvent(source_id=source.id, external_id=row.event_external_id, title=row.title)
+        event = CalendarEvent(source_id=source.id, external_id=row.event_external_id, title=row.title,
+            recurrence_json=json.dumps({"seed_event": raw}) if source.id in SEED_CALENDAR_IDS else "{}")
         occurrence = CalendarOccurrence(source_id=source.id, event_id=event.id, **{
             k: v for k, v in vars(row).items() if k != "event_external_id"})
         upsert = event, occurrence
@@ -226,8 +253,6 @@ async def execute(request: WriteRequest, *, write_id: str | None = None) -> Writ
     if existing is not None:
         if existing.request_hash != digest: raise WriteError("calendar_write_conflict")
         return await get(identifier)
-    if source.id in SEED_CALENDAR_IDS:
-        raise WriteError("calendar_not_writable", 403)
     target = None
     if request.operation != "create":
         target = await calendar_occurrence.get_visible(request.occurrence_id)
@@ -244,6 +269,8 @@ async def execute(request: WriteRequest, *, write_id: str | None = None) -> Writ
     except calendar_write.WriteInProgress:
         raise WriteError("calendar_write_in_progress") from None
     if not claimed: return await get(identifier)
+    if source.id in SEED_CALENDAR_IDS:
+        return await _seed_execute(record, request, source, target)
     dispatched = False
     try:
         await _identity(source)
@@ -297,6 +324,8 @@ async def check(write_id: str) -> WriteOutcome:
     if record.status != "unknown" or not record.request_json: return _out(record)
     try:
         source = await _source(record.source_id)
+        if source.id in SEED_CALENDAR_IDS:
+            return _out(record)
         bound = json.loads(record.request_json)
         if source.connection_ref != bound["connection_ref"]:
             return _out(record)

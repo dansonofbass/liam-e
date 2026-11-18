@@ -7,11 +7,13 @@ from typing import Annotated
 from uuid import UUID
 
 from db.accessors import calendar_occurrence, calendar_source
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
-from api.routers.api.v1.calendar.schemas import OccurrenceOut, OccurrencePage
+from api.routers.api.v1.calendar.schemas import OccurrenceOut, OccurrencePage, EventUpdateIn, EventDeleteIn
+from api.routers.api.v1.calendar import _writes
+from api.calendar import writes
 
-router = APIRouter()
+router = APIRouter(route_class=_writes.QuietWriteRoute)
 
 # A selection, not a bulk export: the calendar view filters by a handful of sources at most.
 MAX_SOURCE_IDS = 50
@@ -73,3 +75,29 @@ async def occurrence(occurrence_id: str) -> OccurrenceOut:
     if row is None:
         raise HTTPException(404, "occurrence_not_found")
     return _out(row)
+
+
+@router.get("/{occurrence_id}/live", operation_id="calendar_occurrence_live")
+async def live(occurrence_id: str) -> writes.LiveEvent:
+    try:
+        return await writes.live(occurrence_id)
+    except writes.WriteError as exc:
+        raise _writes.error(exc) from None
+
+
+async def _change(occurrence_id, body, response, operation):
+    row = await calendar_occurrence.get_visible(occurrence_id)
+    if row is None:
+        raise _writes.error(writes.WriteError("calendar_event_gone", 404))
+    return await _writes.execute({**body.model_dump(exclude_unset=True), "operation": operation,
+        "source_id": row.source_id, "occurrence_id": occurrence_id}, response)
+
+
+@router.patch("/{occurrence_id}", operation_id="calendar_event_update")
+async def update(occurrence_id: str, body: EventUpdateIn, response: Response) -> writes.WriteOutcome:
+    return await _change(occurrence_id, body, response, "update")
+
+
+@router.delete("/{occurrence_id}", operation_id="calendar_event_delete")
+async def delete(occurrence_id: str, body: EventDeleteIn, response: Response) -> writes.WriteOutcome:
+    return await _change(occurrence_id, body, response, "delete")

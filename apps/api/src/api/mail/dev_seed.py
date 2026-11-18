@@ -247,7 +247,7 @@ async def seed_calendars(now: datetime) -> None:
         source_id = seed_id("calendar", key)
         sources.append(CalendarSource(id=source_id, provider="google" if index == 0 else "ics",
             connection_ref="test-only", external_id=key, name=name, timezone="Europe/Berlin",
-            capabilities_json='["read"]', is_active=key != "paused"))
+            capabilities_json='["read","write"]' if index == 0 else '["read"]', is_active=key != "paused"))
         states.append(CalendarSyncState(source_id=source_id,
             coverage_start=None if key == "uncovered" else today - timedelta(days=30),
             coverage_end=None if key == "uncovered" else today + timedelta(days=60),
@@ -259,7 +259,7 @@ async def seed_calendars(now: datetime) -> None:
         event_id = seed_id("calendar-event", key)
         events.append(CalendarEvent(id=event_id, source_id=source_id, external_id=key, title=title))
         occurrences.append(CalendarOccurrence(id=seed_id("calendar-occurrence", key), source_id=source_id,
-            event_id=event_id, external_id=key, title=title,
+            event_id=event_id, external_id=key, title=title, editable=index == 0,
             start_date=today.date() if key == "old" else None,
             end_date=(today + timedelta(days=1)).date() if key == "old" else None,
             start_at=None if key == "old" else today + timedelta(hours=10),

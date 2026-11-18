@@ -16,7 +16,7 @@ from api.calendar import writes
 @pytest.fixture
 def state(monkeypatch):
     from api.mail import connectors
-    from db.accessors import calendar_source, calendar_occurrence, calendar_write, calendar_index_write
+    from db.accessors import calendar_source, calendar_occurrence, calendar_write, calendar_index_write, calendar_sync_state
     from db.models.calendar_source import CalendarSource
     from db.models.calendar_occurrence import CalendarOccurrence
     import hashlib
@@ -76,6 +76,8 @@ def state(monkeypatch):
         s.event["created"] = datetime.now(UTC).isoformat()
         if s.mode == "timeout": raise httpx.ReadTimeout("test-only")
         return json.dumps(s.event)
+    async def sync_state(_): return SimpleNamespace(data_revision=0)
+    monkeypatch.setattr(calendar_sync_state, "get", sync_state)
     monkeypatch.setattr(calendar_source, "get", source_get)
     monkeypatch.setattr(calendar_occurrence, "get_visible", occurrence_get)
     monkeypatch.setattr(calendar_write, "claim", claim)
@@ -95,6 +97,15 @@ def request(operation="create", **changes):
     else: values.update(occurrence_id="synthetic-occurrence", expected_revision="old")
     if operation == "update": values["title"] = "Changed"
     return writes.WriteRequest(**{**values, **changes})
+
+
+async def test_seed_write_changes_index_without_connector(state):
+    from api.mail.seed_ids import seed_id
+    state.source.id = seed_id("calendar", "work")
+    result = await writes.execute(request(source_id=state.source.id))
+    assert result.status == "done"
+    assert not state.calls
+    assert state.applied[0]["upsert"][1].external_id.startswith("seed-")
 
 
 async def test_create_done_updates_index(state):
