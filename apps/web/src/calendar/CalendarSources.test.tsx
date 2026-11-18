@@ -8,8 +8,8 @@ import { de } from '../i18n/de'
 
 afterEach(() => { cleanup(); mock.restore() })
 const source = { id: 'test-only', name: 'Verein', provider: 'ics', timezone: 'UTC', is_active: true, revision: 2, capabilities: ['read'], coverage_start: null, coverage_end: null, last_success_at: null, stale: true, incomplete: true }
-function setup() {
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [source] } as never)
+function setup(sources = [source]) {
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
   const query = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   const invalidated = spyOn(query, 'invalidateQueries')
   const root = createRootRoute({ component: () => <QueryClientProvider client={query}><CalendarSources /></QueryClientProvider> })
@@ -53,4 +53,11 @@ test('refresh, pause and confirmed removal use the existing source actions', asy
   expect(remove).not.toHaveBeenCalled()
   fireEvent.click(within(dialog).getByRole('button', { name: de.calendar.remove }))
   await waitFor(() => expect(remove).toHaveBeenCalledTimes(1))
+})
+
+test('without a source the section says how to subscribe and offers it', async () => {
+  setup([])
+  expect(await screen.findByText(de.calendar.noSources)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.subscribe }))
+  expect(screen.getByRole('dialog', { name: de.calendar.subscribe })).toBeTruthy()
 })

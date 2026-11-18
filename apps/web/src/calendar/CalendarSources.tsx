@@ -10,7 +10,7 @@ import { Button, Notice } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
 import { de } from '../i18n/de'
 import { SourceStatus } from './CalendarPage'
-import { FeedSetup } from './FeedSetup'
+import { CalendarSetup, FeedSetup } from './FeedSetup'
 
 function RemoveSource({ source, close, removed }: { source: SourceOut; close: () => void; removed: () => void }) {
   const [pending, setPending] = useState(false), [error, setError] = useState(false)
@@ -34,11 +34,6 @@ function RemoveSource({ source, close, removed }: { source: SourceOut; close: ()
 }
 
 /** ICS setup shares the calendar query group and agenda with all sources. */
-export function CalendarSetup() {
-  const [open, setOpen] = useState(false), client = useQueryClient()
-  return <><Button variant="secondary" onClick={() => setOpen(true)}>{de.calendar.subscribe}</Button>
-    {open && <FeedSetup close={() => setOpen(false)} saved={() => { setOpen(false); void client.invalidateQueries({ queryKey: ['calendar'] }) }} />}</>
-}
 export function CalendarSources() {
   const sources = useQuery(calendarSourcesQuery()), client = useQueryClient()
   const [pending, setPending] = useState<string[]>([]), [messages, setMessages] = useState<Record<string, string>>({})
@@ -61,6 +56,7 @@ export function CalendarSources() {
     <CalendarSetup />
     {sources.isPending && <p role="status">{de.calendar.loading}</p>}
     {sources.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void sources.refetch() } }}>{de.calendar.error}</Notice>}
+    {sources.data?.length === 0 && <p className="small le-muted">{de.calendar.noSources}</p>}
     {sources.data?.map(source => <section key={source.id} aria-label={source.name}>
       <SourceStatus source={source} />
       <div className="le-calendar-controls">

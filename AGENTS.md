@@ -295,7 +295,7 @@ Die Oberfläche unter `/calendar` zeigt die gemeinsame Agenda; `/calendar/$occur
 in der Verwaltung und als Hinweis angezeigt, ihre Termine bleiben bis zur Aktivierung
 verborgen. Sie tragen nicht zu einer Aussage „Keine Termine“ bei und bleiben auch für
 Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
-`CalendarSetup` in `apps/web/src/calendar/CalendarSources.tsx` öffnet das ICS-Formular
+`CalendarSetup` in `apps/web/src/calendar/FeedSetup.tsx` öffnet das ICS-Formular
 `FeedSetup`: Name, private Kalenderadresse und ausdrücklich angezeigte Fallbackzone.
 `webcal` wird sichtbar zu `https`; die Serverprüfung normalisiert unabhängig nochmals.
 Adresse und Prüftoken bleiben nur im Dialogzustand, nie im Browser-Storage oder Query-Cache.

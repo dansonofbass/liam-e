@@ -1,5 +1,5 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import * as sdk from '../api/generated/sdk.gen'
@@ -20,8 +20,14 @@ for (const desktop of [true, false]) {
     const index = createRoute({ getParentRoute: () => calendar, path: '/', component: CalendarIndexRoute.options.component })
     const router = createRouter({ routeTree: root.addChildren([calendar.addChildren([index])]), history: createMemoryHistory({ initialEntries: ['/calendar'] }) })
     render(<RouterProvider router={router} />)
-    expect(await screen.findByText(de.calendar.unavailable)).toBeTruthy()
+    expect(await screen.findByText(de.calendar.noSources)).toBeTruthy()
     expect(screen.getByRole('heading', { name: de.calendar.title })).toBeTruthy()
+    // Without a calendar the agenda has nothing to page through or refresh; it offers the subscription.
+    expect(screen.queryByRole('button', { name: de.calendar.today })).toBeNull()
+    expect(screen.queryByRole('button', { name: de.calendar.refresh })).toBeNull()
+    expect(screen.queryByLabelText(de.calendar.from)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: de.calendar.subscribe }))
+    expect(screen.getByRole('dialog', { name: de.calendar.subscribe })).toBeTruthy()
     if (desktop) expect((await screen.findByText(de.calendar.select)).classList.contains('le-calendar-detail')).toBe(true)
     else expect(screen.queryByText(de.calendar.select)).toBeNull()
   })
