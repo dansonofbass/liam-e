@@ -1,49 +1,49 @@
-name: Evaluation vorbereiten
-description: Eine Fähigkeit, einen Anbieter oder einen Ansatz prüfen, bevor er umgesetzt wird.
+name: Prepare an evaluation
+description: Evaluate a capability, provider or approach before implementing it.
 title: "Eval: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Eine Evaluation ist kein Auftrag zur Umsetzung, zu neuen Zugängen oder zu Live-Proben mit echten Daten.
-        Versionen und Primärquellen zum Zeitpunkt der Prüfung nachsehen. Keine privaten Daten ins Issue.
+        An evaluation is not authorization to implement, obtain new access or run live probes with real data.
+        Check versions and primary sources at the time of evaluation. No private data in the issue.
   - type: textarea
     id: question
     attributes:
-      label: Entscheidungsfrage und Nutzen
+      label: Decision question and benefit
     validations:
       required: true
   - type: textarea
     id: current
     attributes:
-      label: Ist-Zustand im Code
-      description: Geprüfter Commit, betroffene Module und vorhandene Verträge.
+      label: Current state in code
+      description: Commit checked, affected modules and existing contracts.
     validations:
       required: true
   - type: textarea
     id: candidates
     attributes:
-      label: Kandidaten und einfachste Alternative
-      description: Mit Primärquellen (Herstellerdoku, Spezifikation) und Versionen.
+      label: Candidates and simplest alternative
+      description: Include primary sources (vendor documentation, specification) and versions.
     validations:
       required: true
   - type: textarea
     id: access
     attributes:
-      label: Zugang, Daten und Grenzen
-      description: Welche Zugänge eine Probe braucht, welche Daten sie berührt (nur synthetisch oder eigens angelegte Testquellen), was ausdrücklich nicht passieren darf.
+      label: Access, data and limits
+      description: Access needed for a probe, data it touches (synthetic or specially created test sources only), and what must explicitly not happen.
     validations:
       required: true
   - type: textarea
     id: criteria
     attributes:
-      label: Annahme- und Ablehnungskriterien
-      description: Vor der Prüfung festlegen; ein fehlender Nachweis gibt keine Fähigkeit frei.
+      label: Acceptance and rejection criteria
+      description: Define before evaluation; missing evidence does not authorize a capability.
     validations:
       required: true
   - type: textarea
     id: breakdown
     attributes:
-      label: Teilaufträge und Reihenfolge
-      description: Optional; Abhängigkeiten als Issue-Verweise.
+      label: Subtasks and order
+      description: Optional; dependencies as issue references.

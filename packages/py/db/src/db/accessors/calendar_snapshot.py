@@ -25,7 +25,8 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
                          start: datetime, end: datetime, start_date: date, end_date: date,
                          events: list[CalendarEvent], occurrences: list[CalendarOccurrence],
                          expected_revision: int | None = None, replace_all: bool = False,
-                         encrypted_validators: str | None = None, reset_schedule: bool = False) -> None:
+                         encrypted_validators: str | None = None, reset_schedule: bool = False,
+                         capabilities_json: str | None = None) -> None:
     """Replace a fully processed window; inputs are prepared before the transaction.
 
     Callers must validate adapter completeness and interval normalization before calling.
@@ -54,6 +55,8 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
                 or (expected_revision is not None and source.revision != expected_revision)
                 or (source.provider in {"ics", "google"} and expected_revision is None)):
             raise LostClaim()
+        if capabilities_json is not None:
+            source.capabilities_json = capabilities_json
         state = await session.get(CalendarSyncState, source_id)
         coverage_start, coverage_end = start, end
         if (not replace_all and state and not state.incomplete and state.coverage_start is not None and state.coverage_end is not None

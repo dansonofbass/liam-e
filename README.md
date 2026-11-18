@@ -1,58 +1,55 @@
 # liam-e
 
-liam-e bündelt mehrere Mailkonten in einem Posteingang. Ein KI-Assistent durchsucht den
-Mailindex, fasst Nachrichten zusammen und entwirft Antworten. Du prüfst seine Vorschläge
-im Chat und entscheidest, welche ausgeführt werden. Die App hat eine deutsche Oberfläche
-und ist für eine Person pro Installation ausgelegt.
+liam-e brings multiple mail accounts together in one inbox. An AI assistant searches the mail
+index, summarizes messages and drafts replies. You review its proposals in chat and decide
+which to execute. The app has a German interface and is designed for one person per installation.
 
-## Was du nutzen kannst
+## What you can use
 
-| Bereich | Aktueller Stand |
+| Area | Current state |
 | --- | --- |
-| **Posteingang und Konten** | Mails im Posteingang suchen, filtern, lesen und bearbeiten. Kurzfassungen und erkannte Fristen erscheinen an der Mail. Verbindungswege und Aktionen hängen vom Anbieter ab. [Provider-Matrix](docs/provider-und-betrieb.md) |
-| **Chat** | Ein Konto oder alle Konten durchsuchen, eine Mail als Bezug mitgeben, das Modell wählen und Antworten im Stream lesen. Senden, Antworten, Weiterleiten und Änderungen durch den Assistenten brauchen eine explizite Bestätigung. Eigene Einzelaktionen im Posteingang wirken direkt. [Chat und Bestätigungsfluss](docs/architektur.md#vom-mailabruf-bis-zur-bestätigung) |
-| **Vorlagen** | Eigene Anweisungen in den Einstellungen verwalten und im Chat auswählen. Eine Unterhaltung kann an einer bestimmten Vorlagenrevision bleiben. [Vorlagen](docs/architektur.md) |
-| **Aufgaben** | Die API unterstützt Einzel- und Serienaufgaben, Fälligkeiten, Vorschau und Statuswechsel. Eine Aufgabenansicht und Chat-Werkzeuge für Aufgaben sind noch nicht angebunden. [API-Vertrag](apps/api/openapi.json) |
-| **Kalender** | Die API liest den Kalenderindex und verwaltet vorhandene Quellen. Die Agenda und das Anbinden neuer Quellen fehlen. Ein ICS-Adapter ist implementiert und getestet, aber noch nicht im laufenden Dienst registriert. [Kalenderkern](docs/architektur.md) |
+| **Inbox and accounts** | Search, filter, read and manage mail in the inbox. Summaries and detected deadlines appear on the mail. Connection methods and actions depend on the provider. [Provider matrix](docs/providers-and-operations.md) |
+| **Chat** | Search one account or all accounts, include a mail as context, choose the model and read streamed responses. Sending, replying, forwarding and changes by the assistant require explicit confirmation. Individual actions you initiate in the inbox take effect directly. [Chat and confirmation flow](docs/architecture.md#from-mail-sync-to-confirmation) |
+| **Templates** | Manage your own instructions in settings and select them in chat. A conversation can stay pinned to a particular template revision. [Templates](docs/architecture.md) |
+| **Tasks** | The API supports one-off and recurring tasks, due dates, previews and status changes. A task view and chat tools for tasks are not yet connected. [API contract](apps/api/openapi.json) |
+| **Calendar** | The API reads the calendar index and manages existing sources. The agenda and connecting new sources are missing. An ICS adapter is implemented and tested, but not yet registered in the running service. [Calendar core](docs/architecture.md) |
 
-Für Gmail und Outlook gibt es Pfade über Studio-Connectoren und eigenes OAuth2. iCloud,
-Yahoo und weitere Anbieter lassen sich über IMAP/SMTP anbinden, wenn der Anbieter
-App-Passwörter und die nötigen Mailprotokolle unterstützt. Der
-[Provider- und Betriebsleitfaden](docs/provider-und-betrieb.md) zeigt, welche Fähigkeiten
-lokal belegt sind und wofür ein Studio-Nachweis aussteht. Für den Modellchat brauchst du
-einen serverseitig konfigurierten Mistral-Zugang.
+Gmail and Outlook have paths through Studio connectors and own OAuth2. iCloud, Yahoo and other
+providers can be connected through IMAP/SMTP when the provider supports app passwords and the
+necessary mail protocols. The [provider and operations guide](docs/providers-and-operations.md) shows
+which capabilities are evidenced locally and which still need Studio evidence. Model chat needs
+server-side Mistral access.
 
-## Lokal starten
+## Start locally
 
-Die Referenzumgebung nutzt Bun 1.4.0, Node.js 24, uv, Python 3.14 und Postgres mit pgvector.
-Installiere die Abhängigkeiten vom Repository-Root mit `bun run install-all` und folge der
-Anleitung zur [lokalen Entwicklung](docs/lokale-entwicklung.md) für Konfiguration und
-Migrationen. Mit dem synthetischen Seed siehst du die Oberfläche ohne Anbieter-Zugänge
-oder echte Mails.
+The reference environment uses Bun 1.4.0, Node.js 24, uv, Python 3.14 and Postgres with pgvector.
+Install dependencies from the repository root with `bun run install-all` and follow the
+[local development](docs/local-development.md) guide for configuration and migrations. The
+synthetic seed lets you see the UI without provider access or real mail.
 
-Nach der Einrichtung startest du API und Web in zwei Terminals aus dem Repository-Root.
+After setup, start the API and web in two terminals from the repository root.
 
 ```bash
 MAIL_WORKER_ENABLED=false MISTRAL_SECRETS_ENABLED=false TELEMETRY_ENABLED=false bunx nx run api:serve
 VITE_API_URL=http://127.0.0.1:3000 bun run dev:web
 ```
 
-Die Oberfläche läuft unter [localhost:3001](http://localhost:3001). Den
-[Healthcheck](http://127.0.0.1:3000/api/health) erreichst du direkt an der API.
+The UI runs at [localhost:3001](http://localhost:3001). The
+[health check](http://127.0.0.1:3000/api/health) is available directly on the API.
 
-## Weiterführende Dokumentation
+## Further documentation
 
-- [Architektur und Domänen](docs/architektur.md)
-- [Provider, Synchronisierung und Studio-Deployment](docs/provider-und-betrieb.md)
-- [Lokale Entwicklung und Prüfungen](docs/lokale-entwicklung.md)
+- [Architecture and domains](docs/architecture.md)
+- [Providers, synchronization and Studio deployment](docs/providers-and-operations.md)
+- [Local development and checks](docs/local-development.md)
 - [OpenWiki](openwiki/quickstart.md)
-- [Mitarbeit](CONTRIBUTING.md) und [Sicherheitsmeldungen](SECURITY.md)
+- [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md)
 
-Die [minimale Mistral-Chat-App](apps/chat-app/README.md) ist eine separate Teilanwendung.
-Die Mail-App nutzt [`apps/web`](apps/web/) und [`apps/api`](apps/api/).
+The [minimal Mistral chat app](apps/chat-app/README.md) is a separate sub-application.
+The mail app uses [`apps/web`](apps/web/) and [`apps/api`](apps/api/).
 
-## Lizenz
+## License
 
-Für liam-e liegt keine projektweite Lizenzdatei vor. Die Lizenzentscheidung liegt beim
-Owner. Übernommene Komponenten können eigene Lizenzbedingungen haben. Den Stand zur
-geplanten Veröffentlichung hält die [Veröffentlichungscheckliste](docs/veroeffentlichung.md) fest.
+There is no project-wide license file for liam-e. The license decision belongs to the owner.
+Adopted components may have their own license terms. The
+[publication checklist](docs/publishing.md) records the state of the planned publication.

@@ -447,6 +447,77 @@
         "title": "BulkMessageActionResult",
         "type": "object"
       },
+      "CalendarCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "update",
+              "delete"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "before": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveEvent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
+          "occurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Id"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "source_id",
+          "timezone"
+        ],
+        "title": "CalendarCommand",
+        "type": "object"
+      },
       "CalendarRefOut": {
         "properties": {
           "occurrence_id": {
@@ -463,6 +534,103 @@
           "occurrence_id"
         ],
         "title": "CalendarRefOut",
+        "type": "object"
+      },
+      "CalendarValues": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "end_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Local"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "start_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Local"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CalendarValues",
         "type": "object"
       },
       "CalendarsEvent": {
@@ -1493,6 +1661,248 @@
         "title": "ErrorEvent",
         "type": "object"
       },
+      "EventCreateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "end_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Local"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "start_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Local"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "write_id": {
+            "format": "uuid",
+            "title": "Write Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "write_id",
+          "source_id"
+        ],
+        "title": "EventCreateIn",
+        "type": "object"
+      },
+      "EventDeleteIn": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "string"
+          },
+          "write_id": {
+            "format": "uuid",
+            "title": "Write Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "write_id",
+          "expected_revision"
+        ],
+        "title": "EventDeleteIn",
+        "type": "object"
+      },
+      "EventUpdateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "end_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Local"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "start_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Local"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "write_id": {
+            "format": "uuid",
+            "title": "Write Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "write_id",
+          "expected_revision"
+        ],
+        "title": "EventUpdateIn",
+        "type": "object"
+      },
       "FeedInput": {
         "additionalProperties": false,
         "properties": {
@@ -1980,6 +2390,159 @@
           "code"
         ],
         "title": "ItemProblem",
+        "type": "object"
+      },
+      "LiveEvent": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "description_was_html": {
+            "default": false,
+            "title": "Description Was Html",
+            "type": "boolean"
+          },
+          "editable": {
+            "default": false,
+            "title": "Editable",
+            "type": "boolean"
+          },
+          "end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "html_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Html Link"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "occurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "start_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start At"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "title"
+        ],
+        "title": "LiveEvent",
         "type": "object"
       },
       "MailRefOut": {
@@ -3174,6 +3737,16 @@
       },
       "Proposal": {
         "properties": {
+          "calendar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarCommand"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "draft": {
             "anyOf": [
               {
@@ -3204,7 +3777,8 @@
               "mark_read",
               "unsubscribe",
               "task",
-              "preference"
+              "preference",
+              "calendar"
             ],
             "title": "Kind",
             "type": "string"
@@ -3439,6 +4013,28 @@
       },
       "ProposalResult": {
         "properties": {
+          "calendar_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Status"
+          },
+          "calendar_write_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Write Id"
+          },
           "done": {
             "default": 0,
             "title": "Done",
@@ -5389,8 +5985,81 @@
         "title": "VersionIn",
         "type": "object"
       },
+      "WriteOutcome": {
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveEvent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "occurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Id"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "failed",
+              "unknown",
+              "not_applied",
+              "running"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "write_id": {
+            "title": "Write Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "write_id",
+          "status"
+        ],
+        "title": "WriteOutcome",
+        "type": "object"
+      },
       "api__routers__api__v1__calendar__schemas__OccurrenceOut": {
         "properties": {
+          "editable": {
+            "default": false,
+            "title": "Editable",
+            "type": "boolean"
+          },
           "end_at": {
             "anyOf": [
               {
@@ -6011,6 +6680,44 @@
         "summary": "Calendars"
       }
     },
+    "/api/v1/calendar/events": {
+      "post": {
+        "operationId": "calendar_event_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteOutcome"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create"
+      }
+    },
     "/api/v1/calendar/feeds": {
       "post": {
         "operationId": "calendar_feed_subscribe",
@@ -6211,6 +6918,53 @@
       }
     },
     "/api/v1/calendar/occurrences/{occurrence_id}": {
+      "delete": {
+        "operationId": "calendar_event_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "title": "Occurrence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventDeleteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteOutcome"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete"
+      },
       "get": {
         "operationId": "calendar_occurrence_get",
         "parameters": [
@@ -6247,6 +7001,92 @@
           }
         },
         "summary": "Occurrence"
+      },
+      "patch": {
+        "operationId": "calendar_event_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "title": "Occurrence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteOutcome"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update"
+      }
+    },
+    "/api/v1/calendar/occurrences/{occurrence_id}/live": {
+      "get": {
+        "operationId": "calendar_occurrence_live",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "title": "Occurrence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live"
       }
     },
     "/api/v1/calendar/sources": {
@@ -6397,6 +7237,84 @@
           }
         },
         "summary": "Refresh"
+      }
+    },
+    "/api/v1/calendar/writes/{write_id}": {
+      "get": {
+        "operationId": "calendar_write_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "write_id",
+            "required": true,
+            "schema": {
+              "title": "Write Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteOutcome"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get"
+      }
+    },
+    "/api/v1/calendar/writes/{write_id}/check": {
+      "post": {
+        "operationId": "calendar_write_check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "write_id",
+            "required": true,
+            "schema": {
+              "title": "Write Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteOutcome"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check"
       }
     },
     "/api/v1/chat": {
@@ -6616,6 +7534,45 @@
           }
         },
         "summary": "Cancel"
+      }
+    },
+    "/api/v1/chat/proposals/{proposal_id}/check": {
+      "post": {
+        "operationId": "chat_proposal_check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check"
       }
     },
     "/api/v1/chat/proposals/{proposal_id}/confirm": {

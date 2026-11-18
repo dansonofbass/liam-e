@@ -1,714 +1,708 @@
 # DESIGN.md — liam-e
 
-> **Verbindliche Quelle für die Oberfläche.** Vor jeder Arbeit an `apps/web` lesen.
-> Exakte Werte (Farben, Maße, Schatten) stehen in den **Tokens**; dieses Dokument regelt,
-> wie sie eingesetzt werden, wie Texte klingen und wie sich die App auf kleinen
-> Bildschirmen verhält.
+> **Binding source for the UI.** Read before any work on `apps/web`.
+> Exact values (colors, dimensions, shadows) are in the **tokens**; this document governs
+> how they are used, how text sounds and how the app behaves on small screens.
 
-**Status:** gültig, Stand 2026-11-14. Quelle der Werte sind `apps/web/src/styles/tokens.css`
-(Tokens) und `apps/web/src/ds/` (Bausteine). Das Design-System „liam-e“ in Claude Design
-(Artefakt des Owners, nicht öffentlich, Stilrichtung C „Weich“), aus dem sie
-entstanden sind, wird ihnen nachgeführt (§10).
+**Status:** valid, as of 2026-11-14. The sources of values are `apps/web/src/styles/tokens.css`
+(tokens) and `apps/web/src/ds/` (components). The „liam-e“ design system in Claude Design
+(owner artifact, not public, style direction C „Weich“), from which they originated, is kept
+aligned with them (§10).
 
-## Konflikt-Hierarchie
+## Conflict hierarchy
 
-Bei Widerspruch gewinnt das Höhere.
+In a conflict, the higher item wins.
 
-**Wer entscheidet:**
-1. Owner im Chat bzw. im Auftrag.
-2. `AGENTS.md` (Repo-Regeln).
-3. **DESIGN.md** (dieses Dokument).
+**Who decides:**
+1. Owner in chat or the task.
+2. `AGENTS.md` (repository rules).
+3. **DESIGN.md** (this document).
 
-**Was im Einzelfall gilt:**
-- **Exakte Werte:** die Tokens. Weicht ein Wert hier ab, wird DESIGN.md korrigiert.
-- **Regeln und Verhalten** (Texte, Zustände, Responsive): DESIGN.md. Weichen Bausteine
-  davon ab, wird entschieden und entweder der Code oder dieses Dokument angepasst.
-- Voreinstellungen von Bibliotheken (Tailwind, TanStack) zuletzt.
+**What applies in each case:**
+- **Exact values:** the tokens. If a value here differs, DESIGN.md is corrected.
+- **Rules and behavior** (text, states, responsive behavior): DESIGN.md. If components
+  differ, a decision is made and either the code or this document is adjusted.
+- Library defaults (Tailwind, TanStack) come last.
 
 ---
 
-## 1. Wesen und Haltung
+## 1. Essence and attitude
 
-liam-e bringt die Mails aus allen Konten an einen Ort und erledigt mit dir, was darin
-ansteht. Die Oberfläche ist **hell, weich und aufgeräumt**: schwebende Flächen auf einem
-grünlich-grauen Grund, ein tiefes Petrol als einzige Farbe für Aktionen, große Rundungen,
-helles und dunkles Theme. Sie tritt hinter den Inhalt zurück, bis etwas zu tun ist; dann
-ist klar, was ein Klick bewirkt.
+liam-e brings mail from all accounts into one place and takes care of what needs doing with you.
+The UI is **light, soft and tidy**: floating surfaces on a greenish-gray ground, deep petrol as the
+only color for actions, large rounded corners, light and dark themes. It recedes behind the content
+until something needs doing; then the effect of a click is clear.
 
-- **Ein Ziel pro Fläche.** Höchstens eine primäre Aktion je Ansicht.
-- **Nichts passiert ohne Bestätigung.** Was der Assistent verändert oder verschickt, schlägt
-  er vor; erst ein Klick führt es aus (§9.2).
-- **Jeder Button erklärt sich.** Symbol-Buttons tragen Namen und Tooltip; Buttons mit nicht
-  offensichtlichen Folgen ebenso.
-- **Ruhe vor Dichte.** Lieber eine Zeile weniger als ein Rahmen mehr.
-- **Bewegung erklärt, sie schmückt nicht.**
+- **One goal per surface.** At most one primary action per view.
+- **Nothing happens without confirmation.** The assistant proposes what it changes or sends;
+  only a click executes it (§9.2).
+- **Every button explains itself.** Icon buttons carry a name and tooltip; so do buttons with
+  non-obvious consequences.
+- **Calm before density.** Prefer one fewer line to one more border.
+- **Motion explains; it does not decorate.**
 
-## 2. Sprache und Texte
+## 2. Language and text
 
-### 2.1 Grundsatz: auf Deutsch geschrieben, nicht übersetzt
+German examples in this section are UI text; keep their wording verbatim.
 
-Jeder Text der Oberfläche, auch jede Antwort des Assistenten, muss klingen, als hätte ihn
-jemand auf Deutsch für dich geschrieben. Englische Satzmuster, die durchscheinen,
-Callcenter-Floskeln und Behördendeutsch sind Fehler, auch wenn jedes Wort für sich stimmt.
-Deutsch ist die Ausgangssprache; es gibt kein englisches Original, das übertragen wird.
+### 2.1 Principle: written in German, not translated
 
-Der Maßstab des Owners (2026-11-13): „Guten Morgen! Was kann ich für dich erledigen?“
-wirkt dahingesloppt. „Hallo, was kann ich für dich tun?“ klingt richtig. Das ist ein
-Beispiel für den Ton, keine Einzelregel.
+Every UI text, including every assistant answer, must sound as if someone wrote it in German for
+you. English sentence patterns showing through, call-center clichés and bureaucratic German are
+errors, even if every individual word is correct. German is the source language; there is no
+English original being translated.
 
-### 2.2 Ton
+The owner's benchmark (2026-11-13): „Guten Morgen! Was kann ich für dich erledigen?“ sounds
+slapdash. „Hallo, was kann ich für dich tun?“ sounds right. This is an example of tone, not an
+individual rule.
 
-- **Du**, kleingeschrieben (du, dein). Freundlich, knapp, sachlich; wie jemand, der mitdenkt,
-  nicht wie eine Hotline.
-- Der Assistent darf in der **Ich-Form** sprechen („Hallo, was kann ich für dich tun?“),
-  aber ohne Gefühle und Floskeln: kein „Gerne!“, kein „Ich hoffe, das hilft“, kein
-  „Natürlich!“, keine Entschuldigungsketten.
-- **Verben statt Substantivketten.** „ob du das Angebot annimmst“, nicht „deine Bestätigung
-  des Angebots“.
-- **Das gängige deutsche Wort zuerst.** Anglizismen nur, wo sie im Alltag das normale Wort
-  sind (Mail, Chat, Newsletter, Link, Spam) oder Fachbegriff der Plattform (Secret).
-- **Keine Emojis, keine Ausrufezeichen** in der Oberfläche.
+### 2.2 Tone
 
-### 2.3 Typische Fehler
+- **Du**, lowercase (du, dein). Friendly, brief, factual; like someone thinking along, not a hotline.
+- The assistant may speak in the **first person** („Hallo, was kann ich für dich tun?“), but
+  without feelings or clichés: no „Gerne!“, no „Ich hoffe, das hilft“, no „Natürlich!“, no
+  chains of apologies.
+- **Verbs instead of noun chains.** „ob du das Angebot annimmst“, not „deine Bestätigung des Angebots“.
+- **The common German word first.** Anglicisms only where they are the normal everyday word
+  (Mail, Chat, Newsletter, Link, Spam) or a platform term (Secret).
+- **No emojis, no exclamation marks** in the UI.
 
-| Statt | Besser | Warum |
+### 2.3 Typical mistakes
+
+| Instead | Better | Why |
 |---|---|---|
-| „Guten Morgen! Was kann ich für dich erledigen?“ | „Hallo, was kann ich für dich tun?“ | Tageszeit-Gruß und „erledigen“ klingen nach Hotline; so fragt niemand. |
-| „Drei Mails brauchen eine Antwort.“ | „Auf drei Mails solltest du antworten.“ | „need a reply“, wörtlich übertragen. |
-| „Danach wartet die Meyer GmbH auf deine Bestätigung des Angebots.“ | „Die Meyer GmbH möchte bis Montag wissen, ob du ihr Angebot annimmst.“ | Nominalstil; ein Verb trägt den Satz. |
-| „Bist du sicher?“ | „5 Newsletter abbestellen? Das lässt sich nicht rückgängig machen.“ | Folge nennen statt Zweifel säen. |
-| „Erfolgreich gespeichert!“ | „Gespeichert.“ | Erfolg ist der Normalfall. |
-| „Es ist ein Fehler aufgetreten.“ | „Gmail antwortet nicht. Versuch es in ein paar Minuten noch mal.“ | Ursache und nächster Schritt. |
-| „Keine Daten verfügbar“ | „Keine Mails in diesem Konto. Neue erscheinen nach dem nächsten Abruf.“ | Die Sache benennen, dann weiterhelfen. |
-| „Lade …“, „Loading …“ | „Wird geladen …“ | „Lade“ liest sich als Befehl. |
-| „Klicke hier, um ein Konto zu verbinden.“ | Button „Konto verbinden“ | Der Linktext ist die Handlung. |
-| „Sync“, „Inbox“, „Draft“, „Thread“ | „Abrufen“/„Stand“, „Posteingang“, „Entwurf“, „Verlauf“ | Deutsches Alltagswort vorhanden. |
-| „Gerne! Hier ist deine Zusammenfassung:“ | direkt mit dem Inhalt beginnen | Floskel ohne Information. |
-| „Möchtest du, dass ich Antworten entwerfe?“ | Vorschlag als Chip: „Antworten entwerfen“ | Angebote sind Aktionen, keine Fragen. |
-| „Mail(s)“ | „1 Mail“, „2 Mails“, „keine Mails“ | Pluralform ausschreiben. |
-| „11/21“, „Fri, Nov 21“ | „Fr., 21.11.“ | Deutsches Datumsformat. |
+| „Guten Morgen! Was kann ich für dich erledigen?“ | „Hallo, was kann ich für dich tun?“ | Time-of-day greeting and „erledigen“ sound like a hotline; nobody asks like that. |
+| „Drei Mails brauchen eine Antwort.“ | „Auf drei Mails solltest du antworten.“ | „need a reply“, translated literally. |
+| „Danach wartet die Meyer GmbH auf deine Bestätigung des Angebots.“ | „Die Meyer GmbH möchte bis Montag wissen, ob du ihr Angebot annimmst.“ | Nominal style; a verb carries the sentence. |
+| „Bist du sicher?“ | „5 Newsletter abbestellen? Das lässt sich nicht rückgängig machen.“ | Name the consequence rather than sow doubt. |
+| „Erfolgreich gespeichert!“ | „Gespeichert.“ | Success is the normal case. |
+| „Es ist ein Fehler aufgetreten.“ | „Gmail antwortet nicht. Versuch es in ein paar Minuten noch mal.“ | Cause and next step. |
+| „Keine Daten verfügbar“ | „Keine Mails in diesem Konto. Neue erscheinen nach dem nächsten Abruf.“ | Name the thing, then help further. |
+| „Lade …“, „Loading …“ | „Wird geladen …“ | „Lade“ reads as a command. |
+| „Klicke hier, um ein Konto zu verbinden.“ | Button „Konto verbinden“ | Link text is the action. |
+| „Sync“, „Inbox“, „Draft“, „Thread“ | „Abrufen“/„Stand“, „Posteingang“, „Entwurf“, „Verlauf“ | A German everyday word exists. |
+| „Gerne! Hier ist deine Zusammenfassung:“ | Start directly with content | An empty phrase without information. |
+| „Möchtest du, dass ich Antworten entwerfe?“ | Suggestion as chip: „Antworten entwerfen“ | Offers are actions, not questions. |
+| „Mail(s)“ | „1 Mail“, „2 Mails“, „keine Mails“ | Write out plural forms. |
+| „11/21“, „Fri, Nov 21“ | „Fr., 21.11.“ | German date format. |
 
-### 2.4 Begriffe
+### 2.4 Terms
 
-Gleiche Sache, gleiches Wort, überall: Navigation, Buttons, Tooltips, Hinweise und
-Antworten des Assistenten.
+Same thing, same word, everywhere: navigation, buttons, tooltips, notices and assistant answers.
+The first two columns contain German UI terms and alternatives.
 
-| Begriff | Nicht | Bedeutung |
+| Term | Not | Meaning |
 |---|---|---|
-| Mail, Mails | E-Mail(s), Nachricht | eine Mail; „E-Mail“ nur in festen Wörtern wie „E-Mail-Adresse“ |
-| Konto | Account, Postfach | ein verbundenes Mailkonto (Gmail, Outlook, iCloud, IMAP) |
-| Posteingang | Inbox | die gemischte Liste aller Mails aus allen Konten |
-| Verlauf | Thread, Konversation | zusammengehörige Mails zu einem Betreff |
-| Unterhaltung | Chat-Verlauf, Session, Thread | ein Gespräch mit dem Assistenten |
-| Entwurf | Draft | vom Assistenten vorgeschlagene Mail, noch nicht gesendet |
-| Abrufen · Stand | Sync, Synchronisieren, Refresh | neue Mails holen · Zeitpunkt des letzten Abrufs („Stand 08:57“) |
-| Archivieren | Ablegen, Verschieben | aus dem Posteingang nehmen; die Mail bleibt im Konto |
-| In den Papierkorb | Löschen (bei Mails) | wiederherstellbar; „Löschen“ nur, wo es endgültig ist |
-| Abbestellen | Abmelden, Unsubscribe | Newsletter über den Abmeldelink beenden |
-| Verbinden · Entfernen | Hinzufügen · Löschen (bei Konten) | Konto in liam-e aufnehmen bzw. herausnehmen; beim Anbieter bleibt alles |
-| Anmelden | Einloggen, Login | Anmeldung bei Google oder Microsoft |
-| Bestätigen · Abbrechen | OK · Ja · Nein | Entscheidung über einen Vorschlag |
-| Rückgängig | Undo, Zurücknehmen | eine Aktion umkehren, solange es geht |
-| Modell | KI, LLM | das gewählte Mistral-Modell |
-| Darstellung | Theme, Modus, Design | hell, dunkel oder wie im System |
-| Secret | Geheimnis, Token | Workspace-Secret in Mistral Studio (Begriff der Plattform) |
-| liam-e | Bot, KI, Agent | Name des Assistenten, wo ein Name nötig ist |
+| Mail, Mails | E-Mail(s), Nachricht | a mail; „E-Mail“ only in fixed words such as „E-Mail-Adresse“ |
+| Konto | Account, Postfach | a connected mail account (Gmail, Outlook, iCloud, IMAP) |
+| Posteingang | Inbox | the combined list of all mail from all accounts |
+| Verlauf | Thread, Konversation | related mails about one subject |
+| Unterhaltung | Chat-Verlauf, Session, Thread | a conversation with the assistant |
+| Entwurf | Draft | mail proposed by the assistant, not yet sent |
+| Abrufen · Stand | Sync, Synchronisieren, Refresh | fetch new mail · time of last fetch („Stand 08:57“) |
+| Archivieren | Ablegen, Verschieben | remove from inbox; mail stays in the account |
+| In den Papierkorb | Löschen (bei Mails) | recoverable; „Löschen“ only where permanent |
+| Abbestellen | Abmelden, Unsubscribe | end a newsletter through the unsubscribe link |
+| Verbinden · Entfernen | Hinzufügen · Löschen (bei Konten) | add an account to or remove it from liam-e; everything remains at the provider |
+| Anmelden | Einloggen, Login | sign in to Google or Microsoft |
+| Bestätigen · Abbrechen | OK · Ja · Nein | decision on a proposal |
+| Rückgängig | Undo, Zurücknehmen | reverse an action while possible |
+| Modell | KI, LLM | the selected Mistral model |
+| Darstellung | Theme, Modus, Design | light, dark or as in the system |
+| Secret | Geheimnis, Token | workspace secret in Mistral Studio (platform term) |
+| liam-e | Bot, KI, Agent | assistant's name where a name is needed |
 
-### 2.5 Schreibweisen
+### 2.5 Writing conventions
 
-- **Zeichen:** Anführungszeichen „…“ (innen ‚…‘). Auslassung als ein Zeichen „…“, mit
-  Leerzeichen davor, wenn Wörter fehlen („Wird geladen …“). Gedankenstrich „–“ mit
-  Leerzeichen; Bis-Strich ohne („9–17 Uhr“). Bindestrich nur in Wörtern.
-- **Zahlen:** Dezimalkomma, Tausenderpunkt ab vier Stellen („2.314 Mails“). Zahl und
-  Einheit mit geschütztem Leerzeichen („184,20 €“, „3 Min.“). In Bedienelementen und
-  Zählern Ziffern; in Antworten des Assistenten bis zwölf ausgeschrieben, außer bei
-  Beträgen, Daten und Uhrzeiten.
-- **Datum und Zeit:** in Listen „08:57“ für heute, „Gestern“, für die übrigen Tage der
-  laufenden Woche ab Montag der Wochentag („Di.“), davor „21.11.“; das Jahr nur, wenn es
-  nicht das laufende ist. Die geöffnete Mail zeigt Tag und Uhrzeit („Heute, 08:57“, „Di.,
-  08:57“), eine Frist steht als „Fr., 21.11.“. In Sätzen, also in Antworten des
-  Assistenten, „Freitag, 21. November“ und „um 8:57 Uhr“; die Oberfläche selbst braucht
-  diese Form bisher nicht. Relative Angaben („vor 5 Min.“) nutzt die Oberfläche nicht;
-  kommen sie dazu, dann nur bis „vor 59 Min.“.
-- **Plural:** je Form ein eigener Text über `Intl.PluralRules` („keine Mails“, „1 Mail“,
-  „2 Mails“). Nie Klammerplural.
-- **Großschreibung** nach deutscher Rechtschreibung, erstes Wort von Buttons und
-  Überschriften groß. Kein Title Case, keine Versalien.
-- **Abkürzungen** nur in Hinweisen („z. B.“ mit Leerzeichen), nie in Buttons.
+- **Punctuation:** quotation marks „…“ (nested ‚…‘). Ellipsis as one character „…“, preceded
+  by a space when words are missing („Wird geladen …“). En dash „–“ with spaces; range dash
+  without („9–17 Uhr“). Hyphen only inside words.
+- **Numbers:** decimal comma, thousands dot from four digits („2.314 Mails“). Number and unit
+  separated by a non-breaking space („184,20 €“, „3 Min.“). Digits in controls and counters;
+  in assistant answers write out numbers up to twelve, except amounts, dates and times.
+- **Date and time:** in lists „08:57“ for today, „Gestern“, for the remaining days of the
+  current week from Monday the weekday („Di.“), before that „21.11.“; the year only when not
+  the current one. An open mail shows day and time („Heute, 08:57“, „Di., 08:57“), a deadline
+  appears as „Fr., 21.11.“. In sentences, thus in assistant answers, „Freitag, 21. November“ and
+  „um 8:57 Uhr“; the UI itself does not yet need this form. The UI does not use relative values
+  („vor 5 Min.“); if added, only up to „vor 59 Min.“.
+- **Plural:** a separate text per form through `Intl.PluralRules` („keine Mails“, „1 Mail“,
+  „2 Mails“). Never parenthesized plurals.
+- **Capitalization** follows German spelling, with the first word of buttons and headings capitalized.
+  No title case, no all caps.
+- **Abbreviations** only in notices („z. B.“ with a space), never in buttons.
 
-### 2.6 Textarten
+### 2.6 Types of text
 
-- **Buttons:** Verb im Infinitiv mit Gegenstand, ein bis vier Wörter: „Konto verbinden“,
-  „Antwort entwerfen“, „5 archivieren“. Nie „OK“, „Ja“, „Absenden“.
-- **Tooltips:** ein Satz, was passiert, mit Verb in der dritten Person („Holt neue Mails
-  aus allen Konten“) oder knapp im Infinitiv („Archivieren (E)“). Tastenkürzel in
-  Klammern. Nie den sichtbaren Namen wiederholen.
-- **Hinweise nach einer Aktion:** Ergebnis mit Zahl, Partizip am Ende („61 Mails
-  archiviert.“), dann „Rückgängig“, wo es geht.
-- **Fehler:** was nicht geklappt hat, die Ursache, wenn sie bekannt ist, und der nächste
-  Schritt. Keine Schuldzuweisung, keine Fehlercodes ohne Erklärung.
-- **Leere Zustände:** die Sache benennen und sagen, was als Nächstes passiert oder was du
-  tun kannst.
-- **Bestätigungen:** Frage mit Zahl und Gegenstand („5 Newsletter abbestellen?“), ein Satz
-  Begründung, Unumkehrbares ausdrücklich.
-- **Begrüßung:** kurz und ohne Tageszeit („Hallo, was kann ich für dich tun?“), darunter
-  eine Zeile Stand („47 ungelesene Mails in 4 Konten · Stand 08:57“).
-- **Platzhalter:** eine Einladung oder ein Beispiel („Frag etwas zu deinen Mails …“), keine
-  Bedienungsanleitung.
-- **Antworten des Assistenten:** mit dem Ergebnis beginnen, ohne Einleitung und ohne
-  Schlussformel. Die Regeln aus §2.2 bis §2.5 gelten auch hier; der Systemprompt in
-  `apps/api/src/api/mail/agent_prompt.py` enthält sie.
+- **Buttons:** infinitive verb with object, one to four words: „Konto verbinden“,
+  „Antwort entwerfen“, „5 archivieren“. Never „OK“, „Ja“, „Absenden“.
+- **Tooltips:** one sentence saying what happens, with a third-person verb („Holt neue Mails aus
+  allen Konten“) or briefly in the infinitive („Archivieren (E)“). Keyboard shortcut in
+  parentheses. Never repeat the visible name.
+- **Notices after an action:** result with count, participle at the end („61 Mails archiviert.“),
+  then „Rückgängig“ where possible.
+- **Errors:** what failed, the cause if known, and the next step. No blame, no unexplained error codes.
+- **Empty states:** name the thing and say what happens next or what you can do.
+- **Confirmations:** question with count and object („5 Newsletter abbestellen?“), one sentence
+  of justification, explicitly state irreversible consequences.
+- **Greeting:** brief and without time of day („Hallo, was kann ich für dich tun?“), followed by
+  one status line („47 ungelesene Mails in 4 Konten · Stand 08:57“).
+- **Placeholders:** an invitation or example („Frag etwas zu deinen Mails …“), not instructions.
+- **Assistant answers:** start with the result, without introduction or closing formula. Rules from
+  §2.2 to §2.5 apply here too; the system prompt in `apps/api/src/api/mail/agent_prompt.py` contains them.
 
-### 2.7 Prüfliste für jeden Text
+### 2.7 Checklist for every text
 
-1. Laut lesen: Würde man das so zu jemandem sagen?
-2. Scheint ein englischer Satz durch? Dann neu formulieren, nicht umstellen.
-3. Stimmen die Begriffe aus §2.4?
-4. Stimmen Zeichen und Formate aus §2.5?
-5. Ist die Folge einer Aktion genannt?
-6. Pluralformen für 0, 1 und 2 geprüft?
-7. Passt der längste realistische Wert (Kontoname, Betreff, Absender)?
+1. Read aloud: would you say this to someone?
+2. Does an English sentence show through? Rephrase, do not rearrange.
+3. Are the terms from §2.4 correct?
+4. Are punctuation and formats from §2.5 correct?
+5. Is the consequence of an action stated?
+6. Are plural forms for 0, 1 and 2 checked?
+7. Does the longest realistic value fit (account name, subject, sender)?
 
-### 2.8 Wo Texte stehen
+### 2.8 Where text lives
 
-Alle Texte der Oberfläche stehen in einem Katalog, `apps/web/src/i18n/de.ts`, nach
-Ansichten gruppiert. So steht jeder Begriff einmal und bleibt einheitlich. Pluralformen,
-Uhrzeiten, Daten und Größen bildet `apps/web/src/i18n/format.ts`. Technische Literale in TSX
-(Pfade, Klassen, englische Werte) tragen `// i18n-exempt`.
+All UI text is in one catalogue, `apps/web/src/i18n/de.ts`, grouped by view. This keeps every term
+in one place and consistent. `apps/web/src/i18n/format.ts` forms plurals, times, dates and sizes.
+Technical literals in TSX (paths, classes, English values) carry `// i18n-exempt`.
 
-## 3. Farbe
+## 3. Color
 
-- Grund der App ist `surface-ground`; darauf schweben `surface`-Flächen mit `shadow-sheet`
-  (Seitenleiste, Hauptfläche). Innerhalb einer Fläche gliedern `surface-soft`-Kacheln. Menüs
-  und Popover liegen auf `surface-overlay` mit `shadow-overlay`.
-- `accent` ist die **einzige Handlungsfarbe**: primäre Buttons, aktiver
-  Navigationspunkt, Senden, Links, Assistent-Marke, Erfolg. Text darauf in `on-accent`.
-  `accent-line` ist nur die Unterstreichung von Links (`le-link`); beim Hover wird sie
-  `accent`.
-- **Hover** in drei Stufen:
-  - Zeilen und Einträge (Mailzeile, Navigationspunkt, Unterhaltung, Menüeintrag, Eintrag
-    der Bestätigungskarte): `surface-soft`.
-  - Kacheln, Chips, Symbol-Buttons und Ghost-Buttons: `accent-soft` mit `accent`-Text;
-    Chips zeigen dazu den Rand in `accent`, Schnellaktionen heben sich mit `shadow-lift`.
-    Die Mail-Karte im Chat bekommt nur die Fläche.
-  - Bedienelemente mit eigener Farbe: primäre Buttons und Senden werden `accent-hover`
-    (primäre Buttons mit `shadow-lift`), Secondary-Buttons färben nur Rand und Text in
-    `accent`, Danger-Buttons bekommen einen Ring in `danger-soft`, Felder einen Rand in
-    `ink-muted`.
-- `warm` heißt nur **Dringlichkeit**, nie Aktion oder Schmuck: der Punkt einer markierten
-  Mail (in der Mailzeile neben der Uhrzeit, auf der Mailkarte im Chat vor dem Absender) mit
-  dem Namen und Tooltip „Dringend“, und das Frist-Schild.
-- `danger` nur für Löschen und Fehler, immer mit Wort oder Symbol.
-- `acc-1` bis `acc-4` färben **Konten** in der Reihenfolge ihrer Verbindung (Avatar,
-  Konto-Punkt); ab dem fünften Konto beginnt die Reihe von vorn. Sie bedeuten nie einen
-  Status.
-- Rahmen von Bedienelementen sind `control-border`; `line` und `line-strong` sind rein
-  dekorativ.
-- **Dunkles Theme** folgt der Systemeinstellung (`prefers-color-scheme`), solange keine
-  Darstellung gewählt ist. Es ist kein invertiertes Hell: `accent` wird heller und trägt dunklen Text, Schatten werden
-  tiefer statt farbig.
-- **Darstellung wählen:** Ein Symbol-Button `sun-moon` („Darstellung“) unten in der
-  Seitenleiste, rechts neben der Statuszeile, öffnet ein Menü mit „Hell“, „Dunkel“ und „Wie
-  im System“; die gewählte Zeile trägt `check`. In der Symbolleiste am Tablet steht er allein
-  am unteren Ende, auf dem Handy in der Schublade. Das Menü öffnet nach oben. Die Wahl gilt
-  nur in diesem Browser (`localStorage`, „Wie im System“ speichert nichts) und wird vor dem
-  ersten Zeichnen als `data-theme` auf `<html>` gesetzt, damit nichts aufblitzt.
-- Schublade und Dialoge dunkeln den Inhalt dahinter mit `scrim` ab (`.le-scrim`; hell
-  `rgba(13, 19, 17, .45)`, dunkel `rgba(0, 0, 0, .6)`). Dialoge hängen direkt im `<body>`
-  (`createPortal`): In der Seite läge die Abdunklung unter der haftenden Überschrift der
-  Seitenleiste.
-- In Komponenten nie Hex-Werte, immer `var(--…)`.
+Quoted German labels in this section are UI text.
 
-### Kontrast (WCAG AA, hell und dunkel)
+- The app ground is `surface-ground`; `surface` surfaces with `shadow-sheet` float on it
+  (sidebar, main surface). Within a surface, `surface-soft` tiles provide structure. Menus and
+  popovers sit on `surface-overlay` with `shadow-overlay`.
+- `accent` is the **only action color**: primary buttons, active navigation item, send, links,
+  assistant mark, success. Text on it uses `on-accent`. `accent-line` is only the underline of
+  links (`le-link`); on hover it becomes `accent`.
+- **Hover** in three levels:
+  - Rows and entries (mail row, navigation item, conversation, menu entry, confirmation card
+    entry): `surface-soft`.
+  - Tiles, chips, icon buttons and ghost buttons: `accent-soft` with `accent` text; chips also
+    show their border in `accent`, quick actions lift with `shadow-lift`. The chat mail card
+    gets only the surface.
+  - Controls with their own color: primary buttons and send become `accent-hover` (primary
+    buttons with `shadow-lift`), secondary buttons color only border and text `accent`, danger
+    buttons get a `danger-soft` ring, fields an `ink-muted` border.
+- `warm` means only **urgency**, never action or decoration: the dot of a marked mail (beside the
+  time in the mail row, before the sender on the chat mail card) with name and tooltip „Dringend“,
+  and the deadline badge.
+- `danger` only for deletion and errors, always with a word or icon.
+- `acc-1` through `acc-4` color **accounts** in connection order (avatar, account dot); from the
+  fifth account the sequence starts again. They never signify status.
+- Control borders are `control-border`; `line` and `line-strong` are purely decorative.
+- **Dark theme** follows the system setting (`prefers-color-scheme`) until an appearance is
+  selected. It is not inverted light: `accent` gets lighter and carries dark text, shadows get
+  deeper rather than colored.
+- **Choose appearance:** An icon button `sun-moon` („Darstellung“) at the bottom of the sidebar,
+  to the right of the status line, opens a menu with „Hell“, „Dunkel“ and „Wie im System“; the
+  selected row carries `check`. On the tablet toolbar it stands alone at the bottom, on mobile in
+  the drawer. The menu opens upward. The choice applies only in this browser (`localStorage`,
+  „Wie im System“ stores nothing) and is set as `data-theme` on `<html>` before first paint to
+  prevent a flash.
+- Drawer and dialogs dim the content behind them with `scrim` (`.le-scrim`; light
+  `rgba(13, 19, 17, .45)`, dark `rgba(0, 0, 0, .6)`). Dialogs attach directly to `<body>`
+  (`createPortal`): inside the page, the dimming would lie below the sidebar's sticky heading.
+- Never hex values in components, always `var(--…)`.
 
-Text mindestens 4,5:1, Kanten, Fokusring und andere bedeutungstragende Zeichen mindestens
-3:1. Gemessen 2026-11-13 an den Werten des Design-Systems; die Spalte nennt das schwächste
-Paar über beide Themes.
+### Contrast (WCAG AA, light and dark)
 
-| Token | Auf | Ziel | Schwächstes Paar |
+Text at least 4,5:1, edges, focus ring and other meaningful indicators at least 3:1. Measured
+2026-11-13 against design-system values; the column names the weakest pair across both themes.
+
+| Token | On | Target | Weakest pair |
 |---|---|---|---|
 | `ink` | `surface`, `surface-soft`, `surface-ground`, `surface-overlay`, `accent-soft` | 4,5:1 | 10,65:1 |
 | `ink-muted` | `surface`, `surface-soft`, `surface-ground`, `accent-soft` | 4,5:1 | 5,43:1 |
-| `accent` als Text | `surface`, `surface-soft`, `accent-soft` | 4,5:1 | 5,36:1 |
+| `accent` as text | `surface`, `surface-soft`, `accent-soft` | 4,5:1 | 5,36:1 |
 | `on-accent` | `accent`, `accent-hover` | 4,5:1 | 6,40:1 |
 | `warm` | `surface`, `surface-soft`, `warm-soft` | 4,5:1 | 4,94:1 |
 | `danger` | `surface`, `surface-soft`, `danger-soft` | 4,5:1 | 5,38:1 |
 | `on-danger` | `danger` | 4,5:1 | 6,54:1 |
-| `on-acc` | `acc-1` bis `acc-4` | 4,5:1 | 4,58:1 |
+| `on-acc` | `acc-1` through `acc-4` | 4,5:1 | 4,58:1 |
 | `tip-ink` | `tip-bg` | 4,5:1 | 15,88:1 |
 | `control-border` | `surface`, `surface-soft` | 3:1 | 3,19:1 |
 | `focus-ring` | `surface`, `surface-soft`, `surface-ground`, `accent-soft` | 3:1 | 5,36:1 |
 
-Wer einen Farbwert ändert, misst diese Tabelle neu. `apps/web/src/styles/contrast.test.ts`
-prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der letzten Spalte.
+Anyone changing a color value remeasures this table. `apps/web/src/styles/contrast.test.ts`
+checks each pair in both themes against the target, not the values in the last column.
 
-## 4. Schrift
+## 4. Typography
 
-- **Plus Jakarta Sans** (`font-sans`, dahinter die Systemschriften) in 400, 500, 600 und 700
-  für alles. In der App selbst gehostet
-  über Fontsource, exakt gepinnt; keine Übertragung an Google. Nur die Vorschauen in Claude
-  Design laden sie von Google Fonts.
-- Stile aus den Tokens: `display` (36 px, nur die Begrüßung), `title` (24 px, Seitentitel
-  und Betreff der geöffneten Mail), `heading` (17 px), `body` (14,5 px), `body-strong`,
-  `small` (13 px, Metadaten), `caption` (12 px, Konto-Tags, Zähler, Uhrzeiten).
-- Ziffern in Zählern, Uhrzeiten und Beträgen tabellarisch (`font-variant-numeric:
-  tabular-nums`, Klasse `le-num`).
-- Ungelesene Mails: Absender und Betreff in 700, sonst 500 und 400. Kein Kursiv, keine
-  Versalien.
-- Keine freien px-Schriftgrößen: Die Größen stehen als `--font-size-display` bis
-  `--font-size-caption` in `tokens.css`, und Bausteine nutzen nur diese sechs. Buttons und
-  Eingaben haben `body`, kleine Buttons, Chips, Hinweise, Fehler und Untertitel `small`,
-  Tags, Badges, Uhrzeiten in Listen und Tooltips `caption`, Titel der Bestätigungskarte
-  und Überschriften in Antworten `heading`.
+- **Plus Jakarta Sans** (`font-sans`, followed by system fonts) in 400, 500, 600 and 700 for
+  everything. Self-hosted in the app via Fontsource, exactly pinned; no transmission to Google.
+  Only previews in Claude Design load it from Google Fonts.
+- Styles from tokens: `display` (36 px, greeting only), `title` (24 px, page title and opened
+  mail subject), `heading` (17 px), `body` (14,5 px), `body-strong`, `small` (13 px, metadata),
+  `caption` (12 px, account tags, counters, times).
+- Digits in counters, times and amounts are tabular (`font-variant-numeric:
+  tabular-nums`, class `le-num`).
+- Unread mails: sender and subject in 700, otherwise 500 and 400. No italics, no all caps.
+- No arbitrary px font sizes: sizes are `--font-size-display` through `--font-size-caption` in
+  `tokens.css`, and components use only these six. Buttons and inputs use `body`; small buttons,
+  chips, notices, errors and subtitles `small`; tags, badges, times in lists and tooltips `caption`;
+  confirmation card title and answer headings `heading`.
 
-## 5. Raum, Form, Schatten, Bewegung
+## 5. Space, shape, shadow, motion
 
-- **4-px-Raster**, Schritte `space-1` bis `space-8` (4 bis 64 px). Jeder Innen- und
-  Außenabstand und jede Lücke (`padding`, `margin`, `gap`) liegt auf dem Raster und kommt aus
-  diesen Schritten oder ihrer Summe (20 px = `space-4` + `space-1`). Ausgenommen sind Größen
-  von Bausteinen (Höhen, Breiten, Symbole); Steuerhöhen kommen aus `control-height` (38 px)
-  und `control-height-lg` (44 px). Symbol und Text stehen 8 px auseinander, Punkt und Text
-  in Tags 4 px. App-Rahmen und Abstand
-  der schwebenden Flächen `space-3` (ab `tablet`; auf `mobile` gibt es keinen Rahmen, §7.3),
-  Innenabstand der Hauptfläche `space-5`, Kacheln und Karten `space-4`, das Panel „Konto
-  verbinden“ 20 px (`space-4` + `space-1`).
-- **Maße:** `sidebar-width` 236 px (Seitenleiste am Desktop), `list-width` 400 px (Mailliste
-  neben dem Lesebereich), `chat-width` 780 px (Höchstbreite von Verlauf und Composer),
-  `control-height` 38 px (Bedienelemente) und `control-height-lg` 44 px (große Symbol-Buttons,
-  Tippziel bei Touch, §7.2).
-- **Radien** nur aus den Tokens: `radius-pill` für Buttons, Chips, Navigationspunkte, Tags
-  und Symbol-Buttons; `radius-sm` (12 px) für Zeilen, Felder und Tooltips; `radius-md`
-  (18 px) für Kacheln, Karten und Menüs, auch für drückbare Kacheln (Schnellaktionen,
-  Optionen im Panel „Konto verbinden“); `radius-lg` (24 px) für schwebende Flächen,
-  Composer und Bestätigungskarte. Die eigene Blase im Chat hat `radius-md` mit einer
-  kleinen Ecke unten rechts (`radius-sm` / 2).
-- **Schatten** nur aus den Tokens: `shadow-sheet` für schwebende Flächen, `shadow-overlay`
-  für Menüs, Popover und die Aktionsleiste in Listen, `shadow-lift` für den Hover von
-  Kacheln und primären Buttons. Karten innerhalb einer Fläche haben keinen Schatten.
-- **Linien sparsam:** Bereiche trennen sich über Flächen und Abstand; `line` nur in langen
-  Listen, Konturen nur an Bedienelementen (`control-border`).
-- **Bewegung:** 160 ms für Hover und Tooltips, 220 ms für Zustandswechsel, 420 ms für
-  erscheinende Inhalte (`le-rise`), Kurve `cubic-bezier(.2, .8, .2, 1)`. Tooltips nach
-  350 ms Verweilen, bei Tastaturfokus sofort. Schleifen: Spinner 0,8 s je Umdrehung,
-  Tipp-Punkte 1,2 s, Caret 1 s. Wechselt der Bereich (Chat, Posteingang, Konten), blendet
-  der Inhalt der Hauptfläche über; innerhalb eines Bereichs, etwa von der Liste zur Mail
-  oder zwischen Unterhaltungen, nicht. Seitenleiste und Composer bleiben stehen.
-- **Schwebendes (Tooltip, Menü) liegt immer ganz im Bild und obenauf.** Beide hängen im
-  `<body>`, ihre Lage kommt nur aus `ds/floating.ts`: feste Koordinaten zum Bildschirm, 8 px
-  Abstand zum Auslöser und zum Rand. Die gewünschte Seite ist ein Wunsch; fehlt dort der Platz,
-  springt es auf die Gegenseite und rückt in den Bildschirm. Ein Menü scrollt in dem Raum, den es
-  hat (höchstens 60 % der Bildschirmhöhe); ein Tooltip, der auf keiner Seite Platz hat, rückt ganz
-  ins Bild, notfalls über seinen Auslöser, und wird nie höher als der Bildschirm. So schneidet kein Scrollbereich und kein `overflow`
-  um den Auslöser es ab, und kein Stapelkontext (`z-index`, `transform`) eines Vorfahren legt
-  sich darüber. Reihenfolge über der Abdunklung (50): Menü 55, Tooltip 60. Keine CSS-Regel setzt
-  `top`, `left`, `right`, `bottom` oder `inset` an `.le-menu` oder `.le-tooltip` oder gestaltet
-  sie über einen Vorfahren (`.le-chat-header .le-menu` greift im `<body>` nie);
-  `ds/floating.test.tsx` prüft beides.
-- **`prefers-reduced-motion`** immer beachten: dann nur Überblenden (`le-rise` wird zu
-  `le-fade`, Seitenwechsel und Schublade blenden weiter über), kein Aufsteigen, kein
-  Hereinschieben, Streaming zeigt den Text sofort. Schleifen (Tipp-Punkte, Caret, Spinner)
-  stehen still.
+Quoted German labels in this section are UI text.
 
-## 6. Symbole und Bausteine
+- **4-px grid**, steps `space-1` through `space-8` (4 to 64 px). Every inner and outer spacing
+  and gap (`padding`, `margin`, `gap`) lies on the grid and comes from these steps or their sum
+  (20 px = `space-4` + `space-1`). Component sizes (heights, widths, icons) are exempt; control
+  heights come from `control-height` (38 px) and `control-height-lg` (44 px). Icon and text are
+  8 px apart, dot and text in tags 4 px. App frame and gap between floating surfaces `space-3`
+  (from `tablet`; `mobile` has no frame, §7.3), main surface padding `space-5`, tiles and cards
+  `space-4`, the „Konto verbinden“ panel 20 px (`space-4` + `space-1`).
+- **Dimensions:** `sidebar-width` 236 px (desktop sidebar), `list-width` 400 px (mail list next
+  to reading pane), `chat-width` 780 px (maximum history and composer width), `control-height`
+  38 px (controls) and `control-height-lg` 44 px (large icon buttons, touch target, §7.2).
+- **Radii** only from tokens: `radius-pill` for buttons, chips, navigation items, tags and icon
+  buttons; `radius-sm` (12 px) for rows, fields and tooltips; `radius-md` (18 px) for tiles,
+  cards and menus, including pressable tiles (quick actions, options in the „Konto verbinden“
+  panel); `radius-lg` (24 px) for floating surfaces, composer and confirmation card. The own chat
+  bubble has `radius-md` with a small bottom-right corner (`radius-sm` / 2).
+- **Shadows** only from tokens: `shadow-sheet` for floating surfaces, `shadow-overlay` for menus,
+  popovers and the action bar in lists, `shadow-lift` for hover on tiles and primary buttons.
+  Cards within a surface have no shadow.
+- **Lines sparingly:** areas are separated through surfaces and spacing; `line` only in long lists,
+  outlines only on controls (`control-border`).
+- **Motion:** 160 ms for hover and tooltips, 220 ms for state changes, 420 ms for appearing
+  content (`le-rise`), curve `cubic-bezier(.2, .8, .2, 1)`. Tooltips after 350 ms dwell,
+  immediately on keyboard focus. Loops: spinner 0,8 s per rotation, typing dots 1,2 s, caret 1 s.
+  When the area changes (chat, inbox, accounts), the main surface content crossfades; not within
+  an area, e.g. list to mail or between conversations. Sidebar and composer stay in place.
+- **Floating elements (tooltip, menu) are always entirely on screen and on top.** Both attach to
+  `<body>`, positioned only by `ds/floating.ts`: fixed screen coordinates, 8 px from trigger and
+  edge. The preferred side is a preference; if there is no room it flips to the opposite side and
+  shifts onto the screen. A menu scrolls within the space it has (at most 60% of screen height);
+  a tooltip that fits on neither side shifts fully on screen, over its trigger if necessary, and
+  is never taller than the screen. Thus no scroll area or `overflow` around the trigger clips it,
+  and no ancestor stacking context (`z-index`, `transform`) overlays it. Order above the scrim
+  (50): menu 55, tooltip 60. No CSS rule sets `top`, `left`, `right`, `bottom` or `inset` on
+  `.le-menu` or `.le-tooltip` or styles them through an ancestor (`.le-chat-header .le-menu`
+  never applies in `<body>`); `ds/floating.test.tsx` checks both.
+- Always respect **`prefers-reduced-motion`**: then only crossfade (`le-rise` becomes `le-fade`,
+  page transitions and drawer continue crossfading), no rising, no sliding in, streaming shows text
+  immediately. Loops (typing dots, caret, spinner) stand still.
 
-- **Symbole: Lucide** (`lucide-react`, exakt gepinnt), 24er-Raster, Strich 1,8, runde
-  Enden, `currentColor`. Größen 19 px (Standard) und 16 px (klein): Symbole neben Text in
-  Buttons, Chips, Tags und Hinweisen sind 16 px; Symbol-Buttons, Navigationspunkte und
-  Schnellaktionen tragen 19 px. Keine Emojis, keine Logos der Anbieter.
-- **Lexikon:** `message-circle` Chat · `messages-square` Unterhaltungen (Symbolleiste am Tablet) · `inbox` Posteingang · `at-sign` Konten · `archive`
+## 6. Icons and components
+
+Quoted German labels and the German icon names in this section are UI text.
+
+- **Icons: Lucide** (`lucide-react`, exactly pinned), 24 grid, stroke 1,8, rounded ends,
+  `currentColor`. Sizes 19 px (standard) and 16 px (small): icons beside text in buttons, chips,
+  tags and notices are 16 px; icon buttons, navigation items and quick actions use 19 px. No emojis,
+  no provider logos.
+- **Lexicon:** `message-circle` Chat · `messages-square` Unterhaltungen (Symbolleiste am Tablet) · `inbox` Posteingang · `at-sign` Konten · `archive`
   Archivieren · `trash-2` In den Papierkorb · `reply` Antworten · `pencil` Antwort
   entwerfen · `forward` Weiterleiten · `ban` Als Spam markieren · `file-code` Original anzeigen · `mail-open` Gelesen/Ungelesen · `refresh-cw` Abrufen · `more-horizontal`
   Weitere Aktionen · `external-link` Mail öffnen · `arrow-up` Senden · `square` (gefüllt)
   Anhalten · `sparkle` Assistent · `flag` Priorisieren · `newspaper` Newsletter · `clock`
-  Frist · `paperclip` Anhang · `check`, `circle-alert`, `info` in Hinweisen · `menu` Menü
+  Frist · `paperclip` Anhang · `check`, `circle-alert`, `info` in notices · `menu` Menü
   öffnen · `x` Schließen · `arrow-left` Zurück · `plus` Neue Unterhaltung · `search` Suchen
   · `chevron-down` Auswahl · `list-checks` Auswählen · `link` Connector · `key-round` Anmeldung beim Anbieter ·
-  `sun-moon` Darstellung; `check` markiert außerdem die gewählte Zeile in einem Menü.
-- **Bausteine** (Klassen `le-*`, Beschreibung und Vorschau im Design-System): Button,
-  IconButton, Chip (mit Tag, Badge, Punkt), Tooltip, Notice, AppShell, NavItem, Menu,
-  QuickAction, Composer, ChatMessage, MailReference, ConfirmCard, MailRow, Avatar,
-  TextField, AccountCard, Drawer (Schublade) und NavButton (Navigationspunkt, der eine
-  Schublade öffnet, „Unterhaltungen“ am Tablet). In der App liegen sie unter
-  `apps/web/src/ds/` mit denselben Namen. Screens unter `src/routes/` und die app-weiten
-  Fehler- und Hinweisseiten (`src/root-screens/de.tsx`: neue Version, Fehler, Seite nicht
-  gefunden) setzen keine eigenen Bedienelemente aus rohem `<button>` oder `<input>` zusammen
-  und nutzen keine Tailwind-Größen; `routes/no-raw-controls.test.ts` prüft das.
-- **Zusammengesetzt** aus diesen, im Ordner ihrer Ansicht: ChatHeader und ModelMenu
-  (`chat/`, §9.6), InsightBox („Kurz gefasst“, §9.4) und ActionToast (Hinweis mit
-  „Rückgängig“, §9.2) in `mail/`, der Dialog „Konto entfernen“ (`accounts/RemoveDialog.tsx`,
-  Klasse `le-dialog`, mit `scrim`, Fokus bleibt im Dialog), der Dialog „Original der Mail“
-  (`mail/OriginalDialog.tsx`, breiter mit `le-dialog--wide`, Kopf mit „Schließen“, der
-  Inhalt scrollt für sich) und ThemeMenu (`shell/`, §3). Kalender verbindet man über
-  `CalendarSetup` (`calendar/FeedSetup.tsx`): „Kalender abonnieren“ öffnet `FeedSetup`,
-  „Google Kalender verbinden“ öffnet `GoogleSetup`. Beide Dialoge nutzen `le-dialog` und
-  Fokusführung. Google zeigt statische Platzhalter beim Laden und echte Checkboxen aus
-  `TextField`; bestehende Verbindungen sind angehakt, gesperrt und als „Schon verbunden“
-  erklärt. Neue Auswahlen sind nie vorgewählt. Nur die gewählte Zahl neuer Kalender zählt
-  für „N Kalender verbinden“. Lange Kalendernamen dürfen umbrechen.
-- **Varianten:**
-  - Button `primary`, `secondary`, `ghost`, `danger`; klein mit `le-btn--sm` (obere Leiste
-    der Mail am Desktop, §7.4).
-  - IconButton `tone="danger"` (Papierkorb), `size="lg"` (44 px, Leisten auf `mobile`);
-    `shortcut` hängt das Tastenkürzel in Klammern an den Tooltip.
-  - Chip gedrückt (`aria-pressed`, aktiver Filter) und `quiet` (ohne Rand auf
-    `surface-soft`, für Auswahl-Chips wie Konto und Modell).
-  - Notice `info`, `success`, `danger`, wahlweise mit einer Aktion als Link.
-  - Tag `default`, `warm` (Frist, mit `clock`) und `on-surface` (Konto in Listen, mit
-    Konto-Punkt).
-  - Avatar `md` und `lg` (Kontenkarte).
-  - Badge zeigt ab 1.000 „999+“.
-  - Tooltip an fünf Stellen: `top` (Standard), `top-end`, `bottom`, `bottom-end` und
-    `right` (Symbolleiste am Tablet).
-    Die Stelle ist ein Wunsch (§5, Schwebendes).
-  - Menu: Einträge mit Symbol, `tone: 'danger'`, `disabled` mit `hint` (bleibt fokussierbar
-    und sagt, warum der Eintrag nicht geht) und `checked` (Auswahl, Rolle `menuitemradio`,
-    `check` an der gewählten Zeile; der Fokus beginnt dort). Pfeiltasten bewegen den Fokus,
-    Escape schließt. `placement` nennt Seite und Kante: `down-start` (Standard), `down-end`,
-    `up-start` oder `up-end`; auch das ist ein Wunsch (§5, Schwebendes). Der Fokus springt
-    hinein, sobald das Menü platziert ist; Tab schließt es und macht beim Auslöser weiter, so
-    bleibt die Fokusreihenfolge die der Seite.
-- **Zustände ohne Inhalt sind Pflicht:** jede Liste und Ansicht hat Leer, Laden
-  (Platzhalterzeilen, kein Spinner über der ganzen Fläche) und Fehler mit Ursache und
-  nächstem Schritt. Platzhalter sind statische Balken auf `surface-soft` in `radius-sm`,
-  ohne Schimmer, und tragen `aria-hidden`; für Bildschirmleser steht daneben ein Status
-  („Mails werden geladen …“). Der Posteingang zeigt sechs Zeilen mit Kreis und Balken, die
-  Konten zeigen drei Karten, die geöffnete Mail einen Kopf mit Kreis und zwei Zeilen und
-  darunter vier Balken.
+  `sun-moon` Darstellung; `check` also marks the selected row in a menu.
+- **Components** (classes `le-*`, description and preview in the design system): Button,
+  IconButton, Chip (with tag, badge, dot), Tooltip, Notice, AppShell, NavItem, Menu, QuickAction,
+  Composer, ChatMessage, MailReference, ConfirmCard, MailRow, Avatar, TextField, AccountCard,
+  Drawer and NavButton (navigation item opening a drawer, „Unterhaltungen“ on tablet). In the app
+  they live under `apps/web/src/ds/` with the same names. Screens under `src/routes/` and app-wide
+  error and notice pages (`src/root-screens/de.tsx`: new version, error, page not found) do not
+  build their own controls from raw `<button>` or `<input>` and do not use Tailwind sizes;
+  `routes/no-raw-controls.test.ts` checks this.
+- **Composed** from these, in their view's folder: ChatHeader and ModelMenu (`chat/`, §9.6),
+  InsightBox („Kurz gefasst“, §9.4) and ActionToast (notice with „Rückgängig“, §9.2) in `mail/`,
+  the „Konto entfernen“ dialog (`accounts/RemoveDialog.tsx`, class `le-dialog`, with `scrim`,
+  focus stays in the dialog), the „Original der Mail“ dialog (`mail/OriginalDialog.tsx`, wider
+  with `le-dialog--wide`, header with „Schließen“, content scrolls independently), and ThemeMenu
+  (`shell/`, §3). Calendars connect through `CalendarSetup` (`calendar/FeedSetup.tsx`): „Kalender
+  abonnieren“ opens `FeedSetup`, „Google Kalender verbinden“ opens `GoogleSetup`. Both dialogs use
+  `le-dialog` and focus management. Google shows static placeholders while loading and real
+  checkboxes from `TextField`; existing connections are checked, disabled and explained as „Schon
+  verbunden“. New selections are never preselected. Only the selected count of new calendars counts
+  for „N Kalender verbinden“. Long calendar names may wrap.
+- **Variants:**
+  - Button `primary`, `secondary`, `ghost`, `danger`; small with `le-btn--sm` (upper mail bar
+    on desktop, §7.4).
+  - IconButton `tone="danger"` (trash), `size="lg"` (44 px, bars on `mobile`); `shortcut` appends
+    the keyboard shortcut in parentheses to the tooltip.
+  - Chip pressed (`aria-pressed`, active filter) and `quiet` (without border on `surface-soft`,
+    for selection chips such as account and model).
+  - Notice `info`, `success`, `danger`, optionally with an action as a link.
+  - Tag `default`, `warm` (deadline, with `clock`) and `on-surface` (account in lists, with account dot).
+  - Avatar `md` and `lg` (account card).
+  - Badge shows „999+“ from 1,000.
+  - Tooltip in five positions: `top` (default), `top-end`, `bottom`, `bottom-end` and `right`
+    (tablet toolbar). Position is a preference (§5, floating elements).
+  - Menu: entries with icon, `tone: 'danger'`, `disabled` with `hint` (remains focusable and says
+    why the entry is unavailable) and `checked` (selection, role `menuitemradio`, `check` on the
+    selected row; focus starts there). Arrow keys move focus, Escape closes. `placement` specifies
+    side and edge: `down-start` (default), `down-end`, `up-start` or `up-end`; this too is a
+    preference (§5, floating elements). Focus moves inside once the menu is placed; Tab closes it
+    and continues at the trigger, preserving the page focus order.
+- **States without content are mandatory:** every list and view has empty, loading (placeholder
+  rows, no spinner over the entire surface) and error with cause and next step. Placeholders are
+  static bars on `surface-soft` in `radius-sm`, without shimmer, carrying `aria-hidden`; a status
+  alongside them serves screen readers („Mails werden geladen …“). Inbox shows six rows with circle
+  and bars, accounts show three cards, the open mail a header with circle and two rows and four bars below.
 
-## 7. Responsive und mobil
+## 7. Responsive and mobile
 
-Handy und Tablet sind keine verkleinerte Desktop-Ansicht; jede neue Ansicht plant sie von
-Anfang an mit.
+Phone and tablet are not scaled-down desktop views; every new view plans for them from the start.
+Quoted German labels in this section are UI text.
 
 ### 7.1 Breakpoints
 
-| Name | Bereich | Ziel |
+| Name | Range | Target |
 |---|---|---|
-| `mobile` | unter 640 px | Handy hochkant |
-| `tablet` | 640–1023 px | Tablet, kleines Fenster, Handy quer |
-| `desktop` | ab 1024 px | Desktop |
-| `wide` | ab 1440 px | breiter Monitor, Inhaltsbreite begrenzt |
+| `mobile` | below 640 px | phone portrait |
+| `tablet` | 640–1023 px | tablet, small window, phone landscape |
+| `desktop` | from 1024 px | desktop |
+| `wide` | from 1440 px | wide monitor, limited content width |
 
-- `wide` hat keine eigene Regel: Nur die Hauptfläche wächst, die Inhalte behalten ihre
-  Höchstbreite. Chat und Composer haben `chat-width` (780 px), der Mailtext 720 px, beide
-  stehen mittig; die Konten sind höchstens 1180 px breit und bündig links; die Mailliste
-  bleibt `list-width`.
-- Quelle der Grenzen ist diese Tabelle. Im Code stehen sie an drei Stellen, die
-  übereinstimmen müssen: `shell/useBreakpoint.tsx` (640, 1024 und 1440 px), die
-  Media-Queries in `ds.css` und `ds-app.css` (`max-width: 639px` und `1023px`,
-  `min-width: 640px`) und die Tailwind-Namen `tablet`, `desktop` und `wide` in `index.css`
-  (40, 64 und 90 rem, bisher ungenutzt). `styles/tokens.test.ts` prüft das.
+- `wide` has no separate rule: only the main surface grows, content retains its maximum width.
+  Chat and composer have `chat-width` (780 px), mail text 720 px, both centered; accounts are
+  at most 1180 px wide and left-aligned; the mail list remains `list-width`.
+- This table is the source of the boundaries. In code they appear in three places that must
+  agree: `shell/useBreakpoint.tsx` (640, 1024 and 1440 px), media queries in `ds.css` and
+  `ds-app.css` (`max-width: 639px` and `1023px`, `min-width: 640px`) and Tailwind names `tablet`,
+  `desktop` and `wide` in `index.css` (40, 64 and 90 rem, unused so far). `styles/tokens.test.ts` checks this.
 
 ### 7.2 Touch
 
-- Bei `pointer: coarse` sind alle Tippziele mindestens **44 × 44 px**, ohne sich zu
-  überlappen. Für die Bausteine Button, IconButton, Senden, Chip, Navigationspunkt,
-  Unterhaltung und Menüeintrag gilt das allgemein (`ds.css`); `ds-app.css` ergänzt nur
-  Ziele, die keine Bausteine sind, etwa Links, Beschriftungen von Auswahlfeldern und die
-  Textarea im Composer.
-- **Nichts nur bei Hover.** Die Aktionsleiste einer Mailzeile erscheint am Desktop beim
-  Hover; auf Touch öffnet ein sichtbarer Button „Weitere Aktionen“ dieselben Aktionen.
-- Der Fokusring bleibt auch mit Touch (Tastatur am Tablet).
+- With `pointer: coarse`, all touch targets are at least **44 × 44 px**, without overlapping.
+  This applies generally to Button, IconButton, send, Chip, navigation item, conversation and
+  menu entry components (`ds.css`); `ds-app.css` adds only targets that are not components,
+  such as links, selection-field labels and the composer textarea.
+- **Nothing hover-only.** A mail row action bar appears on desktop hover; on touch a visible
+  „Weitere Aktionen“ button opens the same actions.
+- The focus ring remains with touch too (keyboard on tablet).
 
-### 7.3 Hülle je Breakpoint
+### 7.3 Shell by breakpoint
 
-- `desktop`: Seitenleiste (`sidebar-width`) und Hauptfläche schweben nebeneinander.
-- `tablet`: Seitenleiste als schmale Symbolleiste mit Tooltips rechts daneben, so breit
-  wie ein Navigationspunkt mit Symbol und `space-3` je Seite. Sie zeigt die Marke ohne Namen,
-  Chat, Posteingang, Konten und „Unterhaltungen“, unten „Darstellung“; die Statuszeile mit
-  dem Stand entfällt. „Unterhaltungen“ öffnet eine Schublade über dem Inhalt. Der Zähler der ungelesenen Mails sitzt als Badge an der
-  oberen rechten Ecke des Posteingangs (ab 1.000 „999+“); der zugängliche Name nennt ihn
+- `desktop`: sidebar (`sidebar-width`) and main surface float side by side.
+- `tablet`: sidebar as a narrow toolbar with tooltips to its right, as wide as a navigation item
+  with icon and `space-3` per side. It shows the mark without name, chat, inbox, accounts and
+  „Unterhaltungen“, with „Darstellung“ below; the status line with sync state is omitted.
+  „Unterhaltungen“ opens a drawer over the content. The unread mail count sits as a badge on the
+  inbox's upper-right corner (from 1,000 „999+“); the accessible name states it
   („Posteingang, 47 ungelesen“).
-- `mobile`: Die Hauptfläche füllt den Bildschirm, ohne Rahmen, Rundung und Schatten.
-  Kopfzeile mit Menü-Button links, Titel und „Neue Unterhaltung“ rechts; in einer geöffneten
-  Mail (`/mail/<id>`) ersetzt sie die Leiste der Mail mit „Zurück“. Das
-  Menü öffnet eine Schublade mit Navigation und Unterhaltungen, mit abgedunkeltem
-  Hintergrund. Keine untere Navigationsleiste: Der Composer gehört an den unteren Rand.
-- Die Schublade ist 308 px breit, höchstens `100vw - 48px`, mit 12 px Innenabstand,
-  rechts 24 px Rundung und `shadow-overlay`; ein Schließen-Button steht in der Markenzeile.
-- Der Composer bleibt unten, mit Abstand `max(12px, env(safe-area-inset-bottom))`.
+- `mobile`: the main surface fills the screen without frame, rounding or shadow. Header with menu
+  button left, title and „Neue Unterhaltung“ right; in an open mail (`/mail/<id>`) it replaces
+  the mail bar with „Zurück“. The menu opens a drawer with navigation and conversations, with
+  dimmed background. No bottom navigation bar: the composer belongs at the bottom edge.
+- The drawer is 308 px wide, at most `100vw - 48px`, with 12 px padding, 24 px rounding on the
+  right and `shadow-overlay`; a close button sits in the brand row.
+- The composer stays at the bottom, with spacing `max(12px, env(safe-area-inset-bottom))`.
 
-### 7.4 Posteingang je Breakpoint
+### 7.4 Inbox by breakpoint
 
-- Aufbau der Liste: Auf `desktop` und `tablet` steht oben eine Leiste mit „Posteingang“,
-  Stand, Auswählen (`list-checks`), Suchen (`search`) und Abrufen (`refresh-cw`). Darunter stehen die Filter-Chips:
-  Konto (Menü mit „Alle Konten“), „Ungelesen“, „Wichtig“ und „Mit Anhang“. Auf `mobile`
-  trägt die Kopfzeile den Titel, und unter den Filtern stehen „47 ungelesen · Stand 08:57“
-  und die drei Buttons. Suchen öffnet ein Feld „In allen Konten suchen …“. Die Liste
-  gruppiert nach Tagen: „Heute“, „Gestern“, „Diese Woche“ (ab Montag) und „Älter“.
-- Der Auswahlmodus ersetzt auf `desktop` und `tablet` die obere Leiste, auf `mobile` die Zeile mit Stand und Buttons. Er zeigt „Auswahl beenden“, die Anzahl, „Alle auswählen“ und Archivieren, Gelesen/Ungelesen, Papierkorb und Spam. Die Leiste darf für sich seitlich scrollen, nicht aber die Seite; auf `mobile` und bei grobem Zeiger sind die Ziele mindestens 44 px groß. Ein Tipp auf die Zeile wählt sie aus; der Avatar wählt auch außerhalb des Modus direkt aus. Mit Maus zeigt er beim Hover ein Auswahlkästchen, Umschalt-Klick wählt den Bereich. „Alle auswählen“ wählt höchstens 100 geladene Mails. Escape beendet die Auswahl. Wischen und Zeilenaktionen sind während der Auswahl ausgeschaltet.
-- `desktop`: Liste (`list-width`) und Lesebereich nebeneinander. Alle Aktionen der Mail
-  stehen in der oberen Leiste des Lesebereichs: Archivieren, Gelesen/Ungelesen, Papierkorb
-  und „Weitere Aktionen“, rechts davon „Im Chat fragen“ und „Antwort entwerfen“ als kleine
-  Buttons (`le-btn--sm`).
-- `tablet` und `mobile`: nur die Liste; eine Mail öffnet als eigene Ansicht mit Zurück.
-  Archivieren, Gelesen/Ungelesen, Papierkorb und „Weitere Aktionen“ stehen in der Leiste am
-  oberen Rand; „Im Chat fragen“ und „Antwort entwerfen“ stehen in einer Leiste am unteren
-  Rand.
-- Auf `mobile` und bei `pointer: coarse` trägt jede Mailzeile einen sichtbaren Button
-  „Weitere Aktionen“; mit Maus erscheint auf `tablet` und `desktop` beim Hover die
-  Aktionsleiste (§7.2). Sie liegt über dem Ende der Textspalte, damit Uhrzeit,
-  Dringend-Punkt und Anhang-Symbol sichtbar bleiben und ihr Tooltip erreichbar ist.
-- Eine Frist steht auf allen Breakpoints als Schild in `warm-soft` unter dem Vorschautext,
-  auf `mobile` neben dem Konto-Tag.
-- Das Menü „Weitere Aktionen“ der geöffneten Mail enthält „Weiterleiten“, „Newsletter
-  abbestellen“, „Als Spam markieren“ und „Original anzeigen“. Die ersten beiden schlagen
-  ihre Aktion im Chat vor (§9.2): „Weiterleiten“ bittet um einen Entwurf, und der Assistent
-  fragt dort nach dem Empfänger; „Newsletter abbestellen“ ist gesperrt, mit Hinweis, wo die
-  Mail keinen Weg zum Abbestellen nennt. „Als Spam markieren“ ist eine Einzelaktion (§9.2):
-  Die Mail verschwindet sofort aus der Liste, und der Hinweis bietet „Rückgängig“.
-  „Original anzeigen“ öffnet einen Dialog mit Kopfzeilen und Quelltext, nur lesend und in
-  der normalen Schrift; er holt beides erst beim Öffnen vom Anbieter und speichert nichts.
-  Er gehört zu seiner Mail: Wechselt die Mail, etwa über „Zurück“ im Browser, schließt er.
-  Bei Konten, die das Original nicht liefern (Connector), ist der Eintrag gesperrt, mit
-  Hinweis. Unter `desktop` hängt das Menü rechtsbündig an seinem Knopf (`down-end`), in der
-  geteilten Ansicht linksbündig (`down-start`); reicht der Platz nicht, rückt es in den
-  Bildschirm (§5, Schwebendes).
-- Filter-Chips stehen auf `mobile` in einer Zeile, die für sich seitlich scrollt; die Seite
-  scrollt nie seitlich.
+- List layout: on `desktop` and `tablet` a top bar contains „Posteingang“, status, select
+  (`list-checks`), search (`search`) and fetch (`refresh-cw`). Below are filter chips: account
+  (menu with „Alle Konten“), „Ungelesen“, „Wichtig“ and „Mit Anhang“. On `mobile` the header
+  carries the title, and below the filters are „47 ungelesen · Stand 08:57“ and the three buttons.
+  Search opens a field „In allen Konten suchen …“. The list groups by day: „Heute“, „Gestern“,
+  „Diese Woche“ (from Monday) and „Älter“.
+- Selection mode replaces the top bar on `desktop` and `tablet`, the status-and-buttons row on
+  `mobile`. It shows „Auswahl beenden“, the count, „Alle auswählen“ and archive, read/unread,
+  trash and spam. The bar may scroll horizontally on its own, but not the page; on `mobile` and
+  with a coarse pointer targets are at least 44 px. Tapping a row selects it; the avatar directly
+  selects even outside the mode. With a mouse it shows a checkbox on hover, shift-click selects the
+  range. „Alle auswählen“ selects at most 100 loaded mails. Escape ends selection. Swiping and row
+  actions are disabled during selection.
+- `desktop`: list (`list-width`) and reading pane side by side. All mail actions are in the top
+  bar of the reading pane: archive, read/unread, trash and „Weitere Aktionen“, with „Im Chat fragen“
+  and „Antwort entwerfen“ as small buttons (`le-btn--sm`) to the right.
+- `tablet` and `mobile`: list only; a mail opens as its own view with back. Archive, read/unread,
+  trash and „Weitere Aktionen“ are in the top bar; „Im Chat fragen“ and „Antwort entwerfen“ are in
+  a bar at the bottom.
+- On `mobile` and with `pointer: coarse`, every mail row has a visible „Weitere Aktionen“ button;
+  with a mouse the action bar appears on hover on `tablet` and `desktop` (§7.2). It sits over the
+  end of the text column so the time, urgency dot and attachment icon remain visible and their
+  tooltip reachable.
+- At all breakpoints a deadline appears as a badge in `warm-soft` below the snippet, on `mobile`
+  beside the account tag.
+- The opened mail's „Weitere Aktionen“ menu contains „Weiterleiten“, „Newsletter abbestellen“,
+  „Als Spam markieren“ and „Original anzeigen“. The first two propose their action in chat (§9.2):
+  „Weiterleiten“ asks for a draft and the assistant asks for the recipient there; „Newsletter
+  abbestellen“ is disabled with a notice where the mail names no unsubscribe method. „Als Spam
+  markieren“ is an individual action (§9.2): the mail immediately disappears from the list and the
+  notice offers „Rückgängig“. „Original anzeigen“ opens a dialog with headers and source, read-only
+  and in the normal font; it fetches both from the provider only on opening and stores nothing.
+  It belongs to its mail: when the mail changes, e.g. through „Zurück“ in the browser, it closes.
+  For accounts that do not supply the original (connector), the entry is disabled with a notice.
+  On `desktop` the menu is right-aligned to its button (`down-end`), in the split view left-aligned
+  (`down-start`); if space is insufficient it shifts onto the screen (§5, floating elements).
+- On `mobile` filter chips sit in one independently horizontally scrolling row; the page never
+  scrolls horizontally.
 
-### 7.5 Formulare und Container
+### 7.5 Forms and containers
 
-- Felder füllen in Formularen die volle Breite.
-- Kinder in Flex- und Grid-Containern, die wachsen (Text, Felder), tragen `min-width: 0`.
-- Lange Werte (Betreff, Adresse, Kontoname) enden mit Auslassung, der volle Text steht im
-  zugänglichen Namen oder Tooltip.
+- Fields fill the full width in forms.
+- Children in flex and grid containers that grow (text, fields) carry `min-width: 0`.
+- Long values (subject, address, account name) end with an ellipsis; full text is in the
+  accessible name or tooltip.
 
-## 8. Barrierefreiheit
+### 7.6 Calendar by breakpoint
 
-- Kontrast wie in §3, in beiden Themes.
-- **Tastatur zuerst:** sichtbarer Fokusring (2 px `focus-ring`, 2 px Abstand) auf
-  `:focus-visible`, ohne Ausnahme für Felder: Das Eingabefeld zeigt ihn selbst (dazu den
-  Rand in `accent`), der Composer als Ganzes, sobald sein Textfeld den Fokus hat; einen
-  eigenen Schein statt des Rings gibt es nicht. Logische Reihenfolge, Escape schließt Menüs und Schubladen, der Fokus
-  bleibt in offenen Schubladen und Dialogen und kehrt danach an den Auslöser zurück.
-- **Tastenkürzel im Posteingang**, nur auf `desktop` und `wide`, nicht in Feldern und
-  Menüs und nie, solange ein Dialog offen ist (auch wenn der Fokus gerade nicht in ihm
-  liegt): j und k nächste und vorige Mail, Enter öffnen, e archivieren, u
-  gelesen/ungelesen, Entf oder # in den Papierkorb. Tooltips nennen das Kürzel in Klammern,
-  für den Papierkorb „Entf“.
-- Symbol-Buttons tragen `aria-label`. Tooltips sind `role="tooltip"` und hängen über
-  `aria-describedby` am Element.
-- Status nie nur über Farbe: Dringlichkeit hat Punkt **und** Text oder Tooltip, Fehler ein
-  Symbol und einen Satz.
-- Gestreamte Antworten: `aria-live="polite"` auf dem Antwortbereich, angesagt wird erst die
-  fertige Antwort, nicht jedes Zeichen.
-- `prefers-reduced-motion` wie in §5.
+- Toolbar: „Heute“, previous and next as icon buttons, the period as title, „Neuer Termin“ (only
+  with a writable calendar), the view switch „Monat | Woche | Tag | Liste“ as a segmented control
+  with `aria-pressed`, and „Abrufen“. The toolbar wraps; the title never runs under the buttons.
+  Below it the calendars as toggles with a coloured dot and the name. Colours repeat from the fifth
+  calendar, so the name identifies it. Calendar notices collapse into one line „Kalenderstand
+  anzeigen“. In „Liste“ the toolbar keeps only „Neuer Termin“ and the view switch: the list has its
+  own range with „Heute“, „Von“, „Bis“ and „Abrufen“, and scrolls inside the page.
+- `desktop` and `tablet` open in week, `mobile` in day with a seven-day strip on top. Week and day:
+  an all-day row, then an hour grid in its own scroll area, scrolled to 07:00 or to the hour before
+  now; a now-line in today's column; overlapping appointments share the column width. The gutter
+  label carries a soft hyphen („Ganz-tägig“), because browsers may lack German hyphenation. Month:
+  six weeks from Monday, up to three entries per day and „+N weitere“, which opens that day; days
+  outside the month are dimmed. With `pointer: coarse` a week grows with its 44 px entries and the
+  month scrolls instead of letting targets overlap. On `mobile` the month shows dots and the
+  selected day's appointments below.
+- An appointment opens its detail: on `desktop` as a panel beside the grid, like the reading pane;
+  on `tablet` and `mobile` as its own view with „Zum Kalender“. The detail shows the live state with
+  „Bearbeiten“ and „Löschen“, or „Nur lesbar“ with the reason and „In Google Kalender öffnen“.
+- Creating and editing use one dialog. While Google's answer is open it says „Wird geprüft …“ and
+  offers „Prüfen“; a conflict shows the current values with „Übernehmen und neu bearbeiten“;
+  „Erneut versuchen“ appears only after a definite failure. Deleting asks in a dialog and says
+  that it cannot be guaranteed to be undone. A change whose result is still open stays as a notice
+  with „Prüfen“ after its dialog closes; until then no new appointment, or no further change to
+  that appointment, can start.
+- Every appointment is a link whose accessible name holds title, day, time and calendar. With
+  `pointer: coarse` targets are at least 44 px; nothing is hover-only.
+
+## 8. Accessibility
+
+The quoted key label is UI text.
+
+- Contrast as in §3, in both themes.
+- **Keyboard first:** visible focus ring (2 px `focus-ring`, 2 px offset) on `:focus-visible`,
+  without exception for fields: the input shows it itself (plus `accent` border), the composer
+  as a whole as soon as its text field has focus; there is no separate glow instead of the ring.
+  Logical order, Escape closes menus and drawers, focus stays in open drawers and dialogs and
+  returns to the trigger afterwards.
+- **Inbox keyboard shortcuts**, only on `desktop` and `wide`, not in fields and menus and never
+  while a dialog is open (even if focus is not currently inside it): j and k next and previous
+  mail, Enter open, e archive, u read/unread, Entf or # trash. Tooltips name the shortcut in
+  parentheses, „Entf“ for trash.
+- Icon buttons carry `aria-label`. Tooltips are `role="tooltip"` and attached to the element via
+  `aria-describedby`.
+- Never status by color alone: urgency has a dot **and** text or tooltip, errors an icon and sentence.
+- Streamed answers: `aria-live="polite"` on the answer area; only the finished answer is announced,
+  not each character.
+- `prefers-reduced-motion` as in §5.
 
 ## 9. Chat
 
-### 9.1 Ablauf einer Antwort
+Quoted German labels and examples in this section are UI text.
 
-1. Die Bitte erscheint rechts als Blase in `accent`.
-2. Darunter zeigt `le-working` mit drei Punkten, was der Assistent gerade tut
-   („Durchsuche 4 Konten …“).
-3. Der Text läuft gleichmäßig ein (gepuffert, etwa drei Zeichen je 24 ms, nie ganze
-   Absätze auf einmal), am Ende pulsiert ein Punkt in `accent`.
-4. Mail-Karten und Bestätigungskarten erscheinen erst, wenn ihr Inhalt vollständig ist.
-   Eine Mail-Karte zeigt Absender, Konto und Uhrzeit, darunter den Betreff und eine Zeile
-   Vorschautext in `small` und `ink-muted`, die mit Auslassung endet.
-5. Danach bis zu drei Folgevorschläge als Chips.
+### 9.1 Flow of an answer
 
-Während der Antwort wird Senden zu Anhalten. Eine angehaltene Antwort bleibt stehen und
-bekommt den Hinweis „Angehalten – die Antwort ist unvollständig.“ Die Liste scrollt nur mit,
-solange du unten bist, also höchstens 48 px vom Ende entfernt; scrollst du weiter hoch,
-bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
+1. The request appears on the right as a bubble in `accent`.
+2. Below, `le-working` with three dots shows what the assistant is doing („Durchsuche 4 Konten …“).
+3. Text streams in evenly (buffered, about three characters per 24 ms, never whole paragraphs at
+   once), with a pulsing `accent` dot at the end.
+4. Mail cards and confirmation cards appear only once their content is complete. A mail card shows
+   sender, account and time, followed by subject and one line of preview text in `small` and
+   `ink-muted`, ending in an ellipsis.
+5. Then up to three follow-up suggestions as chips.
 
-### 9.2 Vorschlagen und bestätigen
+During the answer, send becomes stop. A stopped answer remains and gets the notice „Angehalten –
+die Antwort ist unvollständig.“ The list follows only while you are at the bottom, at most 48 px
+from the end; if you scroll further up it stays still and a „Zum Ende“ button appears.
 
-- Der Assistent darf suchen, lesen und zusammenfassen. Alles, was Mails verändert oder etwas
-  verschickt (senden, antworten, weiterleiten, abbestellen, archivieren, in den Papierkorb
-  legen), schlägt er in einer **Bestätigungskarte** vor. Erst ein Klick führt es aus.
-- Die Karte nennt Zahl und Gegenstand, begründet in einem Satz, wählt alles vor und lässt
-  einzelne Einträge abwählen. Unumkehrbares steht als Satz in der Karte, nicht nur im
-  Tooltip.
-- Nach dem Klick ersetzt ein Hinweis die Karte, mit Ergebnis und „Rückgängig“, wo es geht.
-  Nie automatisch bestätigen, nie zwei offene Karten gleichzeitig.
-- **Selbst ausgelöste Aktionen im Posteingang** auf einer Mail oder mehreren ausgewählten Mails wirken sofort und zeigen danach 10 Sekunden lang einen Hinweis mit einem gemeinsamen „Rückgängig“. Vorschläge des Assistenten laufen weiterhin über die Bestätigungskarte.
+### 9.2 Propose and confirm
 
-### 9.3 Herkunft und Inhalte aus Mails
+- The assistant may search, read and summarize. Everything that changes mail or sends something
+  (send, reply, forward, unsubscribe, archive, move to trash) it proposes in a **confirmation card**.
+  Only a click executes it.
+- The card names count and object, gives a one-sentence reason, preselects everything and lets
+  individual entries be deselected. Irreversible consequences are a sentence in the card, not only
+  in the tooltip.
+- After the click a notice replaces the card, with result and „Rückgängig“ where possible. Never
+  confirm automatically, never two open cards at once.
+- **Calendar card:** „Termin anlegen“, „Termin ändern“ or „Termin löschen“ with the calendar,
+  the reason, „Bisher“ and „Vorschlag“ side by side (one column on `mobile`) and the time zone.
+  The card states that a concurrent change in Google can be overwritten. There is no „Rückgängig“;
+  an open result offers „Prüfen“, and a changed appointment asks for a new proposal.
+- **Actions initiated by the user in the inbox** on one mail or multiple selected mails take effect
+  immediately and then show a notice for 10 seconds with a shared „Rückgängig“. Assistant proposals
+  continue through the confirmation card.
 
-- Antworten des Assistenten tragen seine Marke (`le-ai-mark`) und das gewählte Modell.
-  Was er vorschlägt (Entwürfe, Auswahl in Karten), ist als Vorschlag erkennbar, bis du es
-  bestätigst.
-- Antworten sind sicheres Markdown ohne rohes HTML; Links nur `http`, `https` und
-  `mailto`, extern in neuem Tab mit `rel="noopener noreferrer"`.
-- Inhalte aus Mails sind fremde Daten. Sie erscheinen als Text, nie als ausgeführtes HTML,
-  und Anweisungen darin ändern nichts am Ablauf aus §9.2.
+### 9.3 Provenance and content from mail
 
-### 9.4 Mails lesen
+- Assistant answers carry its mark (`le-ai-mark`) and selected model. What it proposes (drafts,
+  selections in cards) is recognizable as a proposal until you confirm it.
+- Answers are safe Markdown without raw HTML; links only `http`, `https` and `mailto`, external
+  ones in a new tab with `rel="noopener noreferrer"`.
+- Mail content is foreign data. It appears as text, never executed HTML, and instructions in it
+  do not change the flow from §9.2.
 
-- Jede geöffnete Mail beginnt mit dem Kasten **„Kurz gefasst“** vom Assistenten
-  (`surface-soft`, Marke `le-ai-mark`): höchstens drei Punkte, eine Frist als Schild in
-  `warm-soft` mit `clock`. Darunter bis zu zwei Folgevorschläge als Chips.
-- Es gibt kein direktes „Antworten“. Die Hauptaktion heißt „Antwort entwerfen“: Der Entwurf
-  entsteht im Chat und geht erst nach Bestätigung raus (§9.2). Daneben steht „Im Chat
-  fragen“, das den Chat mit dieser Mail als Bezug öffnet.
-- Der Mailtext erscheint als Text (§9.3), Anhänge als Chip mit Name und Größe.
+### 9.4 Reading mail
 
-### 9.5 Zustände
+- Every open mail starts with the assistant's **„Kurz gefasst“** box (`surface-soft`, mark
+  `le-ai-mark`): at most three points, a deadline as a `warm-soft` badge with `clock`. Below it,
+  up to two follow-up suggestions as chips.
+- There is no direct „Antworten“. The primary action is „Antwort entwerfen“: the draft is created
+  in chat and sent only after confirmation (§9.2). Beside it is „Im Chat fragen“, opening chat with
+  this mail as context.
+- Mail body appears as text (§9.3), attachments as chips with name and size.
 
-- **Leer:** Begrüßung, Stand und Schnellaktionen (Startseite).
-- **Laden:** `le-working` mit Satz.
-- **Fehler** mit eigener Ursache und eigenem nächsten Schritt, etwa: Modell nicht
-  erreichbar („Das Modell antwortet gerade nicht. Versuch es gleich noch mal.“), Abbruch
-  mitten in der Antwort („Die Antwort ist abgebrochen.“ mit Button „Noch mal versuchen“),
-  Konto nicht erreichbar (Hinweis nennt das Konto, die übrigen Konten arbeiten weiter).
+### 9.5 States
 
-### 9.6 Kopf, Composer und Mailbezug
+- **Empty:** greeting, status and quick actions (home page).
+- **Loading:** `le-working` with sentence.
+- **Error** with its own cause and next step, e.g. model unreachable („Das Modell antwortet gerade
+  nicht. Versuch es gleich noch mal.“), interruption mid-answer („Die Antwort ist abgebrochen.“ with
+  button „Noch mal versuchen“), account unreachable (notice names the account; other accounts continue).
 
-- **Kopf:** Auf `desktop` und `tablet` steht über dem Verlauf eine Leiste mit „Chat“ und, in
-  einer Unterhaltung, „/ Titel“. Ein langer Titel endet mit Auslassung, der volle steht im
-  Tooltip. Rechts stehen das Modellmenü und „Neue Unterhaltung“ (`plus`). Auf `mobile`
-  tragen die Kopfzeile (§7.3) Titel und Plus; darunter stehen Modellmenü und Vorlagen-Chip.
-- **Modellmenü:** ein Chip mit dem Namen des Modells und `chevron-down`, Tooltip „Modell
-  für diese Unterhaltung wählen“. Die Einträge zeigen „Name · Beschreibung“. In einer
-  Unterhaltung wird die Wahl gespeichert und gilt für ihre nächsten Antworten, auf der
-  Startseite für die erste Bitte.
-- **Composer:** Das Textfeld wächst bis 200 px Höhe. Enter sendet, Umschalt+Enter beginnt
-  eine neue Zeile. Der Konto-Chip links unten („Alle Konten“ oder der Name eines Kontos)
-  legt fest, in welchen Konten der Assistent sucht.
-  Daneben legt der Aufgaben-Chip fest, welche Aufgaben der Assistent lesen darf (Vorgabe
-  „Keine Aufgaben“). Sein Menü zeigt die Wahl als Einfachauswahl mit Hinweiszeilen; in einer
-  Unterhaltung mit Verlauf steht bei den anderen Einträgen „Braucht eine neue Unterhaltung.“
-  Die Leiste bricht um, der Senden-Button bleibt am Ende. Auswahlen gehören als Chip in diese
-  Leiste, nicht als Chipgruppe über den Composer: Auf kleinen Telefonen schiebt eine solche
-  Gruppe den Composer aus dem Bild.
-- **Mailbezug:** „Im Chat fragen“ öffnet die Startseite mit der Mail als Bezug. Über dem
-  Composer steht dann ihre Mail-Karte mit dem Symbol-Button „Bezug entfernen“ (`x`).
+### 9.6 Header, composer and mail context
 
-### 9.7 Vorlagen und Einstellungen
+- **Header:** on `desktop` and `tablet` a bar above history shows „Chat“ and, in a conversation,
+  „/ Titel“. A long title ends in an ellipsis, the full title is in the tooltip. On the right are
+  the model menu and „Neue Unterhaltung“ (`plus`). On `mobile` the header (§7.3) carries title and
+  plus; below are model menu and template chip.
+- **Model menu:** a chip with model name and `chevron-down`, tooltip „Modell für diese Unterhaltung
+  wählen“. Entries show „Name · Beschreibung“. In a conversation the selection is saved and applies
+  to its next answers, on the home page to the first request.
+- **Composer:** the text field grows to 200 px high. Enter sends, Shift+Enter starts a new line.
+  The account chip bottom left („Alle Konten“ or an account name) determines which accounts the
+  assistant searches. Beside it the task chip determines which tasks the assistant may read
+  (default „Keine Aufgaben“). Its menu shows single selection with explanatory lines; in a
+  conversation with history the other entries say „Braucht eine neue Unterhaltung.“ The bar wraps,
+  the send button stays at the end. Selections belong as chips in this bar, not a chip group above
+  the composer: on small phones such a group pushes the composer off screen.
+- **Mail context:** „Im Chat fragen“ opens the home page with the mail as context. Above the composer
+  its mail card then appears with the icon button „Bezug entfernen“ (`x`).
 
-- „Einstellungen“ ist in Seitenleiste, Symbolleiste und mobiler Schublade erreichbar.
-  `/settings` zeigt die Vorlagenbibliothek, ebenso `/settings/prompts`. Weitere fertige
-  Bereiche können in `settingsSections` ergänzt werden; es gibt keine leeren Zielseiten.
-  Der aktuelle Bereich ist in der Abschnittsnavigation wie der aktuelle Eintrag der
-  Seitenleiste markiert.
-- Die Bibliothek zeigt Name, Kurzvorschau, Version und, sofern bekannt, das Änderungsdatum. Anlegen und Bearbeiten öffnen eigene
-  Ansichten (`/settings/prompts/new`, `/settings/prompts/$promptId`), auch am Desktop.
-- Name und Anweisungen nutzen TextField mit Zählern (80 bzw. 8.000 Zeichen). Speichern
-  geschieht ausdrücklich; Fehler erhalten Eingaben. Ein Versionskonflikt bietet die
-  aktuelle Fassung an, ohne selbst zu überschreiben. Löschen braucht einen Dialog mit
-  Fokusführung und nennt die Folgen einschließlich gespeicherter Versionen.
-- Im Chat steht der Vorlagen-Chip beim Modell, getrennt vom Konto im Composer. Die
-  Kontrollzeile bricht um. Das Menü zeigt den vollständigen Anweisungstext; die Wahl
-  bestehender Unterhaltungen wird erst nach der Serverantwort aktiv. Ältere angeheftete
-  Versionen bieten „Version übernehmen“. Während einer Antwort ist die Wahl gesperrt.
-- Bei einem abgelehnten Kontowechsel führt „Neue Unterhaltung“ ohne bisherigen Verlauf
-  zur Startseite. Kontoauswahl und noch nicht angenommener Composertext bleiben erhalten.
+### 9.7 Templates and settings
 
-### 9.8 Präferenzen
+- „Einstellungen“ is accessible in sidebar, toolbar and mobile drawer. `/settings` shows the template
+  library, as does `/settings/prompts`. Further completed areas can be added to `settingsSections`;
+  there are no empty landing pages. The current area is marked in section navigation like the current
+  sidebar entry.
+- The library shows name, short preview, version and, if known, modification date. Create and edit
+  open separate views (`/settings/prompts/new`, `/settings/prompts/$promptId`), including on desktop.
+- Name and instructions use TextField with counters (80 and 8,000 characters respectively). Saving
+  is explicit; errors preserve inputs. A version conflict offers the current version without itself
+  overwriting. Deletion requires a dialog with focus management and names consequences including
+  stored versions.
+- In chat the template chip is by the model, separate from the account in the composer. The control
+  row wraps. The menu shows full instruction text; selection in existing conversations becomes active
+  only after the server response. Older pinned versions offer „Version übernehmen“. Selection is
+  disabled during an answer.
+- On a rejected account switch, „Neue Unterhaltung“ leads to the home page without prior history.
+  Account selection and not-yet-accepted composer text remain.
 
-- `/settings/preferences` ergänzt die Abschnittsnavigation. Anlegen und Bearbeiten öffnen
-  eigene Ansichten auf allen Bildschirmgrößen; Controls, Abstände und Dialoge folgen den Vorlagen.
-- Manuelles Speichern bestätigt nur den Wert. Bei ausgeschalteter Verwendung steht
-  „Gespeichert. Verwendung ist ausgeschaltet.“ mit „Verwendung einschalten“. Erst dessen Dialog
-  bestätigt: „Passende Präferenzen werden für Antworten an Mistral übermittelt.“
-- Die ausdrücklich abgestimmte Aktion heißt „Präferenz hinzufügen“; das ist keine Ausnahme
-  für das Verbinden von Konten. Leere Listen nennen keine Prozentwerte. Quelle manueller Werte:
-  „Von dir eingetragen“. Feld und Geltungsbereich sind Chips mit sichtbarer Beschriftung darüber.
-  Bestätigte Chatwerte tragen „Von dir im Chat bestätigt“. Unter „Vorschläge“ stehen offene
-  Merke-dir-Kandidaten und eingeschaltete Vorschläge aus neuen eigenen Nachrichten,
-  noch keine aktiven Präferenzen. „Vorschlag prüfen“ öffnet eine Karte
-  nur bei freiem Platz in der Unterhaltung; sonst erklärt ein Hinweis die offene Karte.
-  Eine bereits zugehörige Karte wird mit „Karte öffnen“ verlinkt, niemals dupliziert.
-  „Aus meinen Nachrichten Vorschläge machen“ schaltet automatische Vorschläge unabhängig
-  von der Verwendung ein oder aus. Daneben steht vor dem Einschalten: Ausgewählte neue
-  eigene Nachrichten werden an Mistral übermittelt und bleiben nicht nur in der App-Datenbank.
-  Frühere Nachrichten werden nicht nachgeholt. Der Zustand steht auch als Text da.
-  Automatische Vorschläge tragen „Aus deinem Chatbeitrag vorgeschlagen“, öffnen nie selbst
-  eine Karte und wirken erst nach Bestätigung und gesondertem Einschalten der Verwendung.
-- Präferenzkarten laden den Wert über ihre Kandidatenreferenz. Sie zeigen Feld, Konto und
-  „Bisher“/„Vorschlag“, auf dem Handy untereinander. „Deine Bitte“ lässt sich aufklappen.
-  Bei bestehendem Wert entscheiden „Ersetzen“ und „Bisherige behalten“; „Abbrechen“ verwirft
-  den Kandidaten ohne Änderung der Präferenz. Gleiche Werte erklären ausdrücklich den No-op.
-  Bestätigen ändert den Nutzungsschalter nie; bei ausgeschalteter Verwendung steht nachher
-  „Gespeichert. Verwendung ist ausgeschaltet.“ Der Fokus geht auf das Ergebnis.
-- Ein Versionskonflikt zeigt „Inzwischen gespeichert“ und sperrt die Entscheidung, bis
-  „Aktuellen Stand prüfen“ die neue Vergleichsfassung lädt. Es gibt keinen automatischen
-  Bestätigungsversuch. Danach liegt der Fokus auf der Kartenüberschrift. Entfernte Konten,
-  Quellen oder Präferenzen zeigen keine Wertkopien und keine Bestätigungsaktion mehr.
-  Laden, Fehler mit Wiederholen und eine leere Vorschlagsliste haben eigene Zustände.
-- Löschen erklärt, dass Chatnachrichten und Antworten bleiben und bereits übermittelte Anfragen
-  nicht zurückholbar sind. Es verspricht weder Löschung beim Anbieter noch aus Backups und bietet
-  einen neuen Chat ohne bisherigen Kontext. Fokus bleibt im Dialog und kehrt beim Schließen zurück.
-- „N Präferenzen verwendet“ an einer Antwort öffnet deren gespeicherte Revisionen, keine aktuellen
-  Ersatzwerte. Entfernte Revisionen zeigen „Präferenz entfernt“. Antworten ohne verwendete
-  Präferenzen zeigen nichts, auch bei ausgeschalteter Verwendung; ein Hinweis unter jeder Antwort
-  wäre Rauschen. Ein Ladefehler bietet ausdrücklich „Ohne Präferenzen fortfahren“.
+### 9.8 Preferences
 
-## 10. Erweitern und pflegen
+- `/settings/preferences` extends section navigation. Create and edit open separate views at all
+  screen sizes; controls, spacing and dialogs follow templates.
+- Manual saving confirms only the value. When usage is off, show „Gespeichert. Verwendung ist
+  ausgeschaltet.“ with „Verwendung einschalten“. Only its dialog confirms: „Passende Präferenzen
+  werden für Antworten an Mistral übermittelt.“
+- The explicitly agreed action is called „Präferenz hinzufügen“; this is not an exception for
+  connecting accounts. Empty lists do not name percentages. Source of manual values: „Von dir
+  eingetragen“. Field and scope are chips with visible labels above. Confirmed chat values carry
+  „Von dir im Chat bestätigt“. Under „Vorschläge“ are open remember candidates and enabled
+  suggestions from new own messages, not yet active preferences. „Vorschlag prüfen“ opens a card
+  only when the conversation slot is free; otherwise a notice explains the open card. An already
+  associated card is linked with „Karte öffnen“, never duplicated. „Aus meinen Nachrichten
+  Vorschläge machen“ turns automatic suggestions on or off independently of usage. Beside it,
+  before enabling, state: selected new own messages are transmitted to Mistral and do not remain
+  only in the app database. Earlier messages are not backfilled. State is also shown as text.
+  Automatic suggestions carry „Aus deinem Chatbeitrag vorgeschlagen“, never open a card themselves
+  and take effect only after confirmation and separately enabling usage.
+- Preference cards load the value via their candidate reference. They show field, account and
+  „Bisher“/„Vorschlag“, stacked on mobile. „Deine Bitte“ can be expanded. For an existing value,
+  „Ersetzen“ and „Bisherige behalten“ decide; „Abbrechen“ discards the candidate without changing
+  the preference. Equal values explicitly explain the no-op. Confirmation never changes the usage
+  toggle; when usage is off, afterwards show „Gespeichert. Verwendung ist ausgeschaltet.“ Focus
+  moves to the result.
+- A version conflict shows „Inzwischen gespeichert“ and blocks the decision until „Aktuellen Stand
+  prüfen“ loads the new comparison version. There is no automatic confirmation attempt. Afterwards
+  focus is on the card heading. Removed accounts, sources or preferences no longer show value copies
+  or confirmation actions. Loading, error with retry and an empty suggestion list have separate states.
+- Deletion explains that chat messages and answers remain and already transmitted requests cannot
+  be recalled. It promises neither deletion at the provider nor from backups and offers a new chat
+  without prior context. Focus stays in the dialog and returns on closing.
+- „N Präferenzen verwendet“ on an answer opens its stored revisions, not current replacement values.
+  Removed revisions show „Präferenz entfernt“. Answers without used preferences show nothing, even
+  when usage is off; a notice under every answer would be noise. A load error explicitly offers
+  „Ohne Präferenzen fortfahren“.
 
-- Neue Bausteine erst aus vorhandenen zusammensetzen; Tokens nie umgehen.
-- Eine Änderung an Werten oder Bausteinen wird an drei Stellen gemeinsam nachgezogen:
-  Tokens bzw. `src/ds/`, DESIGN.md und das Design-System in Claude Design.
-- Neue Ansichten planen §7 von Anfang an mit (Touch, Schublade, eigene Ansicht statt
-  Lesebereich).
-- Neue Texte gehen durch die Prüfliste in §2.7.
+## 10. Extending and maintaining
+
+- Compose new components from existing ones first; never bypass tokens.
+- A change to values or components is propagated together in three places: tokens or `src/ds/`,
+  DESIGN.md and the design system in Claude Design.
+- New views plan for §7 from the start (touch, drawer, separate view instead of reading pane).
+- New text goes through the checklist in §2.7.
 
 ---
 
-## Abweichungen von der Vorlage
+## Differences from the source
 
-DESIGN.md folgt dem Aufbau und den Regeln einer älteren Design-Vorgabe des Owners. Bewusst anders:
+DESIGN.md follows the structure and rules of an older design brief from the owner. Deliberately different:
 
-- **Ich-Form des Assistenten** ist erlaubt (Owner-Beispiel 2026-11-13); die Vorlage
-  verbietet sie. Floskeln und Gefühle bleiben verboten (§2.2).
-- **Weiche Form:** Pillen-Buttons, Radien bis 24 px, farbige Blase für eigene Nachrichten
-  und Schatten für schwebende Flächen; die Vorlage ist flacher und trennt ohne Schatten.
-- **Keine Mono-Schrift:** Zahlen sind tabellarisch statt in einer zweiten Familie.
-- **Deutsch als einzige Sprache der Oberfläche**; es gibt keine englische Fassung.
+- **Assistant first person** is allowed (owner example 2026-11-13); the source forbids it.
+  Clichés and feelings remain forbidden (§2.2).
+- **Soft shape:** pill buttons, radii up to 24 px, colored bubble for own messages and shadows for
+  floating surfaces; the source is flatter and separates without shadows.
+- **No monospace font:** numbers are tabular rather than in a second family.
+- **German as the only UI language**; there is no English version.
 
-## Entschieden (2026-11-13, Owner)
+## Decided (2026-11-13, owner)
 
-1. **Neues Design-System**, Stilrichtung C „Weich“; ein bestehendes Design-System wird nicht übernommen.
-2. **Startseite ist der Chat** mit Schnellaktionen: Ungelesenes zusammenfassen,
-   Priorisieren, Newsletter aufräumen, Heute fällig.
-3. **Vorschlagen und mit einem Klick bestätigen**, nichts ohne Bestätigung (§9.2). Regeln,
-   die ohne Rückfrage handeln, sind später gesondert zu entscheiden.
-4. **Gestaltung:** aufgeräumt, Buttons klar erkennbar und mit Tooltip, saubere Navigation,
-   fließende Übergänge, sauberes Streaming im Chat.
-5. **Texte** klingen wie auf Deutsch geschrieben (§2), Maßstab „Hallo, was kann ich für dich
-   tun?“.
-6. **Design-System „liam-e“** abgenommen, mit dunklem Theme nach Systemeinstellung und
-   sofort wirkenden Einzelaktionen mit „Rückgängig“.
-7. **Mobile Hülle** mit Kopfzeile und Schublade statt unterer Navigationsleiste (§7.3).
-8. **Schrift selbst gehostet** über Fontsource, keine Übertragung an Google (§4).
-9. **Textkatalog** `apps/web/src/i18n/de.ts` für alle Texte der Oberfläche (§2.8).
-10. **Screens abgenommen** auf dem Design-Canvas „liam-e Oberfläche“, Seite „Screens“
-    (Artefakt des Owners, nicht öffentlich): Chat-Start, Antwort mit
-    Streaming, Vorschlag bestätigen, Posteingang, Konten, dazu Handy mit Chat, Schublade,
-    Posteingang und Mail. Darin entschieden: „Kurz gefasst“ über jeder Mail, kein direktes
-    Antworten (§9.4), Einzelaktionen sofort mit „Rückgängig“ (§9.2), Aktionsleisten am
-    Handy (§7.4).
+Quoted German labels in this section are UI text.
 
-## Entschieden (2026-11-14, Owner)
+1. **New design system**, style direction C „Weich“; no existing design system is adopted.
+2. **Home page is chat** with the quick actions „Ungelesenes zusammenfassen“, „Priorisieren“,
+   „Newsletter aufräumen“ and „Heute fällig“.
+3. **Propose and confirm with one click**, nothing without confirmation (§9.2). Rules that act
+   without asking are to be decided separately later.
+4. **Design:** tidy, clearly recognizable buttons with tooltips, clean navigation, fluid transitions,
+   clean streaming in chat.
+5. **Text** sounds as though written in German (§2), benchmark „Hallo, was kann ich für dich tun?“.
+6. **Design system „liam-e“** approved, with dark theme following system settings and immediate
+   individual actions with „Rückgängig“.
+7. **Mobile shell** with header and drawer instead of bottom navigation bar (§7.3).
+8. **Font self-hosted** via Fontsource, no transmission to Google (§4).
+9. **Text catalogue** `apps/web/src/i18n/de.ts` for all UI text (§2.8).
+10. **Screens approved** on the design canvas „liam-e Oberfläche“, page „Screens“ (owner artifact,
+    not public): chat start, answer with streaming, confirm proposal, inbox, accounts, plus phone with
+    chat, drawer, inbox and mail. Decisions there: „Kurz gefasst“ above every mail, no direct reply
+    (§9.4), immediate individual actions with „Rückgängig“ (§9.2), mobile action bars (§7.4).
 
-1. **Handy randlos:** Unter 640 px füllt die Hauptfläche den Bildschirm, ohne Rahmen,
-   Rundung und Schatten. Ab 640 px schwebt sie wie bisher (§7.3).
-2. **Vier Details aus den Screens übernommen:** Dringlichkeitspunkt in `warm` in der
-   Mailzeile mit Tooltip; Symbole in Buttons mit Text 16 px, in Symbol-Buttons 19 px;
-   eine Zeile Vorschautext auf der Mailkarte im Chat; 20 px Innenabstand im Panel
-   „Konto verbinden“.
-3. **Ungelesen-Zähler** am Posteingang auch in der schmalen Symbolleiste am Tablet.
-4. **Weitere Einträge im Menü „Weitere Aktionen“** der geöffneten Mail: „Weiterleiten“
-   (als Vorschlag über den Chat), „Als Spam markieren“ (Einzelaktion mit „Rückgängig“, eine
-   weitere Art am Aktions-Endpunkt) und „Original anzeigen“ (Kopfzeilen und Quelltext, nur
-   lesend, eigener Endpunkt). Umgesetzt, siehe §7.4.
-5. **Outlook:** Der Connector wird erneut geprobt, nur lesend, sobald die App in Studio
-   ihren `MISTRAL_API_KEY` hat. Eigenes Microsoft-Login wird erst geplant, wenn er weiter
-   scheitert.
-6. **Gmail-Probe** (Antworten über den Connector, To und Cc) macht der Owner selbst.
-7. **CI:** Ein GitHub-Workflow führt die bisher nur lokalen Prüfungen aus.
-8. **Design-System „liam-e“** in Claude Design wird nach DESIGN.md und Code nachgeführt
-   (§10).
-9. **Theme-Schalter** Hell, Dunkel, System, im Browser gespeichert, unten in der
-   Seitenleiste neben der Statuszeile (§3).
-10. **Fokus:** Eingabefeld und Composer zeigen den Fokusring aus §8 wie alle anderen
-    Bedienelemente.
-11. **Freie Werte aufgeräumt:** Schriftgrößen nur über Tokens, Abstände auf dem
-    4-px-Raster (§4, §5).
+## Decided (2026-11-14, owner)
 
-## Entschieden (2026-11-18, Owner)
+Quoted German labels in this section are UI text.
 
-1. **Mehrere Mails im Posteingang auswählen und sofort bearbeiten:** eine gemeinsame Rücknahme ohne Bestätigungsdialog; Vorschläge des Assistenten bleiben bestätigungspflichtig (§7.4, §9.2).
+1. **Borderless phone:** below 640 px the main surface fills the screen without frame, rounding or
+   shadow. From 640 px it floats as before (§7.3).
+2. **Four details adopted from the screens:** urgency dot in `warm` in the mail row with tooltip;
+   icons in buttons with text 16 px, in icon buttons 19 px; one line of preview text on the chat
+   mail card; 20 px padding in the „Konto verbinden“ panel.
+3. **Unread count** on inbox also in the narrow tablet toolbar.
+4. **More entries in the open mail's „Weitere Aktionen“ menu:** „Weiterleiten“ (as a proposal via
+   chat), „Als Spam markieren“ (individual action with „Rückgängig“, another kind at the action
+   endpoint) and „Original anzeigen“ (headers and source, read-only, separate endpoint). Implemented,
+   see §7.4.
+5. **Outlook:** the connector will be probed again read-only once the app has its `MISTRAL_API_KEY`
+   in Studio. An own Microsoft login will be planned only if it continues to fail.
+6. **Gmail probe** (replies through the connector, To and Cc) is done by the owner personally.
+7. **CI:** a GitHub workflow runs the previously local-only checks.
+8. **Design system „liam-e“** in Claude Design is kept aligned with DESIGN.md and code (§10).
+9. **Theme switch** „Hell“, „Dunkel“, „System“, stored in browser, at the bottom of the sidebar
+   beside the status line (§3).
+10. **Focus:** input and composer show the focus ring from §8 like all other controls.
+11. **Arbitrary values cleaned up:** font sizes only via tokens, spacing on the 4-px grid (§4, §5).
+
+## Decided (2026-11-18, owner)
+
+1. **Select multiple inbox mails and process immediately:** one shared undo without a confirmation
+   dialog; assistant proposals still require confirmation (§7.4, §9.2).

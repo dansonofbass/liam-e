@@ -1,0 +1,83 @@
+"""Browser write routes keep private values out of validation errors."""
+
+from uuid import uuid4
+
+import pytest
+
+from api.calendar import writes
+
+
+@pytest.mark.parametrize("status,code,http", [("done", None, 201), ("unknown", "calendar_write_unknown", 202),
+    ("failed", "calendar_write_rejected", 403), ("not_applied", "calendar_event_changed", 409)])
+def test_create_outcome_status(client, monkeypatch, status, code, http):
+    async def execute(request):
+        return writes.WriteOutcome(write_id=str(request.write_id), status=status, error_code=code,
+            current=writes.LiveEvent(source_id="synthetic", title="Current") if code == "calendar_event_changed" else None)
+    monkeypatch.setattr(writes, "execute", execute)
+    response = client.post("/api/v1/calendar/events", json=dict(write_id=str(uuid4()), source_id="synthetic",
+        title="Example", start_date="2026-12-05", end_date="2026-12-06"))
+    assert response.status_code == http
+    if code == "calendar_event_changed": assert response.json()["detail"]["current"]["title"] == "Current"
+
+
+def test_extra_fields_are_redacted(client):
+    response = client.post("/api/v1/calendar/events", json=dict(write_id=str(uuid4()), source_id="synthetic", title="Example",
+        start_date="2026-12-05", end_date="2026-12-06", attendees="synthetic-private-text"))
+    assert response.status_code == 422
+    assert "synthetic-private-text" not in response.text
+
+
+def test_invalid_time_is_422(client):
+    response = client.post("/api/v1/calendar/events", json=dict(write_id=str(uuid4()), source_id="synthetic", title="Example",
+        start_date="2026-12-05", end_date="2026-12-05"))
+    assert response.status_code == 422
+
+
+def test_live_and_write_reads(client, monkeypatch):
+    async def live(identifier): return writes.LiveEvent(source_id="synthetic", title="Example", occurrence_id=identifier)
+    async def get(identifier): return writes.WriteOutcome(write_id=identifier, status="unknown")
+    monkeypatch.setattr(writes, "live", live)
+    monkeypatch.setattr(writes, "get", get)
+    monkeypatch.setattr(writes, "check", get)
+    assert client.get("/api/v1/calendar/occurrences/synthetic/live").json()["title"] == "Example"
+    assert client.get("/api/v1/calendar/writes/synthetic").status_code == 202
+    assert client.post("/api/v1/calendar/writes/synthetic/check").status_code == 202
+
+
+def test_occurrence_reads_keep_their_validation_contract(client):
+    # The write routes' quiet 422 must not relabel errors of the existing read routes.
+    response = client.get("/api/v1/calendar/occurrences")
+    assert response.status_code == 422
+    assert "calendar_time_invalid" not in response.text
+
+
+def test_write_record_removed_with_its_source_is_404(client, monkeypatch):
+    async def execute(request): raise LookupError("calendar_unavailable")
+    monkeypatch.setattr(writes, "execute", execute)
+    response = client.post("/api/v1/calendar/events", json=dict(write_id=str(uuid4()), source_id="synthetic",
+        title="Example", start_date="2026-12-05", end_date="2026-12-06"))
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+@pytest.mark.parametrize("change,http,code", [({"is_active": False}, 404, "calendar_unavailable"),
+                                              ({"capabilities_json": '["read"]'}, 403, "calendar_not_writable")])
+def test_change_on_paused_or_read_only_source_sends_nothing(client, monkeypatch, method, change, http, code):
+    from types import SimpleNamespace
+    from api.calendar import google_write
+    from db.accessors import calendar_occurrence, calendar_source
+    source = SimpleNamespace(id="synthetic", provider="google", is_active=True, capabilities_json='["read","write"]',
+                             connection_ref="synthetic-ref", revision=1, external_id="synthetic-calendar")
+    for key, value in change.items(): setattr(source, key, value)
+    calls = []
+    async def get(_): return source
+    async def visible(_): return SimpleNamespace(source_id="synthetic", external_id="synthetic-event")
+    async def call(name, arguments): calls.append(name)
+    monkeypatch.setattr(calendar_source, "get", get)
+    monkeypatch.setattr(calendar_occurrence, "get_visible", visible)
+    monkeypatch.setattr(google_write, "call", call)
+    body = dict(write_id=str(uuid4()), expected_revision="synthetic-revision")
+    if method == "PATCH": body["title"] = "Example"
+    response = client.request(method, "/api/v1/calendar/occurrences/synthetic-occurrence", json=body)
+    assert response.status_code == http and code in response.text
+    assert calls == []

@@ -43,8 +43,8 @@ async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
         return response.json()
 
 
-async def _post(path: str, payload: dict[str, Any]) -> Any:
-    async with httpx.AsyncClient(timeout=120) as client:
+async def _post(path: str, payload: dict[str, Any], timeout: float = 120) -> Any:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             f"{mistral_api_url()}{path}", headers=_headers(), json=payload
         )
@@ -84,12 +84,13 @@ class ToolNotAllowedError(ValueError):
     """Raised before dispatch when a tool is outside the requested capability."""
 
 
-async def _call_tool(connector: str, tool: str, arguments: dict[str, Any]) -> str:
+async def _call_tool(connector: str, tool: str, arguments: dict[str, Any], timeout: float = 120) -> str:
     """Call one connector tool; returns the joined text content of the MCP-style result."""
     ref = quote(connector, safe="")
     data = await _post(
         f"/v1/connectors/{ref}/tools/{quote(tool, safe='')}/call",
         {"arguments": arguments},
+        **({"timeout": timeout} if timeout != 120 else {}),
     )
     return "\n".join(
         part.get("text", "") for part in data.get("content", []) if part.get("text")

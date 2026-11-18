@@ -1,33 +1,33 @@
-# Mistral Chat-App (minimal)
+# Mistral chat app (minimal)
 
-Minimale Web-App, die die [Mistral API](https://docs.mistral.ai) über das offizielle TypeScript-SDK (`@mistralai/mistralai`) aufruft. Der API-Key bleibt ausschließlich auf dem Server (`MISTRAL_API_KEY` als Umgebungsvariable) und wird nie an den Browser geschickt.
+A minimal web app that calls the [Mistral API](https://docs.mistral.ai) through the official TypeScript SDK (`@mistralai/mistralai`). The API key stays exclusively on the server (`MISTRAL_API_KEY` as an environment variable) and is never sent to the browser.
 
-Die [Mail-App liam-e](../../README.md) hat ihren eigenen Einstieg.
+The [liam-e mail app](../../README.md) has its own entry point.
 
-## Voraussetzungen
+## Prerequisites
 
 - Node.js >= 20
-- Ein Mistral API-Key ([console.mistral.ai](https://console.mistral.ai))
+- A Mistral API key ([console.mistral.ai](https://console.mistral.ai))
 
 ## Installation
 
-Führe `npm ci` in `apps/chat-app` aus.
+Run `npm ci` in `apps/chat-app`.
 
-## Lokale Ausführung
+## Running locally
 
-Setze `MISTRAL_API_KEY` in der Umgebung des Servers.
+Set `MISTRAL_API_KEY` in the server environment.
 
 ```bash
-# Entwicklung (mit automatischem Neustart bei Änderungen)
+# Development (automatically restarts on changes)
 npm run dev
 
-# Start ohne Watch-Modus
+# Start without watch mode
 npm start
 ```
 
-Danach im Browser öffnen: [http://localhost:3000](http://localhost:3000)
+Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Struktur
+## Structure
 
-- `src/server.ts` – HTTP-Server, serviert die Chat-Seite und leitet Chat-Anfragen an `mistral-small-latest` weiter
-- `public/index.html` – einfache Chat-Oberfläche (reines HTML/JS, kein Build-Schritt)
+- `src/server.ts` – HTTP server, serves the chat page and forwards chat requests to `mistral-small-latest`
+- `public/index.html` – simple chat UI (plain HTML/JS, no build step)

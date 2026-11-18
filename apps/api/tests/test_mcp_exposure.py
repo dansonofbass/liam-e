@@ -21,6 +21,10 @@ from conftest import build_app
 MUTATING_OPERATIONS: frozenset[str] = frozenset(
     {
         "calendar_google_connect",
+        "calendar_event_create",
+        "calendar_event_update",
+        "calendar_event_delete",
+        "calendar_write_check",
         "calendar_feed_validate",
         "calendar_feed_subscribe",
         "calendar_feed_validation_discard",
@@ -38,6 +42,7 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "chat_conversation_update",
         "chat_proposal_cancel",
         "chat_proposal_confirm",
+        "chat_proposal_check",
         "chat_stream",
         "chat_turn",
         "mail_account_connect_connector",
@@ -70,6 +75,8 @@ BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
     {
         # Provider calls expose private calendar names; never an agent discovery tool.
         "calendar_google_calendars_list",
+        "calendar_occurrence_live",
+        "calendar_write_get",
         "preferences_list",
         "preference_candidates_list",  # Private candidate values and own source messages.
         "preference_context_get",
@@ -80,7 +87,7 @@ BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
 )
 
 AGENTS_MD = Path(__file__).resolve().parents[3] / "AGENTS.md"
-READ_ONLY_LIST_MARKER = "lesenden Operationen:"
+READ_ONLY_LIST_MARKER = "read-only operations:"
 
 
 @pytest.fixture(scope="module")
@@ -129,7 +136,7 @@ def test_mutating_operation_inventory(app: FastAPI) -> None:
     assert not added and not removed, (
         f"new mutating operations: {added}; gone: {removed}. "
         "Register the operation in MUTATING_OPERATIONS in apps/api/tests/test_mcp_exposure.py "
-        "and update the read-only rule in AGENTS.md (section Sicherheit)."
+        "and update the read-only rule in AGENTS.md (section Security)."
     )
 
 
@@ -147,5 +154,5 @@ def test_agents_md_read_only_list_matches_get_operations(app: FastAPI) -> None:
         "AGENTS.md lists the read-only operations differently from the served OpenAPI: "
         f"missing {sorted(_read_only_get_ids(app) - set(listed))}, "
         f"unexpected {sorted(set(listed) - _read_only_get_ids(app))}, "
-        "or out of alphabetical order. Update the rule in AGENTS.md (section Sicherheit)."
+        "or out of alphabetical order. Update the rule in AGENTS.md (section Security)."
     )

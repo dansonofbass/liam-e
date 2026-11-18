@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Index, UniqueConstraint
+from sqlalchemy import Boolean, Column, CheckConstraint, Index, UniqueConstraint, false
 from sqlmodel import Field, SQLModel
 
 from db.models._common import new_id, utc_datetime_column
@@ -26,6 +26,7 @@ class CalendarOccurrence(SQLModel, table=True):
     event_id: str
     external_id: str
     title: str = ""
+    editable: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default=false()))
     start_date: date | None = None
     end_date: date | None = None
     start_at: datetime | None = Field(default=None, sa_column=utc_datetime_column(nullable=True))

@@ -82,7 +82,7 @@ async def run_sync(payload: dict, job_id: str, attempt: int) -> None:
         if not in_window:
             raise ValueError("occurrence outside window")
         occurrences.append(CalendarOccurrence(source_id=source.id, event_id=ids[row.event_external_id],
-                                               external_id=row.external_id, title=row.title,
+                                               external_id=row.external_id, title=row.title, editable=row.editable,
                                                start_date=row.start_date, end_date=row.end_date,
                                                start_at=row.start_at, end_at=row.end_at, timezone=row.timezone))
     await replace_window(source_id=source.id, job_id=job_id, attempt=attempt, start=start, end=end,
@@ -90,4 +90,6 @@ async def run_sync(payload: dict, job_id: str, attempt: int) -> None:
                          expected_revision=source.revision,
                          replace_all=source.provider in {"ics", "google"},
                          reset_schedule=source.provider in {"ics", "google"},
-                         encrypted_validators=getattr(snapshot, "encrypted_validators", None))
+                         encrypted_validators=getattr(snapshot, "encrypted_validators", None),
+                         capabilities_json=(('["read","write"]' if snapshot.access_role in {"owner", "writer"} else '["read"]')
+                                            if source.provider == "google" else None))

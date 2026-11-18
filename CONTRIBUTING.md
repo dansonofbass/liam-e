@@ -1,49 +1,49 @@
-# Mitarbeit
+# Contributing
 
-Verbindlich sind [AGENTS.md](AGENTS.md) für Architektur, Konventionen und Sicherheit und
-[DESIGN.md](DESIGN.md) für Oberfläche und Texte. Diese Datei fasst zusammen, was für Issues und
-Pull Requests gilt. Bitte vor größerer Arbeit ein Issue öffnen.
+[AGENTS.md](AGENTS.md) is binding for architecture, conventions and security, and
+[DESIGN.md](DESIGN.md) for the UI and its text. This file summarizes what applies to issues and
+pull requests. Please open an issue before major work.
 
-## Einrichtung und Prüfungen
+## Setup and checks
 
-Die [Anleitung zur lokalen Entwicklung](docs/lokale-entwicklung.md) beschreibt
-Installation, Datenbank, Startreihenfolge und den Seed-Modus.
+The [local development guide](docs/local-development.md) describes installation, the database,
+startup order and seed mode.
 
 ```bash
-bun run check                # Build, Typprüfung der Oberfläche, Drift-Prüfung des Clients
+bun run check                # Build, UI type check, client drift check
 bunx nx run web:test
 bash tools/uv.sh run --no-sync pytest tests apps/api/tests packages/py -q
-RUN_PG_CONTRACT=1 bunx nx run db:test-pg-contract   # braucht Postgres mit pgvector
+RUN_PG_CONTRACT=1 bunx nx run db:test-pg-contract   # requires Postgres with pgvector
 ```
 
-Die Tests brauchen weder Provider-Zugang noch Mistral-Credentials.
+The tests require neither provider access nor Mistral credentials.
 
-## Regeln in Kürze
+## Rules in brief
 
-- Code, Kommentare, Docstrings und Commit-Nachrichten auf Englisch, Texte der Oberfläche auf
-  Deutsch über den Textkatalog.
-- Nach API-Änderungen OpenAPI-Spezifikation und Client neu erzeugen und mit committen.
-  Tabellenänderungen nur mit generierter Migration.
-- Der Agent verändert oder versendet nie ohne bestätigte Vorschlagskarte. Neue verändernde
-  Operationen gehören in die MCP-Inventur (`apps/api/tests/test_mcp_exposure.py`).
-- Nur synthetische Testdaten. Keine Zugangsdaten, echten Mails, Mistral-IDs oder lokalen Pfade in
-  Dateien, Issues, PRs, Commit-Nachrichten und Logs.
+- Code, comments, docstrings and commit messages are in English; UI text is in German through the
+  text catalogue.
+- After API changes, regenerate and commit the OpenAPI specification and client. Table changes
+  require a generated migration.
+- The agent never changes or sends anything without a confirmed proposal card. New mutating
+  operations belong in the MCP inventory (`apps/api/tests/test_mcp_exposure.py`).
+- Synthetic test data only. No credentials, real mail, Mistral IDs or local paths in files,
+  issues, PRs, commit messages or logs.
 
 ## Issues
 
-Issues entstehen über die Formulare in [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/):
-Fehler, Änderung, Evaluation und Teilauftrag. Jedes fragt nach Abnahmekriterien und danach, wie
-sie zu prüfen sind, damit eine Person oder ein Coding-Agent das Issue umsetzen und ein Reviewer
-es nachprüfen kann. Eine vermutete Schwachstelle kommt nicht in ein Issue, siehe
-[SECURITY.md](SECURITY.md).
+Issues use the forms in [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/):
+[bug](.github/ISSUE_TEMPLATE/01-bug.yml), [change](.github/ISSUE_TEMPLATE/02-change.yml),
+[evaluation](.github/ISSUE_TEMPLATE/03-evaluation.yml) and
+[subtask](.github/ISSUE_TEMPLATE/04-subtask.yml). Each asks for acceptance criteria and how to
+verify them, so a person or coding agent can implement the issue and a reviewer can check it.
+Suspected vulnerabilities do not belong in an issue; see [SECURITY.md](SECURITY.md).
 
-## Pull Requests
+## Pull requests
 
-Pull Requests folgen [`.github/pull_request_template.md`](.github/pull_request_template.md).
+Pull requests follow [`.github/pull_request_template.md`](.github/pull_request_template.md).
 
-- Eine Aufgabe ergibt einen Branch und einen PR. Umfasst sie mehrere Issues, bekommt jedes eigene
-  Commits und ein eigenes Schließwort (`Closes #12. Closes #13.`).
-- Beschreiben, was geprüft wurde und wie, mit den tatsächlich ausgeführten Befehlen. Tests mit
-  Fakes belegen kein Live-Verhalten in Studio, bei Providern oder auf Geräten; was nicht geprüft
-  wurde, steht ausdrücklich da.
-- Die CI (`check`, `web-test`, `pytest`, `pg-contract`, `secrets`) muss grün sein.
+- One task produces one branch and one PR. If it covers multiple issues, each gets its own
+  commits and its own closing keyword (`Closes #12. Closes #13.`).
+- Describe what was checked and how, with the commands actually run. Tests with fakes do not
+  prove live behavior in Studio, at providers or on devices; explicitly state what was not checked.
+- CI (`check`, `web-test`, `pytest`, `pg-contract`, `secrets`) must pass.

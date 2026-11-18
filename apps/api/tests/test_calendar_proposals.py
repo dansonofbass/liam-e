@@ -1,0 +1,201 @@
+"""Calendar proposal scope, confirmation and private serialization contracts."""
+
+import json
+from datetime import date
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+
+from api.calendar import chat, proposals as commands, writes
+from api.mail import proposals
+from api.mail.agent_tools import TurnContext
+from db.models.chat_message import ChatMessage
+
+
+@pytest.fixture
+def context(monkeypatch):
+    from db.accessors import calendar_source, calendar_occurrence
+    source = SimpleNamespace(id="synthetic-source", provider="google", is_active=True,
+                             capabilities_json='["read","write"]', connection_ref="synthetic-private-ref")
+    async def get(_): return source
+    async def occurrence(_): return SimpleNamespace(source_id=source.id)
+    async def live(_): return writes.LiveEvent(occurrence_id="synthetic-occurrence", source_id=source.id, title="Before",
+        start_date=date(2026, 12, 5), end_date=date(2026, 12, 6), revision="old", editable=True)
+    monkeypatch.setattr(calendar_source, "get", get)
+    monkeypatch.setattr(calendar_occurrence, "get_visible", occurrence)
+    monkeypatch.setattr(writes, "live", live)
+    return TurnContext(conversation_id="synthetic-conversation", account_id=None, today=date(2026, 12, 5),
+                       context_id="synthetic-context", calendar_source_ids=[source.id], calendar_timezone="Europe/Berlin")
+
+
+async def test_propose_out_of_scope_source_refused(context):
+    with pytest.raises(writes.WriteError, match="calendar_out_of_scope"):
+        await chat.prepare({"action": "create", "source_id": "other", "title": "Example"}, context)
+
+
+async def test_propose_update_binds_live_revision_and_before(context):
+    command = await chat.prepare({"action": "update", "occurrence_id": "synthetic-occurrence", "title": "After"}, context)
+    assert command.expected_revision == "old" and command.before.title == "Before"
+    assert command.after.title == "After" and command.after.start_date == date(2026, 12, 5)
+    assert command.connection_ref == "synthetic-private-ref"
+
+
+@pytest.fixture
+def card(context, monkeypatch):
+    from db.accessors import chat_context, chat_message
+    command = commands.CalendarCommand(action="create", source_id="synthetic-source", connection_ref="synthetic-private-ref",
+        timezone="Europe/Berlin", after=commands.CalendarValues(title="Example", start_date="2026-12-05", end_date="2026-12-06"))
+    proposal = proposals.Proposal(kind="calendar", reason="Example", items=[], calendar=command)
+    message = ChatMessage(id=str(uuid4()), conversation_id=context.conversation_id, role="proposal", context_id=context.context_id,
+        proposal_json=proposal.model_dump_json(context={"storage": True}), proposal_status="pending")
+    state = SimpleNamespace(message=message, revoked=False, scope=["synthetic-source"], calls=[], outcome="done")
+    async def get(_): return message
+    async def live(_): return not state.revoked
+    async def ctx(_): return SimpleNamespace(revoked=state.revoked, conversation_id=context.conversation_id, calendar_scope_json=json.dumps(state.scope))
+    async def claim(_):
+        if message.proposal_status != "pending" or state.revoked: return None
+        message.proposal_status = "running"
+        return message
+    async def set_proposal(_, **values):
+        for key, value in values.items(): setattr(message, key, value)
+        return message
+    async def execute(request, *, write_id):
+        state.calls.append((request, write_id))
+        return writes.WriteOutcome(write_id=write_id, status=state.outcome)
+    async def check(identifier): return writes.WriteOutcome(write_id=identifier, status="done")
+    async def record(_): return SimpleNamespace(id=message.id)
+    from db.accessors import calendar_write
+    monkeypatch.setattr(calendar_write, "get", record)
+    monkeypatch.setattr(writes, "get", check)
+    monkeypatch.setattr(chat_message, "get_message", get)
+    monkeypatch.setattr(chat_message, "claim_proposal", claim)
+    monkeypatch.setattr(chat_message, "set_proposal", set_proposal)
+    monkeypatch.setattr(chat_context, "is_live", live)
+    monkeypatch.setattr(chat_context, "get_context", ctx)
+    monkeypatch.setattr(writes, "execute", execute)
+    monkeypatch.setattr(writes, "check", check)
+    return state
+
+
+async def test_confirm_runs_one_write_with_proposal_id(card):
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "done" and card.calls[0][1] == card.message.id
+
+
+async def test_second_confirm_proposal_not_pending(card):
+    await proposals.confirm(card.message.id, selected_ids=[])
+    with pytest.raises(proposals.ProposalStateError): await proposals.confirm(card.message.id, selected_ids=[])
+    assert len(card.calls) == 1
+
+
+async def test_confirm_after_scope_change_refused_without_write(card):
+    card.scope = []
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "failed" and not card.calls
+
+
+async def test_confirm_revoked_context_refused(card):
+    card.revoked = True
+    with pytest.raises(proposals.ProposalContextRevokedError): await proposals.confirm(card.message.id, selected_ids=[])
+    assert not card.calls
+
+
+async def test_unknown_card_cannot_be_confirmed_and_check_resolves_to_done(card):
+    card.outcome = "unknown"
+    await proposals.confirm(card.message.id, selected_ids=[])
+    with pytest.raises(proposals.ProposalStateError): await proposals.confirm(card.message.id, selected_ids=[])
+    assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "done"
+
+
+def test_card_output_has_no_connection_ref(card):
+    from api.mail.chat_schemas import to_message_out
+    output = to_message_out(card.message).model_dump_json()
+    assert "connection_ref" not in output and "synthetic-private-ref" not in output
+    assert "synthetic-private-ref" in card.message.proposal_json
+
+
+def test_prompt_version_8_and_rules_present():
+    from api.mail.agent_prompt import APP_PROMPT_VERSION, system_prompt
+    text = system_prompt(today=date(2026, 12, 5), account_scope=None)
+    assert APP_PROMPT_VERSION == "8" and "propose_calendar_change" in text
+    assert "ICS bleibt nur lesbar" in text
+
+
+async def test_propose_nonexistent_local_time_refused(context):
+    # 2026-03-29 02:30 does not exist in Europe/Berlin; the card must not open.
+    with pytest.raises(writes.WriteError, match="calendar_time_invalid"):
+        await chat.prepare({"action": "create", "source_id": "synthetic-source", "title": "Example",
+                            "start_local": "2026-03-29T02:30", "end_local": "2026-03-29T03:30"}, context)
+
+
+async def test_card_does_not_keep_the_provider_link(context, monkeypatch):
+    # Google's htmlLink encodes event and calendar IDs; cards reach chat history and SSE.
+    async def live(_): return writes.LiveEvent(occurrence_id="synthetic-occurrence", source_id="synthetic-source",
+        title="Before", start_date=date(2026, 12, 5), end_date=date(2026, 12, 6), revision="old", editable=True,
+        html_link="https://calendar.example.org/event?eid=synthetic-encoded-id")
+    monkeypatch.setattr(writes, "live", live)
+    command = await chat.prepare({"action": "update", "occurrence_id": "synthetic-occurrence", "title": "After"}, context)
+    assert command.before.html_link is None
+    assert "synthetic-encoded-id" not in command.model_dump_json(context={"storage": True})
+
+
+async def test_running_card_with_write_record_resolves_on_check(card, monkeypatch):
+    from db.accessors import calendar_write
+    card.message.proposal_status = "running"  # The process died after claiming the card.
+    async def record(_): return SimpleNamespace(id=card.message.id)
+    async def get(identifier): return writes.WriteOutcome(write_id=identifier, status="done")
+    monkeypatch.setattr(calendar_write, "get", record)
+    monkeypatch.setattr(writes, "get", get)
+    assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "done"
+
+
+async def test_error_before_the_write_claim_fails_the_card(card, monkeypatch):
+    from db.accessors import calendar_write
+    async def broken(request, *, write_id): raise RuntimeError("test-only")
+    async def record(_): return None
+    monkeypatch.setattr(writes, "execute", broken)
+    monkeypatch.setattr(calendar_write, "get", record)
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "failed"
+
+
+async def test_error_after_the_write_claim_keeps_the_card_unknown(card, monkeypatch):
+    from db.accessors import calendar_write
+    async def broken(request, *, write_id): raise RuntimeError("test-only")
+    async def record(_): return SimpleNamespace(id=card.message.id)
+    monkeypatch.setattr(writes, "execute", broken)
+    monkeypatch.setattr(calendar_write, "get", record)
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "unknown"
+
+
+async def test_unknown_card_without_write_record_settles_failed(card, monkeypatch):
+    from db.accessors import calendar_write
+    card.message.proposal_status = "unknown"
+    async def record(_): return None
+    monkeypatch.setattr(calendar_write, "get", record)
+    assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "failed"
+
+
+@pytest.mark.parametrize("change", [{"is_active": False}, {"capabilities_json": '["read"]'}])
+async def test_confirm_after_source_paused_or_read_only_writes_nothing(card, monkeypatch, change):
+    from db.accessors import calendar_source
+    source = SimpleNamespace(id="synthetic-source", provider="google", is_active=True,
+                             capabilities_json='["read","write"]', connection_ref="synthetic-private-ref")
+    for key, value in change.items(): setattr(source, key, value)
+    async def get(_): return source
+    monkeypatch.setattr(calendar_source, "get", get)
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "failed" and not card.calls
+    assert proposals.proposal_view(result).result.failed[0].code == "calendar_not_writable"
+
+
+async def test_unknown_card_of_a_removed_source_stays_unknown(card, monkeypatch):
+    from db.accessors import calendar_write
+    card.message.proposal_status = "unknown"
+    async def record(_): return SimpleNamespace(id=card.message.id, status="unknown", request_json=None)
+    async def kept(identifier): return writes.WriteOutcome(write_id=identifier, status="unknown", error_code="calendar_write_unknown")
+    monkeypatch.setattr(calendar_write, "get", record)
+    monkeypatch.setattr(writes, "get", kept)
+    assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "unknown"

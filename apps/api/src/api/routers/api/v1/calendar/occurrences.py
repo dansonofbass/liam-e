@@ -6,10 +6,12 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from db.accessors import calendar_occurrence, calendar_source
-from fastapi import APIRouter, HTTPException, Query
+from db.accessors import calendar_occurrence, calendar_source, calendar_write
+from fastapi import APIRouter, HTTPException, Query, Response
 
-from api.routers.api.v1.calendar.schemas import OccurrenceOut, OccurrencePage
+from api.routers.api.v1.calendar.schemas import OccurrenceOut, OccurrencePage, EventUpdateIn, EventDeleteIn
+from api.routers.api.v1.calendar import _writes
+from api.calendar import writes
 
 router = APIRouter()
 
@@ -73,3 +75,36 @@ async def occurrence(occurrence_id: str) -> OccurrenceOut:
     if row is None:
         raise HTTPException(404, "occurrence_not_found")
     return _out(row)
+
+
+@router.get("/{occurrence_id}/live", operation_id="calendar_occurrence_live")
+async def live(occurrence_id: str) -> writes.LiveEvent:
+    try:
+        return await writes.live(occurrence_id)
+    except writes.WriteError as exc:
+        raise _writes.error(exc) from None
+
+
+async def _change(occurrence_id, body, response, operation):
+    row = await calendar_occurrence.get_visible(occurrence_id)
+    previous = await calendar_write.get(str(body.write_id)) if row is None else None
+    if row is None and previous is None:
+        raise _writes.error(writes.WriteError("calendar_event_gone", 404))
+    return await _writes.execute({**body.model_dump(exclude_unset=True), "operation": operation,
+        "source_id": row.source_id if row else previous.source_id, "occurrence_id": occurrence_id}, response)
+
+
+async def update(occurrence_id: str, body: EventUpdateIn, response: Response) -> writes.WriteOutcome:
+    return await _change(occurrence_id, body, response, "update")
+
+
+async def delete(occurrence_id: str, body: EventDeleteIn, response: Response) -> writes.WriteOutcome:
+    return await _change(occurrence_id, body, response, "delete")
+
+
+# Only the write routes redact their 422s as calendar_time_invalid; the read routes above
+# keep their existing validation contract.
+router.add_api_route("/{occurrence_id}", update, methods=["PATCH"], operation_id="calendar_event_update",
+                     response_model=writes.WriteOutcome, route_class_override=_writes.QuietWriteRoute)
+router.add_api_route("/{occurrence_id}", delete, methods=["DELETE"], operation_id="calendar_event_delete",
+                     response_model=writes.WriteOutcome, route_class_override=_writes.QuietWriteRoute)

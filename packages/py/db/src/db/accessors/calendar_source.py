@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from db.engine import get_session_maker
@@ -13,6 +13,7 @@ from db.models.calendar_event import CalendarEvent
 from db.models.calendar_feed_config import CalendarFeedConfig
 from db.models.calendar_occurrence import CalendarOccurrence
 from db.models.calendar_sync_state import CalendarSyncState
+from db.models.calendar_write import CalendarWrite
 from db.models.mail_job import MailJob
 
 
@@ -47,6 +48,13 @@ async def remove(source_id: str) -> bool:
             return False
         for model in (CalendarOccurrence, CalendarEvent, CalendarSyncState, CalendarFeedConfig):
             await session.execute(delete(model).where(model.source_id == source_id))
+        # The provider may already have applied an open write. Its record stays, without the
+        # request text, so a later check reports "unknown" instead of a failure that invites a
+        # duplicate; finished records go with the source. An unsent claim can no longer dispatch.
+        open_write = CalendarWrite.status.in_(["running", "unknown"])
+        await session.execute(update(CalendarWrite).where(CalendarWrite.source_id == source_id, open_write)
+                              .values(status="unknown", error_code="calendar_write_unknown", request_json=None))
+        await session.execute(delete(CalendarWrite).where(CalendarWrite.source_id == source_id, ~open_write))
         await session.delete(row)
         await session.commit()
         return True

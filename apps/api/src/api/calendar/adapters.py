@@ -27,6 +27,7 @@ class Occurrence:
     start_at: datetime | None = None
     end_at: datetime | None = None
     timezone: str | None = None
+    editable: bool = False
 
 
 @dataclass(frozen=True)
@@ -66,4 +67,4 @@ def normalize(row: Occurrence) -> Occurrence:
     if start > end:
         raise ValueError("invalid timed interval")
     return Occurrence(external_id=row.external_id, event_external_id=row.event_external_id,
-                      title=row.title, start_at=start, end_at=end, timezone=row.timezone)
+                      title=row.title, start_at=start, end_at=end, timezone=row.timezone, editable=row.editable)

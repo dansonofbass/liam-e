@@ -1,47 +1,47 @@
 <!--
-Jeden Abschnitt ausfüllen; "keine" schreiben, wo nichts zutrifft. Geprüfte Tatsachen nennen, keine
-Absichten. Nie Zugangsdaten, Tokens, echte Mails oder Termine, Mistral-IDs, lokale Pfade oder rohe
-Providerantworten eintragen.
+Fill in every section; write "none" where nothing applies. State verified facts, not intentions.
+Never include credentials, tokens, real mail or appointments, Mistral IDs, local paths or raw
+provider responses.
 -->
 
-<!-- Ein Schließwort je Issue, z. B. "Closes #12. Closes #13." -->
+<!-- One closing keyword per issue, e.g. "Closes #12. Closes #13." -->
 Closes #
 
-## Zusammenfassung
+## Summary
 
-<!-- Was sich geändert hat und warum, nach beobachtbarem Verhalten. Bei mehreren Issues je Issue ein Abschnitt "### #12: <Titel>". -->
+<!-- What changed and why, in terms of observable behavior. For multiple issues add a section "### #12: <title>" per issue. -->
 
-## Prüfung
+## Verification
 
-<!-- Tatsächlich ausgeführte Befehle mit Ergebnis (Exit-Code, Zähler). Nicht Ausgeführtes nennen. Tests mit Fakes belegen kein Verhalten in Studio, bei Providern oder auf Geräten. -->
+<!-- Commands actually run with results (exit code, counts). Identify what was not run. Tests with fakes do not prove behavior in Studio, with providers or on devices. -->
 
 - `bun run check`:
 - `bunx nx run web:test`:
 - `bash tools/uv.sh run --no-sync pytest tests apps/api/tests packages/py -q`:
 - `RUN_PG_CONTRACT=1 bunx nx run db:test-pg-contract`:
 - `git diff --check`:
-- Gezielte oder Live-Prüfungen:
+- Targeted or live checks:
 
-## Verträge
+## Contracts
 
-- [ ] Eine Aufgabe, ein Branch, dieser eine PR; jedes Issue hat eigene Commits und oben ein eigenes Schließwort
-- [ ] API geändert: `apps/api/openapi.json` und `apps/web/src/api/generated/` neu erzeugt und committet (`bash tools/gen-types.sh --check` grün)
-- [ ] Tabellen geändert: Migration mit `bunx nx run db:revision` erzeugt, nicht von Hand geschrieben, und mit `bunx nx run db:migrate` angewendet
-- [ ] Neue Settings als Modul unter `packages/py/env/src/env/`, jeder Name leer in `.env.example`, Secrets als `WorkspaceSecret`
-- [ ] Neue Web-Route: `bunx nx run web:gen-routes` gelaufen
-- [ ] Neue verändernde Operation in `MUTATING_OPERATIONS` (`apps/api/tests/test_mcp_exposure.py`) und in der Endpunkt-Tabelle von AGENTS.md
-- [ ] Der Agent verändert oder versendet weiterhin nur nach bestätigter Vorschlagskarte
-- [ ] Texte der Oberfläche auf Deutsch im Textkatalog, nach DESIGN.md; Code, Kommentare und Commits auf Englisch
+- [ ] One task, one branch, this one PR; each issue has its own commits and closing keyword above
+- [ ] API changed: `apps/api/openapi.json` and `apps/web/src/api/generated/` regenerated and committed (`bash tools/gen-types.sh --check` passes)
+- [ ] Tables changed: migration generated with `bunx nx run db:revision`, not written by hand, and applied with `bunx nx run db:migrate`
+- [ ] New settings as a module under `packages/py/env/src/env/`, each name empty in `.env.example`, secrets as `WorkspaceSecret`
+- [ ] New web route: `bunx nx run web:gen-routes` run
+- [ ] New mutating operation in `MUTATING_OPERATIONS` (`apps/api/tests/test_mcp_exposure.py`) and in the AGENTS.md endpoint table
+- [ ] The agent still changes or sends only after confirmation of a proposal card
+- [ ] UI text in German in the text catalogue, following DESIGN.md; code, comments and commits in English
 
-## Risiko und Rücknahme
+## Risk and rollback
 
-<!-- Was brechen könnte, für wen, und wie es sich zurücknehmen lässt (Migration, Daten). -->
+<!-- What could break, for whom, and how to roll it back (migration, data). -->
 
-## Review und Beteiligung von Agents
+## Review and agent participation
 
-<!-- Autor (Mensch oder Agent mit Modell). Unabhängige Reviews: Prüfer, Modellfamilie, Ergebnis, behobene und begründet abgelehnte Befunde. -->
+<!-- Author (human or agent with model). Independent reviews: reviewer, model family, outcome, findings fixed and findings rejected with reasons. -->
 
-- Erstellt von:
-- Unabhängiges Review:
+- Created by:
+- Independent review:
 
-- [ ] Dieser PR enthält keine Zugangsdaten, echten Mail- oder Kalenderinhalte, Mistral-IDs, lokalen Pfade oder rohen Providerantworten.
+- [ ] This PR contains no credentials, real mail or calendar content, Mistral IDs, local paths or raw provider responses.

@@ -126,7 +126,7 @@ def test_point_migration_round_trip(pg_db):
                 CalendarSyncState.source_id == "point-source"))).scalar_one()
             assert not (await session.execute(select(CalendarSyncState.incomplete).where(
                 CalendarSyncState.source_id == "other-source"))).scalar_one()
-            assert not (await session.execute(select(CalendarOccurrence).where(CalendarOccurrence.source_id == "point-source"))).scalars().all()
+            assert not (await session.execute(select(CalendarOccurrence.id).where(CalendarOccurrence.source_id == "point-source"))).scalars().all()
     project = Path(__file__).resolve().parents[1]
     config = Config(str(project / "alembic.ini"))
     config.set_main_option("script_location", str(project / "src/db/migrations"))

@@ -43,6 +43,17 @@ async def confirm(proposal_id: str, body: ProposalConfirmIn) -> ChatMessageOut:
         _refuse(error)
 
 
+@router.post("/{proposal_id}/check", operation_id="chat_proposal_check")
+async def check(proposal_id: str) -> ChatMessageOut:
+    from api.calendar.writes import WriteError
+    try:
+        return to_message_out(await proposals.recheck_calendar_card(proposal_id))
+    except WriteError as error:
+        raise refuse(error.status, error.code, "Der Stand konnte nicht geprüft werden. Versuch es später erneut.") from None
+    except (proposals.ProposalNotFoundError, proposals.ProposalStateError) as error:
+        _refuse(error)
+
+
 @router.post("/{proposal_id}/cancel", operation_id="chat_proposal_cancel", description="Verwirft einen offenen Vorschlag, ohne seine Aktionen auszuführen.")
 async def cancel(proposal_id: str) -> ChatMessageOut:
     try:
