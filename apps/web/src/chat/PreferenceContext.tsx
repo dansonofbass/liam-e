@@ -19,7 +19,7 @@ export function PreferenceContext({ context }: { context: ContextOut }) {
     {open && <PreferenceDialog title={de.preferences.historical} close={() => setOpen(false)}>
       {query.isPending && <p role="status">{de.preferences.loading}</p>}
       {query.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{de.preferences.error}</Notice>}
-      {query.data?.revisions.map(rev => <div key={rev.revision_id}>{rev.removed ? <p>{de.preferences.removed}</p> : <><strong>{rev.key && de.preferences.keys[rev.key]}</strong><p>{rev.value}</p><small>{de.preferences.source}</small></>}</div>)}
+      {query.data?.revisions.map(rev => <div key={rev.revision_id}>{rev.removed ? <p>{de.preferences.removed}</p> : <><strong>{rev.key && de.preferences.keys[rev.key]}</strong><p>{rev.value}</p><small>{rev.source === 'confirmed_candidate' ? de.preferences.confirmedSource : de.preferences.source}</small></>}</div>)}
       <Button variant="secondary" onClick={() => setOpen(false)}>{de.preferences.close}</Button>
     </PreferenceDialog>}
   </>

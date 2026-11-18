@@ -11,12 +11,13 @@ import { Button, Chip, Menu, Notice, TextField } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
 import { de } from '../i18n/de'
 import { preferencesQuery, personalizationQuery } from './preferenceQueries'
+import { PreferenceCandidates } from './PreferenceCandidates'
 
 const t = de.preferences
 const codeOf = (cause: unknown) => errorCode(cause instanceof Error ? cause.cause : cause)
 function useRefresh() {
   const client = useQueryClient()
-  return () => { for (const key of ['preferences', 'personalization', 'preference-context', 'history']) void client.invalidateQueries({ queryKey: [key] }) }
+  return () => { for (const key of ['preferences', 'personalization', 'preference-context', 'preference-candidates', 'history']) void client.invalidateQueries({ queryKey: [key] }) }
 }
 
 export function Personalization({ saved = false }: { saved?: boolean }) {
@@ -60,7 +61,8 @@ export function Preferences() {
     {query.isPending && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div className="le-prompt-placeholder" key={i} aria-hidden="true" />)}</>}
     {query.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{t.error}</Notice>}
     {query.data?.length === 0 && <p>{t.empty}</p>}
-    {query.data?.map(row => <div className="le-prompt-row" key={row.id}><strong>{t.keys[row.key]}</strong><span className="le-prompt-preview">{row.value}</span><small>{scope(row.scope)} · {t.source} · {t.statuses[row.status]}</small><Link className="le-btn le-btn--secondary" to="/settings/preferences/$preferenceId" params={{ preferenceId: row.id }}>{t.edit}</Link></div>)}
+    {query.data?.map(row => <div className="le-prompt-row" key={row.id}><strong>{t.keys[row.key]}</strong><span className="le-prompt-preview">{row.value}</span><small>{scope(row.scope)} · {row.source === 'confirmed_candidate' ? t.confirmedSource : t.source} · {t.statuses[row.status]}</small><Link className="le-btn le-btn--secondary" to="/settings/preferences/$preferenceId" params={{ preferenceId: row.id }}>{t.edit}</Link></div>)}
+    <PreferenceCandidates />
   </section>
 }
 
@@ -102,7 +104,7 @@ function PreferenceForm({ initial, reload }: { initial?: PreferenceOut; reload: 
     <div className="le-field"><span className="le-label">{t.field}</span><Menu trigger={props => <Chip {...props} quiet disabled={!!base || busy} aria-label={`${t.field}: ${t.keys[key]}`}>{t.keys[key]}</Chip>} items={(['answer_length', 'salutation', 'signature'] as const).map(k => ({ label: t.keys[k], checked: k === key, onSelect: () => { setKey(k); if (k !== 'answer_length' && scope === '*') setScope('') } }))} /></div>
     <div className="le-field"><span className="le-label">{t.scope}</span><Menu trigger={props => <Chip {...props} quiet disabled={busy} aria-label={`${t.scope}: ${scopeLabel(scope)}`}>{scopeLabel(scope)}</Chip>} items={[...(key === 'answer_length' ? [{ label: t.global, checked: scope === '*', onSelect: () => setScope('*') }] : []), ...accounts.map(a => ({ label: a.display_name || a.email_address, checked: a.id === scope, onSelect: () => setScope(a.id) }))]} /></div>
     <TextField multiline rows={5} label={t.value} value={value} onChange={e => setValue(e.target.value)} maxLength={500} required autoFocus hint={de.prompts.count(Array.from(value).length, 500)} />
-    <p className="le-hint">{t.source}{base && <> · {t.statuses[base.status]}</>}</p><Notice tone="info">{t.safety}</Notice>
+    <p className="le-hint">{base?.source === 'confirmed_candidate' ? t.confirmedSource : t.source}{base && <> · {t.statuses[base.status]}</>}</p><Notice tone="info">{t.safety}</Notice>
     {saved && <Personalization saved />}
     {error && <Notice tone="danger" action={conflict ? { label: t.reload, onClick: () => { void reload().catch(() => setError(t.error)) } } : undefined}>{error}</Notice>}
     <div className="le-prompt-actions"><Button type="submit" variant="primary" disabled={busy || conflict || !scope || !value.trim()}>{t.save}</Button><Link className="le-btn le-btn--secondary" to="/settings/preferences">{t.back}</Link>

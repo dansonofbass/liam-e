@@ -25,6 +25,7 @@ function setup(path: string, respond?: (request: Request) => Promise<Response | 
       if (req.method === 'PATCH') personalization = { ...personalization, ...body.personalization, version: 2 }
       return Response.json({ personalization })
     }
+    if (url.pathname.endsWith('/preferences/candidates')) return Response.json([])
     if (url.pathname.endsWith('/summary')) return Response.json({ accounts: [] })
     if (req.method === 'DELETE') return new Response(null, { status: 204 })
     if (['POST', 'PATCH'].includes(req.method)) { current = { ...current, ...body, version: current.version + 1 }; return Response.json(current) }
@@ -128,9 +129,10 @@ test('an answer names its preferences only when it used some', async () => {
   }
 })
 
-test('suggestions are explained, not offered as a dead button', async () => {
+test('automatic suggestions stay unavailable while explicit candidates are listed', async () => {
   setup('/settings/preferences')
-  expect(await screen.findByText('Vorschläge für Präferenzen sind noch nicht verfügbar.')).toBeTruthy()
+  expect(await screen.findByText('Automatische Vorschläge aus deinen Nachrichten sind noch nicht verfügbar.')).toBeTruthy()
+  expect(await screen.findByText('Keine offenen Vorschläge. Du kannst im Chat mit „Merke dir:“ um eine Präferenz bitten.')).toBeTruthy()
   expect(screen.queryByRole('button', { name: /vorschlagen/ })).toBeNull()
 })
 
@@ -138,6 +140,35 @@ test('a scope whose account is gone says so once the accounts are loaded', async
   setup('/settings/preferences', async req => new URL(req.url).pathname.endsWith('/preferences') ? Response.json([{ ...row, key: 'signature', scope: 'gone' }]) : undefined)
   expect(await screen.findByText(/Gespeichertes Konto nicht verfügbar · Von dir eingetragen · Aktiv/)).toBeTruthy()
   expect(screen.queryByText(/Konto wählen/)).toBeNull()
+})
+
+test('saved candidates do not open cards automatically and a busy slot keeps the proposal', async () => {
+  const candidate = { id: 'candidate', conversation_id: 'conversation', key: 'answer_length', scope: '*', value: 'Kurz', status: 'pending', proposal_id: null }
+  setup('/settings/preferences', async req => {
+    if (new URL(req.url).pathname.endsWith('/candidates')) return Response.json([candidate])
+    if (req.url.endsWith('/candidate/propose')) return Response.json(candidate)
+  })
+  const review = await screen.findByRole('button', { name: 'Vorschlag prüfen' })
+  expect(requests.filter(r => r.method === 'POST')).toHaveLength(0)
+  fireEvent.click(review); fireEvent.click(review)
+  await screen.findByText('In dieser Unterhaltung ist schon eine Karte offen. Bestätige sie oder brich sie ab. Dieser Vorschlag bleibt gespeichert.')
+  expect(requests.filter(r => r.method === 'POST')).toHaveLength(1)
+  expect(screen.getByRole('link', { name: 'Unterhaltung öffnen' }).getAttribute('href')).toBe('/chat/conversation')
+})
+
+test('an associated preference card is linked instead of proposed again', async () => {
+  setup('/settings/preferences', async req => new URL(req.url).pathname.endsWith('/candidates') ? Response.json([{ id: 'candidate', conversation_id: 'conversation', key: 'answer_length', scope: '*', value: 'Kurz', status: 'pending', proposal_id: 'card' }]) : undefined)
+  const link = await screen.findByRole('link', { name: 'Karte öffnen' })
+  expect(link.getAttribute('href')).toBe('/chat/conversation#message-card')
+  expect(requests.filter(r => r.method === 'POST')).toHaveLength(0)
+  expect(screen.queryByRole('button', { name: 'Vorschlag prüfen' })).toBeNull()
+})
+
+test('candidate loading errors offer retry without writing', async () => {
+  setup('/settings/preferences', async req => new URL(req.url).pathname.endsWith('/candidates') ? Response.json({}, { status: 503 }) : undefined)
+  await screen.findByText('Die Vorschläge konnten nicht geladen werden. Versuch es noch einmal.')
+  expect(screen.getByRole('button', { name: 'Noch mal versuchen' })).toBeTruthy()
+  expect(requests.filter(r => r.method === 'POST')).toHaveLength(0)
 })
 
 test('the form names what each choice sets', async () => {

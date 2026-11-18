@@ -143,6 +143,20 @@ async def test_account_and_personal_tasks_reach_model_but_other_accounts_do_not(
     assert 'account_and_unlinked' in payload
 
 
+async def test_preference_tool_payload_never_retains_a_second_value_copy(store, monkeypatch):
+    events, fake = await run(store, monkeypatch, [[chunk('propose_preference', {
+        'source_message_id': 'forged-source', 'key': 'answer_length', 'scope': '*',
+        'value': 'synthetic-private-candidate', 'confirmed': True,
+    })], ['Bitte formuliere eine eigene Merke-dir-Bitte.']])
+    assert events[-1].event == 'done'
+    user = next(row for row in store.rows if row.role == 'user')
+    assert user.id in fake.requests[0]['messages'][0]['content']
+    call = next(row for row in store.rows if row.tool_payload_json and row.role == 'assistant')
+    assert json.loads(call.tool_payload_json)[0]['function']['arguments'] == '{}'
+    assert all('synthetic-private-candidate' not in row.tool_payload_json + row.content + row.extras_json for row in store.rows)
+    assert not any(row.role == 'proposal' for row in store.rows)
+
+
 async def test_turn_streams_text_deltas_in_order(store, monkeypatch):
     events, _ = await run(store, monkeypatch, [['Hallo', ' Welt']])
     assert [e.text for e in events if e.event == 'delta'] == ['Hallo', ' Welt']

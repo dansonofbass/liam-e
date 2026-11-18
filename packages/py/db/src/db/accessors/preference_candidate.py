@@ -201,9 +201,11 @@ async def cancel_card(session, row):
     return card
 
 
-async def list_rows(session):
+async def list_rows(session, candidate_id=None):
+    """The inbox is bounded by the pending quota; history loads one exact reference."""
     rows = list((await session.execute(select(PreferenceCandidate).where(
-        PreferenceCandidate.owner_scope == OWNER_SCOPE
+        PreferenceCandidate.owner_scope == OWNER_SCOPE,
+        PreferenceCandidate.id == candidate_id if candidate_id else PreferenceCandidate.status == 'pending',
     ).order_by(PreferenceCandidate.created_at.desc()))).scalars())
     for row in rows:
         if row.status in {'pending', 'accepted'}:

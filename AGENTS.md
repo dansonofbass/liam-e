@@ -105,6 +105,8 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Vorlagen | PATCH | `/api/v1/prompts/{id}` | `prompt_update` |
 | Vorlagen | DELETE | `/api/v1/prompts/{id}` | `prompt_delete` |
 | Präferenzen | GET | `/api/v1/preferences` | `preferences_list` |
+| Präferenzen | GET | `/api/v1/preferences/candidates` | `preference_candidates_list` |
+| Präferenzen | POST | `/api/v1/preferences/candidates/{candidate_id}/propose` | `preference_candidate_propose` |
 | Präferenzen | POST | `/api/v1/preferences` | `preference_create` |
 | Präferenzen | PATCH | `/api/v1/preferences/{id}` | `preference_update` |
 | Präferenzen | DELETE | `/api/v1/preferences/{id}` | `preference_delete` |
@@ -493,7 +495,8 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `mail_job` — dauerhafte Sync-/Insight-Warteschlange mit Status, Deduplizierung, Versuchen und Sperrzeit.
 - `chat_conversation`, `chat_message` — Verlauf; Vorschläge in `proposal_json` mit `proposal_status`, Mailreferenzen/Vorschläge/Modell in `extras_json`; ältere Entwürfe tragen `draft_json`.
 - `user_preference` — serverseitiger Eigentümer `installation`, Schlüssel, kanonischer Scope (`*` global oder Konto-ID), Status, Revisionszeiger und Objektversion; entfernte Zeilen bleiben als inhaltsfreie Unterdrückungsreferenz.
-- `preference_revision` — unveränderlicher Wert, damaliger Schlüssel/Scope, Quelle `manual` und Bestätigungszeit je Revision; beim Löschen wird der Wert entfernt und `removed` gesetzt.
+- `preference_revision` — unveränderlicher Wert, damaliger Schlüssel/Scope, Quelle `manual` oder `confirmed_candidate` und Bestätigungszeit je Revision; beim Löschen wird der Wert entfernt und `removed` gesetzt.
+- `preference_candidate` — unbestätigter Wert mit eigener Quellnachricht, Unterhaltung, Feld/Scope, erwarteter Zielversion/-revision und optionaler Karten-ID; Status `pending|accepted|rejected|expired`. Abgelehnte und entwertete Kandidaten behalten nur inhaltsfreie Referenzen.
 - `personalization_settings` — serverseitiger Singleton mit `use_preferences`, `suggest_preferences` (beide standardmäßig false) und Version; Vorschläge können noch nicht aktiviert werden.
 - `ui_settings` — die eine geräteübergreifende Bedienungskonfiguration mit festem serverseitigem Scope (`installation`, unique): `swipe_left`/`swipe_right` aus der Allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` für bedingte Updates und `updated_at`; Erstinitialisierung mit links `archive`, rechts `toggle_read`.
 
@@ -557,7 +560,7 @@ Fallback. Ausschalten, Pausieren, Scopewechsel und Löschen widerrufen betroffen
 derselben Transaktion: Ausschalten alle Turns mit mindestens einer verwendeten Revision, die
 anderen Aktionen die Turns mit einer Revision der geänderten Präferenz. Turns ohne verwendete
 Präferenz bleiben gültig, auch ihre offenen Vorschläge. Die Rangfolge steht in den festen
-App-Regeln (`agent_prompt.py`, `APP_PROMPT_VERSION` 6). Die vorhandenen Live-Prüfungen vor Modell-/Werkzeugaufrufen und nach zehn
+App-Regeln (`agent_prompt.py`, `APP_PROMPT_VERSION` 7). Die vorhandenen Live-Prüfungen vor Modell-/Werkzeugaufrufen und nach zehn
 Deltas bleiben maßgeblich; bereits gesendete Anfragen sind nicht rückholbar.
 
 Die gemeinsame transaktionale Präferenzsperre serialisiert Quoten, Änderungen, Auflösung und
@@ -565,13 +568,53 @@ Kontolöschung. `mail_account.delete_account` entfernt Kontopräferenzen in der 
 `mail/service.py` ist im aktuellen Stand nicht der Löschpfad. Löschen entfernt alle Revisionswerte,
 erhält inhaltsfreie Referenzen und widerruft laufende Kontexte. Historische Anzeige:
 „Präferenz entfernt“. Ursprüngliche Chatnachrichten und Antworten bleiben bestehen.
-Für #39 sind entfernte `user_preference`-Zeilen mit Schlüssel und Scope die Unterdrückungsreferenz;
-Kandidaten müssen diese vor Vorschlägen prüfen und dürfen entfernte Revisionen nie auflösen.
-Kandidaten, „Merke dir“-Werkzeuge und Vorschlagskarten gehören nicht zu diesem Schnitt.
+Entfernte `user_preference`-Zeilen mit Schlüssel, Scope und `removed_at` sind die
+Unterdrückungsreferenz: Nachrichten vor dem Entfernen dürfen den Wert nicht wiederherstellen;
+eine neue ausdrückliche Bitte bleibt möglich. Entfernte Revisionen werden nie aufgelöst.
 
-Die GETs `preferences_list`, `preference_context_get` und `settings_get` bleiben ausdrücklich in
+### Bestätigte Merke-dir-Karten (#39)
+
+`propose_preference` ist das einzige neue Werkzeug. Es bindet die vom Server gespeicherte
+aktuelle eigene Nachricht an die Unterhaltung, begrenzt Werte auf 500 Zeichen und prüft Feld,
+Kontoumfang sowie die Quoten aus #38. Ein konservativer Eingang verlangt eine direkte Bitte
+mit „Merke dir“, „Bitte merke dir“ oder „Speichere dauerhaft/als Präferenz“ am Anfang.
+Zitate, hypothetische Beispiele und fremde Nachrichten allein öffnen diesen Ablauf nicht;
+bei unklarer Formulierung bittet der Agent um eine neue direkte Bitte. Die Textprüfung ist
+kein semantischer Klassifikator und ersetzt niemals die Bestätigung. Zusätzliche Argumente
+wie `confirmed` oder `origin` werden abgelehnt.
+
+Die gemeinsame Präferenzsperre serialisiert Kandidatenanlage, Quoten, Bestätigung und Löschen.
+Es gibt höchstens 50 offene Kandidaten. Quelle/Feld/Scope ist eindeutig, auch nach Ablehnung;
+Wiederholen schreibt keinen neuen Text in einen abgelehnten Kandidaten. Karten enthalten nur
+eine Kandidaten-ID. Auch gespeicherte Werkzeugargumente enthalten keine Wertkopie.
+Ein offener Mail-/Aufgabenvorschlag bleibt beim Präferenzvorschlag unverändert; der Kandidat
+bleibt ohne Karte unter Einstellungen → Präferenzen → Vorschläge prüfbar. Das bestehende
+Ersetzen einer offenen Karte durch Mail-/Aufgabenwerkzeuge bleibt erhalten, entfernt bei
+einer verdrängten Präferenzkarte aber deren Kandidatenwert.
+
+`GET /preferences/candidates` liest offene Kandidaten; mit `candidate_id` eine genaue Referenz,
+auch für historische Karten. Quelle und Bisher/Vorschlag werden aus aktuellen zugreifbaren
+Zeilen geladen. Fehlende Quellen und Konten entwerten die Referenz und entfernen den Wert.
+`POST /preferences/candidates/{candidate_id}/propose` öffnet idempotent eine Karte, nur wenn
+der gemeinsame Slot frei ist. Eine bestehende Karten-ID wird wiederverwendet.
+`refresh: true` bedeutet ausdrücklich erneute Prüfung nach einem Versionskonflikt, nicht
+Bestätigung. Die Oberfläche verlinkt die Karte in ihrer Unterhaltung.
+
+Confirm/Cancel verwenden ausschließlich die bestehenden Chat-Endpunkte. Confirm nimmt nur
+für Präferenzen `preference_decision` mit `choice=replace|keep`, `expected_version` und
+`expected_revision_id`. Claim, erneute Quellen-/Versions-/Quotenprüfung, unveränderliche
+Revision und Kartenabschluss liegen in einer Transaktion. Ein 409 liefert den aktuellen
+Stand ausschließlich an den Browser; die Oberfläche sperrt Bestätigen bis zur erneuten
+Prüfung. Exakt gleiche Werte erzeugen keine neue Revision. Behalten und Abbrechen entfernen
+den Kandidatenwert. Löschen einer Präferenz entfernt auch zugehörige Kandidatenwerte, selbst
+nach Annahme; die referenziellen Karten können keinen Inhalt wiederherstellen.
+Bestätigen ändert `use_preferences` nie. Ohne Nutzungsschalter bleibt die nächste Antwort
+ohne Präferenzinjektion. Automatische Extraktion und Aktivierung von `suggest_preferences`
+gehören nicht zu #39 und bleiben gesperrt.
+
+Die GETs `preferences_list`, `preference_context_get`, `preference_candidates_list` und `settings_get` bleiben ausdrücklich in
 `BROWSER_ONLY_GET_OPERATIONS` der MCP-Inventur und außerhalb der Studio-Leseliste: lesend allein
-macht persönliche Werte nicht agentensicher. Die vier Schreiboperationen stehen in
+macht persönliche Werte nicht agentensicher. Die Schreiboperationen einschließlich `preference_candidate_propose` stehen in
 `MUTATING_OPERATIONS`. Neue Präferenzen werden nicht zu Werkzeugberechtigungen.
 
 ## Worker und periodischer Abruf

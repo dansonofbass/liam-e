@@ -1,0 +1,22 @@
+.le-preference-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+.le-preference-values > div { min-width: 0; }
+.le-preference-values p, .le-preference-source blockquote, .le-preference-conflict p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.le-preference-values h4, .le-preference-conflict h4 { font-weight: 600; }
+.le-preference-source, .le-preference-hint, .le-preference-conflict {
+  margin: var(--space-4);
+}
+.le-preference-source summary { cursor: pointer; padding-block: var(--space-3); }
+.le-preference-source blockquote { margin-block: var(--space-3); }
+.le-preference-proposal .le-confirm-foot { flex-wrap: wrap; }
+.le-preference-conflict { display: grid; gap: var(--space-3); }
+@media (max-width: 639px) {
+  .le-preference-values { grid-template-columns: minmax(0, 1fr); }
+}

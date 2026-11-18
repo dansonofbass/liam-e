@@ -607,8 +607,22 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 - Die ausdrücklich abgestimmte Aktion heißt „Präferenz hinzufügen“; das ist keine Ausnahme
   für das Verbinden von Konten. Leere Listen nennen keine Prozentwerte. Quelle manueller Werte:
   „Von dir eingetragen“. Feld und Geltungsbereich sind Chips mit sichtbarer Beschriftung darüber.
-  Vorschläge erscheinen nur als Hinweis, dass sie noch nicht verfügbar sind, nicht als
-  deaktivierter Button: Sekundäre Buttons sehen deaktiviert nicht anders aus.
+  Bestätigte Chatwerte tragen „Von dir im Chat bestätigt“. Unter „Vorschläge“ stehen offene
+  Merke-dir-Kandidaten, noch keine aktiven Präferenzen. „Vorschlag prüfen“ öffnet eine Karte
+  nur bei freiem Platz in der Unterhaltung; sonst erklärt ein Hinweis die offene Karte.
+  Eine bereits zugehörige Karte wird mit „Karte öffnen“ verlinkt, niemals dupliziert.
+  Automatische Vorschläge bleiben als noch nicht verfügbar erklärt, ohne toten Button.
+- Präferenzkarten laden den Wert über ihre Kandidatenreferenz. Sie zeigen Feld, Konto und
+  „Bisher“/„Vorschlag“, auf dem Handy untereinander. „Deine Bitte“ lässt sich aufklappen.
+  Bei bestehendem Wert entscheiden „Ersetzen“ und „Bisherige behalten“; „Abbrechen“ verwirft
+  den Kandidaten ohne Änderung der Präferenz. Gleiche Werte erklären ausdrücklich den No-op.
+  Bestätigen ändert den Nutzungsschalter nie; bei ausgeschalteter Verwendung steht nachher
+  „Gespeichert. Verwendung ist ausgeschaltet.“ Der Fokus geht auf das Ergebnis.
+- Ein Versionskonflikt zeigt „Inzwischen gespeichert“ und sperrt die Entscheidung, bis
+  „Aktuellen Stand prüfen“ die neue Vergleichsfassung lädt. Es gibt keinen automatischen
+  Bestätigungsversuch. Danach liegt der Fokus auf der Kartenüberschrift. Entfernte Konten,
+  Quellen oder Präferenzen zeigen keine Wertkopien und keine Bestätigungsaktion mehr.
+  Laden, Fehler mit Wiederholen und eine leere Vorschlagsliste haben eigene Zustände.
 - Löschen erklärt, dass Chatnachrichten und Antworten bleiben und bereits übermittelte Anfragen
   nicht zurückholbar sind. Es verspricht weder Löschung beim Anbieter noch aus Backups und bietet
   einen neuen Chat ohne bisherigen Kontext. Fokus bleibt im Dialog und kehrt beim Schließen zurück.

@@ -4,7 +4,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvid
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState, type ReactNode } from 'react'
 import * as sdk from '../api/generated/sdk.gen'
-import type { ChatMessageOut, ProposalResult } from '../api/generated/types.gen'
+import type { CandidateOut, ChatMessageOut, ProposalResult } from '../api/generated/types.gen'
 import { ProposalCard } from './ProposalCard'
 import { ChatSessionProvider, useChatSession } from './session'
 
@@ -52,6 +52,89 @@ async function setupConfirmed(done: ChatMessageOut, clock?: Parameters<typeof se
   await screen.findByRole('button', { name: 'Rückgängig' })
   return client
 }
+
+function preferenceCard() {
+  const card = message()
+  card.proposal = { kind: 'preference', reason: '', items: [], preference: { candidate_id: 'candidate' } }
+  return card
+}
+function preferenceCandidate(): CandidateOut {
+  return { id: 'candidate', conversation_id: 'c', source_message_id: 'user', source_text: 'Merke dir: Antworte kurz.', key: 'answer_length', scope: '*', account_name: null, value: 'Kurz', status: 'pending', proposal_id: 'p', expected_version: 1, expected_revision_id: 'revision-1', previous_value: 'Ausführlich', current_value: 'Ausführlich', current_version: 1, current_revision_id: 'revision-1', use_preferences: false }
+}
+
+test('preference replacement uses a typed decision once, preserves opt-out and focuses the result', async () => {
+  const initial = preferenceCard()
+  spyOn(sdk, 'preferenceCandidatesList').mockResolvedValue({ data: [preferenceCandidate()] } as never)
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: { ...initial, proposal_status: 'done', proposal: { ...initial.proposal, result: { done: 1, preference_outcome: 'saved', preferences_enabled: false } } } } as never)
+  const settings = spyOn(sdk, 'settingsUpdate')
+  const client = setup(initial), invalidate = spyOn(client, 'invalidateQueries')
+  expect(await screen.findByText('Bisher')).toBeTruthy()
+  expect(screen.getByText('Vorschlag')).toBeTruthy()
+  expect(screen.getByText('Merke dir: Antworte kurz.')).toBeTruthy()
+  const button = screen.getByRole('button', { name: 'Ersetzen' })
+  button.focus(); fireEvent.click(button); fireEvent.click(button)
+  const result = await screen.findByText('Gespeichert. Verwendung ist ausgeschaltet.')
+  expect(confirm).toHaveBeenCalledTimes(1)
+  expect(confirm.mock.calls[0]?.[0]?.body).toEqual({ selected_ids: [], preference_decision: { choice: 'replace', expected_version: 1, expected_revision_id: 'revision-1' } })
+  expect(settings).not.toHaveBeenCalled()
+  expect(result.closest('.le-proposal-outcome')).toBe(document.activeElement)
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['preferences'] })
+})
+
+test('preference conflict requires explicit review, displays current values and never retries confirm', async () => {
+  const row = preferenceCandidate()
+  spyOn(sdk, 'preferenceCandidatesList').mockImplementation((async () => ({ data: [row] })) as never)
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => {
+    row.current_value = 'Mittellang'; row.current_version = 2; row.current_revision_id = 'revision-2'
+    throw { detail: { code: 'preference_candidate_conflict', current: row } }
+  }) as never)
+  const refresh = spyOn(sdk, 'preferenceCandidatePropose').mockImplementation((async () => ({ data: { ...row, expected_version: 2, expected_revision_id: 'revision-2', previous_value: 'Mittellang' } })) as never)
+  setup(preferenceCard())
+  fireEvent.click(await screen.findByRole('button', { name: 'Ersetzen' }))
+  expect(await screen.findByText('Mittellang')).toBeTruthy()
+  expect((screen.getByRole('button', { name: 'Ersetzen' }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'Aktuellen Stand prüfen' }))
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Ersetzen' }) as HTMLButtonElement).disabled).toBe(false))
+  expect(refresh.mock.calls[0]?.[0]?.body).toEqual({ refresh: true })
+  expect(confirm).toHaveBeenCalledTimes(1)
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Präferenz speichern?' }))
+})
+
+for (const choice of ['keep', 'cancel'] as const) test(`preference ${choice} uses only the existing route`, async () => {
+  const initial = preferenceCard()
+  spyOn(sdk, 'preferenceCandidatesList').mockResolvedValue({ data: [preferenceCandidate()] } as never)
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: { ...initial, proposal_status: 'done', proposal: { ...initial.proposal, result: { done: 0, preference_outcome: 'kept' } } } } as never)
+  const cancel = spyOn(sdk, 'chatProposalCancel').mockResolvedValue({ data: { ...initial, proposal_status: 'cancelled' } } as never)
+  setup(initial)
+  fireEvent.click(await screen.findByRole('button', { name: choice === 'keep' ? 'Bisherige behalten' : 'Abbrechen' }))
+  if (choice === 'keep') {
+    await screen.findByText('Bisherige Präferenz behalten.')
+    expect(confirm.mock.calls[0]?.[0]?.body?.preference_decision?.choice).toBe('keep')
+    expect(cancel).not.toHaveBeenCalled()
+  } else {
+    await screen.findByText('Abgebrochen, es wurde nichts geändert.')
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(confirm).not.toHaveBeenCalled()
+  }
+})
+
+test('identical preference displays a deterministic no-op', async () => {
+  const initial = preferenceCard()
+  spyOn(sdk, 'preferenceCandidatesList').mockResolvedValue({ data: [{ ...preferenceCandidate(), previous_value: 'Kurz' }] } as never)
+  spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: { ...initial, proposal_status: 'done', proposal: { ...initial.proposal, result: { done: 0, preference_outcome: 'unchanged' } } } } as never)
+  setup(initial)
+  await screen.findByText('Dieser Wert ist bereits gespeichert. Bestätigen ändert ihn nicht.')
+  fireEvent.click(screen.getByRole('button', { name: 'Präferenz speichern' }))
+  await screen.findByText('Dieser Wert ist bereits gespeichert. Nichts geändert.')
+})
+
+test('a removed preference account shows no values or confirmation button', async () => {
+  spyOn(sdk, 'preferenceCandidatesList').mockResolvedValue({ data: [{ ...preferenceCandidate(), status: 'expired', value: null, source_text: null, previous_value: null }] } as never)
+  setup(preferenceCard())
+  await screen.findByText(/Dieser Vorschlag ist nicht mehr verfügbar/)
+  expect(screen.queryByRole('button', { name: 'Ersetzen' })).toBeNull()
+  expect(screen.queryByText('Kurz')).toBeNull()
+})
 
 test('task revision collisions explain the conflicting completed occurrence', async () => {
   const initial = message()

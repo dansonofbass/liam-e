@@ -70,8 +70,8 @@ def unavailable():
 async def listing(candidate_id=None):
     async with get_session_maker()() as session:
         await preferences.lock(session)
-        rows = await candidates.list_rows(session)
-        result = [await view(session, row) for row in rows if candidate_id is None or row.id == candidate_id]
+        rows = await candidates.list_rows(session, candidate_id)
+        result = [await view(session, row) for row in rows]
         await session.commit()
         return result
 
