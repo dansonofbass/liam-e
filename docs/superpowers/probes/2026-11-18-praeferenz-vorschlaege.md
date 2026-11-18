@@ -1,4 +1,4 @@
-# Präferenzvorschläge: Offline-Probe vom 18.11.2026
+# Präferenzvorschläge: Probe vom 18.11.2026
 
 ## Aufbau
 
@@ -15,31 +15,36 @@ Validierungsweg wie im Chat. Werkzeuge und Verlauf fehlen.
 ## Ergebnis offline
 
 `bash tools/uv.sh run --no-sync python tools/preference_extraction_eval.py`
-endete mit Exitcode 0 und **12/12** passenden Ergebnissen:
+endete mit Exitcode 0. Gespeichert würde in **12 von 12** Fällen das Erwartete.
 
-| Fälle | Erwartet | Erhalten |
-| --- | --- | --- |
-| durable-short, durable-detail, durable-salutation, durable-signature | je 1 Vorschlag | je 1 Vorschlag |
-| situational-short, situational-detail, situational-salutation, situational-signature | je 0 Vorschläge | je 0 Vorschläge |
-| quoted-wish, foreign-wish, hypothetical-wish, forwarded-wish | je 0 Vorschläge | je 0 Vorschläge |
+**Das ist keine Messung der Modellgüte:** Offline werden festgelegte Ausgaben validiert. Der API-Test
+schickt alle zwölf Fälle zusätzlich durch den Prompt-/Schemaweg mit einem gemockten Client. Separate
+Negativtests lassen den Mock dennoch Kandidaten für die acht ungeeigneten Eingaben liefern und prüfen
+deren Ablehnung.
 
-Keine Abweichung in den vorgegebenen Antworten. **Das ist keine Messung der
-Modellgüte:** Offline werden festgelegte Ausgaben validiert. Der API-Test schickt
-alle zwölf Fälle zusätzlich durch den Prompt-/Schemaweg mit einem gemockten
-Client. Separate Negativtests lassen den Mock dennoch Kandidaten für die acht
-ungeeigneten Eingaben liefern und prüfen deren Ablehnung.
+## Ergebnis live (18.11.2026)
 
-Der konservative Dauerhaftigkeits- und Zitatfilter kann echte Wünsche übersehen.
-Er kann semantische Fehlklassifikationen nicht allgemein ausschließen.
+Lauf: `bash tools/uv.sh run --no-sync python tools/preference_extraction_eval.py --live`, Modell
+`mistral-medium-latest` (Standard `mail_chat_model`), lokal mit dem Schlüssel der App. Gesendet
+wurden nur die zwölf synthetischen Fixturetexte. Die Ausgabe enthält nur Fallkennung, erwartete
+und erhaltene Zahl.
+
+| Fälle | Erwartet | Modell | Gespeichert |
+| --- | --- | --- | --- |
+| durable-short, durable-detail, durable-salutation, durable-signature | je 1 | je 1 gültiger Vorschlag | je 1 |
+| situational-detail, foreign-wish, hypothetical-wish | je 0 | leere Liste | 0 |
+| situational-short, situational-salutation, situational-signature, quoted-wish, forwarded-wish | je 0 | Vorschlag, von der Validierung verworfen | 0 |
+
+Gespeichert würde also in allen zwölf Fällen das Erwartete. Das Modell allein lag in 7 von 12
+Fällen richtig. Bei den fünf Fehlklassifikationen hat es situative, zitierte oder weitergeleitete
+Bitten als dauerhaft vorgeschlagen; die Prüfung auf Dauerhaftigkeitswörter, Zitate und
+Belegstelle hat sie abgefangen. Ohne diese Prüfung entstünden falsche Vorschläge. Der Filter
+verwirft immer die ganze Antwort, auch wenn darin ein gültiger Vorschlag steckt.
+
+Die Zahlen gelten für einen Lauf mit zwölf kurzen Texten. Über andere Formulierungen,
+Sprachen oder Modelle sagen sie nichts. Der konservative Filter kann echte Wünsche übersehen.
 Vorschläge sind deshalb niemals bestätigte Präferenzen und wirken nicht auf Antworten.
 
-## Live noch offen
-
-Die Live-Probe wurde nicht ausgeführt; es lag kein Modellschlüssel vor.
-Nur der ausdrückliche Aufruf mit `--live` sendet die zwölf synthetischen Fälle
-über den bestehenden privaten Mistral-Client (`utils.mistral` über
-`api.mail.chat_client`). Ausgabe: Fallkennung, erwartet, erhalten, Gesamtzahl.
-Kein Eingabetext, Modelltext oder Fehlerdetail wird ausgegeben.
-
-Nach der Live-Probe sind Modellname, Trefferzahl und Fehlklassifikationen hier
-nachzutragen. Offline-Ergebnisse ersetzen diese Prüfung nicht.
+Das Werkzeug meldet inzwischen `rejected`, wenn die Validierung eine Modellantwort verwirft, und
+trennt das von anderen Fehlern. Es gibt je Lauf beide Summen aus: was gespeichert würde und was das
+Modell ohne Validierung geliefert hat.

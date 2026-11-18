@@ -11,18 +11,26 @@ FIXTURES = Path(__file__).resolve().parents[1] / 'apps/api/tests/fixtures/prefer
 
 
 async def main(live=False):
-    matched = 0
+    """Print per case what would be stored; `rejected` means validation dropped the model output.
+
+    A rejected output stores nothing, so it matches an expected 0. Other errors never match.
+    """
+    matched = model_matched = 0
     cases = json.loads(FIXTURES.read_text())
     for case in cases:
         try:
             items = (await extract(case['text'], env.mail_chat_model) if live else
                      validate_output(json.dumps({'candidates': case['candidates']}), case['text']))
             got = len(items)
+        except ValueError:
+            got = 'rejected'
         except Exception:
             got = 'error'
-        matched += got == case['expected']
+        stored = 0 if got == 'rejected' else got
+        matched += stored == case['expected']
+        model_matched += got == case['expected']
         print(f"{case['id']} expected={case['expected']} got={got}")
-    print(f'{matched}/{len(cases)}')
+    print(f'stored {matched}/{len(cases)}, model without validation {model_matched}/{len(cases)}')
     return 0 if matched == len(cases) else 1
 
 

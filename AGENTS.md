@@ -675,11 +675,14 @@ Downgrade stellt `NOT suggest_preferences` wieder her; vor einem solchen Downgra
 Vorschläge ausgeschaltet werden. Der PG-Vertrag prüft nach Migration auf `heads` einen
 leeren Autogenerate-Diff.
 
-Offline-Auswertung und offene Live-Probe:
+Offline- und Live-Auswertung:
 [Präferenzvorschläge vom 18.11.2026](docs/superpowers/probes/2026-11-18-praeferenz-vorschlaege.md).
 `bash tools/uv.sh run --no-sync python tools/preference_extraction_eval.py` prüft zwölf
 synthetische Fälle ohne Modell. Nur das ausdrücklich angehängte `--live` sendet diese
 zwölf Fixtures über den vorhandenen App-Client an Mistral; keine historischen Daten.
+Live lag das Modell in 7 von 12 Fällen richtig; die übrigen fünf hat die Validierung
+verworfen, sodass in allen zwölf Fällen das Erwartete gespeichert würde. Die Validierung ist
+also tragend und darf nicht gelockert werden, ohne die Auswertung zu wiederholen.
 
 ## Worker und periodischer Abruf
 
