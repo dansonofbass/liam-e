@@ -446,6 +446,33 @@ Quoted German labels in this section are UI text.
 - Long values (subject, address, account name) end with an ellipsis; full text is in the
   accessible name or tooltip.
 
+### 7.6 Calendar by breakpoint
+
+- Toolbar: „Heute“, previous and next as icon buttons, the period as title, „Neuer Termin“ (only
+  with a writable calendar), the view switch „Monat | Woche | Tag | Liste“ as a segmented control
+  with `aria-pressed`, and „Abrufen“. The toolbar wraps; the title never runs under the buttons.
+  Below it the calendars as toggles with a coloured dot and the name. Colours repeat from the fifth
+  calendar, so the name identifies it. Calendar notices collapse into one line „Kalenderstand
+  anzeigen“.
+- `desktop` and `tablet` open in week, `mobile` in day with a seven-day strip on top. Week and day:
+  an all-day row, then an hour grid in its own scroll area, scrolled to 07:00 or to the hour before
+  now; a now-line in today's column; overlapping appointments share the column width. The gutter
+  label carries a soft hyphen („Ganz-tägig“), because browsers may lack German hyphenation. Month:
+  six weeks from Monday, up to three entries per day and „+N weitere“, which opens that day; days
+  outside the month are dimmed. On `mobile` the month shows dots and the selected day's
+  appointments below.
+- An appointment opens its detail: on `desktop` as a panel beside the grid, like the reading pane;
+  on `tablet` and `mobile` as its own view with „Zum Kalender“. The detail shows the live state with
+  „Bearbeiten“ and „Löschen“, or „Nur lesbar“ with the reason and „In Google Kalender öffnen“.
+- Creating and editing use one dialog. While Google's answer is open it says „Wird geprüft …“ and
+  offers „Prüfen“; a conflict shows the current values with „Übernehmen und neu bearbeiten“;
+  „Erneut versuchen“ appears only after a definite failure. Deleting asks in a dialog and says
+  that it cannot be guaranteed to be undone. A change whose result is still open stays as a notice
+  with „Prüfen“ after its dialog closes; until then no new appointment, or no further change to
+  that appointment, can start.
+- Every appointment is a link whose accessible name holds title, day, time and calendar. With
+  `pointer: coarse` targets are at least 44 px; nothing is hover-only.
+
 ## 8. Accessibility
 
 The quoted key label is UI text.
@@ -496,6 +523,10 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   in the tooltip.
 - After the click a notice replaces the card, with result and „Rückgängig“ where possible. Never
   confirm automatically, never two open cards at once.
+- **Calendar card:** „Termin anlegen“, „Termin ändern“ or „Termin löschen“ with the calendar,
+  the reason, „Bisher“ and „Vorschlag“ side by side (one column on `mobile`) and the time zone.
+  The card states that a concurrent change in Google can be overwritten. There is no „Rückgängig“;
+  an open result offers „Prüfen“, and a changed appointment asks for a new proposal.
 - **Actions initiated by the user in the inbox** on one mail or multiple selected mails take effect
   immediately and then show a notice for 10 seconds with a shared „Rückgängig“. Assistant proposals
   continue through the confirmation card.

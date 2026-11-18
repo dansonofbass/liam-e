@@ -286,8 +286,22 @@ task description. After confirm the card invalidates the `tasks` query group.
 
 ## Calendar domain
 
-The UI at `/calendar` shows the shared agenda; `/calendar/$occurrenceId` opens a stable
-occurrence. `is_active` remains the permission: paused sources appear in management and as a
+The UI at `/calendar` is a calendar with the views month, week, day and list. View and date are
+in the URL (`/calendar?view=week&date=2026-11-18`); invalid values fall back to week (on mobile:
+day) and today. Week and day show an all-day row and an hour grid with a now line; month shows six
+weeks from Monday with up to three entries per day and “+N weitere”; list is the earlier agenda
+with its from and to fields. `useRangeOccurrences` loads the visible range from the index endpoint
+and follows up to ten cursor pages of 100; beyond that the view says that not everything was
+loaded. `/calendar/$occurrenceId` opens a stable occurrence: on desktop as a panel beside the
+grid, otherwise as its own view. The detail reads the live event (`calendar_occurrence_live`) and
+offers “Bearbeiten” and “Löschen” for an editable event of a writable source, otherwise “Nur lesbar”
+with a fixed reason. A free slot or “Neuer Termin” opens the create dialog when a writable source
+exists. A write whose outcome is `unknown` or `running` stays registered in the browser after its
+dialog closes (`apps/web/src/calendar/write-state.ts`): the calendar offers “Prüfen”, blocks new
+appointments while a create is open and blocks edit and delete of the affected appointment, so the
+same intent is never sent again under a new write ID. A page reload forgets the registry; the
+server record remains, and a check by write ID still resolves it.
+`is_active` remains the permission: paused sources appear in management and as a
 notice, but their appointments remain hidden until activation. They do not contribute to a “Keine Termine” claim and remain blocked for chat tools and old references (decision for #22: option A).
 `CalendarSetup` in `apps/web/src/calendar/FeedSetup.tsx` offers “Kalender abonnieren”
 (`FeedSetup`: name, private calendar address and explicitly displayed fallback zone) and “Google
@@ -299,9 +313,9 @@ normalizes independently again. Address and validation token remain only in dial
 browser storage or query cache. Changes discard validation; subscribing and changing the address
 invalidate the `calendar` query group.
 
-Google calendars connect exclusively read-only through the Studio connector `google_calendar`,
-with no own OAuth fallback. `api/calendar/google.py` contains shared pagination and mapping for
-the production adapter and offline probe. Only `list_calendars` and `list_events` are allowed
+Google calendars connect only through the Studio connector `google_calendar`, with no own OAuth
+fallback. Reading goes through `api/calendar/google.py`, which contains shared pagination and
+mapping for the production adapter and offline probe; writing is described in the next subsection. Only `list_calendars` and `list_events` are allowed
 there; mail allowlists remain unchanged. Management reads all calendar pages (at most ten),
 shows no descriptions and atomically creates selected sources with `capabilities=["read"]` and
 an initial sync job. Repeats leave existing sources unchanged. Because it calls the provider and
@@ -394,11 +408,11 @@ private `connection_ref` is stored with the card but never sent to the browser, 
 and cards do not keep the provider's `htmlLink`. The prompt rules are `APP_PROMPT_VERSION` 8.
 
 The live run of 2026-11-18 is in `docs/superpowers/probes/2026-11-18-google-calendar-write-probe.md`.
-The agenda groups and displays instants in the browser timezone; all-day entries stay on their
+All views group and display instants in the browser timezone; all-day entries stay on their
 date. Local day boundaries are converted to instants. Because the index endpoint accepts only
-whole UTC dates, the query window is rounded outward and also includes all-day dates. Windows
-exceeding 90 UTC days are split into adjacent subwindows, which like cursor pages are loaded only
-explicitly. Boundary results outside selected local start days are hidden and duplicate occurrence
+whole UTC dates, the query window is rounded outward and also includes all-day dates. In the list,
+windows exceeding 90 UTC days are split into adjacent subwindows, which like cursor pages are
+loaded only explicitly; the grid views never exceed six weeks. Boundary results outside selected local start days are hidden and duplicate occurrence
 IDs from adjacent windows merged. An empty partial page does not claim “Keine Termine” while more
 pages or subwindows are missing. A state older than 24 hours gets an age notice; on opening, one
 sync per source is requested via the explicit management endpoint. This does not promise provider
