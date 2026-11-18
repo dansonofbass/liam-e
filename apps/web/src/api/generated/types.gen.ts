@@ -282,6 +282,34 @@ export type BulkMessageActionResult = {
 };
 
 /**
+ * CalendarCommand
+ */
+export type CalendarCommand = {
+    /**
+     * Action
+     */
+    action: 'create' | 'update' | 'delete';
+    after?: CalendarValues | null;
+    before?: LiveEvent | null;
+    /**
+     * Expected Revision
+     */
+    expected_revision?: string | null;
+    /**
+     * Occurrence Id
+     */
+    occurrence_id?: string | null;
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Timezone
+     */
+    timezone: string;
+};
+
+/**
  * CalendarRefOut
  */
 export type CalendarRefOut = {
@@ -293,6 +321,44 @@ export type CalendarRefOut = {
      * Source Id
      */
     source_id: string;
+};
+
+/**
+ * CalendarValues
+ */
+export type CalendarValues = {
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * End Local
+     */
+    end_local?: string | null;
+    /**
+     * Location
+     */
+    location?: string | null;
+    /**
+     * Start Date
+     */
+    start_date?: string | null;
+    /**
+     * Start Local
+     */
+    start_local?: string | null;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
+    /**
+     * Title
+     */
+    title: string;
 };
 
 /**
@@ -2070,6 +2136,7 @@ export type PromptUpdate = {
  * Proposal
  */
 export type Proposal = {
+    calendar?: CalendarCommand | null;
     draft?: SendDraft | null;
     /**
      * Irreversible
@@ -2082,7 +2149,7 @@ export type Proposal = {
     /**
      * Kind
      */
-    kind: 'send' | 'archive' | 'trash' | 'mark_read' | 'unsubscribe' | 'task' | 'preference';
+    kind: 'send' | 'archive' | 'trash' | 'mark_read' | 'unsubscribe' | 'task' | 'preference' | 'calendar';
     preference?: PreferenceReference | null;
     /**
      * Reason
@@ -2180,6 +2247,14 @@ export type ProposalItem = {
  * ProposalResult
  */
 export type ProposalResult = {
+    /**
+     * Calendar Status
+     */
+    calendar_status?: string | null;
+    /**
+     * Calendar Write Id
+     */
+    calendar_write_id?: string | null;
     /**
      * Done
      */
@@ -4201,6 +4276,36 @@ export type ChatProposalCancelResponses = {
 };
 
 export type ChatProposalCancelResponse = ChatProposalCancelResponses[keyof ChatProposalCancelResponses];
+
+export type ChatProposalCheckData = {
+    body?: never;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/v1/chat/proposals/{proposal_id}/check';
+};
+
+export type ChatProposalCheckErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatProposalCheckError = ChatProposalCheckErrors[keyof ChatProposalCheckErrors];
+
+export type ChatProposalCheckResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatMessageOut;
+};
+
+export type ChatProposalCheckResponse = ChatProposalCheckResponses[keyof ChatProposalCheckResponses];
 
 export type ChatProposalConfirmData = {
     body: ProposalConfirmIn;
