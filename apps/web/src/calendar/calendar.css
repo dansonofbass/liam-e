@@ -55,8 +55,6 @@
 .le-time-event { position: absolute; z-index: 1; overflow: hidden; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius-sm); }
 .le-time-now { position: absolute; left: 0; right: 0; border-top: 2px solid var(--danger); pointer-events: none; }
 @media (pointer: coarse) { .le-month-event, .le-time-all-day, .le-time-event { min-height: var(--control-height-lg); min-width: var(--control-height-lg); } }
-/* These override the base control height, so they restore the touch target themselves. */
-@media (pointer: coarse) { .le-calendar-switch .le-btn, .le-month-more.le-btn { min-height: var(--control-height-lg); } }
 /* On the accounts page the sources are cards like the accounts above them. */
 .le-calendar-sources { display: flex; flex-direction: column; gap: var(--space-4); max-width: 1180px; margin-top: var(--space-6); }
 .le-calendar-sources > h2 { margin: 0; }
@@ -68,7 +66,6 @@
 @media (max-width: 639px) { .le-calendar-agenda, .le-calendar-detail { padding: var(--space-4); } }
 /* DESIGN.md §7.2: links are not base controls, so the calendar gives them the touch size itself. */
 @media (pointer: coarse) {
-  .le-month-date, .le-day-strip .le-chip { min-height: var(--control-height-lg); min-width: var(--control-height-lg); }
   .le-month-mobile-grid { grid-template-columns: repeat(7, minmax(var(--control-height-lg), 1fr)); }
   .le-month-mobile { overflow-x: auto; }
   .le-google-choice .le-field { grid-template-columns: var(--control-height-lg) minmax(0, 1fr); }
@@ -147,4 +144,12 @@
   .le-calendar-add { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
   .le-event-form .le-calendar-range { grid-template-columns: minmax(0, 1fr); }
   .le-calendar-sources-row { flex-wrap: nowrap; overflow-x: auto; }
+}
+/* Touch sizes for controls whose base rules above are smaller at the same specificity: this block
+   must stay last. The day strip keeps its flexible width so seven days fit on narrow phones. Month
+   rows grow with their 44 px entries instead of letting them overlap; the month grid scrolls. */
+@media (pointer: coarse) {
+  .le-month-week { grid-template-rows: var(--control-height-lg) repeat(4, auto); }
+  .le-calendar-switch .le-btn, .le-month-more.le-btn, .le-day-strip .le-chip { min-height: var(--control-height-lg); }
+  .le-month-date.le-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); }
 }

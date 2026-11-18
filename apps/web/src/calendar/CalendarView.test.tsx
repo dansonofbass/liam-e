@@ -212,11 +212,15 @@ test('an unresolved create blocks new appointments until it is checked', async (
   expect(check.mock.calls[0]?.[0]?.path.write_id).toBe('test-only')
   expect(screen.queryByText(de.calendar.unresolved)).toBeNull()
 })
-test('coarse pointers get 44 px view switch and overflow buttons, and the calendar row wraps', async () => {
+test('coarse pointers get 44 px view switch, month dates and overflow buttons, and the calendar row wraps', async () => {
   const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
-  const coarse = css.match(/@media \(pointer: coarse\) \{([\s\S]*?)\n\}/gu)?.join('\n') ?? ''
-  expect(coarse).toContain('.le-calendar-switch .le-btn')
-  expect(coarse).toContain('.le-month-more.le-btn')
+  // The base rules size these controls smaller at the same specificity, so the touch block wins
+  // only as the last rule in the file. A text match alone let an inert rule pass before.
+  const tail = css.slice(css.lastIndexOf('@media (pointer: coarse)'))
+  let depth = 0, end = -1
+  for (let i = 0; i < tail.length && end < 0; i++) { if (tail[i] === '{') depth++; else if (tail[i] === '}' && --depth === 0) end = i }
+  expect(tail.slice(end + 1).trim()).toBe('')
+  for (const selector of ['.le-month-week', '.le-calendar-switch .le-btn', '.le-month-more.le-btn', '.le-month-date.le-btn', '.le-day-strip .le-chip']) expect(tail).toContain(selector)
   expect(css.match(/^\.le-calendar-sources-row \{([^}]+)\}/mu)?.[1]).toContain('flex-wrap: wrap')
 })
 test('the list keeps its own range: no period navigation, but open writes stay visible', async () => {

@@ -460,8 +460,9 @@ Quoted German labels in this section are UI text.
   now; a now-line in today's column; overlapping appointments share the column width. The gutter
   label carries a soft hyphen („Ganz-tägig“), because browsers may lack German hyphenation. Month:
   six weeks from Monday, up to three entries per day and „+N weitere“, which opens that day; days
-  outside the month are dimmed. On `mobile` the month shows dots and the selected day's
-  appointments below.
+  outside the month are dimmed. With `pointer: coarse` a week grows with its 44 px entries and the
+  month scrolls instead of letting targets overlap. On `mobile` the month shows dots and the
+  selected day's appointments below.
 - An appointment opens its detail: on `desktop` as a panel beside the grid, like the reading pane;
   on `tablet` and `mobile` as its own view with „Zum Kalender“. The detail shows the live state with
   „Bearbeiten“ and „Löschen“, or „Nur lesbar“ with the reason and „In Google Kalender öffnen“.
