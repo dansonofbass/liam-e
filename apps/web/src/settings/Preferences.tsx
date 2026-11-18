@@ -21,22 +21,23 @@ function useRefresh() {
 }
 
 export function Personalization({ saved = false }: { saved?: boolean }) {
-  const query = useQuery(personalizationQuery()), refresh = useRefresh()
+  const query = useQuery(personalizationQuery()), refresh = useRefresh(), explanationId = useId()
   const [confirm, setConfirm] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(false)
   const lock = useRef(false)
   const config = query.data?.personalization
-  const change = async (use: boolean) => {
+  const change = async (use: boolean, field: 'use_preferences' | 'suggest_preferences' = 'use_preferences') => {
     if (!config || lock.current) return
     lock.current = true; setBusy(true); setError(false)
     try {
-      await unwrap(settingsUpdate({ body: { personalization: { expected_version: config.version, use_preferences: use } }, throwOnError: true }))
+      await unwrap(settingsUpdate({ body: { personalization: { expected_version: config.version, [field]: use } }, throwOnError: true }))
       setConfirm(false); refresh()
     } catch { setError(true) } finally { lock.current = false; setBusy(false) }
   }
   if (!config) return query.isPending ? <p role="status">{t.loading}</p> : <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{t.error}</Notice>
   return <div className="le-prompts">
     <Notice tone="info" action={{ label: config.use_preferences ? t.disable : t.enable, onClick: () => { if (busy) return; if (config.use_preferences) void change(false); else setConfirm(true) } }}>{saved ? config.use_preferences ? t.saved : t.savedOff : config.use_preferences ? t.on : t.off}</Notice>
-    <p className="le-hint">{t.suggestionsUnavailable}</p>
+    <Button variant="secondary" role="switch" aria-checked={config.suggest_preferences} aria-describedby={explanationId} disabled={busy} onClick={() => { void change(!config.suggest_preferences, 'suggest_preferences') }}>{t.suggestionsSwitch}</Button>
+    <p id={explanationId} className="le-hint">{config.suggest_preferences ? t.suggestionsOn : t.suggestionsOff} {t.suggestionsExplanation}</p>
     {error && <Notice tone="danger" action={{ label: t.reload, onClick: () => { void query.refetch() } }}>{t.conflict}</Notice>}
     {confirm && <PreferenceDialog title={t.enable} close={() => { if (!busy) setConfirm(false) }}><p>{t.transfer}</p><div className="le-dialog-actions"><Button variant="secondary" disabled={busy} onClick={() => setConfirm(false)}>{de.controls.cancel}</Button><Button variant="primary" disabled={busy} onClick={() => { void change(true) }}>{t.enable}</Button></div></PreferenceDialog>}
   </div>

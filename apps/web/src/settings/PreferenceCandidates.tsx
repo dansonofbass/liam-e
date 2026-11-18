@@ -42,7 +42,7 @@ function Candidate({ row }: { row: CandidateOut }) {
   }
   return <div className="le-prompt-row">
     <strong>{de.preferences.keys[row.key]}</strong><span className="le-prompt-preview">{row.value}</span>
-    <small>{row.scope === '*' ? de.preferences.global : row.account_name ?? de.prompts.scopeUnavailable}</small>
+    <small>{row.scope === '*' ? de.preferences.global : row.account_name ?? de.prompts.scopeUnavailable} · {row.origin === 'extractor' ? t.extractorSource : t.explicitSource}</small>
     {row.proposal_id ? <Link className="le-btn le-btn--secondary" to="/chat/$conversationId" params={{ conversationId: row.conversation_id }} hash={`message-${row.proposal_id}`}>{t.open}</Link>
       : <Button variant="secondary" disabled={busy} onClick={() => { void propose() }}>{t.review}</Button>}
     {blocked && <><Notice tone="info">{t.busySlot}</Notice><Link className="le-link" to="/chat/$conversationId" params={{ conversationId: row.conversation_id }}>{t.openConversation}</Link></>}

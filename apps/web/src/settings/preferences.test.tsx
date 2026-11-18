@@ -129,11 +129,28 @@ test('an answer names its preferences only when it used some', async () => {
   }
 })
 
-test('automatic suggestions stay unavailable while explicit candidates are listed', async () => {
+test('suggestions switch explains transmission and patches only its own opt-in with a version', async () => {
   setup('/settings/preferences')
-  expect(await screen.findByText('Automatische Vorschläge aus deinen Nachrichten sind noch nicht verfügbar.')).toBeTruthy()
+  const toggle = await screen.findByRole('switch', { name: 'Aus meinen Nachrichten Vorschläge machen' })
+  expect(toggle.getAttribute('aria-checked')).toBe('false')
+  expect(screen.getByText(/ausgewählte neue Nachrichten von dir an Mistral übermittelt/)).toBeTruthy()
+  expect(screen.getByText(/Sie bleiben also nicht nur in der App-Datenbank/)).toBeTruthy()
+  fireEvent.click(toggle)
+  await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'))
+  expect(requests.find(r => r.method === 'PATCH')?.body).toEqual({ personalization: { expected_version: 1, suggest_preferences: true } })
+  expect(screen.getByText('Präferenzen aus')).toBeTruthy()
   expect(await screen.findByText('Keine offenen Vorschläge. Du kannst im Chat mit „Merke dir:“ um eine Präferenz bitten.')).toBeTruthy()
-  expect(screen.queryByRole('button', { name: /vorschlagen/ })).toBeNull()
+})
+
+test('suggestion version conflicts do not flip the switch and offer a reload', async () => {
+  setup('/settings/preferences', async req => req.method === 'PATCH' ? Response.json({ detail: { code: 'preference_conflict' } }, { status: 409 }) : undefined)
+  const toggle = await screen.findByRole('switch', { name: 'Aus meinen Nachrichten Vorschläge machen' })
+  fireEvent.click(toggle)
+  const reload = await screen.findByRole('button', { name: 'Aktuelle Fassung laden' })
+  expect(toggle.getAttribute('aria-checked')).toBe('false')
+  const reads = requests.filter(r => r.method === 'GET' && r.path.endsWith('/settings')).length
+  fireEvent.click(reload)
+  await waitFor(() => expect(requests.filter(r => r.method === 'GET' && r.path.endsWith('/settings')).length).toBeGreaterThan(reads))
 })
 
 test('a scope whose account is gone says so once the accounts are loaded', async () => {
@@ -143,12 +160,13 @@ test('a scope whose account is gone says so once the accounts are loaded', async
 })
 
 test('saved candidates do not open cards automatically and a busy slot keeps the proposal', async () => {
-  const candidate = { id: 'candidate', conversation_id: 'conversation', key: 'answer_length', scope: '*', value: 'Kurz', status: 'pending', proposal_id: null }
+  const candidate = { id: 'candidate', origin: 'extractor', conversation_id: 'conversation', key: 'answer_length', scope: '*', value: 'Kurz', status: 'pending', proposal_id: null }
   setup('/settings/preferences', async req => {
     if (new URL(req.url).pathname.endsWith('/candidates')) return Response.json([candidate])
     if (req.url.endsWith('/candidate/propose')) return Response.json(candidate)
   })
   const review = await screen.findByRole('button', { name: 'Vorschlag prüfen' })
+  expect(screen.getByText(/Aus deinem Chatbeitrag vorgeschlagen/)).toBeTruthy()
   expect(requests.filter(r => r.method === 'POST')).toHaveLength(0)
   fireEvent.click(review); fireEvent.click(review)
   await screen.findByText('In dieser Unterhaltung ist schon eine Karte offen. Bestätige sie oder brich sie ab. Dieser Vorschlag bleibt gespeichert.')
