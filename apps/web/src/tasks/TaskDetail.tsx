@@ -49,7 +49,7 @@ export function TaskDetail({ id }: { id: string }) {
     const fn = kind === 'complete' ? tasksOccurrenceComplete : kind === 'skip' ? tasksOccurrenceSkip : tasksOccurrenceReopen
     void run(() => fn({ path: { occurrence_id: item.id }, body: { version: item.version } }))
   }
-  return <main className="le-tasks"><Link to="/tasks" search={true} className="le-link">{t.back}</Link><h1 className="heading">{series.title}</h1>{series.archived && <p>{t.archived}</p>}<p>{series.description}</p><p>{series.schedule?.timezone ?? 'UTC'} · {formatTaskRule(series.schedule?.rrule)}</p>
+  return <main className="le-tasks"><Link to="/tasks" search={true} className="le-link">{t.back}</Link><h1 className="title">{series.title}</h1>{series.archived && <p>{t.archived}</p>}<p>{series.description}</p><p>{series.schedule?.timezone ?? 'UTC'} · {formatTaskRule(series.schedule?.rrule)}</p>
     {series.source_message_id && <SourceMail id={series.source_message_id} />}
     {(reconciling || !series.complete) && <p role="status">{t.incomplete} {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p>}
     {reconcileFailed && <Notice tone="danger" action={{ label: t.retry, onClick: () => setAttempt(value => value + 1) }}>{t.error}</Notice>}

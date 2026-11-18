@@ -9,7 +9,7 @@
 .le-prompt-placeholder { height: var(--control-height-lg); background: var(--surface-soft); border-radius: var(--radius-sm); }
 /* Portal menu text must wrap independently of the page's containers. */
 .le-menu-title, .le-menu-sub { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-.le-settings .le-btn { min-height: var(--control-height-lg); white-space: normal; }
+.le-settings .le-btn { white-space: normal; }
 .le-chat-topbar, .le-chat-header { flex-wrap: wrap; gap: var(--space-2); }
 .le-template-control { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 .le-template-control .le-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

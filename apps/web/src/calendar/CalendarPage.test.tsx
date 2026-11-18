@@ -18,22 +18,21 @@ test('the date range has its own two-column row instead of squeezing beside the 
   expect(css).not.toMatch(/\.le-calendar-controls \.le-field/u)
 })
 
-test('the agenda link in calendar management has a token-sized touch target outside the calendar page', async () => {
-  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
-  const rule = css.match(/^\.le-calendar-back \{ ([^{}]+) \}$/mu)
-  expect(rule).toBeTruthy()
-  for (const part of ['display: inline-flex', 'align-items: center', 'min-height: var(--control-height-lg)', 'min-width: var(--control-height-lg)']) expect(rule?.[1]).toContain(part)
-})
-
-test('the agenda back link has a token-sized touch target even without the desktop container', async () => {
-  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
-  const rule = css.match(/^\.le-calendar-detail > \.le-link \{ ([^{}]+) \}$/mu)
-  expect(rule).toBeTruthy()
-  expect(rule?.[1]).toContain('display: inline-flex')
-  expect(rule?.[1]).toContain('align-items: center')
-  expect(rule?.[1]).toContain('min-height: var(--control-height-lg)')
-  expect(rule?.[1]).toContain('min-width: var(--control-height-lg)')
-})
+// DESIGN.md §7.2: the 44 px touch target applies with a coarse pointer; with a mouse the links keep their text height.
+const coarseBlock = (css: string) => css.match(/@media \(pointer: coarse\) \{([\s\S]*?)\n\}/u)?.[1] ?? ''
+for (const [name, selector, pattern] of [
+  ['the agenda link in calendar management outside the calendar page', '.le-calendar-back', /^\.le-calendar-back \{ ([^{}]+) \}$/mu],
+  ['the agenda back link even without the desktop container', '.le-calendar-detail > .le-link', /^\.le-calendar-detail > \.le-link \{ ([^{}]+) \}$/mu],
+] as const) {
+  test(`${name} has a token-sized touch target on coarse pointers`, async () => {
+    const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
+    const rule = css.match(pattern)
+    for (const part of ['display: inline-flex', 'align-items: center']) expect(rule?.[1]).toContain(part)
+    expect(rule?.[1]).not.toContain('--control-height-lg')
+    const coarse = coarseBlock(css)
+    for (const property of ['min-height', 'min-width']) expect(coarse).toMatch(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}[^{]*\\{ ${property}: var\\(--control-height-lg\\); \\}`, 'u'))
+  })
+}
 
 const source: SourceOut = { id: 'test-only', name: 'Planung', provider: 'google', timezone: 'UTC', is_active: true, capabilities: ['read'], coverage_start: '2026-11-01T00:00:00Z', coverage_end: '2026-12-01T00:00:00Z', last_success_at: '2026-11-13T10:00:00Z', stale: false, incomplete: false }
 test('pausing a source hides its cached agenda rows without waiting for a refetch', async () => {

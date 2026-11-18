@@ -50,14 +50,13 @@ export function CalendarSources() {
     } catch { setMessages(current => ({ ...current, [source.id]: refresh ? de.calendar.refreshError : de.calendar.actionError })) }
     finally { setPending(current => current.filter(id => id !== source.id)) }
   }
-  return <section id="calendar-sources" aria-labelledby="calendar-sources-title">
+  return <section id="calendar-sources" className="le-calendar-sources" aria-labelledby="calendar-sources-title">
     <h2 className="heading" id="calendar-sources-title" tabIndex={-1} ref={heading}>{de.calendar.title}</h2>
-    <Link to="/calendar" className="le-link le-calendar-back">{de.calendar.back}</Link>
-    <CalendarSetup />
+    <div className="le-calendar-controls"><CalendarSetup /><Link to="/calendar" className="le-link le-calendar-back">{de.calendar.back}</Link></div>
     {sources.isPending && <p role="status">{de.calendar.loading}</p>}
     {sources.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void sources.refetch() } }}>{de.calendar.error}</Notice>}
     {sources.data?.length === 0 && <p className="small le-muted">{de.calendar.noSources}</p>}
-    {sources.data?.map(source => <section key={source.id} aria-label={source.name}>
+    {Boolean(sources.data?.length) && <div className="le-calendar-source-list">{sources.data?.map(source => <section key={source.id} className="le-calendar-source" aria-label={source.name}>
       <SourceStatus source={source} />
       <div className="le-calendar-controls">
         <Button variant="secondary" disabled={pending.includes(source.id)} onClick={() => { void action(source, false) }}>{source.is_active ? de.calendar.pause : de.calendar.activate}</Button>
@@ -66,7 +65,7 @@ export function CalendarSources() {
         <Button variant="ghost" disabled={pending.includes(source.id)} onClick={() => setRemoving(source)}>{de.calendar.remove}</Button>
       </div>
       {messages[source.id] && <Notice tone="info">{messages[source.id]}</Notice>}
-    </section>)}
+    </section>)}</div>}
     {replacing && <FeedSetup source={replacing} close={() => setReplacing(undefined)} saved={() => { setReplacing(undefined); invalidate() }} />}
     {removing && <RemoveSource source={removing} close={() => setRemoving(undefined)} removed={() => { setRemoving(undefined); invalidate(); heading.current?.focus() }} />}
   </section>
