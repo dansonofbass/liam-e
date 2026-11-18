@@ -680,8 +680,10 @@ Offline- und Live-Auswertung:
 `bash tools/uv.sh run --no-sync python tools/preference_extraction_eval.py` prüft zwölf
 synthetische Fälle ohne Modell. Nur das ausdrücklich angehängte `--live` sendet diese
 zwölf Fixtures über den vorhandenen App-Client an Mistral; keine historischen Daten.
-Live lag das Modell in 7 von 12 Fällen richtig; die übrigen fünf hat die Validierung
-verworfen, sodass in allen zwölf Fällen das Erwartete gespeichert würde. Die Validierung ist
+Live lag das Modell in zwei Läufen in 7 bzw. 6 von 12 Fällen richtig; die übrigen hat die
+Validierung verworfen, sodass beide Male in allen zwölf Fällen das Erwartete gespeichert würde.
+Anrede und Signatur müssen wörtlich in der zitierten Belegstelle stehen; Antwortlängen sind
+Umschreibungen und nur über die Belegstelle an die Nachricht gebunden. Die Validierung ist
 also tragend und darf nicht gelockert werden, ohne die Auswertung zu wiederholen.
 
 ## Worker und periodischer Abruf

@@ -54,6 +54,23 @@ def test_schema_requires_an_own_durable_wish(patch):
         ex.validate_output(json.dumps({'candidates': [item]}), CASES[0]['text'])
 
 
+@pytest.mark.parametrize('index,value', [(2, 'Hallo'), (3, 'Beste Grüße')])
+def test_literal_values_must_appear_in_the_quoted_wish(index, value):
+    case = CASES[index]
+    item = {**case['candidates'][0], 'value': value}
+    with pytest.raises(ValueError):
+        ex.validate_output(json.dumps({'candidates': [item]}), case['text'])
+    spaced = {**case['candidates'][0], 'value': '  ' + case['candidates'][0]['value'].upper() + '.'}
+    assert len(ex.validate_output(json.dumps({'candidates': [spaced]}), case['text'])) == 1
+
+
+def test_quote_anywhere_suppresses_an_otherwise_durable_wish():
+    text = CASES[0]['text'] + ' Das gilt auch für „Notizen“.'
+    item = dict(CASES[0]['candidates'][0])
+    with pytest.raises(ValueError):
+        ex.validate_output(json.dumps({'candidates': [item]}), text)
+
+
 def test_long_input_is_not_sent(monkeypatch):
     call = client(monkeypatch, '{}')
     assert asyncio.run(ex.extract('x' * 2001, 'test-model')) == []

@@ -3,6 +3,7 @@ import json
 from db.engine import get_session_maker
 from db.accessors import preference_candidate as candidates, user_preference as preferences
 from db.accessors.personalization_settings import settings_in_session
+from db.models.personalization_settings import PersonalizationSettings
 from db.models.preference_extraction import PreferenceExtraction
 from db.models.chat_context import ChatContext
 from db.models.preference_candidate import PreferenceCandidate
@@ -25,6 +26,11 @@ async def eligible(session, conversation_id, message_id):
 
 async def claim(conversation_id, message_id, version):
     async with get_session_maker()() as session:
+        # Every chat turn calls this; with suggestions off, skip the shared preference lock.
+        # A message stored before a concurrent opt-in never qualifies, so this read is safe.
+        current = await session.get(PersonalizationSettings, OWNER_SCOPE)
+        if current is None or not current.suggest_preferences:
+            return None
         await preferences.lock(session)
         result = await eligible(session, conversation_id, message_id)
         if result is None or await session.get(PreferenceExtraction, (message_id, version)):

@@ -41,6 +41,11 @@ Bitten als dauerhaft vorgeschlagen; die Prüfung auf Dauerhaftigkeitswörter, Zi
 Belegstelle hat sie abgefangen. Ohne diese Prüfung entstünden falsche Vorschläge. Der Filter
 verwirft immer die ganze Antwort, auch wenn darin ein gültiger Vorschlag steckt.
 
+Ein zweiter Lauf nach dem Review verlangt zusätzlich, dass Anrede und Signatur wörtlich in der
+Belegstelle stehen. Ergebnis: wieder 12 von 12 gespeichert wie erwartet, das Modell allein 6 von 12.
+Diesmal hat es auch `foreign-wish` vorgeschlagen; die Validierung hat ihn verworfen. Die
+Fehlklassifikationen schwanken also zwischen Läufen.
+
 Die Zahlen gelten für einen Lauf mit zwölf kurzen Texten. Über andere Formulierungen,
 Sprachen oder Modelle sagen sie nichts. Der konservative Filter kann echte Wünsche übersehen.
 Vorschläge sind deshalb niemals bestätigte Präferenzen und wirken nicht auf Antworten.

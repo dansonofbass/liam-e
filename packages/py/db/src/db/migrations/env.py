@@ -40,7 +40,11 @@ if config.config_file_name is not None:
 
 @comparators.dispatch_for("table")
 def compare_removed_checks(autogen_context, modify_ops, schema, name, reflected, model):
-    """Autogenerate misses removed CHECKs; this repo forbids hand-edited migrations."""
+    """Autogenerate misses removed CHECKs; this repo forbids hand-edited migrations.
+
+    Only a table whose model declares no CHECK at all gets drops. Removing one of several
+    CHECKs from a model is not detected: unnamed constraints cannot be matched safely.
+    """
     if (model is None or reflected is None
             or not include_object(reflected, name, "table", True, model)
             or any(isinstance(c, CheckConstraint) for c in model.constraints)):

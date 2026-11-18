@@ -47,10 +47,17 @@ class ExtractionOutput(BaseModel):
     candidates: list[ExtractedCandidate] = Field(max_length=3)
 
 
+def _words(value):
+    return ' '.join(value.casefold().split()).strip(' .,;:!?')
+
+
 def validate_output(content, text):
     result = ExtractionOutput.model_validate_json(content)
     for item in result.candidates:
+        # Salutation and signature are literal texts: the value must appear in the quoted wish.
+        # Answer-length values are paraphrases, so only the evidence binds them to the message.
         if (not item.value.strip() or item.evidence not in text
+                or (item.key != 'answer_length' and _words(item.value) not in _words(item.evidence))
                 or not re.search(r'(?i)\b(immer|künftig|dauerhaft|grundsätzlich|in Zukunft|ab jetzt|standardmäßig|merke? dir)\b', item.evidence)
                 or re.search(r'(?i)["„“»«>]|\b(wenn|würde|angenommen|hypothetisch|zitiert|Zitat|schreibt|sagte)\b', text)
                 or (item.key != 'answer_length' and item.scope != 'account')):
