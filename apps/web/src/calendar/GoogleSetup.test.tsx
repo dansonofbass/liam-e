@@ -122,3 +122,7 @@ test('selection is bounded to twenty new calendars', async () => {
   fireEvent.click(choices[0]!)
   expect((choices[20] as HTMLInputElement).disabled).toBe(false)
 })
+test('the selection hint no longer promises that nothing is changed at Google', () => {
+  expect(de.calendar.googleChoose).not.toMatch(/ändert nichts/)
+  expect(de.calendar.googleChoose).toMatch(/bestätigst/)
+})

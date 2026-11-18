@@ -26,7 +26,7 @@ export function SourceStatus({ source, from, to }: { source: SourceOut; from?: s
     : source.last_error === 'calendar_unavailable' ? de.calendar.googleUnavailableError : de.calendar.googleProviderError
   return <div className="le-calendar-status">
     <strong>{source.name}</strong>
-    <span>{source.provider === 'ics' ? de.calendar.ics : source.provider === 'google' ? de.calendar.google : de.calendar.readOnly}</span>
+    <span>{source.provider === 'ics' ? de.calendar.ics : source.provider === 'google' ? (source.capabilities.includes('write') ? de.calendar.googleWritable : de.calendar.google) : de.calendar.readOnly}</span>
     <span>{source.last_success_at ? `${de.calendar.stored}: ${calendarDate(source.last_success_at)} ${calendarTime(source.last_success_at)}` : de.calendar.never}</span>
     {!source.is_active ? <Notice tone="info">{de.calendar.paused}</Notice> : <>
       {source.last_error && <Notice tone="danger">{source.provider === 'google' ? googleError : source.last_error === 'address_check' ? de.calendar.feedAddressError : de.calendar.feedSyncError}</Notice>}

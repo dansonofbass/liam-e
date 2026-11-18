@@ -374,9 +374,9 @@ test('IMAP reconnect selects provider and focuses the secret field', async () =>
   expect(document.activeElement).toBe(screen.getByLabelText('Secret mit dem App-Passwort'))
 })
 
-test('the agenda link in calendar management uses the touch-sized link style', async () => {
+test('the calendar link in calendar management uses the touch-sized link style', async () => {
   setup()
-  const link = await screen.findByRole('link', { name: 'Zur Agenda' })
+  const link = await screen.findByRole('link', { name: 'Zum Kalender' })
   expect(link.classList.contains('le-calendar-back')).toBe(true)
 })
 

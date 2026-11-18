@@ -144,6 +144,11 @@ test('provider provenance and read-only status are textual', () => {
   expect(screen.getByText(de.calendar.google)).toBeTruthy()
   expect(screen.getByText(de.calendar.ics)).toBeTruthy()
 })
+test('a writable Google source does not claim to be read-only', () => {
+  render(<SourceStatus source={{ ...source, capabilities: ['read', 'write'] }} />)
+  expect(screen.getByText(de.calendar.googleWritable)).toBeTruthy()
+  expect(screen.queryByText(/Nur lesen/)).toBeNull()
+})
 test('paused sources do not claim completeness or freshness', () => {
   render(<SourceStatus source={{ ...source, is_active: false }} from="2026-12-01" to="2026-12-08" />)
   expect(screen.getByText(de.calendar.paused)).toBeTruthy()
