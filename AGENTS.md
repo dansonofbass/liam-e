@@ -88,6 +88,8 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages` | `liam_mail_search` |
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages/{message_id}` | `liam_mail_read` |
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/summary` | `liam_mail_summary` |
+| Kalender | GET | `/api/v1/calendar/connections/google/calendars` | `calendar_google_calendars_list` |
+| Kalender | POST | `/api/v1/calendar/connections/google` | `calendar_google_connect` |
 | Kalender | POST | `/api/v1/calendar/feeds/validate` | `calendar_feed_validate` |
 | Kalender | POST | `/api/v1/calendar/feeds` | `calendar_feed_subscribe` |
 | Kalender | POST | `/api/v1/calendar/feeds/validations/discard` | `calendar_feed_validation_discard` |
@@ -301,7 +303,35 @@ Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
 `webcal` wird sichtbar zu `https`; die Serverprüfung normalisiert unabhängig nochmals.
 Adresse und Prüftoken bleiben nur im Dialogzustand, nie im Browser-Storage oder Query-Cache.
 Änderungen verwerfen die Prüfung; Abonnieren und Adresswechsel invalidieren die Query-Gruppe
-`calendar`. Google-Einrichtung ist weiterhin nicht freigegeben.
+`calendar`.
+
+Google-Kalender werden ausschließlich lesend über den Studio-Connector `google_calendar`
+angebunden, ohne eigenen OAuth-Fallback. `api/calendar/google.py` enthält die gemeinsame
+Pagination und das Mapping für Produktionsadapter und Offline-Probe. Nur `list_calendars`
+und `list_events` sind dort erlaubt; die Mail-Allowlisten bleiben unverändert. Die Verwaltung
+liest alle Kalenderseiten (höchstens zehn), zeigt keine Beschreibungen und legt ausgewählte
+Quellen mit `capabilities=["read"]` samt erstem Abrufjob atomar an. Wiederholungen lassen
+bestehende Quellen unverändert. `calendar_google_calendars_list` bleibt wegen des Provideraufrufs
+und privater Kalendernamen browser-only und gehört nicht in die Studio-Leseliste.
+Die Verbindung bindet `connection_ref` an `google_calendar#<fingerprint>`: SHA-256 aus
+`google_calendar:` plus der obersten `summary` einer Hauptkalender-Terminliste, gekürzt auf
+16 Hexzeichen. Vor jedem Snapshot wird diese Identität mit einem kleinen Hauptkalenderfenster
+erneut geprüft. Abweichungen sperren den Abruf als `reconnect_required`, ohne den Index zu ändern.
+Ein anderes verbundenes Google-Konto erzeugt neue Quellen, übernimmt nie alte Quellen.
+Dies ist das verfügbare Identitätssignal des Connectors, keine unveränderliche Google-Account-ID;
+eine geänderte Hauptkalenderbezeichnung kann daher ebenfalls ein erneutes Verbinden erfordern.
+Snapshots lesen alle Seiten des festen Fensters heute −30 bis +180 Tage, höchstens 40 Seiten
+und 10.000 Instanzen. Fehlende Seiten, Fehler und Grenzen liefern nie einen Teilsnapshot.
+Instanz-ID und `recurringEventId` erhalten verschobene Instanzen und Serienbezug;
+fehlende abgesagte Instanzen verschwinden erst beim vollständigen Snapshotwechsel.
+Revision-Fence und `replace_all` gelten wie bei ICS. Erfolg setzt die Abrufplanung ausdrücklich
+mit `reset_schedule` zurück, unabhängig von verschlüsselten ICS-HTTP-Validatoren.
+`CALENDAR_GOOGLE_SYNC_INTERVAL_MINUTES` ist standardmäßig 5. Der gemeinsame Worker prüft
+Google und ICS jede Minute. `reconnect_required` und `calendar_unavailable` stoppen automatische
+Versuche bis zu manuellem Abruf oder Resume; `provider_unavailable` nutzt den begrenzten Backoff.
+Entfernen räumt nur lokal auf, nie bei Google. Schreiben bleibt gesperrt:
+#23 ist `BLOCKED: calendar_write_capability_missing` (keine Versionsvorbedingung, keine idempotente Anlage).
+Belege und offene Live-Fragen stehen in `docs/superpowers/probes/2026-11-18-google-kalender.md`.
 Die Agenda gruppiert und zeigt Zeitpunkte in der Browser-Zeitzone; Ganztägiges bleibt
 bei seinem Datum. Lokale Tagesgrenzen werden in Zeitpunkte umgerechnet. Weil der
 Index-Endpunkt nur ganze UTC-Daten akzeptiert, wird das Abfragefenster nach außen
@@ -371,7 +401,7 @@ Snapshotaktivierung; Entfernen löscht Jobs, Index, Status und private Konfigura
 Historische Chattexte bleiben bestehen; aktive Quellenscope-Prüfungen sperren entfernte Quellen.
 
 `CALENDAR_SYNC_INTERVAL_MINUTES` ist standardmäßig 30. Der gemeinsame Worker prüft jede Minute
-aktive ICS-Quellen, unabhängig von der Mailperiodik. Beim Öffnen fragt die Agenda über den
+aktive ICS- und Google-Quellen, unabhängig von der Mailperiodik. Beim Öffnen fragt die Agenda über den
 Verwaltungsendpunkt mit `due_only=true` nur fällige Abrufe an. Manuelles Abrufen hat eine
 persistierte Minute Wartezeit. 429/5xx und Transportfehler erhalten begrenzten exponentiellen
 Backoff mit Jitter; nach drei Fehlern endet die kurze Wiederholung und die Quelle kehrt zum

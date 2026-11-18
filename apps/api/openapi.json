@@ -1417,6 +1417,94 @@
         "title": "FeedPreviewOut",
         "type": "object"
       },
+      "GoogleCalendarOut": {
+        "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "enum": [
+                  "owner",
+                  "reader"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "timezone",
+          "access",
+          "source_id"
+        ],
+        "title": "GoogleCalendarOut",
+        "type": "object"
+      },
+      "GoogleCalendarsOut": {
+        "properties": {
+          "calendars": {
+            "items": {
+              "$ref": "#/components/schemas/GoogleCalendarOut"
+            },
+            "title": "Calendars",
+            "type": "array"
+          }
+        },
+        "required": [
+          "calendars"
+        ],
+        "title": "GoogleCalendarsOut",
+        "type": "object"
+      },
+      "GoogleConnectInput": {
+        "additionalProperties": false,
+        "properties": {
+          "calendar_ids": {
+            "items": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Calendar Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "calendar_ids"
+        ],
+        "title": "GoogleConnectInput",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5596,6 +5684,66 @@
           }
         },
         "summary": "Report dependency status; always answers 200"
+      }
+    },
+    "/api/v1/calendar/connections/google": {
+      "post": {
+        "operationId": "calendar_google_connect",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleConnectInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceOut"
+                  },
+                  "title": "Response Calendar Google Connect",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect"
+      }
+    },
+    "/api/v1/calendar/connections/google/calendars": {
+      "get": {
+        "operationId": "calendar_google_calendars_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleCalendarsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Calendars"
       }
     },
     "/api/v1/calendar/feeds": {

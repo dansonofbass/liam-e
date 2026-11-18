@@ -163,6 +163,35 @@ async def identity(*, call: Call | None = None, now: datetime | None = None) -> 
     return f"google_calendar#{digest}"
 
 
+async def calendars() -> tuple[str, list[dict]]:
+    """Discover calendars under the current connector identity; no descriptions escape."""
+    try:
+        ref = await identity()
+    except GoogleError as error:
+        if error.code == "calendar_unavailable":
+            # A missing primary calendar and a missing connector both produce 404 on
+            # list_events. The calendar-list tool distinguishes a missing connector.
+            await live_call("list_calendars", {"pageSize": 1})
+        raise
+    listing = await pages(live_call, "list_calendars", {"pageSize": 250})
+    result = []
+    ids: set[str] = set()
+    for page in listing:
+        for raw in page["calendars"]:
+            identifier, name = raw.get("id"), raw.get("summary")
+            if (not isinstance(identifier, str) or not identifier or identifier in ids
+                    or not isinstance(name, str)):
+                raise GoogleError()
+            ids.add(identifier)
+            result.append({"id": identifier, "name": name,
+                           "timezone": timezone(raw.get("timeZone")),
+                           "access": raw.get("accessRole") if raw.get("accessRole") in ("owner", "reader") else None})
+    # A connector switched during discovery must not attach old selections to a new identity.
+    if await identity() != ref:
+        raise GoogleError("reconnect_required")
+    return ref, result
+
+
 @dataclass(frozen=True)
 class GoogleSnapshot(Snapshot):
     source_revision: int

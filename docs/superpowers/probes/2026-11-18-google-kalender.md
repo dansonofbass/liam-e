@@ -125,10 +125,13 @@ Anfragepfade mit Kalenderkennungen nicht in Diagnoseausgaben gelangen.
 Die lokale Shell-Historie kann eingegebene Argumente trotzdem speichern; der Aufruf mit
 privater Kalenderkennung gehört nicht in öffentliche Protokolle.
 
-## Noch umzusetzen (#21)
+## Anschlussarbeit (#21)
 
-Produktionsadapter, Identitätsbindung, Quellenanlage und Verwaltungsrouten, Fehlerzustände,
-periodischer Abruf, Revision-Fence und transaktionaler Snapshotwechsel, Google-Dialog sowie
-Postgres-/UI-Vertragstests sind **nicht Bestandteil dieser Probe**. Insbesondere ist die
-geplante Fingerprint-Bindung an die Hauptkalender-`summary` hier noch keine Zugriffsschranke.
-Die Agenda erhält durch #19 allein keine neuen Google-Daten.
+#19 allein schaltet keine Integration frei. #21 ergänzt den Produktionsadapter in
+`api/calendar/google.py`; Probe und Adapter verwenden seitdem dieselben Funktionen für
+Mapping und Pagination. Die synthetischen Mapping-Belege dieses Berichts bleiben gültig.
+Identitätsbindung, Quellenanlage, Verwaltungsrouten, Fehlerzustände, periodischer Abruf,
+Revision-Fence und transaktionaler Snapshotwechsel sind getrennte Integrationseigenschaften;
+ihre Verträge und Tests sind in `AGENTS.md` unter „Kalenderdomäne“ beschrieben.
+Die Fingerprint-Bindung nutzt die Hauptkalender-`summary`, keine unveränderliche Account-ID.
+Die offenen Live-Fragen und die Schreibblockade aus diesem Bericht bleiben unverändert.

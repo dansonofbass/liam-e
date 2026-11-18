@@ -842,6 +842,52 @@ export type FeedPreviewOut = {
 };
 
 /**
+ * GoogleCalendarOut
+ */
+export type GoogleCalendarOut = {
+    /**
+     * Access
+     */
+    access: 'owner' | 'reader' | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Source Id
+     */
+    source_id: string | null;
+    /**
+     * Timezone
+     */
+    timezone: string;
+};
+
+/**
+ * GoogleCalendarsOut
+ */
+export type GoogleCalendarsOut = {
+    /**
+     * Calendars
+     */
+    calendars: Array<GoogleCalendarOut>;
+};
+
+/**
+ * GoogleConnectInput
+ */
+export type GoogleConnectInput = {
+    /**
+     * Calendar Ids
+     */
+    calendar_ids: Array<string>;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -3195,6 +3241,49 @@ export type HealthResponses = {
 };
 
 export type HealthResponse2 = HealthResponses[keyof HealthResponses];
+
+export type CalendarGoogleConnectData = {
+    body: GoogleConnectInput;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/connections/google';
+};
+
+export type CalendarGoogleConnectErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarGoogleConnectError = CalendarGoogleConnectErrors[keyof CalendarGoogleConnectErrors];
+
+export type CalendarGoogleConnectResponses = {
+    /**
+     * Response Calendar Google Connect
+     *
+     * Successful Response
+     */
+    200: Array<SourceOut>;
+};
+
+export type CalendarGoogleConnectResponse = CalendarGoogleConnectResponses[keyof CalendarGoogleConnectResponses];
+
+export type CalendarGoogleCalendarsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/connections/google/calendars';
+};
+
+export type CalendarGoogleCalendarsListResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoogleCalendarsOut;
+};
+
+export type CalendarGoogleCalendarsListResponse = CalendarGoogleCalendarsListResponses[keyof CalendarGoogleCalendarsListResponses];
 
 export type CalendarFeedSubscribeData = {
     body: SubscribeInput;
