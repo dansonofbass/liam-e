@@ -448,6 +448,10 @@ export type ChatStreamRequest = {
      * Text
      */
     text: string;
+    /**
+     * Without Preferences
+     */
+    without_preferences?: boolean;
 };
 
 /**
@@ -500,6 +504,10 @@ export type ChatTurnRequest = {
      * Task Source Account Id
      */
     task_source_account_id?: string | null;
+    /**
+     * Without Preferences
+     */
+    without_preferences?: boolean;
 };
 
 /**
@@ -571,9 +579,21 @@ export type ContextOut = {
      */
     id: string;
     /**
+     * Preference Resolver Version
+     */
+    preference_resolver_version?: string;
+    /**
      * Preference Revision Id
      */
     preference_revision_id: string | null;
+    /**
+     * Preference Revision Ids Json
+     */
+    preference_revision_ids_json?: string;
+    /**
+     * Preferences Enabled
+     */
+    preferences_enabled?: boolean;
     /**
      * Prompt Hash
      */
@@ -711,7 +731,7 @@ export type ErrorEvent = {
     /**
      * Code
      */
-    code: 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked';
+    code: 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | 'preferences_unavailable';
     /**
      * Event
      */
@@ -806,6 +826,40 @@ export type HealthResponse = {
      * Status
      */
     status: 'ok' | 'degraded';
+};
+
+/**
+ * HistoricalPreferenceOut
+ */
+export type HistoricalPreferenceOut = {
+    /**
+     * Confirmed At
+     */
+    confirmed_at?: string | null;
+    /**
+     * Key
+     */
+    key?: 'answer_length' | 'salutation' | 'signature' | null;
+    /**
+     * Removed
+     */
+    removed?: boolean;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Scope
+     */
+    scope?: string | null;
+    /**
+     * Source
+     */
+    source?: 'manual';
+    /**
+     * Value
+     */
+    value?: string | null;
 };
 
 /**
@@ -1305,6 +1359,146 @@ export type OAuthAuthorizeOut = {
      * State
      */
     state: string;
+};
+
+/**
+ * PersonalizationOut
+ */
+export type PersonalizationOut = {
+    /**
+     * Suggest Preferences
+     */
+    suggest_preferences: boolean;
+    /**
+     * Use Preferences
+     */
+    use_preferences: boolean;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * PersonalizationUpdate
+ */
+export type PersonalizationUpdate = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Suggest Preferences
+     */
+    suggest_preferences?: boolean | null;
+    /**
+     * Use Preferences
+     */
+    use_preferences?: boolean | null;
+};
+
+/**
+ * PreferenceContextOut
+ */
+export type PreferenceContextOut = {
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Resolver Version
+     */
+    resolver_version: string;
+    /**
+     * Revisions
+     */
+    revisions: Array<HistoricalPreferenceOut>;
+};
+
+/**
+ * PreferenceCreate
+ */
+export type PreferenceCreate = {
+    /**
+     * Key
+     */
+    key: 'answer_length' | 'salutation' | 'signature';
+    /**
+     * Scope
+     */
+    scope?: string;
+    /**
+     * Status
+     */
+    status?: 'active' | 'paused';
+    /**
+     * Value
+     */
+    value: string;
+};
+
+/**
+ * PreferenceOut
+ */
+export type PreferenceOut = {
+    /**
+     * Confirmed At
+     */
+    confirmed_at: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Key
+     */
+    key: 'answer_length' | 'salutation' | 'signature';
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Scope
+     */
+    scope: string;
+    /**
+     * Source
+     */
+    source?: 'manual';
+    /**
+     * Status
+     */
+    status: 'active' | 'paused';
+    /**
+     * Value
+     */
+    value: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * PreferenceUpdate
+ */
+export type PreferenceUpdate = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Scope
+     */
+    scope?: string | null;
+    /**
+     * Status
+     */
+    status?: 'active' | 'paused' | null;
+    /**
+     * Value
+     */
+    value?: string | null;
 };
 
 /**
@@ -1936,6 +2130,20 @@ export type SeriesVersionIn = {
      * Expected Version
      */
     expected_version: number;
+};
+
+/**
+ * SettingsOut
+ */
+export type SettingsOut = {
+    personalization: PersonalizationOut;
+};
+
+/**
+ * SettingsUpdate
+ */
+export type SettingsUpdate = {
+    personalization: PersonalizationUpdate;
 };
 
 /**
@@ -3959,6 +4167,144 @@ export type MailSyncAllResponses = {
 
 export type MailSyncAllResponse = MailSyncAllResponses[keyof MailSyncAllResponses];
 
+export type PreferencesListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/preferences';
+};
+
+export type PreferencesListResponses = {
+    /**
+     * Response Preferences List
+     *
+     * Successful Response
+     */
+    200: Array<PreferenceOut>;
+};
+
+export type PreferencesListResponse = PreferencesListResponses[keyof PreferencesListResponses];
+
+export type PreferenceCreateData = {
+    body: PreferenceCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/preferences';
+};
+
+export type PreferenceCreateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceCreateError = PreferenceCreateErrors[keyof PreferenceCreateErrors];
+
+export type PreferenceCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: PreferenceOut;
+};
+
+export type PreferenceCreateResponse = PreferenceCreateResponses[keyof PreferenceCreateResponses];
+
+export type PreferenceContextGetData = {
+    body?: never;
+    path: {
+        /**
+         * Context Id
+         */
+        context_id: string;
+    };
+    query?: never;
+    url: '/api/v1/preferences/contexts/{context_id}';
+};
+
+export type PreferenceContextGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceContextGetError = PreferenceContextGetErrors[keyof PreferenceContextGetErrors];
+
+export type PreferenceContextGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PreferenceContextOut;
+};
+
+export type PreferenceContextGetResponse = PreferenceContextGetResponses[keyof PreferenceContextGetResponses];
+
+export type PreferenceDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query: {
+        /**
+         * Expected Version
+         */
+        expected_version: number;
+    };
+    url: '/api/v1/preferences/{id}';
+};
+
+export type PreferenceDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceDeleteError = PreferenceDeleteErrors[keyof PreferenceDeleteErrors];
+
+export type PreferenceDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type PreferenceDeleteResponse = PreferenceDeleteResponses[keyof PreferenceDeleteResponses];
+
+export type PreferenceUpdateData = {
+    body: PreferenceUpdate;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/preferences/{id}';
+};
+
+export type PreferenceUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceUpdateError = PreferenceUpdateErrors[keyof PreferenceUpdateErrors];
+
+export type PreferenceUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: PreferenceOut;
+};
+
+export type PreferenceUpdateResponse = PreferenceUpdateResponses[keyof PreferenceUpdateResponses];
+
 export type PromptsListData = {
     body?: never;
     path?: never;
@@ -4135,6 +4481,47 @@ export type PromptUpdateResponses = {
 };
 
 export type PromptUpdateResponse = PromptUpdateResponses[keyof PromptUpdateResponses];
+
+export type SettingsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings';
+};
+
+export type SettingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsOut;
+};
+
+export type SettingsGetResponse = SettingsGetResponses[keyof SettingsGetResponses];
+
+export type SettingsUpdateData = {
+    body: SettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings';
+};
+
+export type SettingsUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SettingsUpdateError = SettingsUpdateErrors[keyof SettingsUpdateErrors];
+
+export type SettingsUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsOut;
+};
+
+export type SettingsUpdateResponse = SettingsUpdateResponses[keyof SettingsUpdateResponses];
 
 export type SettingsUiGetData = {
     body?: never;

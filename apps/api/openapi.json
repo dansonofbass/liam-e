@@ -736,6 +736,11 @@
             "minLength": 1,
             "title": "Text",
             "type": "string"
+          },
+          "without_preferences": {
+            "default": false,
+            "title": "Without Preferences",
+            "type": "boolean"
           }
         },
         "required": [
@@ -850,6 +855,11 @@
               }
             ],
             "title": "Task Source Account Id"
+          },
+          "without_preferences": {
+            "default": false,
+            "title": "Without Preferences",
+            "type": "boolean"
           }
         },
         "required": [
@@ -940,6 +950,11 @@
             "title": "Id",
             "type": "string"
           },
+          "preference_resolver_version": {
+            "default": "1",
+            "title": "Preference Resolver Version",
+            "type": "string"
+          },
           "preference_revision_id": {
             "anyOf": [
               {
@@ -950,6 +965,16 @@
               }
             ],
             "title": "Preference Revision Id"
+          },
+          "preference_revision_ids_json": {
+            "default": "[]",
+            "title": "Preference Revision Ids Json",
+            "type": "string"
+          },
+          "preferences_enabled": {
+            "default": false,
+            "title": "Preferences Enabled",
+            "type": "boolean"
           },
           "prompt_hash": {
             "anyOf": [
@@ -1180,7 +1205,8 @@
               "model_unavailable",
               "aborted",
               "internal",
-              "context_revoked"
+              "context_revoked",
+              "preferences_unavailable"
             ],
             "title": "Code",
             "type": "string"
@@ -1346,6 +1372,80 @@
           "deps"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "HistoricalPreferenceOut": {
+        "properties": {
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "enum": [
+                  "answer_length",
+                  "salutation",
+                  "signature"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "removed": {
+            "default": true,
+            "title": "Removed",
+            "type": "boolean"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "source": {
+            "const": "manual",
+            "default": "manual",
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "revision_id"
+        ],
+        "title": "HistoricalPreferenceOut",
         "type": "object"
       },
       "ImapConnectRequest": {
@@ -2109,6 +2209,254 @@
           "state"
         ],
         "title": "OAuthAuthorizeOut",
+        "type": "object"
+      },
+      "PersonalizationOut": {
+        "properties": {
+          "suggest_preferences": {
+            "title": "Suggest Preferences",
+            "type": "boolean"
+          },
+          "use_preferences": {
+            "title": "Use Preferences",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "use_preferences",
+          "suggest_preferences",
+          "version"
+        ],
+        "title": "PersonalizationOut",
+        "type": "object"
+      },
+      "PersonalizationUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "suggest_preferences": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggest Preferences"
+          },
+          "use_preferences": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Preferences"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "PersonalizationUpdate",
+        "type": "object"
+      },
+      "PreferenceContextOut": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "resolver_version": {
+            "title": "Resolver Version",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/HistoricalPreferenceOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "resolver_version",
+          "revisions"
+        ],
+        "title": "PreferenceContextOut",
+        "type": "object"
+      },
+      "PreferenceCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "enum": [
+              "answer_length",
+              "salutation",
+              "signature"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "scope": {
+            "default": "*",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "enum": [
+              "active",
+              "paused"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "PreferenceCreate",
+        "type": "object"
+      },
+      "PreferenceOut": {
+        "properties": {
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "enum": [
+              "answer_length",
+              "salutation",
+              "signature"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "const": "manual",
+            "default": "manual",
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "paused"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "scope",
+          "value",
+          "status",
+          "version",
+          "revision_id",
+          "confirmed_at"
+        ],
+        "title": "PreferenceOut",
+        "type": "object"
+      },
+      "PreferenceUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "paused"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "PreferenceUpdate",
         "type": "object"
       },
       "PreviewException": {
@@ -3241,6 +3589,31 @@
           "expected_version"
         ],
         "title": "SeriesVersionIn",
+        "type": "object"
+      },
+      "SettingsOut": {
+        "properties": {
+          "personalization": {
+            "$ref": "#/components/schemas/PersonalizationOut"
+          }
+        },
+        "required": [
+          "personalization"
+        ],
+        "title": "SettingsOut",
+        "type": "object"
+      },
+      "SettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "personalization": {
+            "$ref": "#/components/schemas/PersonalizationUpdate"
+          }
+        },
+        "required": [
+          "personalization"
+        ],
+        "title": "SettingsUpdate",
         "type": "object"
       },
       "SourceOut": {
@@ -6671,6 +7044,192 @@
         "summary": "Mail Sync All"
       }
     },
+    "/api/v1/preferences": {
+      "get": {
+        "operationId": "preferences_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PreferenceOut"
+                  },
+                  "title": "Response Preferences List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Preferences"
+      },
+      "post": {
+        "operationId": "preference_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Preference"
+      }
+    },
+    "/api/v1/preferences/contexts/{context_id}": {
+      "get": {
+        "operationId": "preference_context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "context_id",
+            "required": true,
+            "schema": {
+              "title": "Context Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Preference Context"
+      }
+    },
+    "/api/v1/preferences/{id}": {
+      "delete": {
+        "operationId": "preference_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Preference"
+      },
+      "patch": {
+        "operationId": "preference_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Preference"
+      }
+    },
     "/api/v1/prompts": {
       "get": {
         "operationId": "prompts_list",
@@ -6858,6 +7417,60 @@
           }
         },
         "summary": "Update Prompt"
+      }
+    },
+    "/api/v1/settings": {
+      "get": {
+        "operationId": "settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Settings"
+      },
+      "patch": {
+        "operationId": "settings_update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Settings"
       }
     },
     "/api/v1/settings/ui": {

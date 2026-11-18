@@ -24,6 +24,9 @@ import { Route as AppMailMessageIdRouteImport } from './routes/_app/mail/$messag
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings/index'
 import { Route as AppTasksTaskIdRouteImport } from './routes/_app/tasks/$taskId'
 import { Route as AppSettingsControlsIndexRouteImport } from './routes/_app/settings/controls/index'
+import { Route as AppSettingsPreferencesIndexRouteImport } from './routes/_app/settings/preferences/index'
+import { Route as AppSettingsPreferencesPreferenceIdRouteImport } from './routes/_app/settings/preferences/$preferenceId'
+import { Route as AppSettingsPreferencesNewRouteImport } from './routes/_app/settings/preferences/new'
 import { Route as AppSettingsPromptsIndexRouteImport } from './routes/_app/settings/prompts/index'
 import { Route as AppSettingsPromptsPromptIdRouteImport } from './routes/_app/settings/prompts/$promptId'
 import { Route as AppSettingsPromptsNewRouteImport } from './routes/_app/settings/prompts/new'
@@ -103,6 +106,24 @@ const AppSettingsControlsIndexRoute =
     path: '/controls/',
     getParentRoute: () => AppSettingsRoute,
   } as any)
+const AppSettingsPreferencesIndexRoute =
+  AppSettingsPreferencesIndexRouteImport.update({
+    id: '/preferences/',
+    path: '/preferences/',
+    getParentRoute: () => AppSettingsRoute,
+  } as any)
+const AppSettingsPreferencesPreferenceIdRoute =
+  AppSettingsPreferencesPreferenceIdRouteImport.update({
+    id: '/preferences/$preferenceId',
+    path: '/preferences/$preferenceId',
+    getParentRoute: () => AppSettingsRoute,
+  } as any)
+const AppSettingsPreferencesNewRoute =
+  AppSettingsPreferencesNewRouteImport.update({
+    id: '/preferences/new',
+    path: '/preferences/new',
+    getParentRoute: () => AppSettingsRoute,
+  } as any)
 const AppSettingsPromptsIndexRoute = AppSettingsPromptsIndexRouteImport.update({
   id: '/prompts/',
   path: '/prompts/',
@@ -134,9 +155,12 @@ export interface FileRoutesByFullPath {
   '/calendar/': typeof AppCalendarIndexRoute
   '/mail/': typeof AppMailIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
+  '/settings/preferences/$preferenceId': typeof AppSettingsPreferencesPreferenceIdRoute
+  '/settings/preferences/new': typeof AppSettingsPreferencesNewRoute
   '/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
   '/settings/prompts/new': typeof AppSettingsPromptsNewRoute
   '/settings/controls/': typeof AppSettingsControlsIndexRoute
+  '/settings/preferences/': typeof AppSettingsPreferencesIndexRoute
   '/settings/prompts/': typeof AppSettingsPromptsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -150,9 +174,12 @@ export interface FileRoutesByTo {
   '/calendar': typeof AppCalendarIndexRoute
   '/mail': typeof AppMailIndexRoute
   '/settings': typeof AppSettingsIndexRoute
+  '/settings/preferences/$preferenceId': typeof AppSettingsPreferencesPreferenceIdRoute
+  '/settings/preferences/new': typeof AppSettingsPreferencesNewRoute
   '/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
   '/settings/prompts/new': typeof AppSettingsPromptsNewRoute
   '/settings/controls': typeof AppSettingsControlsIndexRoute
+  '/settings/preferences': typeof AppSettingsPreferencesIndexRoute
   '/settings/prompts': typeof AppSettingsPromptsIndexRoute
 }
 export interface FileRoutesById {
@@ -171,9 +198,12 @@ export interface FileRoutesById {
   '/_app/calendar/': typeof AppCalendarIndexRoute
   '/_app/mail/': typeof AppMailIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
+  '/_app/settings/preferences/$preferenceId': typeof AppSettingsPreferencesPreferenceIdRoute
+  '/_app/settings/preferences/new': typeof AppSettingsPreferencesNewRoute
   '/_app/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
   '/_app/settings/prompts/new': typeof AppSettingsPromptsNewRoute
   '/_app/settings/controls/': typeof AppSettingsControlsIndexRoute
+  '/_app/settings/preferences/': typeof AppSettingsPreferencesIndexRoute
   '/_app/settings/prompts/': typeof AppSettingsPromptsIndexRoute
 }
 export interface FileRouteTypes {
@@ -192,9 +222,12 @@ export interface FileRouteTypes {
     | '/calendar/'
     | '/mail/'
     | '/settings/'
+    | '/settings/preferences/$preferenceId'
+    | '/settings/preferences/new'
     | '/settings/prompts/$promptId'
     | '/settings/prompts/new'
     | '/settings/controls/'
+    | '/settings/preferences/'
     | '/settings/prompts/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -208,9 +241,12 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/mail'
     | '/settings'
+    | '/settings/preferences/$preferenceId'
+    | '/settings/preferences/new'
     | '/settings/prompts/$promptId'
     | '/settings/prompts/new'
     | '/settings/controls'
+    | '/settings/preferences'
     | '/settings/prompts'
   id:
     | '__root__'
@@ -228,9 +264,12 @@ export interface FileRouteTypes {
     | '/_app/calendar/'
     | '/_app/mail/'
     | '/_app/settings/'
+    | '/_app/settings/preferences/$preferenceId'
+    | '/_app/settings/preferences/new'
     | '/_app/settings/prompts/$promptId'
     | '/_app/settings/prompts/new'
     | '/_app/settings/controls/'
+    | '/_app/settings/preferences/'
     | '/_app/settings/prompts/'
   fileRoutesById: FileRoutesById
 }
@@ -345,6 +384,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsControlsIndexRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/settings/preferences/': {
+      id: '/_app/settings/preferences/'
+      path: '/preferences'
+      fullPath: '/settings/preferences/'
+      preLoaderRoute: typeof AppSettingsPreferencesIndexRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/preferences/$preferenceId': {
+      id: '/_app/settings/preferences/$preferenceId'
+      path: '/preferences/$preferenceId'
+      fullPath: '/settings/preferences/$preferenceId'
+      preLoaderRoute: typeof AppSettingsPreferencesPreferenceIdRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/preferences/new': {
+      id: '/_app/settings/preferences/new'
+      path: '/preferences/new'
+      fullPath: '/settings/preferences/new'
+      preLoaderRoute: typeof AppSettingsPreferencesNewRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/prompts/': {
       id: '/_app/settings/prompts/'
       path: '/prompts'
@@ -398,17 +458,24 @@ const AppMailRouteWithChildren =
 
 interface AppSettingsRouteChildren {
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
+  AppSettingsPreferencesPreferenceIdRoute: typeof AppSettingsPreferencesPreferenceIdRoute
+  AppSettingsPreferencesNewRoute: typeof AppSettingsPreferencesNewRoute
   AppSettingsPromptsPromptIdRoute: typeof AppSettingsPromptsPromptIdRoute
   AppSettingsPromptsNewRoute: typeof AppSettingsPromptsNewRoute
   AppSettingsControlsIndexRoute: typeof AppSettingsControlsIndexRoute
+  AppSettingsPreferencesIndexRoute: typeof AppSettingsPreferencesIndexRoute
   AppSettingsPromptsIndexRoute: typeof AppSettingsPromptsIndexRoute
 }
 
 const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsIndexRoute: AppSettingsIndexRoute,
+  AppSettingsPreferencesPreferenceIdRoute:
+    AppSettingsPreferencesPreferenceIdRoute,
+  AppSettingsPreferencesNewRoute: AppSettingsPreferencesNewRoute,
   AppSettingsPromptsPromptIdRoute: AppSettingsPromptsPromptIdRoute,
   AppSettingsPromptsNewRoute: AppSettingsPromptsNewRoute,
   AppSettingsControlsIndexRoute: AppSettingsControlsIndexRoute,
+  AppSettingsPreferencesIndexRoute: AppSettingsPreferencesIndexRoute,
   AppSettingsPromptsIndexRoute: AppSettingsPromptsIndexRoute,
 }
 
