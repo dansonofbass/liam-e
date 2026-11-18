@@ -1,5 +1,6 @@
 """The synced message index: page through messages and read one in full."""
 
+import asyncio
 import base64
 import binascii
 import json
@@ -12,13 +13,13 @@ from db.accessors import mail_insight as insight_access
 from db.accessors import mail_message as message_access
 from db.models.mail_insight import MailInsight
 from db.models.mail_message import MailMessage
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from api.errors import refuse
 from api.mail import actions, insights, original
 from api.mail.headers import sender_name
 from api.mail.state import color_indexes
-from api.routers.api.v1.mail.schemas import InsightOut, MessageActionIn, MessageActionOut, MessageDetailOut, MessageListItemOut, MessageOriginalOut, MessagePageOut
+from api.routers.api.v1.mail.schemas import BulkMessageActionIn, BulkMessageActionOut, BulkMessageActionResult, InsightOut, MessageActionIn, MessageActionOut, MessageDetailOut, MessageListItemOut, MessageOriginalOut, MessagePageOut
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -79,6 +80,45 @@ async def list_messages(
         items=[list_item(message, colors, insights.get(message.id)) for message in messages],
         next_cursor=encode_cursor(messages[-1]) if len(messages) == limit else None,
     )
+
+
+@router.post("/actions", operation_id="mail_messages_bulk_action", summary="Apply an undoable action to messages")
+async def bulk_message_action(body: BulkMessageActionIn) -> BulkMessageActionOut:
+    """Apply actions independently, with bounded provider concurrency."""
+    semaphore = asyncio.Semaphore(4)
+    accounts: asyncio.Future | None = None
+
+    async def colors() -> dict:
+        # One account read per request, shared by all rows; a failure only drops the display rows.
+        nonlocal accounts
+        if accounts is None:
+            accounts = asyncio.ensure_future(account_access.list_accounts())
+        return color_indexes(await accounts)
+
+    async def apply(message_id: str) -> BulkMessageActionResult:
+        async with semaphore:
+            try:
+                action = await actions.apply_action(message_id, body.kind)
+            except actions.ActionUnsupportedError:
+                return BulkMessageActionResult(message_id=message_id, status="unsupported")
+            except HTTPException as error:
+                if error.status_code == 404:
+                    return BulkMessageActionResult(message_id=message_id, status="not_found")
+                return BulkMessageActionResult(message_id=message_id, status="failed")
+            except Exception as error:
+                logger.warning("Bulk action failed: %s", type(error).__name__)
+                return BulkMessageActionResult(message_id=message_id, status="failed")
+            result = BulkMessageActionResult(message_id=message_id, status="done", action_id=action.id)
+            try:
+                message = await message_access.get_message(message_id)
+                if message is not None:
+                    insights = await insight_access.get_for_messages([message.id])
+                    result.message = list_item(message, await colors(), insights.get(message.id))
+            except Exception as error:
+                logger.warning("Bulk action display failed: %s", type(error).__name__)
+            return result
+
+    return BulkMessageActionOut(results=await asyncio.gather(*(apply(mid) for mid in body.message_ids)))
 
 
 @router.post("/{message_id}/actions", operation_id="mail_message_action", summary="Apply an undoable message action")

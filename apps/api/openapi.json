@@ -355,6 +355,98 @@
         "title": "AttachmentOut",
         "type": "object"
       },
+      "BulkMessageActionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "archive",
+              "trash",
+              "spam",
+              "mark_read",
+              "mark_unread"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Message Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "message_ids",
+          "kind"
+        ],
+        "title": "BulkMessageActionIn",
+        "type": "object"
+      },
+      "BulkMessageActionOut": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BulkMessageActionResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "BulkMessageActionOut",
+        "type": "object"
+      },
+      "BulkMessageActionResult": {
+        "properties": {
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MessageListItemOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "not_found",
+              "unsupported",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "status"
+        ],
+        "title": "BulkMessageActionResult",
+        "type": "object"
+      },
       "CalendarRefOut": {
         "properties": {
           "occurrence_id": {
@@ -394,6 +486,182 @@
           "calendars"
         ],
         "title": "CalendarsEvent",
+        "type": "object"
+      },
+      "CandidateOut": {
+        "properties": {
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "current_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Revision Id"
+          },
+          "current_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Value"
+          },
+          "current_version": {
+            "default": 0,
+            "title": "Current Version",
+            "type": "integer"
+          },
+          "expected_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision Id"
+          },
+          "expected_version": {
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "enum": [
+              "answer_length",
+              "salutation",
+              "signature"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "origin": {
+            "default": "explicit",
+            "enum": [
+              "explicit",
+              "extractor"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "previous_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Value"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "source_message_id": {
+            "title": "Source Message Id",
+            "type": "string"
+          },
+          "source_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Text"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "use_preferences": {
+            "title": "Use Preferences",
+            "type": "boolean"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "source_message_id",
+          "key",
+          "scope",
+          "value",
+          "status",
+          "proposal_id",
+          "expected_version",
+          "expected_revision_id",
+          "use_preferences"
+        ],
+        "title": "CandidateOut",
+        "type": "object"
+      },
+      "CandidateProposeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "refresh": {
+            "default": false,
+            "title": "Refresh",
+            "type": "boolean"
+          }
+        },
+        "title": "CandidateProposeIn",
         "type": "object"
       },
       "ChatConversationUpdateIn": {
@@ -1325,6 +1593,78 @@
         "title": "FeedPreviewOut",
         "type": "object"
       },
+      "GoogleCalendarOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "timezone",
+          "source_id"
+        ],
+        "title": "GoogleCalendarOut",
+        "type": "object"
+      },
+      "GoogleCalendarsOut": {
+        "properties": {
+          "calendars": {
+            "items": {
+              "$ref": "#/components/schemas/GoogleCalendarOut"
+            },
+            "title": "Calendars",
+            "type": "array"
+          }
+        },
+        "required": [
+          "calendars"
+        ],
+        "title": "GoogleCalendarsOut",
+        "type": "object"
+      },
+      "GoogleConnectInput": {
+        "additionalProperties": false,
+        "properties": {
+          "calendar_ids": {
+            "items": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Calendar Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "calendar_ids"
+        ],
+        "title": "GoogleConnectInput",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1425,8 +1765,11 @@
             "title": "Scope"
           },
           "source": {
-            "const": "manual",
             "default": "manual",
+            "enum": [
+              "manual",
+              "confirmed_candidate"
+            ],
             "title": "Source",
             "type": "string"
           },
@@ -2339,6 +2682,42 @@
         "title": "PreferenceCreate",
         "type": "object"
       },
+      "PreferenceDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "replace",
+              "keep"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "expected_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision Id"
+          },
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "choice",
+          "expected_version",
+          "expected_revision_id"
+        ],
+        "title": "PreferenceDecision",
+        "type": "object"
+      },
       "PreferenceOut": {
         "properties": {
           "confirmed_at": {
@@ -2368,8 +2747,11 @@
             "type": "string"
           },
           "source": {
-            "const": "manual",
             "default": "manual",
+            "enum": [
+              "manual",
+              "confirmed_candidate"
+            ],
             "title": "Source",
             "type": "string"
           },
@@ -2401,6 +2783,20 @@
           "confirmed_at"
         ],
         "title": "PreferenceOut",
+        "type": "object"
+      },
+      "PreferenceReference": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id"
+        ],
+        "title": "PreferenceReference",
         "type": "object"
       },
       "PreferenceUpdate": {
@@ -2807,10 +3203,21 @@
               "trash",
               "mark_read",
               "unsubscribe",
-              "task"
+              "task",
+              "preference"
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "preference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reason": {
             "title": "Reason",
@@ -2871,6 +3278,7 @@
         "type": "object"
       },
       "ProposalConfirmIn": {
+        "additionalProperties": false,
         "properties": {
           "body": {
             "anyOf": [
@@ -2882,6 +3290,16 @@
               }
             ],
             "title": "Body"
+          },
+          "preference_decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "selected_ids": {
             "items": {
@@ -3039,6 +3457,33 @@
             },
             "title": "Manual",
             "type": "array"
+          },
+          "preference_outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "saved",
+                  "unchanged",
+                  "kept"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preference Outcome"
+          },
+          "preferences_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferences Enabled"
           },
           "task_series_id": {
             "anyOf": [
@@ -5506,6 +5951,66 @@
         "summary": "Report dependency status; always answers 200"
       }
     },
+    "/api/v1/calendar/connections/google": {
+      "post": {
+        "operationId": "calendar_google_connect",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleConnectInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceOut"
+                  },
+                  "title": "Response Calendar Google Connect",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect"
+      }
+    },
+    "/api/v1/calendar/connections/google/calendars": {
+      "get": {
+        "operationId": "calendar_google_calendars_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleCalendarsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Calendars"
+      }
+    },
     "/api/v1/calendar/feeds": {
       "post": {
         "operationId": "calendar_feed_subscribe",
@@ -6816,6 +7321,45 @@
         "summary": "List the synced inbox"
       }
     },
+    "/api/v1/mail/messages/actions": {
+      "post": {
+        "description": "Apply actions independently, with bounded provider concurrency.",
+        "operationId": "mail_messages_bulk_action",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkMessageActionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkMessageActionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply an undoable action to messages"
+      }
+    },
     "/api/v1/mail/messages/{message_id}": {
       "get": {
         "description": "Return one indexed message or 404 if it does not exist.",
@@ -7100,6 +7644,105 @@
           }
         },
         "summary": "Create Preference"
+      }
+    },
+    "/api/v1/preferences/candidates": {
+      "get": {
+        "operationId": "preference_candidates_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "candidate_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Candidate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CandidateOut"
+                  },
+                  "title": "Response Preference Candidates List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing"
+      }
+    },
+    "/api/v1/preferences/candidates/{candidate_id}/propose": {
+      "post": {
+        "operationId": "preference_candidate_propose",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateProposeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Propose"
       }
     },
     "/api/v1/preferences/contexts/{context_id}": {

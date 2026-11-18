@@ -127,6 +127,18 @@ async def open_proposal(conversation_id: str) -> ChatMessage | None:
 
 async def cancel_open_proposals(conversation_id: str) -> int:
     async with get_session_maker()() as session:
+        from db.accessors import user_preference, preference_candidate
+        from db.models.preference_candidate import PreferenceCandidate
+        await user_preference.lock(session)
+        candidates = (await session.execute(select(PreferenceCandidate).where(
+            PreferenceCandidate.conversation_id == conversation_id,
+            PreferenceCandidate.status == 'pending', PreferenceCandidate.proposal_id.is_not(None),
+        ))).scalars()
+        for candidate in candidates:
+            # A newer card replaces an open preference card as before. The candidate
+            # stays pending and visible in the candidate list, so it can be reviewed later.
+            # The update below cancels and counts the card itself.
+            await preference_candidate.detach(session, candidate)
         result = await session.execute(
             update(ChatMessage).where(ChatMessage.conversation_id == conversation_id, ChatMessage.proposal_status == "pending")
             .values(proposal_status="cancelled").returning(ChatMessage.id)

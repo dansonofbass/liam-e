@@ -1,0 +1,28 @@
+{
+  "summary": "work@example.org",
+  "description": "Ausschließlich synthetische Termine",
+  "updated": "2026-10-26T08:00:00.000Z",
+  "timeZone": "Europe/Berlin",
+  "accessRole": "owner",
+  "defaultReminders": [],
+  "events": [
+    {
+      "id": "synthetic-allday", "status": "confirmed", "summary": "Werkstatt geschlossen",
+      "start": {"date": "2026-10-12", "dateTime": null, "timeZone": null},
+      "end": {"date": "2026-10-14", "dateTime": null, "timeZone": null},
+      "recurringEventId": null, "recurrence": null, "eventType": "DEFAULT",
+      "created": "2026-09-01T08:00:00.000Z", "updated": "2026-10-01T08:00:00.000Z",
+      "creator": {"email": "organizer@example.org", "displayName": "Robin Beispiel", "self": true},
+      "description": "Nur erfundener Inhalt", "location": "Beispielraum"
+    },
+    {
+      "id": "synthetic-weekly_20261018T070000Z", "status": "confirmed", "summary": "Material sortieren",
+      "start": {"date": null, "dateTime": "2026-10-18T09:00:00+02:00", "timeZone": "Europe/Berlin", "eventTimeZone": null},
+      "end": {"date": null, "dateTime": "2026-10-18T10:00:00+02:00", "timeZone": "Europe/Berlin", "eventTimeZone": null},
+      "recurringEventId": "synthetic-weekly", "recurrence": null,
+      "originalStartTime": {"date": null, "dateTime": "2026-10-18T09:00:00+02:00", "timeZone": "Europe/Berlin"},
+      "eventType": "DEFAULT"
+    }
+  ],
+  "nextPageToken": "synthetic-events-page-2"
+}

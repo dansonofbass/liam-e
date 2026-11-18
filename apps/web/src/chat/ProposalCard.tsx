@@ -8,6 +8,7 @@ import { ConfirmCard, Notice } from '../ds'
 import { de } from '../i18n/de'
 import { useRestartConversation } from './session'
 import { TaskProposal } from './TaskProposal'
+import { PreferenceProposal } from './PreferenceProposal'
 import type { TaskFormDraft } from '../tasks/TaskForm'
 
 type Clock = { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }
@@ -95,6 +96,7 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
     }
   }
   if (proposal.kind === 'task') return <Notice tone="success"><span>{de.taskChat.done}</span>{result?.task_series_id && <> <Link className="le-link" to="/tasks/$taskId" params={{ taskId: result.task_series_id }}>{de.tasks.detail}</Link></>}</Notice>
+  if (proposal.kind === 'preference') return <Notice tone="success">{result?.preference_outcome === 'kept' ? de.preferenceCandidates.kept : result?.preference_outcome === 'unchanged' ? de.preferenceCandidates.unchanged : result?.preferences_enabled ? de.preferences.saved : de.preferences.savedOff}</Notice>
   if (undone) return <Notice tone="info">{de.proposal.undone}</Notice>
   const text = proposal.kind === 'unsubscribe' ? de.proposal.results.unsubscribe(result?.done ?? 0, ids.length) : de.proposal.results[proposal.kind](result?.done ?? 0)
   const failed = result?.failed ?? []
@@ -147,6 +149,9 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
       client.setQueryData<ChatMessageOut[]>(['history', current.conversation_id], rows => rows?.map(row => row.id === result.id ? result : row))
       void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
       void client.invalidateQueries({ queryKey: ['summary'] })
+      if (proposal?.kind === 'preference') {
+        for (const key of ['preference-candidates', 'preferences', 'personalization']) void client.invalidateQueries({ queryKey: [key] })
+      }
       if (confirm) {
         if (proposal?.kind === 'task') void client.invalidateQueries({ queryKey: ['tasks'] })
         void client.invalidateQueries({ queryKey: ['messages'] })
@@ -155,6 +160,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
     } catch (failure) {
       const code = errorCode(failure instanceof Error ? failure.cause : failure) ?? 'action_failed'
       setError(code)
+      if (proposal?.kind === 'preference') void client.invalidateQueries({ queryKey: ['preference-candidates'] })
       if (code === 'proposal_not_pending') void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
     } finally { pending.current = false; setBusy(false) }
   }
@@ -183,6 +189,10 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
     confirm={task_edit => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids: [], task_edit }, throwOnError: true })), true) }}
     cancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }}
   />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' || error === 'task_scope_invalid' ? { label: de.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind)}</Notice>}</>
+  if (proposal.kind === 'preference') return proposal.preference ? <PreferenceProposal key={current.id} id={proposal.preference.candidate_id} busy={busy} error={error} clearError={() => setError(undefined)}
+    confirm={preference_decision => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids: [], preference_decision }, throwOnError: true })), true) }}
+    cancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }}
+  /> : null
   const saved = cardState(client, current.id)
   const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${de.proposal.manualSubtitle}` } : item)
   const irreversibleNote = proposal.irreversible ? proposal.kind === 'unsubscribe' ? de.proposal.irreversibleUnsubscribe : proposal.kind === 'send' ? de.proposal.irreversibleSend : undefined : undefined

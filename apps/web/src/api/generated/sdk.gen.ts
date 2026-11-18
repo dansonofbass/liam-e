@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CalendarFeedSubscribeData, CalendarFeedSubscribeErrors, CalendarFeedSubscribeResponses, CalendarFeedValidateData, CalendarFeedValidateErrors, CalendarFeedValidateResponses, CalendarFeedValidationDiscardData, CalendarFeedValidationDiscardErrors, CalendarFeedValidationDiscardResponses, CalendarOccurrenceGetData, CalendarOccurrenceGetErrors, CalendarOccurrenceGetResponses, CalendarOccurrencesListData, CalendarOccurrencesListErrors, CalendarOccurrencesListResponses, CalendarSourceDeleteData, CalendarSourceDeleteErrors, CalendarSourceDeleteResponses, CalendarSourcesListData, CalendarSourcesListResponses, CalendarSourceSyncData, CalendarSourceSyncErrors, CalendarSourceSyncResponses, CalendarSourceUpdateData, CalendarSourceUpdateErrors, CalendarSourceUpdateResponses, ChatConversationsListData, ChatConversationsListResponses, ChatConversationUpdateData, ChatConversationUpdateErrors, ChatConversationUpdateResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatModelsListData, ChatModelsListResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatStreamData, ChatStreamErrors, ChatStreamResponse, ChatStreamResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, LiamMailAccountsData, LiamMailAccountsErrors, LiamMailAccountsResponses, LiamMailReadData, LiamMailReadErrors, LiamMailReadResponses, LiamMailSearchData, LiamMailSearchErrors, LiamMailSearchResponses, LiamMailSummaryData, LiamMailSummaryErrors, LiamMailSummaryResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOptionsData, MailAccountOptionsResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailAccountUpdateData, MailAccountUpdateErrors, MailAccountUpdateResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessageOriginalData, MailMessageOriginalErrors, MailMessageOriginalResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses, PreferenceContextGetData, PreferenceContextGetErrors, PreferenceContextGetResponses, PreferenceCreateData, PreferenceCreateErrors, PreferenceCreateResponses, PreferenceDeleteData, PreferenceDeleteErrors, PreferenceDeleteResponses, PreferencesListData, PreferencesListResponses, PreferenceUpdateData, PreferenceUpdateErrors, PreferenceUpdateResponses, PromptCreateData, PromptCreateErrors, PromptCreateResponses, PromptDeleteData, PromptDeleteErrors, PromptDeleteResponses, PromptGetData, PromptGetErrors, PromptGetResponses, PromptsListData, PromptsListErrors, PromptsListResponses, PromptUpdateData, PromptUpdateErrors, PromptUpdateResponses, SettingsGetData, SettingsGetResponses, SettingsUiGetData, SettingsUiGetErrors, SettingsUiGetResponses, SettingsUiUpdateData, SettingsUiUpdateErrors, SettingsUiUpdateResponses, SettingsUpdateData, SettingsUpdateErrors, SettingsUpdateResponses, TasksArchiveData, TasksArchiveErrors, TasksArchiveResponses, TasksCreateData, TasksCreateErrors, TasksCreateResponses, TasksDeleteData, TasksDeleteErrors, TasksDeleteResponses, TasksGetData, TasksGetErrors, TasksGetResponses, TasksListData, TasksListErrors, TasksListResponses, TasksOccurrenceCompleteData, TasksOccurrenceCompleteErrors, TasksOccurrenceCompleteResponses, TasksOccurrenceReopenData, TasksOccurrenceReopenErrors, TasksOccurrenceReopenResponses, TasksOccurrenceSkipData, TasksOccurrenceSkipErrors, TasksOccurrenceSkipResponses, TasksOccurrencesListData, TasksOccurrencesListErrors, TasksOccurrencesListResponses, TasksPreviewData, TasksPreviewErrors, TasksPreviewResponses, TasksReconcileData, TasksReconcileErrors, TasksReconcileResponses, TasksUpdateData, TasksUpdateErrors, TasksUpdateResponses } from './types.gen';
+import type { CalendarFeedSubscribeData, CalendarFeedSubscribeErrors, CalendarFeedSubscribeResponses, CalendarFeedValidateData, CalendarFeedValidateErrors, CalendarFeedValidateResponses, CalendarFeedValidationDiscardData, CalendarFeedValidationDiscardErrors, CalendarFeedValidationDiscardResponses, CalendarGoogleCalendarsListData, CalendarGoogleCalendarsListResponses, CalendarGoogleConnectData, CalendarGoogleConnectErrors, CalendarGoogleConnectResponses, CalendarOccurrenceGetData, CalendarOccurrenceGetErrors, CalendarOccurrenceGetResponses, CalendarOccurrencesListData, CalendarOccurrencesListErrors, CalendarOccurrencesListResponses, CalendarSourceDeleteData, CalendarSourceDeleteErrors, CalendarSourceDeleteResponses, CalendarSourcesListData, CalendarSourcesListResponses, CalendarSourceSyncData, CalendarSourceSyncErrors, CalendarSourceSyncResponses, CalendarSourceUpdateData, CalendarSourceUpdateErrors, CalendarSourceUpdateResponses, ChatConversationsListData, ChatConversationsListResponses, ChatConversationUpdateData, ChatConversationUpdateErrors, ChatConversationUpdateResponses, ChatHistoryData, ChatHistoryErrors, ChatHistoryResponses, ChatModelsListData, ChatModelsListResponses, ChatProposalCancelData, ChatProposalCancelErrors, ChatProposalCancelResponses, ChatProposalConfirmData, ChatProposalConfirmErrors, ChatProposalConfirmResponses, ChatStreamData, ChatStreamErrors, ChatStreamResponse, ChatStreamResponses, ChatTurnData, ChatTurnErrors, ChatTurnResponses, HealthData, HealthResponses, LiamMailAccountsData, LiamMailAccountsErrors, LiamMailAccountsResponses, LiamMailReadData, LiamMailReadErrors, LiamMailReadResponses, LiamMailSearchData, LiamMailSearchErrors, LiamMailSearchResponses, LiamMailSummaryData, LiamMailSummaryErrors, LiamMailSummaryResponses, MailAccountConnectConnectorData, MailAccountConnectConnectorErrors, MailAccountConnectConnectorResponses, MailAccountConnectImapData, MailAccountConnectImapErrors, MailAccountConnectImapResponses, MailAccountDeleteData, MailAccountDeleteErrors, MailAccountDeleteResponses, MailAccountOauthAuthorizeData, MailAccountOauthAuthorizeErrors, MailAccountOauthAuthorizeResponses, MailAccountOauthCallbackData, MailAccountOauthCallbackErrors, MailAccountOptionsData, MailAccountOptionsResponses, MailAccountsListData, MailAccountsListResponses, MailAccountSyncData, MailAccountSyncErrors, MailAccountSyncResponses, MailAccountUpdateData, MailAccountUpdateErrors, MailAccountUpdateResponses, MailActionsUndoData, MailActionsUndoErrors, MailActionsUndoResponses, MailConnectorsListData, MailConnectorsListResponses, MailConnectorToolsListData, MailConnectorToolsListErrors, MailConnectorToolsListResponses, MailMessageActionData, MailMessageActionErrors, MailMessageActionResponses, MailMessageGetData, MailMessageGetErrors, MailMessageGetResponses, MailMessageInsightData, MailMessageInsightErrors, MailMessageInsightResponses, MailMessageOriginalData, MailMessageOriginalErrors, MailMessageOriginalResponses, MailMessagesBulkActionData, MailMessagesBulkActionErrors, MailMessagesBulkActionResponses, MailMessagesListData, MailMessagesListErrors, MailMessagesListResponses, MailSummaryData, MailSummaryResponses, MailSyncAllData, MailSyncAllErrors, MailSyncAllResponses, PreferenceCandidateProposeData, PreferenceCandidateProposeErrors, PreferenceCandidateProposeResponses, PreferenceCandidatesListData, PreferenceCandidatesListErrors, PreferenceCandidatesListResponses, PreferenceContextGetData, PreferenceContextGetErrors, PreferenceContextGetResponses, PreferenceCreateData, PreferenceCreateErrors, PreferenceCreateResponses, PreferenceDeleteData, PreferenceDeleteErrors, PreferenceDeleteResponses, PreferencesListData, PreferencesListResponses, PreferenceUpdateData, PreferenceUpdateErrors, PreferenceUpdateResponses, PromptCreateData, PromptCreateErrors, PromptCreateResponses, PromptDeleteData, PromptDeleteErrors, PromptDeleteResponses, PromptGetData, PromptGetErrors, PromptGetResponses, PromptsListData, PromptsListErrors, PromptsListResponses, PromptUpdateData, PromptUpdateErrors, PromptUpdateResponses, SettingsGetData, SettingsGetResponses, SettingsUiGetData, SettingsUiGetErrors, SettingsUiGetResponses, SettingsUiUpdateData, SettingsUiUpdateErrors, SettingsUiUpdateResponses, SettingsUpdateData, SettingsUpdateErrors, SettingsUpdateResponses, TasksArchiveData, TasksArchiveErrors, TasksArchiveResponses, TasksCreateData, TasksCreateErrors, TasksCreateResponses, TasksDeleteData, TasksDeleteErrors, TasksDeleteResponses, TasksGetData, TasksGetErrors, TasksGetResponses, TasksListData, TasksListErrors, TasksListResponses, TasksOccurrenceCompleteData, TasksOccurrenceCompleteErrors, TasksOccurrenceCompleteResponses, TasksOccurrenceReopenData, TasksOccurrenceReopenErrors, TasksOccurrenceReopenResponses, TasksOccurrenceSkipData, TasksOccurrenceSkipErrors, TasksOccurrenceSkipResponses, TasksOccurrencesListData, TasksOccurrencesListErrors, TasksOccurrencesListResponses, TasksPreviewData, TasksPreviewErrors, TasksPreviewResponses, TasksReconcileData, TasksReconcileErrors, TasksReconcileResponses, TasksUpdateData, TasksUpdateErrors, TasksUpdateResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -53,6 +53,23 @@ export const liamMailSummary = <ThrowOnError extends boolean = false>(options?: 
  * service answers. ``degraded`` when one does not; the response is 200 either way.
  */
 export const health = <ThrowOnError extends boolean = false>(options?: Options<HealthData, ThrowOnError>): RequestResult<HealthResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
+
+/**
+ * Connect
+ */
+export const calendarGoogleConnect = <ThrowOnError extends boolean = false>(options: Options<CalendarGoogleConnectData, ThrowOnError>): RequestResult<CalendarGoogleConnectResponses, CalendarGoogleConnectErrors, ThrowOnError> => (options.client ?? client).post<CalendarGoogleConnectResponses, CalendarGoogleConnectErrors, ThrowOnError>({
+    url: '/api/v1/calendar/connections/google',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Calendars
+ */
+export const calendarGoogleCalendarsList = <ThrowOnError extends boolean = false>(options?: Options<CalendarGoogleCalendarsListData, ThrowOnError>): RequestResult<CalendarGoogleCalendarsListResponses, unknown, ThrowOnError> => (options?.client ?? client).get<CalendarGoogleCalendarsListResponses, unknown, ThrowOnError>({ url: '/api/v1/calendar/connections/google/calendars', ...options });
 
 /**
  * Subscribe
@@ -353,6 +370,20 @@ export const mailConnectorToolsList = <ThrowOnError extends boolean = false>(opt
 export const mailMessagesList = <ThrowOnError extends boolean = false>(options?: Options<MailMessagesListData, ThrowOnError>): RequestResult<MailMessagesListResponses, MailMessagesListErrors, ThrowOnError> => (options?.client ?? client).get<MailMessagesListResponses, MailMessagesListErrors, ThrowOnError>({ url: '/api/v1/mail/messages', ...options });
 
 /**
+ * Apply an undoable action to messages
+ *
+ * Apply actions independently, with bounded provider concurrency.
+ */
+export const mailMessagesBulkAction = <ThrowOnError extends boolean = false>(options: Options<MailMessagesBulkActionData, ThrowOnError>): RequestResult<MailMessagesBulkActionResponses, MailMessagesBulkActionErrors, ThrowOnError> => (options.client ?? client).post<MailMessagesBulkActionResponses, MailMessagesBulkActionErrors, ThrowOnError>({
+    url: '/api/v1/mail/messages/actions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Read one synced message in full
  *
  * Return one indexed message or 404 if it does not exist.
@@ -418,6 +449,23 @@ export const preferencesList = <ThrowOnError extends boolean = false>(options?: 
  */
 export const preferenceCreate = <ThrowOnError extends boolean = false>(options: Options<PreferenceCreateData, ThrowOnError>): RequestResult<PreferenceCreateResponses, PreferenceCreateErrors, ThrowOnError> => (options.client ?? client).post<PreferenceCreateResponses, PreferenceCreateErrors, ThrowOnError>({
     url: '/api/v1/preferences',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Listing
+ */
+export const preferenceCandidatesList = <ThrowOnError extends boolean = false>(options?: Options<PreferenceCandidatesListData, ThrowOnError>): RequestResult<PreferenceCandidatesListResponses, PreferenceCandidatesListErrors, ThrowOnError> => (options?.client ?? client).get<PreferenceCandidatesListResponses, PreferenceCandidatesListErrors, ThrowOnError>({ url: '/api/v1/preferences/candidates', ...options });
+
+/**
+ * Propose
+ */
+export const preferenceCandidatePropose = <ThrowOnError extends boolean = false>(options: Options<PreferenceCandidateProposeData, ThrowOnError>): RequestResult<PreferenceCandidateProposeResponses, PreferenceCandidateProposeErrors, ThrowOnError> => (options.client ?? client).post<PreferenceCandidateProposeResponses, PreferenceCandidateProposeErrors, ThrowOnError>({
+    url: '/api/v1/preferences/candidates/{candidate_id}/propose',
     ...options,
     headers: {
         'Content-Type': 'application/json',

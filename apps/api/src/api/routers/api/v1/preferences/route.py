@@ -22,7 +22,7 @@ class PrivatePreferenceRoute(APIRoute):
             except (preferences.StaleVersion, preferences.PreferenceConflict):
                 raise refuse(409, 'preference_conflict', 'Die Präferenzen wurden geändert oder die Grenze ist erreicht. Lade sie neu; je Feld und Geltungsbereich ist nur ein aktiver Wert möglich.') from None
             except (RequestValidationError, preferences.InvalidPreference):
-                raise refuse(422, 'preference_invalid', 'Prüfe Feld, Konto und Wert (1–500 Zeichen). Vorschläge sind noch nicht verfügbar.') from None
+                raise refuse(422, 'preference_invalid', 'Prüfe Feld, Konto und Wert (1–500 Zeichen).') from None
             except SQLAlchemyError:
                 raise refuse(503, 'preferences_unavailable', 'Die Präferenzen sind gerade nicht erreichbar. Versuch es gleich noch einmal.') from None
         return private_handler
@@ -64,7 +64,7 @@ class PreferenceOut(BaseModel):
     status: PreferenceStatus
     version: int
     revision_id: str
-    source: Literal['manual'] = 'manual'
+    source: Literal['manual', 'confirmed_candidate'] = 'manual'
     confirmed_at: datetime
 
 
@@ -73,7 +73,7 @@ class HistoricalPreferenceOut(BaseModel):
     key: PreferenceKey | None = None
     scope: str | None = None
     value: str | None = None
-    source: Literal['manual'] = 'manual'
+    source: Literal['manual', 'confirmed_candidate'] = 'manual'
     confirmed_at: datetime | None = None
     removed: bool = True
 
@@ -91,7 +91,7 @@ async def output(row):
     if rev is None or rev.removed:
         raise refuse(404, 'preference_unavailable', 'Diese Präferenz gibt es nicht mehr. Lade die Übersicht neu.')
     return PreferenceOut(id=row.id, key=row.key, scope=row.scope, value=rev.value, status=row.status,
-                         version=row.version, revision_id=rev.id, confirmed_at=rev.confirmed_at)
+                         version=row.version, revision_id=rev.id, source=rev.source, confirmed_at=rev.confirmed_at)
 
 
 @router.get('', operation_id='preferences_list')
@@ -126,5 +126,5 @@ async def get_preference_context(context_id: str) -> PreferenceContextOut:
     return PreferenceContextOut(enabled=context.preferences_enabled, resolver_version=context.preference_resolver_version,
         revisions=[HistoricalPreferenceOut(revision_id=id) if rev is None or rev.removed else
                    HistoricalPreferenceOut(revision_id=id, key=rev.key, scope=rev.scope, value=rev.value,
-                                           confirmed_at=rev.confirmed_at, removed=False)
+                                           source=rev.source, confirmed_at=rev.confirmed_at, removed=False)
                    for id, rev in zip(ids, revisions)])

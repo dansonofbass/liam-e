@@ -25,7 +25,7 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
                          start: datetime, end: datetime, start_date: date, end_date: date,
                          events: list[CalendarEvent], occurrences: list[CalendarOccurrence],
                          expected_revision: int | None = None, replace_all: bool = False,
-                         encrypted_validators: str | None = None) -> None:
+                         encrypted_validators: str | None = None, reset_schedule: bool = False) -> None:
     """Replace a fully processed window; inputs are prepared before the transaction.
 
     Callers must validate adapter completeness and interval normalization before calling.
@@ -52,7 +52,7 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
         source = (await session.execute(select(CalendarSource).where(CalendarSource.id == source_id).with_for_update())).scalar_one_or_none()
         if (source is None or not source.is_active
                 or (expected_revision is not None and source.revision != expected_revision)
-                or (source.provider == "ics" and expected_revision is None)):
+                or (source.provider in {"ics", "google"} and expected_revision is None)):
             raise LostClaim()
         state = await session.get(CalendarSyncState, source_id)
         coverage_start, coverage_end = start, end
@@ -110,6 +110,7 @@ async def replace_window(*, source_id: str, job_id: str, attempt: int,
         state.data_revision += 1
         if encrypted_validators is not None:
             state.encrypted_validators = encrypted_validators
+        if reset_schedule:
             state.last_checked_at = state.last_validated_at = state.last_success_at
             state.next_attempt_at = None
             state.last_error = None

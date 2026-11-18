@@ -20,6 +20,7 @@ from conftest import build_app
 # deciding that it must not be reachable from a Studio agent.
 MUTATING_OPERATIONS: frozenset[str] = frozenset(
     {
+        "calendar_google_connect",
         "calendar_feed_validate",
         "calendar_feed_subscribe",
         "calendar_feed_validation_discard",
@@ -27,6 +28,7 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "calendar_source_sync",
         "calendar_source_update",
         "preference_create",
+        "preference_candidate_propose",
         "preference_update",
         "preference_delete",
         "settings_update",
@@ -45,6 +47,7 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "mail_account_update",
         "mail_actions_undo",
         "mail_message_action",
+        "mail_messages_bulk_action",
         "mail_sync_all",
         "settings_ui_update",
         "tasks_archive",
@@ -65,7 +68,10 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
 # rather than left out of the read-only list silently.
 BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
     {
+        # Provider calls expose private calendar names; never an agent discovery tool.
+        "calendar_google_calendars_list",
         "preferences_list",
+        "preference_candidates_list",  # Private candidate values and own source messages.
         "preference_context_get",
         "settings_get",
         "mail_account_oauth_authorize",

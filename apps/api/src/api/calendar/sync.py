@@ -21,7 +21,9 @@ def register_adapter(provider: str, adapter: Adapter) -> None:
 def register_worker() -> None:
     from api.mail.jobs import register_claim_handler
     from api.calendar.feed_jobs import StoredICSAdapter
+    from api.calendar.google import GoogleConnectorAdapter
     register_adapter("ics", StoredICSAdapter())
+    register_adapter("google", GoogleConnectorAdapter())
     register_claim_handler("calendar_sync", run_sync)
 
 
@@ -35,7 +37,7 @@ async def enqueue(source_id: str, start: datetime, end: datetime) -> bool:
     if source_id in SEED_CALENDAR_IDS:
         return False
     source = await calendar_source.get(source_id)
-    if source is not None and source.provider == "ics":
+    if source is not None and source.provider in {"ics", "google"}:
         from api.calendar.feed_jobs import enqueue as enqueue_feed
         return await enqueue_feed(source_id, manual=True)
     payload = {"source_id": source_id, "start": start.isoformat(), "end": end.isoformat()}
@@ -51,13 +53,13 @@ async def run_sync(payload: dict, job_id: str, attempt: int) -> None:
     adapter = _adapters.get(source.provider)
     if adapter is None:
         raise LookupError("adapter unavailable")
-    if source.provider == "ics":
+    if source.provider in {"ics", "google"}:
         from api.calendar.ics import default_window
         start, end = default_window()
     else:
         start, end = datetime.fromisoformat(payload["start"]), datetime.fromisoformat(payload["end"])
     snapshot = await adapter.snapshot(source.id, start, end)
-    if source.provider == "ics" and snapshot.source_revision != source.revision:
+    if source.provider in {"ics", "google"} and snapshot.source_revision != source.revision:
         raise LookupError("source_changed")
     if not snapshot.complete:
         raise ValueError("incomplete snapshot")
@@ -86,5 +88,6 @@ async def run_sync(payload: dict, job_id: str, attempt: int) -> None:
     await replace_window(source_id=source.id, job_id=job_id, attempt=attempt, start=start, end=end,
                          start_date=start.date(), end_date=end.date(), events=events, occurrences=occurrences,
                          expected_revision=source.revision,
-                         replace_all=source.provider == "ics",
+                         replace_all=source.provider in {"ics", "google"},
+                         reset_schedule=source.provider in {"ics", "google"},
                          encrypted_validators=getattr(snapshot, "encrypted_validators", None))

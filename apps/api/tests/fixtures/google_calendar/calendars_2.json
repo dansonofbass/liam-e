@@ -1,0 +1,6 @@
+{
+  "calendars": [
+    {"id": "garden@example.org", "summary": "Garten", "description": null, "timeZone": "UTC"}
+  ],
+  "nextPageToken": null
+}

@@ -11,31 +11,33 @@ import { Button, Chip, Menu, Notice, TextField } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
 import { de } from '../i18n/de'
 import { preferencesQuery, personalizationQuery } from './preferenceQueries'
+import { PreferenceCandidates } from './PreferenceCandidates'
 
 const t = de.preferences
 const codeOf = (cause: unknown) => errorCode(cause instanceof Error ? cause.cause : cause)
 function useRefresh() {
   const client = useQueryClient()
-  return () => { for (const key of ['preferences', 'personalization', 'preference-context', 'history']) void client.invalidateQueries({ queryKey: [key] }) }
+  return () => { for (const key of ['preferences', 'personalization', 'preference-context', 'preference-candidates', 'history']) void client.invalidateQueries({ queryKey: [key] }) }
 }
 
 export function Personalization({ saved = false }: { saved?: boolean }) {
-  const query = useQuery(personalizationQuery()), refresh = useRefresh()
+  const query = useQuery(personalizationQuery()), refresh = useRefresh(), explanationId = useId()
   const [confirm, setConfirm] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(false)
   const lock = useRef(false)
   const config = query.data?.personalization
-  const change = async (use: boolean) => {
+  const change = async (use: boolean, field: 'use_preferences' | 'suggest_preferences' = 'use_preferences') => {
     if (!config || lock.current) return
     lock.current = true; setBusy(true); setError(false)
     try {
-      await unwrap(settingsUpdate({ body: { personalization: { expected_version: config.version, use_preferences: use } }, throwOnError: true }))
+      await unwrap(settingsUpdate({ body: { personalization: { expected_version: config.version, [field]: use } }, throwOnError: true }))
       setConfirm(false); refresh()
     } catch { setError(true) } finally { lock.current = false; setBusy(false) }
   }
   if (!config) return query.isPending ? <p role="status">{t.loading}</p> : <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{t.error}</Notice>
   return <div className="le-prompts">
     <Notice tone="info" action={{ label: config.use_preferences ? t.disable : t.enable, onClick: () => { if (busy) return; if (config.use_preferences) void change(false); else setConfirm(true) } }}>{saved ? config.use_preferences ? t.saved : t.savedOff : config.use_preferences ? t.on : t.off}</Notice>
-    <p className="le-hint">{t.suggestionsUnavailable}</p>
+    <Button variant="secondary" role="switch" aria-checked={config.suggest_preferences} aria-describedby={explanationId} disabled={busy} onClick={() => { void change(!config.suggest_preferences, 'suggest_preferences') }}>{t.suggestionsSwitch}</Button>
+    <p id={explanationId} className="le-hint">{config.suggest_preferences ? t.suggestionsOn : t.suggestionsOff} {t.suggestionsExplanation}</p>
     {error && <Notice tone="danger" action={{ label: t.reload, onClick: () => { void query.refetch() } }}>{t.conflict}</Notice>}
     {confirm && <PreferenceDialog title={t.enable} close={() => { if (!busy) setConfirm(false) }}><p>{t.transfer}</p><div className="le-dialog-actions"><Button variant="secondary" disabled={busy} onClick={() => setConfirm(false)}>{de.controls.cancel}</Button><Button variant="primary" disabled={busy} onClick={() => { void change(true) }}>{t.enable}</Button></div></PreferenceDialog>}
   </div>
@@ -60,7 +62,8 @@ export function Preferences() {
     {query.isPending && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div className="le-prompt-placeholder" key={i} aria-hidden="true" />)}</>}
     {query.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{t.error}</Notice>}
     {query.data?.length === 0 && <p>{t.empty}</p>}
-    {query.data?.map(row => <div className="le-prompt-row" key={row.id}><strong>{t.keys[row.key]}</strong><span className="le-prompt-preview">{row.value}</span><small>{scope(row.scope)} · {t.source} · {t.statuses[row.status]}</small><Link className="le-btn le-btn--secondary" to="/settings/preferences/$preferenceId" params={{ preferenceId: row.id }}>{t.edit}</Link></div>)}
+    {query.data?.map(row => <div className="le-prompt-row" key={row.id}><strong>{t.keys[row.key]}</strong><span className="le-prompt-preview">{row.value}</span><small>{scope(row.scope)} · {row.source === 'confirmed_candidate' ? t.confirmedSource : t.source} · {t.statuses[row.status]}</small><Link className="le-btn le-btn--secondary" to="/settings/preferences/$preferenceId" params={{ preferenceId: row.id }}>{t.edit}</Link></div>)}
+    <PreferenceCandidates />
   </section>
 }
 
@@ -102,7 +105,7 @@ function PreferenceForm({ initial, reload }: { initial?: PreferenceOut; reload: 
     <div className="le-field"><span className="le-label">{t.field}</span><Menu trigger={props => <Chip {...props} quiet disabled={!!base || busy} aria-label={`${t.field}: ${t.keys[key]}`}>{t.keys[key]}</Chip>} items={(['answer_length', 'salutation', 'signature'] as const).map(k => ({ label: t.keys[k], checked: k === key, onSelect: () => { setKey(k); if (k !== 'answer_length' && scope === '*') setScope('') } }))} /></div>
     <div className="le-field"><span className="le-label">{t.scope}</span><Menu trigger={props => <Chip {...props} quiet disabled={busy} aria-label={`${t.scope}: ${scopeLabel(scope)}`}>{scopeLabel(scope)}</Chip>} items={[...(key === 'answer_length' ? [{ label: t.global, checked: scope === '*', onSelect: () => setScope('*') }] : []), ...accounts.map(a => ({ label: a.display_name || a.email_address, checked: a.id === scope, onSelect: () => setScope(a.id) }))]} /></div>
     <TextField multiline rows={5} label={t.value} value={value} onChange={e => setValue(e.target.value)} maxLength={500} required autoFocus hint={de.prompts.count(Array.from(value).length, 500)} />
-    <p className="le-hint">{t.source}{base && <> · {t.statuses[base.status]}</>}</p><Notice tone="info">{t.safety}</Notice>
+    <p className="le-hint">{base?.source === 'confirmed_candidate' ? t.confirmedSource : t.source}{base && <> · {t.statuses[base.status]}</>}</p><Notice tone="info">{t.safety}</Notice>
     {saved && <Personalization saved />}
     {error && <Notice tone="danger" action={conflict ? { label: t.reload, onClick: () => { void reload().catch(() => setError(t.error)) } } : undefined}>{error}</Notice>}
     <div className="le-prompt-actions"><Button type="submit" variant="primary" disabled={busy || conflict || !scope || !value.trim()}>{t.save}</Button><Link className="le-btn le-btn--secondary" to="/settings/preferences">{t.back}</Link>

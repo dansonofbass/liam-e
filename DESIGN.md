@@ -322,7 +322,7 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   Anhalten · `sparkle` Assistent · `flag` Priorisieren · `newspaper` Newsletter · `clock`
   Frist · `paperclip` Anhang · `check`, `circle-alert`, `info` in Hinweisen · `menu` Menü
   öffnen · `x` Schließen · `arrow-left` Zurück · `plus` Neue Unterhaltung · `search` Suchen
-  · `chevron-down` Auswahl · `link` Connector · `key-round` Anmeldung beim Anbieter ·
+  · `chevron-down` Auswahl · `list-checks` Auswählen · `link` Connector · `key-round` Anmeldung beim Anbieter ·
   `sun-moon` Darstellung; `check` markiert außerdem die gewählte Zeile in einem Menü.
 - **Bausteine** (Klassen `le-*`, Beschreibung und Vorschau im Design-System): Button,
   IconButton, Chip (mit Tag, Badge, Punkt), Tooltip, Notice, AppShell, NavItem, Menu,
@@ -338,7 +338,13 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   „Rückgängig“, §9.2) in `mail/`, der Dialog „Konto entfernen“ (`accounts/RemoveDialog.tsx`,
   Klasse `le-dialog`, mit `scrim`, Fokus bleibt im Dialog), der Dialog „Original der Mail“
   (`mail/OriginalDialog.tsx`, breiter mit `le-dialog--wide`, Kopf mit „Schließen“, der
-  Inhalt scrollt für sich) und ThemeMenu (`shell/`, §3).
+  Inhalt scrollt für sich) und ThemeMenu (`shell/`, §3). Kalender verbindet man über
+  `CalendarSetup` (`calendar/FeedSetup.tsx`): „Kalender abonnieren“ öffnet `FeedSetup`,
+  „Google Kalender verbinden“ öffnet `GoogleSetup`. Beide Dialoge nutzen `le-dialog` und
+  Fokusführung. Google zeigt statische Platzhalter beim Laden und echte Checkboxen aus
+  `TextField`; bestehende Verbindungen sind angehakt, gesperrt und als „Schon verbunden“
+  erklärt. Neue Auswahlen sind nie vorgewählt. Nur die gewählte Zahl neuer Kalender zählt
+  für „N Kalender verbinden“. Lange Kalendernamen dürfen umbrechen.
 - **Varianten:**
   - Button `primary`, `secondary`, `ghost`, `danger`; klein mit `le-btn--sm` (obere Leiste
     der Mail am Desktop, §7.4).
@@ -425,11 +431,12 @@ Anfang an mit.
 ### 7.4 Posteingang je Breakpoint
 
 - Aufbau der Liste: Auf `desktop` und `tablet` steht oben eine Leiste mit „Posteingang“,
-  Stand, Suchen (`search`) und Abrufen (`refresh-cw`). Darunter stehen die Filter-Chips:
+  Stand, Auswählen (`list-checks`), Suchen (`search`) und Abrufen (`refresh-cw`). Darunter stehen die Filter-Chips:
   Konto (Menü mit „Alle Konten“), „Ungelesen“, „Wichtig“ und „Mit Anhang“. Auf `mobile`
   trägt die Kopfzeile den Titel, und unter den Filtern stehen „47 ungelesen · Stand 08:57“
-  und die beiden Buttons. Suchen öffnet ein Feld „In allen Konten suchen …“. Die Liste
+  und die drei Buttons. Suchen öffnet ein Feld „In allen Konten suchen …“. Die Liste
   gruppiert nach Tagen: „Heute“, „Gestern“, „Diese Woche“ (ab Montag) und „Älter“.
+- Der Auswahlmodus ersetzt auf `desktop` und `tablet` die obere Leiste, auf `mobile` die Zeile mit Stand und Buttons. Er zeigt „Auswahl beenden“, die Anzahl, „Alle auswählen“ und Archivieren, Gelesen/Ungelesen, Papierkorb und Spam. Die Leiste darf für sich seitlich scrollen, nicht aber die Seite; auf `mobile` und bei grobem Zeiger sind die Ziele mindestens 44 px groß. Ein Tipp auf die Zeile wählt sie aus; der Avatar wählt auch außerhalb des Modus direkt aus. Mit Maus zeigt er beim Hover ein Auswahlkästchen, Umschalt-Klick wählt den Bereich. „Alle auswählen“ wählt höchstens 100 geladene Mails. Escape beendet die Auswahl. Wischen und Zeilenaktionen sind während der Auswahl ausgeschaltet.
 - `desktop`: Liste (`list-width`) und Lesebereich nebeneinander. Alle Aktionen der Mail
   stehen in der oberen Leiste des Lesebereichs: Archivieren, Gelesen/Ungelesen, Papierkorb
   und „Weitere Aktionen“, rechts davon „Im Chat fragen“ und „Antwort entwerfen“ als kleine
@@ -517,10 +524,7 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
   Tooltip.
 - Nach dem Klick ersetzt ein Hinweis die Karte, mit Ergebnis und „Rückgängig“, wo es geht.
   Nie automatisch bestätigen, nie zwei offene Karten gleichzeitig.
-- **Einzelaktionen im Posteingang** (eine Mail archivieren, gelesen/ungelesen, in den
-  Papierkorb, als Spam markieren) löst du selbst aus; sie wirken sofort und zeigen danach 10 Sekunden lang
-  einen Hinweis mit „Rückgängig“. Alles,
-  was mehrere Mails betrifft, läuft über den Chat und eine Bestätigungskarte.
+- **Selbst ausgelöste Aktionen im Posteingang** auf einer Mail oder mehreren ausgewählten Mails wirken sofort und zeigen danach 10 Sekunden lang einen Hinweis mit einem gemeinsamen „Rückgängig“. Vorschläge des Assistenten laufen weiterhin über die Bestätigungskarte.
 
 ### 9.3 Herkunft und Inhalte aus Mails
 
@@ -603,8 +607,28 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 - Die ausdrücklich abgestimmte Aktion heißt „Präferenz hinzufügen“; das ist keine Ausnahme
   für das Verbinden von Konten. Leere Listen nennen keine Prozentwerte. Quelle manueller Werte:
   „Von dir eingetragen“. Feld und Geltungsbereich sind Chips mit sichtbarer Beschriftung darüber.
-  Vorschläge erscheinen nur als Hinweis, dass sie noch nicht verfügbar sind, nicht als
-  deaktivierter Button: Sekundäre Buttons sehen deaktiviert nicht anders aus.
+  Bestätigte Chatwerte tragen „Von dir im Chat bestätigt“. Unter „Vorschläge“ stehen offene
+  Merke-dir-Kandidaten und eingeschaltete Vorschläge aus neuen eigenen Nachrichten,
+  noch keine aktiven Präferenzen. „Vorschlag prüfen“ öffnet eine Karte
+  nur bei freiem Platz in der Unterhaltung; sonst erklärt ein Hinweis die offene Karte.
+  Eine bereits zugehörige Karte wird mit „Karte öffnen“ verlinkt, niemals dupliziert.
+  „Aus meinen Nachrichten Vorschläge machen“ schaltet automatische Vorschläge unabhängig
+  von der Verwendung ein oder aus. Daneben steht vor dem Einschalten: Ausgewählte neue
+  eigene Nachrichten werden an Mistral übermittelt und bleiben nicht nur in der App-Datenbank.
+  Frühere Nachrichten werden nicht nachgeholt. Der Zustand steht auch als Text da.
+  Automatische Vorschläge tragen „Aus deinem Chatbeitrag vorgeschlagen“, öffnen nie selbst
+  eine Karte und wirken erst nach Bestätigung und gesondertem Einschalten der Verwendung.
+- Präferenzkarten laden den Wert über ihre Kandidatenreferenz. Sie zeigen Feld, Konto und
+  „Bisher“/„Vorschlag“, auf dem Handy untereinander. „Deine Bitte“ lässt sich aufklappen.
+  Bei bestehendem Wert entscheiden „Ersetzen“ und „Bisherige behalten“; „Abbrechen“ verwirft
+  den Kandidaten ohne Änderung der Präferenz. Gleiche Werte erklären ausdrücklich den No-op.
+  Bestätigen ändert den Nutzungsschalter nie; bei ausgeschalteter Verwendung steht nachher
+  „Gespeichert. Verwendung ist ausgeschaltet.“ Der Fokus geht auf das Ergebnis.
+- Ein Versionskonflikt zeigt „Inzwischen gespeichert“ und sperrt die Entscheidung, bis
+  „Aktuellen Stand prüfen“ die neue Vergleichsfassung lädt. Es gibt keinen automatischen
+  Bestätigungsversuch. Danach liegt der Fokus auf der Kartenüberschrift. Entfernte Konten,
+  Quellen oder Präferenzen zeigen keine Wertkopien und keine Bestätigungsaktion mehr.
+  Laden, Fehler mit Wiederholen und eine leere Vorschlagsliste haben eigene Zustände.
 - Löschen erklärt, dass Chatnachrichten und Antworten bleiben und bereits übermittelte Anfragen
   nicht zurückholbar sind. Es verspricht weder Löschung beim Anbieter noch aus Backups und bietet
   einen neuen Chat ohne bisherigen Kontext. Fokus bleibt im Dialog und kehrt beim Schließen zurück.
@@ -684,3 +708,7 @@ DESIGN.md folgt dem Aufbau und den Regeln einer älteren Design-Vorgabe des Owne
     Bedienelemente.
 11. **Freie Werte aufgeräumt:** Schriftgrößen nur über Tokens, Abstände auf dem
     4-px-Raster (§4, §5).
+
+## Entschieden (2026-11-18, Owner)
+
+1. **Mehrere Mails im Posteingang auswählen und sofort bearbeiten:** eine gemeinsame Rücknahme ohne Bestätigungsdialog; Vorschläge des Assistenten bleiben bestätigungspflichtig (§7.4, §9.2).

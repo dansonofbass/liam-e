@@ -239,6 +239,49 @@ export type AttachmentOut = {
 };
 
 /**
+ * BulkMessageActionIn
+ */
+export type BulkMessageActionIn = {
+    /**
+     * Kind
+     */
+    kind: 'archive' | 'trash' | 'spam' | 'mark_read' | 'mark_unread';
+    /**
+     * Message Ids
+     */
+    message_ids: Array<string>;
+};
+
+/**
+ * BulkMessageActionOut
+ */
+export type BulkMessageActionOut = {
+    /**
+     * Results
+     */
+    results: Array<BulkMessageActionResult>;
+};
+
+/**
+ * BulkMessageActionResult
+ */
+export type BulkMessageActionResult = {
+    /**
+     * Action Id
+     */
+    action_id?: string | null;
+    message?: MessageListItemOut | null;
+    /**
+     * Message Id
+     */
+    message_id: string;
+    /**
+     * Status
+     */
+    status: 'done' | 'not_found' | 'unsupported' | 'failed';
+};
+
+/**
  * CalendarRefOut
  */
 export type CalendarRefOut = {
@@ -264,6 +307,94 @@ export type CalendarsEvent = {
      * Event
      */
     event: 'calendars';
+};
+
+/**
+ * CandidateOut
+ */
+export type CandidateOut = {
+    /**
+     * Account Name
+     */
+    account_name?: string | null;
+    /**
+     * Conversation Id
+     */
+    conversation_id: string;
+    /**
+     * Current Revision Id
+     */
+    current_revision_id?: string | null;
+    /**
+     * Current Value
+     */
+    current_value?: string | null;
+    /**
+     * Current Version
+     */
+    current_version?: number;
+    /**
+     * Expected Revision Id
+     */
+    expected_revision_id: string | null;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Key
+     */
+    key: 'answer_length' | 'salutation' | 'signature';
+    /**
+     * Origin
+     */
+    origin?: 'explicit' | 'extractor';
+    /**
+     * Previous Value
+     */
+    previous_value?: string | null;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string | null;
+    /**
+     * Scope
+     */
+    scope: string;
+    /**
+     * Source Message Id
+     */
+    source_message_id: string;
+    /**
+     * Source Text
+     */
+    source_text?: string | null;
+    /**
+     * Status
+     */
+    status: 'pending' | 'accepted' | 'rejected' | 'expired';
+    /**
+     * Use Preferences
+     */
+    use_preferences: boolean;
+    /**
+     * Value
+     */
+    value: string | null;
+};
+
+/**
+ * CandidateProposeIn
+ */
+export type CandidateProposeIn = {
+    /**
+     * Refresh
+     */
+    refresh?: boolean;
 };
 
 /**
@@ -799,6 +930,48 @@ export type FeedPreviewOut = {
 };
 
 /**
+ * GoogleCalendarOut
+ */
+export type GoogleCalendarOut = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Source Id
+     */
+    source_id: string | null;
+    /**
+     * Timezone
+     */
+    timezone: string;
+};
+
+/**
+ * GoogleCalendarsOut
+ */
+export type GoogleCalendarsOut = {
+    /**
+     * Calendars
+     */
+    calendars: Array<GoogleCalendarOut>;
+};
+
+/**
+ * GoogleConnectInput
+ */
+export type GoogleConnectInput = {
+    /**
+     * Calendar Ids
+     */
+    calendar_ids: Array<string>;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -855,7 +1028,7 @@ export type HistoricalPreferenceOut = {
     /**
      * Source
      */
-    source?: 'manual';
+    source?: 'manual' | 'confirmed_candidate';
     /**
      * Value
      */
@@ -1438,6 +1611,24 @@ export type PreferenceCreate = {
 };
 
 /**
+ * PreferenceDecision
+ */
+export type PreferenceDecision = {
+    /**
+     * Choice
+     */
+    choice: 'replace' | 'keep';
+    /**
+     * Expected Revision Id
+     */
+    expected_revision_id: string | null;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+};
+
+/**
  * PreferenceOut
  */
 export type PreferenceOut = {
@@ -1464,7 +1655,7 @@ export type PreferenceOut = {
     /**
      * Source
      */
-    source?: 'manual';
+    source?: 'manual' | 'confirmed_candidate';
     /**
      * Status
      */
@@ -1477,6 +1668,16 @@ export type PreferenceOut = {
      * Version
      */
     version: number;
+};
+
+/**
+ * PreferenceReference
+ */
+export type PreferenceReference = {
+    /**
+     * Candidate Id
+     */
+    candidate_id: string;
 };
 
 /**
@@ -1709,7 +1910,8 @@ export type Proposal = {
     /**
      * Kind
      */
-    kind: 'send' | 'archive' | 'trash' | 'mark_read' | 'unsubscribe' | 'task';
+    kind: 'send' | 'archive' | 'trash' | 'mark_read' | 'unsubscribe' | 'task' | 'preference';
+    preference?: PreferenceReference | null;
     /**
      * Reason
      */
@@ -1737,6 +1939,7 @@ export type ProposalConfirmIn = {
      * Body
      */
     body?: string | null;
+    preference_decision?: PreferenceDecision | null;
     /**
      * Selected Ids
      */
@@ -1817,6 +2020,14 @@ export type ProposalResult = {
      * Manual
      */
     manual?: Array<ManualStep>;
+    /**
+     * Preference Outcome
+     */
+    preference_outcome?: 'saved' | 'unchanged' | 'kept' | null;
+    /**
+     * Preferences Enabled
+     */
+    preferences_enabled?: boolean | null;
     /**
      * Task Series Id
      */
@@ -3153,6 +3364,49 @@ export type HealthResponses = {
 
 export type HealthResponse2 = HealthResponses[keyof HealthResponses];
 
+export type CalendarGoogleConnectData = {
+    body: GoogleConnectInput;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/connections/google';
+};
+
+export type CalendarGoogleConnectErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarGoogleConnectError = CalendarGoogleConnectErrors[keyof CalendarGoogleConnectErrors];
+
+export type CalendarGoogleConnectResponses = {
+    /**
+     * Response Calendar Google Connect
+     *
+     * Successful Response
+     */
+    200: Array<SourceOut>;
+};
+
+export type CalendarGoogleConnectResponse = CalendarGoogleConnectResponses[keyof CalendarGoogleConnectResponses];
+
+export type CalendarGoogleCalendarsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/connections/google/calendars';
+};
+
+export type CalendarGoogleCalendarsListResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoogleCalendarsOut;
+};
+
+export type CalendarGoogleCalendarsListResponse = CalendarGoogleCalendarsListResponses[keyof CalendarGoogleCalendarsListResponses];
+
 export type CalendarFeedSubscribeData = {
     body: SubscribeInput;
     path?: never;
@@ -4006,6 +4260,31 @@ export type MailMessagesListResponses = {
 
 export type MailMessagesListResponse = MailMessagesListResponses[keyof MailMessagesListResponses];
 
+export type MailMessagesBulkActionData = {
+    body: BulkMessageActionIn;
+    path?: never;
+    query?: never;
+    url: '/api/v1/mail/messages/actions';
+};
+
+export type MailMessagesBulkActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailMessagesBulkActionError = MailMessagesBulkActionErrors[keyof MailMessagesBulkActionErrors];
+
+export type MailMessagesBulkActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: BulkMessageActionOut;
+};
+
+export type MailMessagesBulkActionResponse = MailMessagesBulkActionResponses[keyof MailMessagesBulkActionResponses];
+
 export type MailMessageGetData = {
     body?: never;
     path: {
@@ -4209,6 +4488,68 @@ export type PreferenceCreateResponses = {
 };
 
 export type PreferenceCreateResponse = PreferenceCreateResponses[keyof PreferenceCreateResponses];
+
+export type PreferenceCandidatesListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Candidate Id
+         */
+        candidate_id?: string | null;
+    };
+    url: '/api/v1/preferences/candidates';
+};
+
+export type PreferenceCandidatesListErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceCandidatesListError = PreferenceCandidatesListErrors[keyof PreferenceCandidatesListErrors];
+
+export type PreferenceCandidatesListResponses = {
+    /**
+     * Response Preference Candidates List
+     *
+     * Successful Response
+     */
+    200: Array<CandidateOut>;
+};
+
+export type PreferenceCandidatesListResponse = PreferenceCandidatesListResponses[keyof PreferenceCandidatesListResponses];
+
+export type PreferenceCandidateProposeData = {
+    body: CandidateProposeIn;
+    path: {
+        /**
+         * Candidate Id
+         */
+        candidate_id: string;
+    };
+    query?: never;
+    url: '/api/v1/preferences/candidates/{candidate_id}/propose';
+};
+
+export type PreferenceCandidateProposeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceCandidateProposeError = PreferenceCandidateProposeErrors[keyof PreferenceCandidateProposeErrors];
+
+export type PreferenceCandidateProposeResponses = {
+    /**
+     * Successful Response
+     */
+    200: CandidateOut;
+};
+
+export type PreferenceCandidateProposeResponse = PreferenceCandidateProposeResponses[keyof PreferenceCandidateProposeResponses];
 
 export type PreferenceContextGetData = {
     body?: never;

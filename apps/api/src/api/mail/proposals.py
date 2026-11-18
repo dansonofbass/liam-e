@@ -20,9 +20,10 @@ from api.errors import refuse
 from api.tasks import patch as task_patch
 from api.tasks import proposals as task_proposals
 from api.tasks import state as task_state
+from api.preferences import candidates as preference_candidates
 
 logger = logging.getLogger(__name__)
-ProposalKind = Literal["send", "archive", "trash", "mark_read", "unsubscribe", "task"]
+ProposalKind = Literal["send", "archive", "trash", "mark_read", "unsubscribe", "task", "preference"]
 
 
 class ProposalItem(BaseModel):
@@ -65,6 +66,8 @@ class ProposalResult(BaseModel):
     manual: list[ManualStep] = Field(default_factory=list)
     undo_action_ids: list[str] = Field(default_factory=list)
     task_series_id: str | None = None
+    preference_outcome: Literal['saved', 'unchanged', 'kept'] | None = None
+    preferences_enabled: bool | None = None
 
 
 class Proposal(BaseModel):
@@ -73,6 +76,7 @@ class Proposal(BaseModel):
     items: list[ProposalItem]
     draft: SendDraft | None = None
     task: task_proposals.TaskProposal | None = None
+    preference: preference_candidates.PreferenceReference | None = None
     irreversible: bool = False
     result: ProposalResult | None = None
 
@@ -85,6 +89,10 @@ class Proposal(BaseModel):
             raise ValueError('task requires exactly one typed command')
         if self.kind == 'task' and (self.items or self.draft):
             raise ValueError('task commands do not select mail items')
+        if (self.kind == 'preference') != (self.preference is not None):
+            raise ValueError('preference requires a candidate reference')
+        if self.kind == 'preference' and (self.items or self.draft or self.task):
+            raise ValueError('preference cannot contain mail or task actions')
         expected = "sender" if self.kind == "unsubscribe" else "mail"
         if self.kind != "send" and any(item.kind != expected for item in self.items):
             raise ValueError("item kind does not match proposal")
@@ -143,7 +151,10 @@ async def _get_proposal(proposal_id: str) -> ChatMessage:
 
 
 async def cancel(proposal_id: str) -> ChatMessage:
-    await _get_proposal(proposal_id)
+    row = await _get_proposal(proposal_id)
+    proposal = proposal_view(row)
+    if proposal and proposal.kind == 'preference':
+        return await preference_candidates.cancel(proposal, proposal_id)
     message = await message_access.cancel_proposal(proposal_id)
     if message is None:
         raise ProposalStateError
@@ -273,10 +284,17 @@ async def _confirm_task(message: ChatMessage, edit: task_proposals.TaskCreateCom
 
 
 async def confirm(proposal_id: str, *, selected_ids: list[str], body: str | None = None,
-                  task_edit: task_proposals.TaskCreateCommand | None = None) -> ChatMessage:
+                  task_edit: task_proposals.TaskCreateCommand | None = None,
+                  preference_decision: preference_candidates.PreferenceDecision | None = None) -> ChatMessage:
     message = await _get_proposal(proposal_id)
     proposal = proposal_view(message)
     assert proposal is not None
+    if proposal.kind == 'preference':
+        if selected_ids or body is not None or task_edit is not None or preference_decision is None:
+            raise ProposalSelectionError('selection_invalid')
+        return await preference_candidates.confirm(proposal_id, preference_decision)
+    if preference_decision is not None:
+        raise ProposalSelectionError('selection_invalid')
     if proposal.kind == 'task':
         if selected_ids or body is not None:
             raise ProposalSelectionError('selection_invalid')

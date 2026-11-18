@@ -1,6 +1,6 @@
 import { useQueryClient, type InfiniteData, type QueryKey } from '@tanstack/react-query'
 import { createContext, createElement, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { mailActionsUndo, mailMessageAction } from '../api/generated/sdk.gen'
+import { mailActionsUndo, mailMessageAction, mailMessagesBulkAction } from '../api/generated/sdk.gen'
 import type { MessageDetailOut, MessageListItemOut, MessagePageOut } from '../api/generated/types.gen'
 import { de } from '../i18n/de'
 import { errorCode } from '../api/unwrap'
@@ -13,7 +13,8 @@ type Kind = Removal | 'mark_read' | 'mark_unread'
 const removes = (kind: Kind | 'remove'): kind is Removal => kind === 'archive' || kind === 'trash' || kind === 'spam'
 type Toast = { tone: 'success' | 'danger'; text: string; undoable: boolean }
 type Change = { key: QueryKey; page: number; index: number; row: MessageListItemOut }
-export type UndoEntry = { actionId: string; messageId: string; kind: Kind; changes: Change[]; previousRead?: boolean; text: string; label: string; deadline: number; pending: boolean }
+type GroupItem = { actionId: string; messageId: string; changes: Change[]; previousRead?: boolean }
+export type UndoEntry = { actionId: string; messageId: string; kind: Kind; changes: Change[]; previousRead?: boolean; group?: GroupItem[]; text: string; label: string; deadline: number; pending: boolean }
 const LIMIT = 20
 // A provider can stop responding; release the queue after fifteen seconds.
 const UNDO_TIMEOUT_MS = 15_000
@@ -166,12 +167,72 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       settle()
     }
   }
+  const runBulk = (ids: string[], kind: Kind) => {
+    if (!ids.length || !checkCapacity()) return Promise.resolve()
+    reservations.current++; setReserved(reservations.current)
+    const previous = ids.map(id => queues.current.get(id)).filter((p): p is Promise<unknown> => Boolean(p))
+    const work = (previous.length ? Promise.all(previous.map(p => p.catch(() => {}))) : Promise.resolve()).then(async () => {
+      ++pending.current
+      const changes: Change[] = []
+      const reads = new Map<string, boolean>()
+      const rollback = (selected: string[]) => {
+        const wanted = new Set(selected)
+        restore(changes.filter(change => wanted.has(change.row.id)).sort((a, b) => a.page - b.page || a.index - b.index), removes(kind))
+        for (const id of selected) {
+          const read = reads.get(id)
+          if (read !== undefined) client.setQueryData<MessageDetailOut>(['message', id], data => data && { ...data, is_read: read })
+        }
+      }
+      try {
+        await client.cancelQueries({ queryKey: ['messages'] })
+        for (const id of ids) {
+          if (!removes(kind)) {
+            await client.cancelQueries({ queryKey: ['message', id], exact: true })
+            const read = client.getQueryData<MessageDetailOut>(['message', id])?.is_read
+            if (read !== undefined) reads.set(id, read)
+            client.setQueryData<MessageDetailOut>(['message', id], data => data && { ...data, is_read: kind === 'mark_read' })
+          }
+        }
+        for (const [key, data] of client.getQueriesData<InfiniteData<MessagePageOut>>({ queryKey: ['messages'] })) {
+          data?.pages.forEach((page, pageIndex) => page.items.forEach((row, index) => {
+            if (ids.includes(row.id)) changes.push({ key, page: pageIndex, index, row })
+          }))
+        }
+        for (const id of ids) update(id, kind)
+        const result = await mailMessagesBulkAction({ body: { message_ids: ids, kind } })
+        if (!result.data || !result.response?.ok) throw new Error('bulk action failed') // i18n-exempt
+        const failed = result.data.results.filter(row => row.status === 'failed' || row.status === 'unsupported').map(row => row.message_id)
+        rollback(failed)
+        for (const row of result.data.results) if (row.status === 'not_found') { update(row.message_id, 'remove'); void client.invalidateQueries({ queryKey: ['message', row.message_id], exact: true }) }
+        const group = result.data.results.filter(row => row.status === 'done' && row.action_id).map(row => ({ actionId: row.action_id!, messageId: row.message_id, changes: changes.filter(change => change.row.id === row.message_id), previousRead: reads.get(row.message_id) }))
+        const text = de.inbox.bulkResult(kind, group.length, ids.length)
+        if (group.length) {
+          setNotice(null)
+          publish([...entriesRef.current, { ...group[0]!, group, kind, text, label: text, deadline: clock.now() + 10_000, pending: false }])
+        } else notify(text)
+        reconcile.current = true
+        void client.invalidateQueries({ queryKey: ['summary'] })
+      } catch {
+        rollback(ids)
+        reconcile.current = true
+        notify(de.errors.action_uncertain)
+      } finally {
+        reservations.current--; setReserved(reservations.current)
+        settle()
+      }
+    })
+    for (const id of ids) queues.current.set(id, work)
+    setQueueVersion(version => version + 1)
+    void work.finally(() => { for (const id of ids) if (queues.current.get(id) === work) queues.current.delete(id); setQueueVersion(version => version + 1) })
+    return work
+  }
   const undo = (actionId?: string) => {
     const selected = actionId ? entriesRef.current.find(entry => entry.actionId === actionId) : entriesRef.current.at(-1)
     if (!selected || selected.pending) return Promise.resolve()
     if (clock.now() >= selected.deadline) { publish(entriesRef.current.filter(entry => entry !== selected)); return Promise.resolve() }
     publish(entriesRef.current.map(entry => entry === selected ? { ...entry, pending: true } : entry))
-    return enqueue(selected.messageId, async () => {
+    const group = selected.group ?? [{ actionId: selected.actionId, messageId: selected.messageId, changes: selected.changes, previousRead: selected.previousRead }]
+    const executeUndo = async () => {
       ++pending.current
       const controller = new AbortController()
       let timedOut = false
@@ -184,8 +245,13 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         }, UNDO_TIMEOUT_MS)
       })
       try {
-        const result = await Promise.race([mailActionsUndo({ body: { action_ids: [selected.actionId] }, signal: controller.signal }), deadline])
-        if (result.data?.restored.includes(selected.actionId)) {
+        const result = await Promise.race([mailActionsUndo({ body: { action_ids: group.map(item => item.actionId) }, signal: controller.signal }), deadline])
+        if (selected.group && result.data) {
+          const restored = group.filter(item => result.data!.restored.includes(item.actionId))
+          restore(restored.flatMap(item => item.changes).sort((a, b) => a.page - b.page || a.index - b.index), removes(selected.kind))
+          for (const item of restored) if (!removes(selected.kind) && item.previousRead !== undefined) client.setQueryData<MessageDetailOut>(['message', item.messageId], data => data && { ...data, is_read: item.previousRead! })
+          if (restored.length !== group.length) notify(de.inbox.bulkUndoFailed(group.length - restored.length))
+        } else if (result.data?.restored.includes(selected.actionId)) {
           restore(selected.changes, removes(selected.kind))
           if (!removes(selected.kind) && selected.previousRead !== undefined) client.setQueryData<MessageDetailOut>(['message', selected.messageId], data => data && { ...data, is_read: selected.previousRead! })
         } else if (result.data?.skipped.includes(selected.actionId)) notify(de.inbox.undoSkipped)
@@ -200,14 +266,21 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
           : entriesRef.current.filter(entry => entry.actionId !== selected.actionId))
         reconcile.current = true
         void client.invalidateQueries({ queryKey: ['summary'] })
-        void client.invalidateQueries({ queryKey: ['message', selected.messageId] })
+        for (const item of group) void client.invalidateQueries({ queryKey: ['message', item.messageId] })
         settle()
       }
-    })
+    }
+    if (!selected.group) return enqueue(selected.messageId, executeUndo)
+    const previous = group.map(item => queues.current.get(item.messageId)).filter((p): p is Promise<unknown> => Boolean(p))
+    const work = (previous.length ? Promise.all(previous.map(p => p.catch(() => {}))) : Promise.resolve()).then(executeUndo)
+    for (const item of group) queues.current.set(item.messageId, work)
+    setQueueVersion(version => version + 1)
+    void work.finally(() => { for (const item of group) if (queues.current.get(item.messageId) === work) queues.current.delete(item.messageId); setQueueVersion(version => version + 1) })
+    return work
   }
   const latest = entries.at(-1)
   const toast: Toast | null = notice ? { tone: 'danger', text: notice, undoable: false } : latest ? { tone: 'success', text: latest.text, undoable: true } : null
-  return { run, undo, notify, toast, entries, checkCapacity, isBusy: (id: string) => queues.current.has(id), capacityAvailable: entries.filter(entry => entry.pending || entry.deadline > clock.now()).length + reserved < LIMIT }
+  return { run, runBulk, undo, notify, toast, entries, checkCapacity, isBusy: (id: string) => queues.current.has(id), capacityAvailable: entries.filter(entry => entry.pending || entry.deadline > clock.now()).length + reserved < LIMIT }
 }
 
 const MailActionsContext = createContext<ReturnType<typeof useMailActions> | null>(null)

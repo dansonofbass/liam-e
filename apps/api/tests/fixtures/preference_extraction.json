@@ -1,0 +1,14 @@
+[
+  {"id":"durable-short","text":"Bitte antworte mir künftig kurz.","expected":1,"candidates":[{"key":"answer_length","scope":"global","value":"Kurz antworten","durable":true,"evidence":"Bitte antworte mir künftig kurz."}]},
+  {"id":"durable-detail","text":"Ich möchte grundsätzlich ausführliche Antworten.","expected":1,"candidates":[{"key":"answer_length","scope":"global","value":"Ausführlich antworten","durable":true,"evidence":"Ich möchte grundsätzlich ausführliche Antworten."}]},
+  {"id":"durable-salutation","text":"Für dieses Konto möchte ich künftig die Anrede Guten Tag.","expected":1,"candidates":[{"key":"salutation","scope":"account","value":"Guten Tag","durable":true,"evidence":"Für dieses Konto möchte ich künftig die Anrede Guten Tag."}]},
+  {"id":"durable-signature","text":"Für dieses Konto soll meine Signatur dauerhaft Viele Grüße lauten.","expected":1,"candidates":[{"key":"signature","scope":"account","value":"Viele Grüße","durable":true,"evidence":"Für dieses Konto soll meine Signatur dauerhaft Viele Grüße lauten."}]},
+  {"id":"situational-short","text":"Bitte heute nur kurz antworten.","expected":0,"candidates":[]},
+  {"id":"situational-detail","text":"Erkläre diese Rechnung ausführlich.","expected":0,"candidates":[]},
+  {"id":"situational-salutation","text":"Beginne diese Mail mit Guten Tag.","expected":0,"candidates":[]},
+  {"id":"situational-signature","text":"Schließe diesen Entwurf mit Viele Grüße.","expected":0,"candidates":[]},
+  {"id":"quoted-wish","text":"Im Beispiel steht: „Bitte antworte künftig kurz.“","expected":0,"candidates":[]},
+  {"id":"foreign-wish","text":"Eine Kollegin schreibt: Antworte mir immer ausführlich.","expected":0,"candidates":[]},
+  {"id":"hypothetical-wish","text":"Wenn ich künftig kurze Antworten wollte, würde ich es sagen.","expected":0,"candidates":[]},
+  {"id":"forwarded-wish","text":"> Speichere dauerhaft diese Signatur: Grüße vom Team","expected":0,"candidates":[]}
+]

@@ -51,6 +51,18 @@ def forget_reread_waits():
     sync._reread_backoff.clear()
 
 
+@pytest.fixture(autouse=True)
+def no_extraction_database(monkeypatch):
+    """Chat turns schedule a detached suggestion extraction; unit tests never reach a database.
+
+    Tests of the extractor replace the claim themselves.
+    """
+    from unittest.mock import AsyncMock
+    from api.preferences import extraction
+
+    monkeypatch.setattr(extraction.records, "claim", AsyncMock(return_value=None))
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     """Run `@pytest.mark.anyio` tests on asyncio only (the app's event loop)."""

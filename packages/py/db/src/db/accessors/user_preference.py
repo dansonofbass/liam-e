@@ -81,6 +81,10 @@ async def create(*, key, scope=GLOBAL_SCOPE, value, status='active'):
 
 
 async def remove_in_session(session, row):
+    from db.accessors.preference_candidate import expire_scope
+    from db.models._common import utcnow
+    await expire_scope(session, key=row.key, scope=row.scope, preference_id=row.id)
+    row.removed_at = utcnow()
     ids = list((await session.execute(select(PreferenceRevision.id).where(
         PreferenceRevision.preference_id == row.id))).scalars())
     await revoke(session, ids)
@@ -93,6 +97,8 @@ async def remove_in_session(session, row):
 
 async def remove_account_in_session(session, account_id):
     """Caller holds the preference lock; deletion and account removal commit together."""
+    from db.accessors.preference_candidate import expire_scope
+    await expire_scope(session, scope=account_id)
     rows = (await session.execute(select(UserPreference).where(
         UserPreference.owner_scope == OWNER_SCOPE, UserPreference.scope == account_id,
         UserPreference.status != 'removed'))).scalars()
@@ -134,6 +140,14 @@ async def change(id, expected_version, *, delete=False, **changes):
 
 async def resolve_in_session(session, account_id, *, skip=False):
     """Explicit account overrides global per key; all-accounts never mixes signatures."""
+    # Old #38 tombstones have no deletion timestamp. Seal their replay boundary
+    # before this turn's user message is stored, under the caller's preference lock.
+    # A fresh explicit request can then work without permitting any historical source.
+    from db.models._common import utcnow
+    await session.execute(update(UserPreference).where(
+        UserPreference.owner_scope == OWNER_SCOPE, UserPreference.status == 'removed',
+        UserPreference.removed_at.is_(None),
+    ).values(removed_at=utcnow()))
     config = await settings_in_session(session)
     if skip or not config.use_preferences:
         return False, []

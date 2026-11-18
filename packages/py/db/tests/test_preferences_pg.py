@@ -19,8 +19,7 @@ def test_revision_concurrency_and_account_removal(pg_db):
         await p.update_settings(1, use_preferences=True)
         with pytest.raises(p.StaleVersion):
             await p.update_settings(1, use_preferences=False)
-        with pytest.raises(p.InvalidPreference):
-            await p.update_settings(2, suggest_preferences=True)
+        assert (await p.update_settings(2, suggest_preferences=True)).suggest_preferences
         assert await a.delete_account(account.id)
         assert await p.list_preferences() == []
         old = (await r.get_revisions([row.revision_id]))[0]

@@ -2,7 +2,7 @@
 import json
 from datetime import UTC, date, datetime
 from types import SimpleNamespace as NS
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -108,10 +108,14 @@ async def test_task_scope_boundary_blocks_all_old_roles_before_model_payload(sto
     monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(return_value={old.id: old, narrow.id: narrow}))
     fake = FakeMistral(streams=[['Antwort']])
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    scheduled = Mock()
+    monkeypatch.setattr('api.preferences.extraction.schedule', scheduled)
     events = [event async for event in agent.run_turn_events(conversation_id=conversation.id, text='Weiter', account_id=selected_account,
         resolved_context=(conversation, narrow, None))]
     assert events[-1].event == 'error' and events[-1].code == 'context_revoked'
     assert fake.requests == []
+    # A turn stopped at its scope boundary never hands its message to the extractor either.
+    scheduled.assert_not_called()
     fresh = await store.create()
     events = [event async for event in agent.run_turn_events(conversation_id=fresh.id, text='Neue Bitte', account_id=selected_account,
         resolved_context=(fresh, narrow, None))]
@@ -143,10 +147,28 @@ async def test_account_and_personal_tasks_reach_model_but_other_accounts_do_not(
     assert 'account_and_unlinked' in payload
 
 
+async def test_preference_tool_payload_never_retains_a_second_value_copy(store, monkeypatch):
+    events, fake = await run(store, monkeypatch, [[chunk('propose_preference', {
+        'source_message_id': 'forged-source', 'key': 'answer_length', 'scope': '*',
+        'value': 'synthetic-private-candidate', 'confirmed': True,
+    })], ['Bitte formuliere eine eigene Merke-dir-Bitte.']])
+    assert events[-1].event == 'done'
+    user = next(row for row in store.rows if row.role == 'user')
+    assert user.id in fake.requests[0]['messages'][0]['content']
+    call = next(row for row in store.rows if row.tool_payload_json and row.role == 'assistant')
+    assert json.loads(call.tool_payload_json)[0]['function']['arguments'] == '{}'
+    assert all('synthetic-private-candidate' not in row.tool_payload_json + row.content + row.extras_json for row in store.rows)
+    assert not any(row.role == 'proposal' for row in store.rows)
+
+
 async def test_turn_streams_text_deltas_in_order(store, monkeypatch):
+    scheduled = Mock()
+    monkeypatch.setattr('api.preferences.extraction.schedule', scheduled)
     events, _ = await run(store, monkeypatch, [['Hallo', ' Welt']])
     assert [e.text for e in events if e.event == 'delta'] == ['Hallo', ' Welt']
     assert store.rows[-1].content == 'Hallo Welt'
+    user = next(row for row in store.rows if row.role == 'user')
+    assert [c.args[:2] for c in scheduled.call_args_list] == [(user.conversation_id, user.id)]
 
 
 async def test_tool_round_emits_status_then_continues(store, monkeypatch):

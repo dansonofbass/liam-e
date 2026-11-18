@@ -39,7 +39,9 @@ def test_settings_partial_update_and_disabled_suggestions(monkeypatch):
     response = client.patch('/api/v1/settings', json={'personalization': {'expected_version': 1, 'use_preferences': True}})
     assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
     update.assert_awaited_once_with(expected_version=1, use_preferences=True)
-    for body in [{'personalization': {'expected_version': 2, 'suggest_preferences': True}},
-                 {'personalization': {'expected_version': 2, 'use_preferences': None}},
+    response = client.patch('/api/v1/settings', json={'personalization': {'expected_version': 2, 'suggest_preferences': True}})
+    assert response.status_code == 200
+    update.assert_awaited_with(expected_version=2, suggest_preferences=True)
+    for body in [{'personalization': {'expected_version': 2, 'use_preferences': None}},
                  {'personalization': {'expected_version': 2}, 'ui': {}}]:
         assert client.patch('/api/v1/settings', json=body).status_code == 422

@@ -16,6 +16,9 @@ async def replace_conversations(conversations: list[ChatConversation]) -> None:
     """Remove seeded conversations and all their messages, then restore the conversations."""
     ids = [row.id for row in conversations]
     async with get_session_maker()() as session:
+        from db.accessors import user_preference, preference_candidate
+        await user_preference.lock(session)
+        await preference_candidate.expire_conversations(session, ids)
         await session.execute(delete(ChatMessage).where(ChatMessage.conversation_id.in_(ids)))
         await session.execute(delete(ChatConversation).where(ChatConversation.id.in_(ids)))
         session.add_all(conversations)

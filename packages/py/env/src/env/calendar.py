@@ -7,6 +7,7 @@ from env._base import BaseEnv
 
 class Env(BaseEnv):
     calendar_sync_interval_minutes: int = Field(default=30, ge=1)
+    calendar_google_sync_interval_minutes: int = Field(default=5, ge=1)
 
 
 env = Env()
