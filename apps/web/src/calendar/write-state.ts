@@ -10,7 +10,8 @@ export function writeOutcome(result: { data?: WriteOutcome; error?: unknown; res
   if (result.data && (!result.response || result.response.status < 400)) return result.data
   const detail = (result.error as { detail?: WriteOutcome } | undefined)?.detail
   if (detail && typeof detail.status === 'string' && ['done', 'failed', 'unknown', 'running', 'not_applied'].includes(detail.status)) return detail
-  return { write_id: '', status: 'failed', error_code: errorCode(result.error) ?? 'calendar_write_unknown' }
+  const code = errorCode(result.error)
+  return { write_id: '', status: code ? 'failed' : 'unknown', error_code: code ?? 'calendar_write_unknown' }
 }
 export function safeCalendarLink(value?: string | null): string | undefined {
   try { const url = new URL(value ?? ''); return url.protocol === 'https:' ? url.href : undefined } catch { return undefined }

@@ -71,6 +71,11 @@ export const de = {
     days: ['Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.', 'So.'],
   },
   calendar: {
+    cardActions: { create: 'Termin anlegen', update: 'Termin ändern', delete: 'Termin löschen' },
+    cardDone: { create: 'Termin angelegt.', update: 'Termin geändert.', delete: 'Termin gelöscht.' },
+    cardBefore: 'Bisher', cardAfter: 'Vorschlag', cardConfirm: 'Bestätigen',
+    cardChanged: 'Der Termin wurde inzwischen geändert. Bitte um einen neuen Vorschlag.',
+    cardNotApplied: 'Die Änderung wurde nicht ausgeführt. Bitte um einen neuen Vorschlag.',
     eventTitle: 'Titel', eventStart: 'Beginn', eventEnd: 'Ende', eventEndDate: 'Letzter Tag', eventDate: 'Datum', eventLocation: 'Ort', eventDescription: 'Beschreibung', eventZone: 'Zeitzone', eventSave: 'Speichern', eventSaving: 'Wird gespeichert …',
     htmlDescription: 'Wenn du die Beschreibung bearbeitest, geht ihre Formatierung verloren.',
     noWritable: 'Kein Kalender erlaubt Änderungen. Prüfe die Schreibrechte in Google Kalender.',

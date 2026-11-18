@@ -1,0 +1,10 @@
+.le-calendar-proposal { display: flex; flex-direction: column; gap: var(--space-3); overflow-wrap: anywhere; }
+.le-calendar-proposal > * { min-width: 0; }
+.le-calendar-proposal-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-4); }
+.le-calendar-proposal-values section { min-width: 0; padding: var(--space-3); background: var(--surface-soft); border-radius: var(--radius-sm); }
+.le-calendar-proposal-values h4, .le-calendar-proposal-values p { margin-bottom: var(--space-2); }
+.le-calendar-proposal-description { white-space: pre-wrap; }
+.le-calendar-proposal-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.le-calendar-proposal-placeholder { height: var(--space-6); background: var(--surface-soft); border-radius: var(--radius-sm); }
+@media (max-width: 639px) { .le-calendar-proposal-values { grid-template-columns: minmax(0, 1fr); } }
+@media (pointer: coarse) { .le-calendar-proposal .le-link { display: inline-flex; align-items: center; min-height: var(--control-height-lg); } }

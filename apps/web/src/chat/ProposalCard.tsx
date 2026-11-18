@@ -9,6 +9,7 @@ import { de } from '../i18n/de'
 import { useRestartConversation } from './session'
 import { TaskProposal } from './TaskProposal'
 import { PreferenceProposal } from './PreferenceProposal'
+import { CalendarProposal } from './CalendarProposal'
 import type { TaskFormDraft } from '../tasks/TaskForm'
 
 type Clock = { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }
@@ -95,6 +96,7 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
       pending.current = false; setBusy(false)
     }
   }
+  if (proposal.kind === 'calendar') return <CalendarProposal message={message} />
   if (proposal.kind === 'task') return <Notice tone="success"><span>{de.taskChat.done}</span>{result?.task_series_id && <> <Link className="le-link" to="/tasks/$taskId" params={{ taskId: result.task_series_id }}>{de.tasks.detail}</Link></>}</Notice>
   if (proposal.kind === 'preference') return <Notice tone="success">{result?.preference_outcome === 'kept' ? de.preferenceCandidates.kept : result?.preference_outcome === 'unchanged' ? de.preferenceCandidates.unchanged : result?.preferences_enabled ? de.preferences.saved : de.preferences.savedOff}</Notice>
   if (undone) return <Notice tone="info">{de.proposal.undone}</Notice>
@@ -179,6 +181,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
     if (current.proposal_status !== 'pending' && (saved.focus || saved.handoff)) { saved.focus = false; saved.handoff = false; outcome.current?.focus() }
   })
   if (!proposal) return null
+  if (proposal.kind === 'calendar') return <CalendarProposal key={current.id} message={current} />
   const settled = (content: ReactNode) => <div ref={outcome} tabIndex={-1} className="le-proposal-outcome">{content}</div>
   if (current.proposal_status === 'running') return settled(<p className="le-hint">{de.proposal.running}</p>)
   if (current.proposal_status === 'cancelled') return settled(<p className="le-hint">{de.proposal.cancelled}</p>)
