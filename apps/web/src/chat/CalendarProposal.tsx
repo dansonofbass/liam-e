@@ -9,7 +9,7 @@ import { Button, Notice } from '../ds'
 import { Dot } from '../ds/Chip'
 import { de } from '../i18n/de'
 import { addDays, calendarDate } from '../calendar/state'
-import { safeCalendarLink, writeError } from '../calendar/write-state'
+import { writeError } from '../calendar/write-state'
 import './calendar-proposal.css'
 
 function Values({ value, zone }: { value: CalendarValues | LiveEvent; zone: string }) {
@@ -55,7 +55,6 @@ export function CalendarProposal({ message }: { message: ChatMessageOut }) {
   if (!command) return null
   const source = sources.data?.find(s => s.id === command.source_id)
   const failed = current.proposal?.result?.failed?.[0]?.code
-  const href = safeCalendarLink(command.before?.html_link)
   const status = current.proposal_status
   return <section className="le-confirm le-calendar-proposal" ref={region} tabIndex={-1} aria-label={de.calendar.cardActions[command.action]}>
     <h3 className="heading">{de.calendar.cardActions[command.action]}</h3>
@@ -67,13 +66,13 @@ export function CalendarProposal({ message }: { message: ChatMessageOut }) {
         <div className="le-calendar-proposal-values">{command.before && <section><h4>{de.calendar.cardBefore}</h4><Values value={command.before} zone={command.timezone} /></section>}{command.after && <section><h4>{de.calendar.cardAfter}</h4><Values value={command.after} zone={command.timezone} /></section>}</div>
         <p>{de.calendar.eventZone}: {command.timezone}</p>
         {command.action === 'delete' && <p>{de.calendar.deleteWarning}</p>}<p className="le-hint">{de.calendar.writeRisk}</p>
-        {href && <a className="le-link" href={href} target="_blank" rel="noopener noreferrer">{de.calendar.googleOpen}</a>}
       </>}
       {status === 'failed' && <Notice tone="danger">{failed === 'calendar_event_changed' ? de.calendar.cardChanged : failed === 'calendar_write_not_applied' ? de.calendar.cardNotApplied : writeError(failed)}</Notice>}
       {(status === 'unknown' || status === 'running') && <p role="status">{de.calendar.checking}</p>}
       <div className="le-calendar-proposal-actions">
         {status === 'pending' && <><Button variant="primary" disabled={busy || !source?.is_active || !source.capabilities.includes('write') || sources.isError} onClick={() => { void apply('confirm') }}>{de.calendar.cardConfirm}</Button><Button variant="ghost" disabled={busy} onClick={() => { void apply('cancel') }}>{de.controls.cancel}</Button></>}
-        {status === 'unknown' && <Button variant="secondary" disabled={busy} onClick={() => { void apply('check') }}>{de.calendar.check}</Button>}
+        {/* running: a confirm may have died after claiming the card; the server answers while one is still in flight. */}
+        {(status === 'unknown' || status === 'running') && <Button variant="secondary" disabled={busy} onClick={() => { void apply('check') }}>{de.calendar.check}</Button>}
       </div>
     </>}
     {error && <Notice tone="danger">{error}</Notice>}

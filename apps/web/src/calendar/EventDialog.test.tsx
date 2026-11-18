@@ -70,3 +70,15 @@ test('edit sends only changed fields and explicit clearing', async () => {
   const body = update.mock.calls[0]?.[0]?.body
   expect(body).toEqual({ write_id: expect.any(String), expected_revision: 'v1', location: '' })
 })
+test('a definite refusal unlocks the form for a corrected attempt with a new ID', async () => {
+  const create = spyOn(sdk, 'calendarEventCreate')
+    .mockResolvedValueOnce({ error: { detail: { status: 'failed', error_code: 'calendar_write_rejected', write_id: 'w' } }, response: { status: 403 } } as never)
+    .mockResolvedValueOnce({ data: { status: 'done' }, response: { status: 201 } } as never)
+  const close = mount(); title(); fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+  await screen.findByText(/Google hat die Änderung abgelehnt/)
+  fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }))
+  expect((screen.getByLabelText('Titel') as HTMLInputElement).disabled).toBe(false)
+  fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+  await waitFor(() => expect(close).toHaveBeenCalledTimes(1))
+  expect(create.mock.calls[0]?.[0]?.body.write_id).not.toBe(create.mock.calls[1]?.[0]?.body.write_id)
+})

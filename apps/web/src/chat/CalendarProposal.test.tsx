@@ -42,3 +42,10 @@ test('confirmation invalidates calendar and cannot be repeated', async () => {
   await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['calendar'] }))
   expect(confirm.mock.calls[0]?.[0]?.body).toEqual({ selected_ids: [] })
 })
+test('a card left running after an interrupted confirm can be checked', async () => {
+  const check = spyOn(sdk, 'chatProposalCheck').mockResolvedValue({ data: { ...message, proposal_status: 'done' }, response: { status: 200 } } as never)
+  mount({ ...message, proposal_status: 'running' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Prüfen' }))
+  await screen.findByText('Termin geändert.')
+  expect(check).toHaveBeenCalledTimes(1)
+})

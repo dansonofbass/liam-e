@@ -98,7 +98,7 @@ export function EventDialog({ mode, initial, sources, onClose }: { mode: 'create
       <div className="le-dialog-actions"><Button type="button" variant="secondary" disabled={busy} onClick={close}>{de.controls.cancel}</Button>
         {!outcome && <Button type="submit" variant="primary" disabled={busy || !valid || (mode === 'edit' && (!changed || !live?.revision || !live.editable))}>{de.calendar.eventSave}</Button>}
         {checking && <Button type="button" variant="secondary" disabled={busy} onClick={() => { void run(true) }}>{de.calendar.check}</Button>}
-        {outcome?.status === 'not_applied' && !outcome.current && <Button type="button" variant="secondary" disabled={busy} onClick={() => { setWriteId(crypto.randomUUID()); setOutcome(undefined) }}>{de.calendar.retryWrite}</Button>}
+        {((outcome?.status === 'not_applied' && !outcome.current) || outcome?.status === 'failed') && <Button type="button" variant="secondary" disabled={busy} onClick={() => { setWriteId(crypto.randomUUID()); setOutcome(undefined) }}>{de.calendar.retryWrite}</Button>}
       </div>
     </form>
   </div></div>, document.body)

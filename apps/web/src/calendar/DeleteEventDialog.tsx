@@ -35,7 +35,7 @@ export function DeleteEventDialog({ event, onClose, onDone }: { event: LiveEvent
     <div className="le-dialog-actions"><Button variant="secondary" disabled={busy} onClick={close}>{de.controls.cancel}</Button>
       {!outcome && <Button variant="danger" disabled={busy} onClick={() => { void run() }}>{de.calendar.deleteEvent}</Button>}
       {checking && <Button variant="secondary" disabled={busy} onClick={() => { void run(true) }}>{de.calendar.check}</Button>}
-      {outcome?.status === 'not_applied' && !outcome.current && <Button variant="secondary" disabled={busy} onClick={() => { setWriteId(crypto.randomUUID()); setOutcome(undefined) }}>{de.calendar.retryWrite}</Button>}
+      {((outcome?.status === 'not_applied' && !outcome.current) || outcome?.status === 'failed') && <Button variant="secondary" disabled={busy} onClick={() => { setWriteId(crypto.randomUUID()); setOutcome(undefined) }}>{de.calendar.retryWrite}</Button>}
     </div>
   </div></div>, document.body)
 }

@@ -79,7 +79,7 @@ export const de = {
     eventTitle: 'Titel', eventStart: 'Beginn', eventEnd: 'Ende', eventEndDate: 'Letzter Tag', eventDate: 'Datum', eventLocation: 'Ort', eventDescription: 'Beschreibung', eventZone: 'Zeitzone', eventSave: 'Speichern', eventSaving: 'Wird gespeichert …',
     htmlDescription: 'Wenn du die Beschreibung bearbeitest, geht ihre Formatierung verloren.',
     noWritable: 'Kein Kalender erlaubt Änderungen. Prüfe die Schreibrechte in Google Kalender.',
-    newEvent: 'Neuer Termin', addEvent: '+ Termin', editEvent: 'Bearbeiten', deleteEvent: 'Löschen', deleteTitle: 'Termin löschen?',
+    newEvent: 'Neuer Termin', addEvent: 'Neuer Termin', editEvent: 'Bearbeiten', deleteEvent: 'Löschen', deleteTitle: 'Termin löschen?',
     deleteWarning: 'Das Löschen kann nicht garantiert rückgängig gemacht werden.',
     writeRisk: 'Eine gleichzeitige Änderung in Google kann überschrieben werden.',
     readOnlyTag: 'Nur lesbar', googleOpen: 'In Google Kalender öffnen', checking: 'Wird geprüft …', check: 'Prüfen',
