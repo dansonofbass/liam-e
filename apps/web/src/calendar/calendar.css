@@ -55,6 +55,8 @@
 .le-time-event { position: absolute; z-index: 1; overflow: hidden; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius-sm); }
 .le-time-now { position: absolute; left: 0; right: 0; border-top: 2px solid var(--danger); pointer-events: none; }
 @media (pointer: coarse) { .le-month-event, .le-time-all-day, .le-time-event { min-height: var(--control-height-lg); min-width: var(--control-height-lg); } }
+/* These override the base control height, so they restore the touch target themselves. */
+@media (pointer: coarse) { .le-calendar-switch .le-btn, .le-month-more.le-btn { min-height: var(--control-height-lg); } }
 /* On the accounts page the sources are cards like the accounts above them. */
 .le-calendar-sources { display: flex; flex-direction: column; gap: var(--space-4); max-width: 1180px; margin-top: var(--space-6); }
 .le-calendar-sources > h2 { margin: 0; }
@@ -80,13 +82,15 @@
 .le-calendar-grid-page { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .le-calendar-grid-page > * { flex-shrink: 0; }
 .le-calendar-grid-page > .le-time-grid { flex: 1; }
+/* The list view scrolls inside the page; its old side-by-side width must not become a height. */
+.le-calendar-grid-page > .le-calendar-agenda { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0; }
 .le-calendar-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 .le-calendar-period { margin: 0; min-width: 0; }
 .le-calendar-switch { display: flex; margin-left: auto; border: 1px solid var(--control-border); border-radius: var(--radius-pill); overflow: hidden; flex-shrink: 0; }
 .le-calendar-switch .le-btn { border-radius: 0; min-height: 32px; padding: var(--space-1) var(--space-3); font-size: var(--font-size-small); }
 .le-calendar-switch .le-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .le-calendar-switch .le-btn + .le-btn { border-left: 1px solid var(--line); }
-.le-calendar-sources-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.le-calendar-sources-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 .le-calendar-sources-row .le-chip { flex-shrink: 0; white-space: nowrap; border: 1px solid transparent; }
 .le-calendar-sources-row .le-chip[aria-pressed="true"] { background: transparent; border-color: var(--accent); color: var(--accent); }
 .le-calendar-manage { margin-left: auto; white-space: nowrap; }
@@ -142,5 +146,5 @@
   .le-calendar-refresh { grid-column: 4; grid-row: 2; justify-self: end; }
   .le-calendar-add { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
   .le-event-form .le-calendar-range { grid-template-columns: minmax(0, 1fr); }
-  .le-calendar-sources-row { overflow-x: auto; }
+  .le-calendar-sources-row { flex-wrap: nowrap; overflow-x: auto; }
 }

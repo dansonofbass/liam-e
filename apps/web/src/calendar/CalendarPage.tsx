@@ -106,13 +106,12 @@ export function CalendarAgenda() {
   const rows = page.isSuccess ? [...unique.values()].filter(row => activeIds.has(row.source_id) && inLocalWindow(row, from, to, timeZone)).sort((a, b) => occurrenceDay(a, timeZone).localeCompare(occurrenceDay(b, timeZone)) || (a.start_at ?? '').localeCompare(b.start_at ?? '') || a.id.localeCompare(b.id)) : []
   // Without any calendar there is nothing to page through or refresh: name the way to add one.
   // Only after a successful load: a failed reload keeps the cached list and must show its error and retry.
-  if (sources.isSuccess && sources.data.length === 0) return <section className="le-calendar-agenda" aria-label={de.calendar.title}>
-    <h1 className="title">{de.calendar.title}</h1>
+  if (sources.isSuccess && sources.data.length === 0) return <section className="le-calendar-agenda" aria-label={de.calendar.list}>
     <Notice tone="info">{de.calendar.noSources}</Notice>
     <div className="le-calendar-controls"><CalendarSetup primary /></div>
   </section>
-  return <section className="le-calendar-agenda" aria-label={de.calendar.title}>
-    <h1 className="title">{de.calendar.title}</h1>
+  // Embedded as the calendar's list view, under the page's own title.
+  return <section className="le-calendar-agenda" aria-label={de.calendar.list}>
     <div className="le-calendar-controls">
       <Button variant="secondary" onClick={() => { setFrom(todayLocal()); setTo(addDays(todayLocal(), 7)) }}>{de.calendar.today}</Button>
       <Button variant="ghost" icon="refresh-cw" disabled={!selected.length || refreshing} onClick={() => { void refreshSources(selected) }}>{de.calendar.refresh}</Button>

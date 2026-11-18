@@ -63,18 +63,21 @@ export function CalendarView() {
   return <section className="le-calendar-grid-page" aria-label={de.calendar.title}>
     <h1 className="title">{de.calendar.title}</h1>
     <div className="le-calendar-toolbar">
-      <Button className="le-calendar-today le-btn--sm" variant="secondary" onClick={() => change(view, todayLocal())}>{de.calendar.today}</Button>
-      <IconButton className="le-calendar-prev" size={mobile ? 'lg' : 'md'} icon="chevron-left" label={de.calendar.previous} onClick={() => change(view, shift(view, date, -1))} />
-      <IconButton className="le-calendar-next" size={mobile ? 'lg' : 'md'} icon="chevron-right" label={de.calendar.next} onClick={() => change(view, shift(view, date, 1))} />
-      <h2 className="heading le-calendar-period">{periodTitle(view, date)}</h2>
+      {/* The list keeps its own from/to range; a period here would contradict it. */}
+      {view !== 'list' && <>
+        <Button className="le-calendar-today le-btn--sm" variant="secondary" onClick={() => change(view, todayLocal())}>{de.calendar.today}</Button>
+        <IconButton className="le-calendar-prev" size={mobile ? 'lg' : 'md'} icon="chevron-left" label={de.calendar.previous} onClick={() => change(view, shift(view, date, -1))} />
+        <IconButton className="le-calendar-next" size={mobile ? 'lg' : 'md'} icon="chevron-right" label={de.calendar.next} onClick={() => change(view, shift(view, date, 1))} />
+        <h2 className="heading le-calendar-period">{periodTitle(view, date)}</h2>
+      </>}
       {writable.length > 0 && <Button className="le-calendar-add le-btn--sm" variant="secondary" icon="plus" disabled={creating} onClick={() => onSlot({ date, minute: 540 })}>{de.calendar.addEvent}</Button>}
       <div className="le-calendar-switch" role="group" aria-label={de.calendar.view}>{(['month', 'week', 'day', 'list'] as const).map(v => <Button variant="ghost" key={v} aria-pressed={v === view} onClick={() => change(v, date)}>{de.calendar[v]}</Button>)}</div>
-      <IconButton className="le-calendar-refresh" icon="refresh-cw" label={de.calendar.refresh} disabled={!selected.length || refreshing} onClick={() => { void refresh(selected.map(s => s.id), false) }} />
+      {view !== 'list' && <IconButton className="le-calendar-refresh" icon="refresh-cw" label={de.calendar.refresh} disabled={!selected.length || refreshing} onClick={() => { void refresh(selected.map(s => s.id), false) }} />}
     </div>
+    <UnresolvedNotice writes={unresolved} />
     {view === 'list' ? <ListView /> : <>
     {sources.isPending && <p role="status">{de.calendar.loading}</p>}
     {sources.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void sources.refetch() } }}>{de.calendar.error}</Notice>}
-    <UnresolvedNotice writes={unresolved} />
     <SourceBar sources={sources.data ?? []} selected={selected.map(s => s.id)} onToggle={id => setExcluded(current => current.includes(id) ? current.filter(x => x !== id) : [...current, id])} from={range.from} to={range.to} />
     {selected.map(s => notices[s.id] && <Notice key={s.id} tone="info">{s.name}: {notices[s.id]}</Notice>)}
     {page.isPending && <p role="status">{de.calendar.loading}</p>}

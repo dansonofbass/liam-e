@@ -453,7 +453,8 @@ Quoted German labels in this section are UI text.
   with `aria-pressed`, and „Abrufen“. The toolbar wraps; the title never runs under the buttons.
   Below it the calendars as toggles with a coloured dot and the name. Colours repeat from the fifth
   calendar, so the name identifies it. Calendar notices collapse into one line „Kalenderstand
-  anzeigen“.
+  anzeigen“. In „Liste“ the toolbar keeps only „Neuer Termin“ and the view switch: the list has its
+  own range with „Heute“, „Von“, „Bis“ and „Abrufen“, and scrolls inside the page.
 - `desktop` and `tablet` open in week, `mobile` in day with a seven-day strip on top. Week and day:
   an all-day row, then an hour grid in its own scroll area, scrolled to 07:00 or to the hour before
   now; a now-line in today's column; overlapping appointments share the column width. The gutter

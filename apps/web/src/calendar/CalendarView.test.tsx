@@ -212,3 +212,28 @@ test('an unresolved create blocks new appointments until it is checked', async (
   expect(check.mock.calls[0]?.[0]?.path.write_id).toBe('test-only')
   expect(screen.queryByText(de.calendar.unresolved)).toBeNull()
 })
+test('coarse pointers get 44 px view switch and overflow buttons, and the calendar row wraps', async () => {
+  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
+  const coarse = css.match(/@media \(pointer: coarse\) \{([\s\S]*?)\n\}/gu)?.join('\n') ?? ''
+  expect(coarse).toContain('.le-calendar-switch .le-btn')
+  expect(coarse).toContain('.le-month-more.le-btn')
+  expect(css.match(/^\.le-calendar-sources-row \{([^}]+)\}/mu)?.[1]).toContain('flex-wrap: wrap')
+})
+test('the list keeps its own range: no period navigation, but open writes stay visible', async () => {
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ ...source, capabilities: ['read', 'write'] }] } as never)
+  spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [], next_cursor: null } } as never)
+  spyOn(sdk, 'calendarSourceSync').mockResolvedValue({ data: { queued: false }, response: { ok: true } } as never)
+  trackWrite({ writeId: 'test-only', kind: 'create' }, 'unknown')
+  setup('/calendar?view=list&date=2026-11-18')
+  expect(await screen.findByText(de.calendar.unresolved)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: de.calendar.previous })).toBeNull()
+  expect(screen.queryByRole('button', { name: de.calendar.next })).toBeNull()
+  expect(screen.getByRole('button', { name: de.calendar.list }).getAttribute('aria-pressed')).toBe('true')
+  // The embedded list brings no second page title and no second fetch button.
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  expect(screen.getAllByRole('button', { name: de.calendar.refresh })).toHaveLength(1)
+  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
+  const rule = css.match(/^\.le-calendar-grid-page > \.le-calendar-agenda \{([^}]+)\}/mu)?.[1] ?? ''
+  expect(rule).toContain('overflow-y: auto')
+  expect(rule).toContain('min-height: 0')
+})
