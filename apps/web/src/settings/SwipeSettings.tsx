@@ -3,10 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { settingsUiUpdate } from '../api/generated/sdk.gen'
 import type { UiSettingsOut } from '../api/generated/types.gen'
-import { uiSettingsQuery } from '../api/queries'
+import { cacheUiSettings, uiSettingsQuery } from '../api/queries'
 import { errorCode, unwrap } from '../api/unwrap'
 import { Button, Chip, Icon, Menu, Notice, Tooltip, type IconName } from '../ds'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import type { SwipeAction } from './useSwipeSettings'
 import './settings.css'
 
@@ -17,10 +17,11 @@ const actionIcon = (action: SwipeAction): IconName | undefined =>
 const codeOf = (cause: unknown) => errorCode(cause instanceof Error ? cause.cause : cause)
 
 export function SwipeSettings() {
+  const { texts } = useI18n()
   const query = useQuery(uiSettingsQuery())
-  if (!query.data) return <section className="le-swipe"><h2 className="heading">{de.settingsUi.title}</h2>
-    {query.isPending ? <><p role="status">{de.settingsUi.loading}</p>{[0, 1].map(index => <div key={index} className="le-swipe-placeholder" aria-hidden="true" />)}</>
-      : <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{de.settingsUi.error}</Notice>}
+  if (!query.data) return <section className="le-swipe"><h2 className="heading">{texts.settingsUi.title}</h2>
+    {query.isPending ? <><p role="status">{texts.settingsUi.loading}</p>{[0, 1].map(index => <div key={index} className="le-swipe-placeholder" aria-hidden="true" />)}</>
+      : <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void query.refetch() } }}>{texts.settingsUi.error}</Notice>}
   </section>
   return <SwipeSettingsForm settings={query.data} reload={async () => {
     const result = await query.refetch()
@@ -36,6 +37,7 @@ export function SwipeSettings() {
  * being overwritten unseen; an untouched form simply follows the newer assignment.
  */
 function SwipeSettingsForm({ settings, reload }: { settings: UiSettingsOut; reload: () => Promise<UiSettingsOut> }) {
+  const { texts } = useI18n()
   const client = useQueryClient()
   const [base, setBase] = useState<UiSettingsOut>(settings)
   const [left, setLeft] = useState<SwipeAction>(settings.swipe_left)
@@ -52,8 +54,8 @@ function SwipeSettingsForm({ settings, reload }: { settings: UiSettingsOut; relo
     lock.current = true; setBusy(true); setOutcome(undefined)
     try {
       const saved = await unwrap(settingsUiUpdate({ body: { expected_revision: base.revision, swipe_left: assignment.left, swipe_right: assignment.right }, throwOnError: true }))
-      setBase(saved); setLeft(saved.swipe_left); setRight(saved.swipe_right)
-      client.setQueryData(uiSettingsQuery().queryKey, saved)
+      const current = await cacheUiSettings(client, saved)
+      setBase(current); setLeft(current.swipe_left); setRight(current.swipe_right)
       setOutcome('saved')
     } catch (cause) {
       if (codeOf(cause) === 'ui_settings_conflict') {
@@ -64,36 +66,38 @@ function SwipeSettingsForm({ settings, reload }: { settings: UiSettingsOut; relo
     } finally { lock.current = false; setBusy(false) }
   }
   return <form className="le-swipe" onSubmit={event => { event.preventDefault(); void save({ left, right }) }}>
-    <h2 className="heading">{de.settingsUi.title}</h2>
-    <p className="le-swipe-intro">{de.settingsUi.intro}</p>
+    <h2 className="heading">{texts.settingsUi.title}</h2>
+    <p className="le-swipe-intro">{texts.settingsUi.intro}</p>
     <div className="le-swipe-fields">
-      <SwipeSelect id="le-swipe-left" label={de.settingsUi.left} action={left} disabled={busy} onSelect={value => select(setLeft, value)} />
-      <SwipeSelect id="le-swipe-right" label={de.settingsUi.right} action={right} disabled={busy} onSelect={value => select(setRight, value)} />
+      <SwipeSelect id="le-swipe-left" label={texts.settingsUi.left} action={left} disabled={busy} onSelect={value => select(setLeft, value)} />
+      <SwipeSelect id="le-swipe-right" label={texts.settingsUi.right} action={right} disabled={busy} onSelect={value => select(setRight, value)} />
     </div>
-    {outcome === 'saved' && <Notice tone="success">{de.settingsUi.saved}</Notice>}
-    {outcome === 'error' && <Notice tone="danger">{de.settingsUi.saveError}</Notice>}
-    {outcome === 'conflict' && <Notice tone="danger" action={{ label: de.settingsUi.reload, onClick: () => { setLeft(base.swipe_left); setRight(base.swipe_right); setOutcome(undefined) } }}>
-      {de.settingsUi.conflict(de.settingsUi.actions[base.swipe_left], de.settingsUi.actions[base.swipe_right])}</Notice>}
+    {outcome === 'saved' && <Notice tone="success">{texts.settingsUi.saved}</Notice>}
+    {outcome === 'error' && <Notice tone="danger">{texts.settingsUi.saveError}</Notice>}
+    {outcome === 'conflict' && <Notice tone="danger" action={{ label: texts.settingsUi.reload, onClick: () => { setLeft(base.swipe_left); setRight(base.swipe_right); setOutcome(undefined) } }}>
+      {texts.settingsUi.conflict(texts.settingsUi.actions[base.swipe_left], texts.settingsUi.actions[base.swipe_right])}</Notice>}
     <div className="le-swipe-actions">
-      <Button type="submit" variant="primary" disabled={busy}>{de.settingsUi.save}</Button>
-      <Tooltip content={de.settingsUi.restoreTip}><Button variant="secondary" disabled={busy} onClick={() => { void save(DEFAULTS) }}>{de.settingsUi.restore}</Button></Tooltip>
+      <Button type="submit" variant="primary" disabled={busy}>{texts.settingsUi.save}</Button>
+      <Tooltip content={texts.settingsUi.restoreTip}><Button variant="secondary" disabled={busy} onClick={() => { void save(DEFAULTS) }}>{texts.settingsUi.restore}</Button></Tooltip>
     </div>
   </form>
 }
 
 function SwipeSelect({ id, label, action, disabled, onSelect }: { id: string; label: string; action: SwipeAction; disabled: boolean; onSelect: (action: SwipeAction) => void }) {
+  const { texts } = useI18n()
   return <div className="le-swipe-field">
     <span className="le-swipe-label" id={`${id}-label`}>{label}</span>
-    <Menu trigger={props => <Chip {...props} quiet disabled={disabled} aria-labelledby={`${id}-label`}>{de.settingsUi.actions[action]}<Icon name="chevron-down" size="sm" /></Chip>}
-      items={ACTIONS.map(value => ({ label: de.settingsUi.actions[value], checked: value === action, onSelect: () => onSelect(value) }))} />
+    <Menu trigger={props => <Chip {...props} quiet disabled={disabled} aria-labelledby={`${id}-label`}>{texts.settingsUi.actions[action]}<Icon name="chevron-down" size="sm" /></Chip>}
+      items={ACTIONS.map(value => ({ label: texts.settingsUi.actions[value], checked: value === action, onSelect: () => onSelect(value) }))} />
     <SwipePreview action={action} />
   </div>
 }
 
 function SwipePreview({ action }: { action: SwipeAction }) {
+  const { texts } = useI18n()
   const icon = actionIcon(action)
   return <div className="le-swipe-preview">
-    <span className="le-swipe-preview-row" aria-hidden="true"><span className="le-swipe-preview-name">{de.settingsUi.previewSender}</span><span className="le-swipe-preview-subject">{de.settingsUi.previewSubject}</span></span>
-    <span className="le-swipe-preview-effect">{icon && <Icon name={icon} size="sm" />}{de.settingsUi.effects[action]}</span>
+    <span className="le-swipe-preview-row" aria-hidden="true"><span className="le-swipe-preview-name">{texts.settingsUi.previewSender}</span><span className="le-swipe-preview-subject">{texts.settingsUi.previewSubject}</span></span>
+    <span className="le-swipe-preview-effect">{icon && <Icon name={icon} size="sm" />}{texts.settingsUi.effects[action]}</span>
   </div>
 }

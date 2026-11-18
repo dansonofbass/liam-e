@@ -6,11 +6,12 @@ import { calendarFeedSubscribe, calendarFeedValidate, calendarFeedValidationDisc
 import type { CalendarFeedValidateResponse, SourceOut } from '../api/generated/types.gen'
 import { Button, Notice, TextField } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import { GoogleSetup } from './GoogleSetup'
 
 /** Secret addresses live only in this dialog's state, never in queries or browser storage. */
 export function FeedSetup({ source, close, saved }: { source?: SourceOut; close: () => void; saved: () => void }) {
+  const { texts, localeTag } = useI18n()
   const [name, setName] = useState(source?.name ?? ''), [url, setUrl] = useState('')
   const [zone, setZone] = useState(source?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
   const [preview, setPreview] = useState<CalendarFeedValidateResponse>(), [error, setError] = useState(''), [pending, setPending] = useState(false)
@@ -42,7 +43,7 @@ export function FeedSetup({ source, close, saved }: { source?: SourceOut; close:
       }
       proof.current = result.data.validation_id
       setPreview(result.data)
-    } catch { if (mounted.current) setError(de.calendar.feedError) }
+    } catch { if (mounted.current) setError(texts.calendar.feedError) }
     finally { busy.current = false; if (mounted.current) setPending(false) }
   }
   const subscribe = async () => {
@@ -53,37 +54,38 @@ export function FeedSetup({ source, close, saved }: { source?: SourceOut; close:
       if (result.error || !result.data) throw new Error()
       proof.current = undefined
       saved()
-    } catch { changed(); setError(de.calendar.feedSaveError) }
+    } catch { changed(); setError(texts.calendar.feedSaveError) }
     finally { busy.current = false; if (mounted.current) setPending(false) }
   }
-  const day = (value: string) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(value))
+  const day = (value: string) => new Intl.DateTimeFormat(localeTag, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(value))
   return createPortal(<div className="le-scrim"><div className="le-dialog le-feed-form" role="dialog" aria-modal="true" aria-labelledby={title} ref={trap} tabIndex={-1}>
-    <h2 className="heading" id={title}>{source ? de.calendar.replaceAddress : de.calendar.subscribe}</h2>
-    <p>{de.calendar.feedReadOnly}</p>
-    <TextField label={de.calendar.feedName} hint={de.calendar.feedNameHint} value={name} maxLength={80} disabled={pending} onChange={event => { changed(); setName(event.target.value) }} />
-    <TextField label={de.calendar.feedAddress} hint={de.calendar.feedNormalize} value={url} maxLength={4096} autoComplete="off" spellCheck={false} disabled={pending} onChange={event => { changed(); setUrl(event.target.value) }} />
-    <TextField label={de.calendar.feedZone} hint={de.calendar.feedZoneHint} value={zone} maxLength={100} disabled={pending} onChange={event => { changed(); setZone(event.target.value) }} />
-    {pending && <p role="status">{de.calendar.feedChecking}</p>}
+    <h2 className="heading" id={title}>{source ? texts.calendar.replaceAddress : texts.calendar.subscribe}</h2>
+    <p>{texts.calendar.feedReadOnly}</p>
+    <TextField label={texts.calendar.feedName} hint={texts.calendar.feedNameHint} value={name} maxLength={80} disabled={pending} onChange={event => { changed(); setName(event.target.value) }} />
+    <TextField label={texts.calendar.feedAddress} hint={texts.calendar.feedNormalize} value={url} maxLength={4096} autoComplete="off" spellCheck={false} disabled={pending} onChange={event => { changed(); setUrl(event.target.value) }} />
+    <TextField label={texts.calendar.feedZone} hint={texts.calendar.feedZoneHint} value={zone} maxLength={100} disabled={pending} onChange={event => { changed(); setZone(event.target.value) }} />
+    {pending && <p role="status">{texts.calendar.feedChecking}</p>}
     {error && <Notice tone="danger">{error}</Notice>}
-    {preview && <section aria-label={de.calendar.feedPreview} aria-live="polite">
+    {preview && <section aria-label={texts.calendar.feedPreview} aria-live="polite">
       <h3 className="heading">{preview.name}</h3><p>{day(preview.coverage_start)} – {day(preview.coverage_end)}</p>
-      <p>{de.calendar.feedCount(preview.occurrence_count)}</p><p>{de.calendar.feedExpires}</p>
+      <p>{texts.calendar.feedCount(preview.occurrence_count)}</p><p>{texts.calendar.feedExpires}</p>
     </section>}
     <div className="le-dialog-actions">
-      <Button variant="secondary" disabled={pending} onClick={dismiss}>{de.calendar.cancel}</Button>
-      {preview ? <Button variant="primary" disabled={pending} onClick={() => { void subscribe() }}>{source ? de.calendar.replaceAddress : de.calendar.subscribeConfirm}</Button>
-        : <Button variant="primary" disabled={pending || !name.trim() || !url || !zone} onClick={() => { void check() }}>{de.calendar.feedCheck}</Button>}
+      <Button variant="secondary" disabled={pending} onClick={dismiss}>{texts.calendar.cancel}</Button>
+      {preview ? <Button variant="primary" disabled={pending} onClick={() => { void subscribe() }}>{source ? texts.calendar.replaceAddress : texts.calendar.subscribeConfirm}</Button>
+        : <Button variant="primary" disabled={pending || !name.trim() || !url || !zone} onClick={() => { void check() }}>{texts.calendar.feedCheck}</Button>}
     </div>
   </div></div>, document.body)
 }
 
 /** Shared setup entries on the accounts page and in the empty agenda. */
 export function CalendarSetup({ primary = false }: { primary?: boolean }) {
+  const { texts } = useI18n()
   const [open, setOpen] = useState<'ics' | 'google'>(), client = useQueryClient()
   const close = () => setOpen(undefined)
   const saved = () => { close(); void client.invalidateQueries({ queryKey: ['calendar'] }) }
-  return <><Button variant={primary ? 'primary' : 'secondary'} onClick={() => setOpen('ics')}>{de.calendar.subscribe}</Button>
-    <Button variant="secondary" onClick={() => setOpen('google')}>{de.calendar.googleConnect}</Button>
+  return <><Button variant={primary ? 'primary' : 'secondary'} onClick={() => setOpen('ics')}>{texts.calendar.subscribe}</Button>
+    <Button variant="secondary" onClick={() => setOpen('google')}>{texts.calendar.googleConnect}</Button>
     {open === 'ics' && <FeedSetup close={close} saved={saved} />}
     {open === 'google' && <GoogleSetup close={close} saved={saved} />}</>
 }

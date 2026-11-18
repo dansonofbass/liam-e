@@ -2,18 +2,19 @@
 
 Like the prompt library, the owner is a deployment-level server constant (``OWNER_SCOPE``),
 never a request identity: callers cannot choose or override it. The single row holds the
-device-independent swipe assignment of the mail list; ``revision`` guards it against lost
-updates from concurrent devices.
+device-independent swipe assignment and language preference. The revision guards against
+lost updates from concurrent devices.
 """
 
 from datetime import datetime
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Column, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from db.models._common import new_id, utc_datetime_column, utcnow
 
 OWNER_SCOPE = "installation"
+BROWSER_LOCALE = "browser"
 
 
 class UiSettings(SQLModel, table=True):
@@ -26,5 +27,6 @@ class UiSettings(SQLModel, table=True):
     owner_scope: str = Field(default=OWNER_SCOPE)
     swipe_left: str
     swipe_right: str
+    locale: str = Field(default=BROWSER_LOCALE, sa_column=Column(String, nullable=False, server_default=BROWSER_LOCALE))
     revision: int = 1
     updated_at: datetime = Field(default_factory=utcnow, sa_column=utc_datetime_column())

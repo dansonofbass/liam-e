@@ -624,6 +624,12 @@ export type ChatStreamRequest = {
      */
     conversation_id?: string | null;
     /**
+     * Locale
+     *
+     * Browser language when the saved setting follows the browser
+     */
+    locale?: 'de' | 'en';
+    /**
      * Model
      *
      * Model for a new conversation; ignored when conversation_id is set (use PATCH on the conversation).
@@ -681,6 +687,12 @@ export type ChatTurnRequest = {
      * Leer lassen für eine neue Unterhaltung
      */
     conversation_id?: string;
+    /**
+     * Locale
+     *
+     * Browser language when the saved setting follows the browser
+     */
+    locale?: 'de' | 'en';
     /**
      * Message
      */
@@ -3205,6 +3217,10 @@ export type TaskWindow = {
  */
 export type UiSettingsOut = {
     /**
+     * Locale
+     */
+    locale: 'browser' | 'de' | 'en';
+    /**
      * Revision
      */
     revision: number;
@@ -3225,13 +3241,17 @@ export type UiSettingsOut = {
 /**
  * UiSettingsUpdate
  *
- * A change to the swipe assignment; the owner scope is not part of the contract.
+ * A change to the UI settings; the owner scope is not part of the contract.
  */
 export type UiSettingsUpdate = {
     /**
      * Expected Revision
      */
     expected_revision: number;
+    /**
+     * Locale
+     */
+    locale?: 'browser' | 'de' | 'en' | null;
     /**
      * Swipe Left
      */
@@ -4836,7 +4856,12 @@ export type MailMessageInsightData = {
          */
         message_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Locale
+         */
+        locale?: 'de' | 'en';
+    };
     url: '/api/v1/mail/messages/{message_id}/insight';
 };
 

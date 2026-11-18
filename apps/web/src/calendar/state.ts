@@ -1,3 +1,4 @@
+import { REFERENCE_LOCALE, intlLocale, type Locale } from '../i18n/locales'
 import type { SourceOut, ApiRoutersApiV1CalendarSchemasOccurrenceOut as OccurrenceOut } from '../api/generated/types.gen'
 
 const DAY = 86_400_000
@@ -45,5 +46,5 @@ export function inLocalWindow(row: OccurrenceOut, from: string, to: string, time
   const day = occurrenceDay(row, timeZone)
   return day >= from && day < to
 }
-export const calendarDate = (value: string, timeZone = browserZone()) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeZone: /^\d{4}-\d{2}-\d{2}$/.test(value) ? 'UTC' : timeZone }).format(new Date(value))
-export const calendarTime = (value: string, timeZone = browserZone()) => new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit', timeZone }).format(new Date(value))
+export const calendarDate = (value: string, timeZone = browserZone(), locale: Locale = REFERENCE_LOCALE) => new Intl.DateTimeFormat(intlLocale[locale], { dateStyle: 'medium', timeZone: /^\d{4}-\d{2}-\d{2}$/.test(value) ? 'UTC' : timeZone }).format(new Date(value))
+export const calendarTime = (value: string, timeZone = browserZone(), locale: Locale = REFERENCE_LOCALE) => new Intl.DateTimeFormat(intlLocale[locale], { hour: '2-digit', minute: '2-digit', timeZone }).format(new Date(value))

@@ -279,7 +279,7 @@ async def stale_bodies(account_id: str, folder: str, version: int, *, limit: int
 
 async def _drop_insight(session, message_id: str) -> None:
     # The row is written first: its lock makes an insight being stored for the old text either land
-    # before this delete or see the new text (mail_insight.upsert, `summarized`).
+    # before this delete or see the new text (mail_insight.store_if_missing, `summarized`).
     await session.flush()
     await session.execute(delete(MailInsight).where(MailInsight.message_id == message_id))
 

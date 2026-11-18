@@ -4,10 +4,11 @@ import { chatConversationUpdate } from '../api/generated/sdk.gen'
 import { conversationsQuery, modelsQuery } from '../api/queries'
 import { errorCode, unwrap } from '../api/unwrap'
 import { Chip, Icon, Menu, Notice, Tooltip } from '../ds'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 
 // With a conversation the choice is saved on it. Without one (the start page) the parent owns the choice: it is reported via onChange and shown from `model`; the first message carries it.
 export function ModelMenu({ conversationId, model, onChange }: { conversationId?: string; model?: string; onChange?: (model: string) => void }) {
+  const { texts } = useI18n()
   const { data: models = [] } = useQuery(modelsQuery())
   const client = useQueryClient()
   const [chosen, setChosen] = useState<string>()
@@ -21,7 +22,7 @@ export function ModelMenu({ conversationId, model, onChange }: { conversationId?
     setBusy(true); setError(undefined)
     try {
       const current = (await client.fetchQuery({ ...conversationsQuery(), staleTime: 0 })).find(item => item.id === conversationId)
-      if (!current) { setError(de.errors.conversation_not_found); return }
+      if (!current) { setError(texts.errors.conversation_not_found); return }
       await unwrap(chatConversationUpdate({ path: { conversation_id: conversationId }, body: { model: next, expected_version: current.version }, throwOnError: true }))
       setChosen(next)
       onChange?.(next)
@@ -32,14 +33,15 @@ export function ModelMenu({ conversationId, model, onChange }: { conversationId?
       if (code === 'version_conflict') {
         try {
           const current = (await client.fetchQuery({ ...conversationsQuery(), staleTime: 0 })).find(item => item.id === conversationId)
-          if (!current) { setError(de.errors.conversation_not_found); return }
+          if (!current) { setError(texts.errors.conversation_not_found); return }
           setChosen(current.model || models.find(item => item.is_default)?.id)
           onChange?.(current.model)
-          setError(de.chat.modelConflict)
+          setError(texts.chat.modelConflict)
           void client.invalidateQueries({ queryKey: ['history', conversationId] })
-        } catch { setError(de.chat.modelConflictReloadError) }
-      } else setError(code === 'model_unknown' ? de.chat.modelUnknown : de.chat.modelError)
+        } catch { setError(texts.chat.modelConflictReloadError) }
+      } else setError(code === 'model_unknown' ? texts.chat.modelUnknown : texts.chat.modelError)
     } finally { setBusy(false) }
   }
-  return <>{label && <Menu placement="down-end" trigger={props => <Tooltip content={de.chat.modelTip} pos="bottom"><Chip {...props} quiet disabled={busy}>{label}<Icon name="chevron-down" size="sm" /></Chip></Tooltip>} items={models.map(item => ({ label: item.description ? `${item.label} · ${item.description}` : item.label, onSelect: () => { void select(item.id) } }))} />}{error && <Notice tone="danger">{error}</Notice>}</>
+  const descriptions: Partial<Record<string, string>> = texts.chat.modelDescriptions
+  return <>{label && <Menu placement="down-end" trigger={props => <Tooltip content={texts.chat.modelTip} pos="bottom"><Chip {...props} quiet disabled={busy}>{label}<Icon name="chevron-down" size="sm" /></Chip></Tooltip>} items={models.map(item => { const description = descriptions[item.id] ?? item.description; return { label: description ? `${item.label} · ${description}` : item.label, onSelect: () => { void select(item.id) } } })} />}{error && <Notice tone="danger">{error}</Notice>}</>
 }

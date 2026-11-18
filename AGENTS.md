@@ -11,7 +11,7 @@ Outlook, iCloud, Yahoo and any other providers — and enables searching, readin
 | Provider connections | Providers available as **Mistral Studio connectors** (e.g. `gmail`) use the existing connector (`api/mail/connectors.py`, REST `/v1/connectors/...` with the app key — OAuth credentials are in Mistral, no own OAuth app needed). Others: Gmail & Outlook through **own OAuth2**, iCloud, Yahoo and all others through **IMAP/SMTP with an app password** |
 | Data storage | **Sync to managed Postgres**: credentials encrypted at rest, mail index (metadata + body texts), chat history |
 | Sending mail | Agent may freely search/read/summarize; **send/reply/forward only after explicit confirmation** of the draft in chat |
-| Scope | Feature in `apps/api` + `apps/web`; deploy via existing `mistral.json` to Mistral Studio; **single user**; UI in German |
+| Scope | Feature in `apps/api` + `apps/web`; deploy via existing `mistral.json` to Mistral Studio; **single user**; UI in German or English |
 
 ## Architecture
 
@@ -38,11 +38,30 @@ managed Postgres (module in mistral.json)              Mail index, credentials, 
 - `/settings/prompts/new` and `/settings/prompts/$promptId` — create or edit a template in a separate view at all screen sizes.
 - `/settings/preferences`, `/settings/preferences/new` and `/settings/preferences/$preferenceId` — preferences, usage toggle and separate create/edit views, including on mobile.
 
+### App language
+
+`/settings/language` saves the single owner’s language in the shared `ui_settings` row with the
+same revision check as swipe settings. Existing rows default to `browser`. In automatic mode
+the web server uses the browser’s `Accept-Language` list, with English as the fallback when
+neither German nor English is accepted. A cookie mirrors an explicit setting after the browser
+confirms it with the API. It lets subsequent documents start in that language during hydration.
+A new device starts with its browser preference until its first settings read. Re-focusing a tab
+reloads the setting from the server.
+
+Chat and insight requests send the browser's language. For new chat turns and insights, the API uses
+the saved override first and the request locale in browser mode. Chat uses that result when the
+language of the user’s current message is unclear. Scheduled insights use the saved override or English when there is no browser
+context. This keeps deadlines and reply flags available for the Important filter. Existing
+insights are served as stored, including when requests with different locales race. Changes to the
+mail body continue to invalidate its insight. Direct preference requests support both languages
+(for example “Remember this”). Automatic suggestions retain the existing German phrase and
+evidence checks.
+
 ### Mail domain (`apps/api/src/api/mail/`)
 
 - `agent.py` — streamed chat turn, tool loop and stored history.
 - `agent_tools.py` — read-only agent tools and proposal creation. Task tools delegate to `api/tasks/chat.py`; typed task commands and their local execution live in `api/tasks/proposals.py`.
-- `agent_prompt.py` — German system instructions for the agent.
+- `agent_prompt.py` — System instructions for the agent, including the current user message’s language and the active UI locale as fallback.
 - `chat_events.py` — typed streaming events; `chat_schemas.py` — chat output models.
 - `actions.py` — index changes and one-time undo; `action_backends.py` — provider actions.
 - `proposals.py` — store, confirm, cancel and execute proposals after confirmation.
@@ -564,7 +583,7 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `preference_candidate` — unconfirmed value with own source message, conversation, field/scope, expected target version/revision and optional card ID; status `pending|accepted|rejected|expired`. Rejected and invalidated candidates retain only content-free references.
 - `personalization_settings` — server-side singleton with independent `use_preferences` and `suggest_preferences` (both default false), version and ID and time of the last suggestion activation.
 - `preference_extraction` — content-free one-time ID per source message and extractor version; binds activation and prevents repeated model calls even after errors or restart.
-- `ui_settings` — the single cross-device interaction configuration with fixed server-side scope (`installation`, unique): `swipe_left`/`swipe_right` from allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` for conditional updates and `updated_at`; initial initialization with left `archive`, right `toggle_read`.
+- `ui_settings` — the single cross-device interaction configuration with fixed server-side scope (`installation`, unique): `swipe_left`/`swipe_right` from allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` for conditional updates and `updated_at`; initial assignment left `archive`, right `toggle_read`, plus `locale=browser`. Language overrides are `de` or `en`.
 
 ## Templates and turn context
 
@@ -745,7 +764,8 @@ active accounts; recently synced accounts and accounts whose last error was `aut
 skipped. Manual sync and the OAuth callback after reconnection enqueue these accounts too; the
 worker must be running to execute them. `MAIL_SYNC_STALE_MINUTES` (default `10`) determines
 when a locked job is stale. After a successful sync with new mails, an insight job is enqueued
-to fill in missing summaries.
+to fill in missing summaries. The worker uses the saved language, with English for browser mode
+because a background job has no browser request.
 
 When the text version (`body_text` in `sync_types.py`) changes, `BODY_VERSION` is incremented.
 Each subsequent sync rereads up to 25 INBOX mails with an older version from the provider
@@ -793,13 +813,13 @@ label, `send_email` takes `replyToMessageId`; the Outlook connector returned HTT
 - **Settings:** each new setting belongs in its own module `packages/py/env/src/env/<name>.py` (`class Env(BaseEnv)` + `env = Env()`); declare every name **empty** in the root `.env.example`. Mark secrets with `Annotated[str | None, WorkspaceSecret()] = None` (in Studio from workspace secrets, locally from `.env`).
 - **DB:** one model per file in `packages/py/db/src/db/models/<table>.py` (drop-in, automatically discovered by the loader; **no cross-table foreign keys**, references as string columns), one accessor module per table in `db/accessors/` — ORM queries only in accessors. Migrations: one branch per owner, `branch_labels` set, `down_revision = None` at the root.
 - **Router:** directory tree = URL tree under `apps/api/src/api/routers/`. Every module with `router` is served; every package needs an access rule (`dependencies` in `__init__.py`, `()` = anonymous — never omit it, or imports fail). `operation_id` is unique and becomes the MCP tool name in Studio. `[name]` in a file/directory = path parameter `{name}`; `route.py` = index.
-- **Code/comments/docstrings in English** (repository convention); **UI text in German**.
+- **Code, comments, and docstrings in English.** UI copy lives in the typed German and English catalogues.
 - Never log or commit secrets; `.env` is gitignored.
 
 ### TypeScript (apps/web)
 - TanStack Router: one file per route under `src/routes/`; claim the landing page via `staticData: { landing: <rank> }`. After new routes run `bunx nx run web:gen-routes`.
 - API access only through the generated client (`src/api/generated/`, committed to git, never edit manually) + `unwrap`/`dataOr404` from `src/api/unwrap.ts`; `VITE_API_URL` configures the base URL. Calls whose result depends on HTTP status (404/409/502 for mail actions, syncs and accounts) may call the generated client without `unwrap` and branch on status themselves.
-- Styling with Tailwind 4; mark paths/English literals with `// i18n-exempt`. Tests: `bun test` (jsdom setup in `src/test/setup.js`).
+- Styling with Tailwind 4; mark technical literals such as paths and class names with `// i18n-exempt`. Tests: `bun test` (jsdom setup in `src/test/setup.js`).
 - Tooltips and menus are attached to `<body>` and are never positioned by CSS or styled through an ancestor (no `top`/`left`/`right`/`bottom` on `.le-menu`/`.le-tooltip`, no `.le-x .le-menu`); positioning comes from `src/ds/floating.ts` (`pos` or `placement` is only the preferred side). `src/ds/floating.test.tsx` checks this. See DESIGN.md §5, “Floating elements”.
 
 ## Security
@@ -858,7 +878,7 @@ anything on GitHub (issues, PRs, reviews, comments), therefore already counts as
 - What remains before publication is in [docs/publishing.md](docs/publishing.md).
 
 ## Working practices for agents
-- Documentation, issues, pull requests and commit messages are English. UI wording follows the locale catalogues (see #65); until then the UI is German.
+- Documentation, issues, pull requests and commit messages are English. UI wording follows the German and English catalogues (see #65). Add a matching key in both catalogues for new UI text.
 - Before any work on the UI (`apps/web`, text, including assistant response text), read `DESIGN.md`; it governs tokens, components, responsive behavior and how text sounds.
 - Minimal diffs; copy existing patterns (see module docstrings — they document the conventions locally).
 - After API changes always run `gen-types` and commit `apps/api/openapi.json` + `apps/web/src/api/generated`.

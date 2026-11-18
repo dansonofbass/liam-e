@@ -2,7 +2,7 @@ import { useQueryClient, type InfiniteData, type QueryKey } from '@tanstack/reac
 import { createContext, createElement, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { mailActionsUndo, mailMessageAction, mailMessagesBulkAction } from '../api/generated/sdk.gen'
 import type { MessageDetailOut, MessageListItemOut, MessagePageOut } from '../api/generated/types.gen'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import { errorCode } from '../api/unwrap'
 import { useBreakpoint } from '../shell/useBreakpoint'
 
@@ -20,6 +20,7 @@ const LIMIT = 20
 const UNDO_TIMEOUT_MS = 15_000
 
 export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) {
+  const { texts } = useI18n()
   const client = useQueryClient()
   const breakpoint = useBreakpoint()
   const [entries, setEntries] = useState<UndoEntry[]>([])
@@ -104,7 +105,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     const active = entriesRef.current.filter(entry => entry.pending || entry.deadline > clock.now())
     if (active.length !== entriesRef.current.length) publish(active)
     if (active.length + reservations.current < LIMIT) return true
-    notify(de.inbox.undoCapacity)
+    notify(texts.inbox.undoCapacity)
     return false
   }
   const run = (id: string, kind: Kind, options?: { silent?: boolean }) => {
@@ -139,28 +140,28 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       const result = await mailMessageAction({ path: { message_id: id }, body: { kind } })
       if (result.response?.status === 404) {
         update(id, 'remove')
-        if (!options?.silent) notify(de.proposalErrors.item_gone)
+        if (!options?.silent) notify(texts.proposalErrors.item_gone)
       } else if (result.response?.status === 409) {
         rollback()
-        if (!options?.silent) notify(de.proposalErrors.action_unsupported)
+        if (!options?.silent) notify(texts.proposalErrors.action_unsupported)
         return changes.length > 0
       } else if (!result.data || result.response?.status !== 200) {
         rollback()
-        if (!options?.silent) notify(result.response?.status === 502 && errorCode(result.error) === 'provider_failed' ? de.errors.provider_failed : de.errors.action_uncertain)
+        if (!options?.silent) notify(result.response?.status === 502 && errorCode(result.error) === 'provider_failed' ? texts.errors.provider_failed : texts.errors.action_uncertain)
         return changes.length > 0
       } else {
         if (removal) reconcile.current = true
         if (!options?.silent) {
-          const text = breakpoint === 'mobile' ? de.inbox.doneShort[kind] : de.inbox.done[kind](result.data.message.subject)
+          const text = breakpoint === 'mobile' ? texts.inbox.doneShort[kind] : texts.inbox.done[kind](result.data.message.subject)
           setNotice(null)
-          publish([...entriesRef.current, { actionId: result.data.action_id, messageId: id, kind, changes, previousRead, text, label: de.inbox.done[kind](result.data.message.subject), deadline: clock.now() + 10_000, pending: false }])
+          publish([...entriesRef.current, { actionId: result.data.action_id, messageId: id, kind, changes, previousRead, text, label: texts.inbox.done[kind](result.data.message.subject), deadline: clock.now() + 10_000, pending: false }])
         }
         void client.invalidateQueries({ queryKey: ['summary'] })
         void client.invalidateQueries({ queryKey: ['message', id] })
       }
     } catch {
       rollback()
-      if (!options?.silent) notify(de.errors.action_uncertain)
+      if (!options?.silent) notify(texts.errors.action_uncertain)
       return changes.length > 0
     } finally {
       if (!options?.silent) { reservations.current--; setReserved(reservations.current) }
@@ -205,7 +206,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         rollback(failed)
         for (const row of result.data.results) if (row.status === 'not_found') { update(row.message_id, 'remove'); void client.invalidateQueries({ queryKey: ['message', row.message_id], exact: true }) }
         const group = result.data.results.filter(row => row.status === 'done' && row.action_id).map(row => ({ actionId: row.action_id!, messageId: row.message_id, changes: changes.filter(change => change.row.id === row.message_id), previousRead: reads.get(row.message_id) }))
-        const text = de.inbox.bulkResult(kind, group.length, ids.length)
+        const text = texts.inbox.bulkResult(kind, group.length, ids.length)
         if (group.length) {
           setNotice(null)
           publish([...entriesRef.current, { ...group[0]!, group, kind, text, label: text, deadline: clock.now() + 10_000, pending: false }])
@@ -215,7 +216,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       } catch {
         rollback(ids)
         reconcile.current = true
-        notify(de.errors.action_uncertain)
+        notify(texts.errors.action_uncertain)
       } finally {
         reservations.current--; setReserved(reservations.current)
         settle()
@@ -250,15 +251,15 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
           const restored = group.filter(item => result.data!.restored.includes(item.actionId))
           restore(restored.flatMap(item => item.changes).sort((a, b) => a.page - b.page || a.index - b.index), removes(selected.kind))
           for (const item of restored) if (!removes(selected.kind) && item.previousRead !== undefined) client.setQueryData<MessageDetailOut>(['message', item.messageId], data => data && { ...data, is_read: item.previousRead! })
-          if (restored.length !== group.length) notify(de.inbox.bulkUndoFailed(group.length - restored.length))
+          if (restored.length !== group.length) notify(texts.inbox.bulkUndoFailed(group.length - restored.length))
         } else if (result.data?.restored.includes(selected.actionId)) {
           restore(selected.changes, removes(selected.kind))
           if (!removes(selected.kind) && selected.previousRead !== undefined) client.setQueryData<MessageDetailOut>(['message', selected.messageId], data => data && { ...data, is_read: selected.previousRead! })
-        } else if (result.data?.skipped.includes(selected.actionId)) notify(de.inbox.undoSkipped)
-        else if (result.data?.expired.includes(selected.actionId)) notify(de.inbox.undoExpired)
-        else if (result.data?.failed.includes(selected.actionId)) notify(de.inbox.undoFailed)
-        else notify(de.inbox.undoUncertain)
-      } catch { notify(timedOut ? de.inbox.undoTimeout : de.inbox.undoUncertain) }
+        } else if (result.data?.skipped.includes(selected.actionId)) notify(texts.inbox.undoSkipped)
+        else if (result.data?.expired.includes(selected.actionId)) notify(texts.inbox.undoExpired)
+        else if (result.data?.failed.includes(selected.actionId)) notify(texts.inbox.undoFailed)
+        else notify(texts.inbox.undoUncertain)
+      } catch { notify(timedOut ? texts.inbox.undoTimeout : texts.inbox.undoUncertain) }
       finally {
         if (timeout !== undefined) clock.clearTimeout(timeout)
         publish(timedOut

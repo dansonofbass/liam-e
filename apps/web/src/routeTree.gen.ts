@@ -24,6 +24,7 @@ import { Route as AppMailMessageIdRouteImport } from './routes/_app/mail/$messag
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings/index'
 import { Route as AppTasksTaskIdRouteImport } from './routes/_app/tasks/$taskId'
 import { Route as AppSettingsControlsIndexRouteImport } from './routes/_app/settings/controls/index'
+import { Route as AppSettingsLanguageIndexRouteImport } from './routes/_app/settings/language/index'
 import { Route as AppSettingsPreferencesIndexRouteImport } from './routes/_app/settings/preferences/index'
 import { Route as AppSettingsPreferencesPreferenceIdRouteImport } from './routes/_app/settings/preferences/$preferenceId'
 import { Route as AppSettingsPreferencesNewRouteImport } from './routes/_app/settings/preferences/new'
@@ -106,6 +107,12 @@ const AppSettingsControlsIndexRoute =
     path: '/controls/',
     getParentRoute: () => AppSettingsRoute,
   } as any)
+const AppSettingsLanguageIndexRoute =
+  AppSettingsLanguageIndexRouteImport.update({
+    id: '/language/',
+    path: '/language/',
+    getParentRoute: () => AppSettingsRoute,
+  } as any)
 const AppSettingsPreferencesIndexRoute =
   AppSettingsPreferencesIndexRouteImport.update({
     id: '/preferences/',
@@ -160,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
   '/settings/prompts/new': typeof AppSettingsPromptsNewRoute
   '/settings/controls/': typeof AppSettingsControlsIndexRoute
+  '/settings/language/': typeof AppSettingsLanguageIndexRoute
   '/settings/preferences/': typeof AppSettingsPreferencesIndexRoute
   '/settings/prompts/': typeof AppSettingsPromptsIndexRoute
 }
@@ -179,6 +187,7 @@ export interface FileRoutesByTo {
   '/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
   '/settings/prompts/new': typeof AppSettingsPromptsNewRoute
   '/settings/controls': typeof AppSettingsControlsIndexRoute
+  '/settings/language': typeof AppSettingsLanguageIndexRoute
   '/settings/preferences': typeof AppSettingsPreferencesIndexRoute
   '/settings/prompts': typeof AppSettingsPromptsIndexRoute
 }
@@ -203,6 +212,7 @@ export interface FileRoutesById {
   '/_app/settings/prompts/$promptId': typeof AppSettingsPromptsPromptIdRoute
   '/_app/settings/prompts/new': typeof AppSettingsPromptsNewRoute
   '/_app/settings/controls/': typeof AppSettingsControlsIndexRoute
+  '/_app/settings/language/': typeof AppSettingsLanguageIndexRoute
   '/_app/settings/preferences/': typeof AppSettingsPreferencesIndexRoute
   '/_app/settings/prompts/': typeof AppSettingsPromptsIndexRoute
 }
@@ -227,6 +237,7 @@ export interface FileRouteTypes {
     | '/settings/prompts/$promptId'
     | '/settings/prompts/new'
     | '/settings/controls/'
+    | '/settings/language/'
     | '/settings/preferences/'
     | '/settings/prompts/'
   fileRoutesByTo: FileRoutesByTo
@@ -246,6 +257,7 @@ export interface FileRouteTypes {
     | '/settings/prompts/$promptId'
     | '/settings/prompts/new'
     | '/settings/controls'
+    | '/settings/language'
     | '/settings/preferences'
     | '/settings/prompts'
   id:
@@ -269,6 +281,7 @@ export interface FileRouteTypes {
     | '/_app/settings/prompts/$promptId'
     | '/_app/settings/prompts/new'
     | '/_app/settings/controls/'
+    | '/_app/settings/language/'
     | '/_app/settings/preferences/'
     | '/_app/settings/prompts/'
   fileRoutesById: FileRoutesById
@@ -384,6 +397,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsControlsIndexRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/settings/language/': {
+      id: '/_app/settings/language/'
+      path: '/language'
+      fullPath: '/settings/language/'
+      preLoaderRoute: typeof AppSettingsLanguageIndexRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/preferences/': {
       id: '/_app/settings/preferences/'
       path: '/preferences'
@@ -463,6 +483,7 @@ interface AppSettingsRouteChildren {
   AppSettingsPromptsPromptIdRoute: typeof AppSettingsPromptsPromptIdRoute
   AppSettingsPromptsNewRoute: typeof AppSettingsPromptsNewRoute
   AppSettingsControlsIndexRoute: typeof AppSettingsControlsIndexRoute
+  AppSettingsLanguageIndexRoute: typeof AppSettingsLanguageIndexRoute
   AppSettingsPreferencesIndexRoute: typeof AppSettingsPreferencesIndexRoute
   AppSettingsPromptsIndexRoute: typeof AppSettingsPromptsIndexRoute
 }
@@ -475,6 +496,7 @@ const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsPromptsPromptIdRoute: AppSettingsPromptsPromptIdRoute,
   AppSettingsPromptsNewRoute: AppSettingsPromptsNewRoute,
   AppSettingsControlsIndexRoute: AppSettingsControlsIndexRoute,
+  AppSettingsLanguageIndexRoute: AppSettingsLanguageIndexRoute,
   AppSettingsPreferencesIndexRoute: AppSettingsPreferencesIndexRoute,
   AppSettingsPromptsIndexRoute: AppSettingsPromptsIndexRoute,
 }

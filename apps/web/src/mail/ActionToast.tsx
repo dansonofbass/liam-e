@@ -1,11 +1,12 @@
 import { useLayoutEffect, useRef } from 'react'
 import { Menu, Notice } from '../ds'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import { useMailActionsContext } from './useMailActions'
 
 // Feedback of the shared mail actions. The list renders it as an overlay; the reading view
 // renders it inline when it stands alone (mobile and tablet), since the list is unmounted there.
 export function ActionToast({ inline }: { inline?: boolean }) {
+  const { texts } = useI18n()
   const { toast, undo, entries } = useMailActionsContext()
   const root = useRef<HTMLDivElement>(null)
   const lastFocus = useRef<HTMLElement | null>(null)
@@ -27,5 +28,5 @@ export function ActionToast({ inline }: { inline?: boolean }) {
   }, [entries.length])
   if (!toast && !entries.length) return null
   const single = entries.length === 1 ? entries[0] : undefined
-  return <div ref={root} className={inline ? 'le-inbox-toast le-inbox-toast--inline' : 'le-inbox-toast'}><Notice tone={toast?.tone ?? 'success'}><span>{toast?.text}</span>{single && <button type="button" className="le-link" disabled={single.pending} onClick={() => { void undo(single.actionId) }}>{de.proposal.undo}</button>}{entries.length > 1 && <Menu placement="up-end" trigger={props => <button type="button" className="le-link" {...props}>{de.inbox.recentActions(entries.length)}</button>} items={entries.map(entry => ({ label: de.inbox.undoAction(entry.label), disabled: entry.pending, hint: entry.pending ? de.inbox.undoRunning : undefined, onSelect: () => { void undo(entry.actionId) } }))} />}</Notice></div>
+  return <div ref={root} className={inline ? 'le-inbox-toast le-inbox-toast--inline' : 'le-inbox-toast'}><Notice tone={toast?.tone ?? 'success'}><span>{toast?.text}</span>{single && <button type="button" className="le-link" disabled={single.pending} onClick={() => { void undo(single.actionId) }}>{texts.proposal.undo}</button>}{entries.length > 1 && <Menu placement="up-end" trigger={props => <button type="button" className="le-link" {...props}>{texts.inbox.recentActions(entries.length)}</button>} items={entries.map(entry => ({ label: texts.inbox.undoAction(entry.label), disabled: entry.pending, hint: entry.pending ? texts.inbox.undoRunning : undefined, onSelect: () => { void undo(entry.actionId) } }))} />}</Notice></div>
 }

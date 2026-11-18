@@ -8,7 +8,7 @@ import { tasksArchive, tasksDelete, tasksOccurrenceComplete, tasksOccurrenceReop
 import type { ApiRoutersApiV1TasksSchemasOccurrenceOut as Occurrence } from '../api/generated/types.gen'
 import { taskDetailQuery } from '../api/queries'
 import { Button, Notice, TextField } from '../ds'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import { reconcileTask } from './reconcile'
 import { taskWindow } from './window'
 import { SourceMail } from './SourceMail'
@@ -16,8 +16,9 @@ import { TaskSelect } from './TaskSelect'
 import { formatTaskDue, formatTaskRule } from './format'
 import './tasks.css'
 
-const t = de.tasks
 export function TaskDetail({ id }: { id: string }) {
+  const { texts, locale } = useI18n()
+  const t = texts.tasks
   const [period, setPeriod] = useState(0), [base] = useState(() => new Date()), client = useQueryClient()
   const navigate = useNavigate()
   const window = taskWindow(base, period)
@@ -49,12 +50,12 @@ export function TaskDetail({ id }: { id: string }) {
     const fn = kind === 'complete' ? tasksOccurrenceComplete : kind === 'skip' ? tasksOccurrenceSkip : tasksOccurrenceReopen
     void run(() => fn({ path: { occurrence_id: item.id }, body: { version: item.version } }))
   }
-  return <main className="le-tasks"><Link to="/tasks" search={true} className="le-link">{t.back}</Link><h1 className="title">{series.title}</h1>{series.archived && <p>{t.archived}</p>}<p>{series.description}</p><p>{series.schedule?.timezone ?? 'UTC'} · {formatTaskRule(series.schedule?.rrule)}</p>
+  return <main className="le-tasks"><Link to="/tasks" search={true} className="le-link">{t.back}</Link><h1 className="title">{series.title}</h1>{series.archived && <p>{t.archived}</p>}<p>{series.description}</p><p>{series.schedule?.timezone ?? 'UTC'} · {formatTaskRule(series.schedule?.rrule, locale)}</p>
     {series.source_message_id && <SourceMail id={series.source_message_id} />}
-    {(reconciling || !series.complete) && <p role="status">{t.incomplete} {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p>}
+    {(reconciling || !series.complete) && <p role="status">{t.incomplete} {formatTaskDue(window.due_from, locale)} – {formatTaskDue(window.due_to, locale)}</p>}
     {reconcileFailed && <Notice tone="danger" action={{ label: t.retry, onClick: () => setAttempt(value => value + 1) }}>{t.error}</Notice>}
     {error && <Notice tone="danger" action={conflict ? { label: t.refresh, onClick: refresh } : undefined}>{error}</Notice>}
-    <h2>{t.detail}</h2><p>{t.period}: {formatTaskDue(window.due_from)} – {formatTaskDue(window.due_to)}</p><div><Button variant="secondary" onClick={() => setPeriod(value => value - 1)}>{t.previousPeriod}</Button><Button variant="secondary" onClick={() => setPeriod(value => value + 1)}>{t.nextPeriod}</Button></div><ul>{occurrences.map(item => <li key={item.id}><span>{formatTaskDue(item.due_local)} · {item.status === 'open' ? t.open : item.status === 'completed' ? t.completed : item.status === 'skipped' ? t.skipped : t.cancelled}</span>{item.status === 'open' && <><Button variant="secondary" disabled={busy || conflict} onClick={() => transition(item, 'complete')}>{t.complete}</Button><Button variant="secondary" disabled={busy || conflict} onClick={() => transition(item, 'skip')}>{t.skip}</Button>{!series.archived && <Button variant="ghost" disabled={busy || conflict} onClick={() => { setEditing(item); setStart(item.due_local); setScope('occurrence') }}>{t.edit}</Button>}</>}{(item.status === 'completed' || item.status === 'skipped') && <Button variant="secondary" disabled={busy || conflict} onClick={() => transition(item, 'reopen')}>{t.reopen}</Button>}</li>)}</ul>
+    <h2>{t.detail}</h2><p>{t.period}: {formatTaskDue(window.due_from, locale)} – {formatTaskDue(window.due_to, locale)}</p><div><Button variant="secondary" onClick={() => setPeriod(value => value - 1)}>{t.previousPeriod}</Button><Button variant="secondary" onClick={() => setPeriod(value => value + 1)}>{t.nextPeriod}</Button></div><ul>{occurrences.map(item => <li key={item.id}><span>{formatTaskDue(item.due_local, locale)} · {item.status === 'open' ? t.open : item.status === 'completed' ? t.completed : item.status === 'skipped' ? t.skipped : t.cancelled}</span>{item.status === 'open' && <><Button variant="secondary" disabled={busy || conflict} onClick={() => transition(item, 'complete')}>{t.complete}</Button><Button variant="secondary" disabled={busy || conflict} onClick={() => transition(item, 'skip')}>{t.skip}</Button>{!series.archived && <Button variant="ghost" disabled={busy || conflict} onClick={() => { setEditing(item); setStart(item.due_local); setScope('occurrence') }}>{t.edit}</Button>}</>}{(item.status === 'completed' || item.status === 'skipped') && <Button variant="secondary" disabled={busy || conflict} onClick={() => transition(item, 'reopen')}>{t.reopen}</Button>}</li>)}</ul>
     {query.hasNextPage && <Button variant="secondary" onClick={() => { void query.fetchNextPage() }}>{t.more}</Button>}
     {editing && <form onSubmit={event => { event.preventDefault(); void run(() => tasksUpdate({ path: { series_id: id }, body: { expected_version: series.version, occurrence_id: editing.id, expected_occurrence_version: editing.version, scope, start, ...(scope === 'this_and_following' ? { timezone: series.schedule?.timezone ?? 'UTC' } : {}) } }), () => setEditing(undefined)) }}><h2>{t.edit}</h2><TaskSelect label={t.scope} value={scope} onChange={value => setScope(value as typeof scope)} options={[{ value: 'occurrence', label: t.onlyThis }, { value: 'this_and_following', label: t.following }]} /><TextField label={t.date} type={editing.due_local.includes('T') ? 'datetime-local' : 'date'} value={start} onChange={event => setStart(event.target.value)} required /><Button variant="primary" type="submit" disabled={busy || conflict}>{t.saveEdit}</Button><Button variant="secondary" onClick={() => setEditing(undefined)}>{t.cancel}</Button></form>}
     {!series.archived && <Button variant="secondary" disabled={busy || conflict} onClick={() => { void run(() => tasksArchive({ path: { series_id: id }, body: { expected_version: series.version } })) }}>{t.archive}</Button>}
@@ -63,6 +64,8 @@ export function TaskDetail({ id }: { id: string }) {
   </main>
 }
 function DeleteDialog({ busy, close, remove }: { busy: boolean; close: () => void; remove: () => void }) {
+  const { texts } = useI18n()
+  const t = texts.tasks
   const ref = useFocusTrap(true, () => { if (!busy) close() }), title = useId()
   return createPortal(<div className="le-scrim" onMouseDown={event => { if (!busy && event.target === event.currentTarget) close() }}><div className="le-dialog" role="dialog" aria-modal="true" aria-labelledby={title} ref={ref} tabIndex={-1}><h2 id={title} className="heading">{t.delete}</h2><p>{t.deleteWarning}</p><div className="le-dialog-actions"><Button variant="secondary" disabled={busy} onClick={close}>{t.cancel}</Button><Button variant="danger" disabled={busy} onClick={remove}>{t.delete}</Button></div></div></div>, document.body)
 }

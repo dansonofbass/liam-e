@@ -49,9 +49,8 @@ const RootDocument = ({ children }: { children: ReactNode }) => {
 };
 
 export const Route = createRootRouteWithContext<RouterContext>()({
-  // The locale the root screens speak (`root-screens.tsx`). The server resolves it per request and
-  // the browser hydrates with that answer, as the router carries `beforeLoad`'s context; in the
-  // browser it re-runs on each navigation and `router.invalidate()`, so a language switch shows.
+  // The initial language can vary between requests to the same URL.
+  headers: () => ({ Vary: "Accept-Language, Cookie", "Cache-Control": "private, no-cache" }),
   beforeLoad: () => ({ locale: contributedRootScreens.resolveLocale() }),
   head: ({ match }) => ({
     meta: [

@@ -10,9 +10,9 @@ from db.accessors import ui_settings as access
 from db.models.ui_settings import UiSettings
 
 
-def row(revision=1, swipe_left='archive', swipe_right='toggle_read') -> UiSettings:
+def row(revision=1, swipe_left='archive', swipe_right='toggle_read', locale='browser') -> UiSettings:
     return UiSettings(id='ui', owner_scope='installation', swipe_left=swipe_left,
-                      swipe_right=swipe_right, revision=revision, updated_at=datetime.now(timezone.utc))
+                      swipe_right=swipe_right, locale=locale, revision=revision, updated_at=datetime.now(timezone.utc))
 
 
 @pytest.fixture
@@ -30,7 +30,8 @@ def test_get_returns_the_canonical_first_configuration(client):
     assert body['swipe_left'] == 'archive' and body['swipe_right'] == 'toggle_read'
     assert body['revision'] == 1
     assert datetime.fromisoformat(body['updated_at']).tzinfo is not None
-    assert set(body) == {'swipe_left', 'swipe_right', 'revision', 'updated_at'}
+    assert body['locale'] == 'browser'
+    assert set(body) == {'swipe_left', 'swipe_right', 'locale', 'revision', 'updated_at'}
 
 
 def test_patch_applies_valid_actions_and_bumps_the_revision(client):
@@ -41,7 +42,19 @@ def test_patch_applies_valid_actions_and_bumps_the_revision(client):
     access.update.assert_awaited_once_with(1, swipe_left='trash', swipe_right='none')
 
 
+@pytest.mark.parametrize('locale', ['browser', 'de', 'en'])
+def test_patch_language_only_keeps_the_swipe_settings(client, locale):
+    response = client.patch('/api/v1/settings/ui', json={'expected_revision': 1, 'locale': locale})
+    assert response.status_code == 200
+    assert response.json()['locale'] == locale
+    assert response.json()['swipe_left'] == 'archive'
+    access.update.assert_awaited_once_with(1, locale=locale)
+
+
 @pytest.mark.parametrize('payload', [
+    {'expected_revision': 1, 'locale': 'fr'},
+    {'expected_revision': 1, 'locale': None},
+    {'expected_revision': 1, 'locale': 'en', 'owner_scope': 'untrusted'},
     {'expected_revision': 1, 'swipe_left': 'spam'},
     {'expected_revision': 1, 'swipe_left': 'delete'},
     {'expected_revision': 1, 'swipe_left': 'send'},

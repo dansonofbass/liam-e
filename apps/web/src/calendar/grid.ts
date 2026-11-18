@@ -1,3 +1,4 @@
+import { REFERENCE_LOCALE, intlLocale, type Locale } from '../i18n/locales'
 import type { ApiRoutersApiV1CalendarSchemasOccurrenceOut as OccurrenceOut } from '../api/generated/types.gen'
 import { addDays, browserZone, localBoundary } from './state'
 import type { CalendarView } from './url'
@@ -17,13 +18,13 @@ export function shift(view: CalendarView, date: string, step: -1 | 1): string {
   d.setUTCDate(Math.min(Number(date.slice(8, 10)), end))
   return d.toISOString().slice(0, 10)
 }
-export function periodTitle(view: CalendarView, date: string): string {
-  const format = (day: string, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('de-DE', { ...options, timeZone: 'UTC' }).format(new Date(day))
+export function periodTitle(view: CalendarView, date: string, locale: Locale = REFERENCE_LOCALE): string {
+  const format = (day: string, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(intlLocale[locale], { ...options, timeZone: 'UTC' }).format(new Date(day))
   if (view === 'month') return format(date, { month: 'long', year: 'numeric' })
   if (view === 'day') return format(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const { from, to } = visibleRange(view, date)
   const end = addDays(to, -1)
-  return new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).formatRange(new Date(from), new Date(end)).replace(/\s*–\s*/, '–')
+  return new Intl.DateTimeFormat(intlLocale[locale], { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).formatRange(new Date(from), new Date(end)).replace(/\s*–\s*/, '–')
 }
 export function monthCells(date: string): { day: string; inMonth: boolean }[] {
   const { from } = visibleRange('month', date)

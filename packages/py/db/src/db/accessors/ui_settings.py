@@ -13,10 +13,11 @@ from sqlalchemy.dialects.postgresql import insert
 
 from db.engine import get_session_maker
 from db.models._common import new_id, utcnow
-from db.models.ui_settings import OWNER_SCOPE, UiSettings
+from db.models.ui_settings import BROWSER_LOCALE, OWNER_SCOPE, UiSettings
 
 #: The actions a swipe direction may be assigned to; anything else is invalid.
 SWIPE_ACTIONS = ("none", "archive", "toggle_read", "trash")
+UI_LOCALES = (BROWSER_LOCALE, "de", "en")
 #: The canonical first assignment of a freshly initialized configuration.
 DEFAULT_SWIPE_LEFT = "archive"
 DEFAULT_SWIPE_RIGHT = "toggle_read"
@@ -83,7 +84,7 @@ async def _locked(session) -> UiSettings:
 
 
 async def update(
-    expected_revision: int, *, swipe_left: str | None = None, swipe_right: str | None = None
+    expected_revision: int, *, swipe_left: str | None = None, swipe_right: str | None = None, locale: str | None = None
 ) -> UiSettings:
     """Apply changes atomically while the caller still holds the current revision.
 
@@ -97,8 +98,12 @@ async def update(
         changes["swipe_left"] = _validated(swipe_left)
     if swipe_right is not None:
         changes["swipe_right"] = _validated(swipe_right)
+    if locale is not None:
+        if locale not in UI_LOCALES:
+            raise ValueError("unknown UI locale")
+        changes["locale"] = locale
     if not changes:
-        raise ValueError("an update needs at least one swipe assignment")
+        raise ValueError("an update needs at least one UI setting")
     async with get_session_maker()() as session:
         row = await _locked(session)
         if row.revision != expected_revision:

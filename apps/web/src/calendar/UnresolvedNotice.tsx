@@ -3,11 +3,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { calendarWriteCheck } from '../api/generated/sdk.gen'
 import { Notice } from '../ds'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import { trackWrite, writeOutcome, type UnresolvedWrite } from './write-state'
 
 /** Offers the check for writes whose outcome is still open; nothing is sent again. */
 export function UnresolvedNotice({ writes }: { writes: UnresolvedWrite[] }) {
+  const { texts } = useI18n()
   const client = useQueryClient(), [busy, setBusy] = useState(false), pending = useRef(false)
   if (!writes.length) return null
   const check = async () => {
@@ -22,5 +23,5 @@ export function UnresolvedNotice({ writes }: { writes: UnresolvedWrite[] }) {
       void client.invalidateQueries({ queryKey: ['calendar'] })
     }
   }
-  return <Notice tone="info" action={busy ? undefined : { label: de.calendar.check, onClick: () => { void check() } }}>{busy ? de.calendar.checking : de.calendar.unresolved}</Notice>
+  return <Notice tone="info" action={busy ? undefined : { label: texts.calendar.check, onClick: () => { void check() } }}>{busy ? texts.calendar.checking : texts.calendar.unresolved}</Notice>
 }

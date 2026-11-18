@@ -610,7 +610,7 @@ export const settingsUpdate = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Get Ui Settings
  *
- * The one confirmed assignment, initializing the canonical defaults on first read.
+ * The confirmed settings, initializing the canonical defaults on first read.
  */
 export const settingsUiGet = <ThrowOnError extends boolean = false>(options?: Options<SettingsUiGetData, ThrowOnError>): RequestResult<SettingsUiGetResponses, SettingsUiGetErrors, ThrowOnError> => (options?.client ?? client).get<SettingsUiGetResponses, SettingsUiGetErrors, ThrowOnError>({ url: '/api/v1/settings/ui', ...options });
 

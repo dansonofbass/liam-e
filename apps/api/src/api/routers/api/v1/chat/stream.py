@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse, StreamingResponse
 from mistralai_capabilities.fastapi.sse import event_stream_response, format_sse
 
 from api.errors import quiet_validation_route, refuse
+from api.locales import DEFAULT_LOCALE, Locale
 from api.mail.agent import run_turn_events
 from api.mail.context_resolver import resolve_context
 from api.mail.chat_events import ChatEvent as ChatEventUnion, ErrorEvent
@@ -31,6 +32,7 @@ class ChatStreamRequest(BaseModel):
     account_id: str | None = None
     prompt_revision_id: str | None = None
     without_preferences: bool = False
+    locale: Locale = Field(default=DEFAULT_LOCALE, description="Browser language when the saved setting follows the browser")
     context_message_id: str | None = None
     context_occurrence_id: str | None = None
     calendar_source_ids: list[str] = Field(default_factory=list, max_length=50)
@@ -83,6 +85,6 @@ async def chat_stream(body: ChatStreamRequest, request: Request) -> StreamingRes
         raise refuse(404, 'conversation_not_found', 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.')
     if body.conversation_id is None and body.model is not None and body.model not in {m.id for m in await list_chat_models()}:
         raise refuse(422, 'model_unknown', 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.')
-    resolved = await resolve_context(**body.model_dump())
+    resolved = await resolve_context(**body.model_dump(exclude={'locale'}))
     events = run_turn_events(**body.model_dump(), resolved_context=resolved)
     return event_stream_response(sse_frames(events, request.is_disconnected))

@@ -45,12 +45,13 @@ until something needs doing; then the effect of a click is clear.
 
 German examples in this section are UI text; keep their wording verbatim.
 
-### 2.1 Principle: written in German, not translated
+### 2.1 Write natural German and English
 
-Every UI text, including every assistant answer, must sound as if someone wrote it in German for
-you. English sentence patterns showing through, call-center clichés and bureaucratic German are
-errors, even if every individual word is correct. German is the source language; there is no
-English original being translated.
+Write each locale as someone would speak to the reader. German is the reference for existing
+wording. A caller chooses German, English, or the browser language in Settings → Language.
+The app uses English when none of the browser’s preferred languages are supported. German
+formatting follows §2.5. English uses month-first dates, 12-hour times, a decimal point, and
+a thousands comma.
 
 The owner's benchmark (2026-11-13): „Guten Morgen! Was kann ich für dich erledigen?“ sounds
 slapdash. „Hallo, was kann ich für dich tun?“ sounds right. This is an example of tone, not an
@@ -66,6 +67,13 @@ individual rule.
 - **The common German word first.** Anglicisms only where they are the normal everyday word
   (Mail, Chat, Newsletter, Link, Spam) or a platform term (Secret).
 - **No emojis, no exclamation marks** in the UI.
+
+In English, use plain words and direct address. Prefer sentence case, short verbs, and natural
+contractions. Use “email”, “account”, “inbox”, “thread”, “conversation”, “draft”, “archive”, “trash”,
+and “unsubscribe” consistently. Buttons state what they do, for example “Connect an account” or
+“Draft a reply”. A confirmation names the action and its consequences. Use curly quotation marks
+and the same spaced ellipsis for progress. Assistant replies use the user’s current language and use
+the app language when it is unclear.
 
 ### 2.3 Typical mistakes
 
@@ -163,9 +171,12 @@ The first two columns contain German UI terms and alternatives.
 
 ### 2.8 Where text lives
 
-All UI text is in one catalogue, `apps/web/src/i18n/de.ts`, grouped by view. This keeps every term
-in one place and consistent. `apps/web/src/i18n/format.ts` forms plurals, times, dates and sizes.
-Technical literals in TSX (paths, classes, English values) carry `// i18n-exempt`.
+UI copy lives in `apps/web/src/i18n/de.ts` and `apps/web/src/i18n/en.ts`, grouped by view.
+The German catalogue defines the required keys and argument types. `format.ts` formats dates,
+times and sizes in the active locale. Counts use `Intl.PluralRules` and locale-specific number
+formatting. Structured API errors are rendered from a catalogue by code, using the supplied
+server message when a code is unknown. Technical literals in TSX, such as paths and class names,
+carry `// i18n-exempt`. Stored content and provider text are shown in their original wording.
 
 ## 3. Color
 
@@ -654,7 +665,7 @@ DESIGN.md follows the structure and rules of an older design brief from the owne
 - **Soft shape:** pill buttons, radii up to 24 px, colored bubble for own messages and shadows for
   floating surfaces; the source is flatter and separates without shadows.
 - **No monospace font:** numbers are tabular rather than in a second family.
-- **German as the only UI language**; there is no English version.
+- **German and English UI catalogues.** Existing German wording is the reference.
 
 ## Decided (2026-11-13, owner)
 

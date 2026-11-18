@@ -1120,6 +1120,16 @@
             ],
             "title": "Conversation Id"
           },
+          "locale": {
+            "default": "en",
+            "description": "Browser language when the saved setting follows the browser",
+            "enum": [
+              "de",
+              "en"
+            ],
+            "title": "Locale",
+            "type": "string"
+          },
           "model": {
             "anyOf": [
               {
@@ -1238,6 +1248,16 @@
             "default": "",
             "description": "Leer lassen f\u00fcr eine neue Unterhaltung",
             "title": "Conversation Id",
+            "type": "string"
+          },
+          "locale": {
+            "default": "en",
+            "description": "Browser language when the saved setting follows the browser",
+            "enum": [
+              "de",
+              "en"
+            ],
+            "title": "Locale",
             "type": "string"
           },
           "message": {
@@ -5784,6 +5804,15 @@
       },
       "UiSettingsOut": {
         "properties": {
+          "locale": {
+            "enum": [
+              "browser",
+              "de",
+              "en"
+            ],
+            "title": "Locale",
+            "type": "string"
+          },
           "revision": {
             "title": "Revision",
             "type": "integer"
@@ -5817,6 +5846,7 @@
         "required": [
           "swipe_left",
           "swipe_right",
+          "locale",
           "revision",
           "updated_at"
         ],
@@ -5825,12 +5855,28 @@
       },
       "UiSettingsUpdate": {
         "additionalProperties": false,
-        "description": "A change to the swipe assignment; the owner scope is not part of the contract.",
+        "description": "A change to the UI settings; the owner scope is not part of the contract.",
         "properties": {
           "expected_revision": {
             "minimum": 1.0,
             "title": "Expected Revision",
             "type": "integer"
+          },
+          "locale": {
+            "anyOf": [
+              {
+                "enum": [
+                  "browser",
+                  "de",
+                  "en"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
           },
           "swipe_left": {
             "anyOf": [
@@ -8420,6 +8466,20 @@
               "title": "Message Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "enum": [
+                "de",
+                "en"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9075,7 +9135,7 @@
     },
     "/api/v1/settings/ui": {
       "get": {
-        "description": "The one confirmed assignment, initializing the canonical defaults on first read.",
+        "description": "The confirmed settings, initializing the canonical defaults on first read.",
         "operationId": "settings_ui_get",
         "responses": {
           "200": {

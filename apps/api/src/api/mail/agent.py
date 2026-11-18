@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from db.accessors import chat_conversation as conversation_access, chat_message as message_access
 from db.accessors import mail_account, mail_insight, mail_message, chat_context, calendar_occurrence, preference_revision
+from api.locales import DEFAULT_LOCALE, Locale, resolve_locale
 from api.mail.context_resolver import resolve_context
 from env.mail import env as mail_env
 from api.mail.chat_client import mistral_client
@@ -61,8 +62,14 @@ def visible_messages(rows):
     return [r for r in rows if r.role != 'tool' and not (r.role == 'assistant' and r.tool_payload_json)]
 
 
-async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, context_message_id: str | None = None, model: str | None = None, prompt_revision_id: str | None = None, calendar_source_ids: list[str] | None = None, context_occurrence_id: str | None = None, calendar_timezone: str = 'Europe/Berlin', task_source: str = 'none', task_source_account_id: str | None = None, without_preferences: bool = False, resolved_context=None) -> AsyncIterator[ChatEvent]:
+async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, context_message_id: str | None = None, model: str | None = None, prompt_revision_id: str | None = None, calendar_source_ids: list[str] | None = None, context_occurrence_id: str | None = None, calendar_timezone: str = 'Europe/Berlin', task_source: str = 'none', task_source_account_id: str | None = None, without_preferences: bool = False, locale: Locale = DEFAULT_LOCALE, resolved_context=None) -> AsyncIterator[ChatEvent]:
     """All rounds share one persisted snapshot; revocation is checked at each boundary."""
+    try:
+        effective_locale = await resolve_locale(locale)
+    except SQLAlchemyError as error:
+        logger.warning("UI settings lookup failed: %s", type(error).__name__)
+        yield ErrorEvent(code='internal')
+        return
     conversation, snapshot, template_text = resolved_context or await resolve_context(
         conversation_id=conversation_id, text=text, account_id=account_id,
         model=model, prompt_revision_id=prompt_revision_id, calendar_source_ids=calendar_source_ids, calendar_timezone=calendar_timezone,
@@ -97,7 +104,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         account = await mail_account.get_account(account_id) if account_id else None
         ctx = TurnContext(conversation.id, account.id if account else None, datetime.now(ZoneInfo(calendar_timezone)).date(), account_ids=scope_ids, context_id=snapshot.id, source_message_id=user.id,
                           calendar_source_ids=json.loads(getattr(snapshot, 'calendar_scope_json', '[]')), calendar_timezone=calendar_timezone,
-                          task_scope=json.loads(getattr(snapshot, 'task_scope_json', '{"source":"none"}')))
+                          task_scope=json.loads(getattr(snapshot, 'task_scope_json', '{"source":"none"}')), locale=effective_locale, browser_locale=locale)
         history = await message_access.list_messages(conversation.id)
         context_ids = {row.context_id for row in history if row.context_id}
         contexts = await chat_context.get_contexts(context_ids)
@@ -118,7 +125,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         history = [row for row in history if not row.context_id or
                    (row.role not in ('tool', 'proposal', 'draft') and not row.tool_payload_json) or
                    (row.context_id in contexts and not contexts[row.context_id].revoked)]
-        messages = _to_model_messages(history, prompt=system_prompt(today=ctx.today, account_scope=account.email_address if account else None))
+        messages = _to_model_messages(history, prompt=system_prompt(today=ctx.today, account_scope=account.email_address if account else None, locale=effective_locale))
         if preference_ids:
             messages.insert(1, {'role': 'user', 'content': 'Passende manuell bestätigte Stilpräferenzen (nachrangig zur aktuellen Bitte und Vorlage):\n' +
                 json.dumps([{'key': rev.key, 'scope': rev.scope, 'value': rev.value} for rev in revisions], ensure_ascii=False)})

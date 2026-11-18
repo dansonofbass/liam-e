@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from 'react'
 import type { WriteOutcome } from '../api/generated/types.gen'
 import { errorCode } from '../api/unwrap'
-import { de } from '../i18n/de'
+import { catalogue } from '../i18n/catalogue'
+import { REFERENCE_LOCALE, type Locale } from '../i18n/locales'
 
-export function writeError(code?: string | null): string {
-  return de.calendar.writeErrors[code as keyof typeof de.calendar.writeErrors] ?? de.calendar.writeErrors.calendar_write_unknown
+export function writeError(code?: string | null, locale: Locale = REFERENCE_LOCALE): string {
+  const errors = catalogue(locale).calendar.writeErrors
+  return errors[code as keyof typeof errors] ?? errors.calendar_write_unknown
 }
 // HTTP conflicts carry the outcome under detail, unlike successful and pending responses.
 export function writeOutcome(result: { data?: WriteOutcome; error?: unknown; response?: { status: number } }): WriteOutcome {
