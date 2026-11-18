@@ -99,7 +99,7 @@
 .le-time-days [aria-current="date"] strong, .le-month-date[aria-current="date"] { background: var(--accent-soft); color: var(--accent); border-radius: var(--radius-pill); }
 .le-time-days strong { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; }
 .le-time-all-days { border-bottom: 1px solid var(--line); align-items: start; }
-.le-time-all-label { color: var(--ink-muted); font-size: var(--font-size-caption); overflow: hidden; }
+.le-time-all-label { color: var(--ink-muted); font-size: var(--font-size-caption); min-width: 0; overflow-wrap: anywhere; hyphens: auto; padding-inline: var(--space-1); }
 .le-time-all-day { color: var(--ink); font-size: var(--font-size-caption); padding: var(--space-1); text-decoration: none; }
 .le-time-scroll { overflow: auto; min-height: 0; flex: 1; }
 .le-time-gutter { position: relative; }

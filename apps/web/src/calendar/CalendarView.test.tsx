@@ -64,6 +64,16 @@ test('mobile month shows dots and the selected day appointments', async () => {
   fireEvent.click(screen.getByRole('button', { name: /19\.11\.2026/ }))
   expect(screen.queryByRole('link', { name: /Termin a/ })).toBeNull()
 })
+test('all-day gutter wraps its complete label rather than clipping it', async () => {
+  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
+  const rule = css.match(/\.le-time-all-label \{([^}]+)\}/u)?.[1] ?? ''
+  expect(rule).toContain('overflow-wrap: anywhere')
+  expect(rule).not.toContain('overflow: hidden')
+  const root = createRootRoute({ component: () => <TimeGrid from="2026-11-18" to="2026-11-19" rows={[]} sources={[]} onSlot={() => {}} onOpen={() => {}} /> })
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  render(<RouterProvider router={router} />)
+  expect((await screen.findByText(de.calendar.allDay)).getAttribute('aria-hidden')).not.toBe('true')
+})
 test('mobile calendar targets have coarse pointer token sizing', async () => {
   const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
   const coarse = css.match(/@media \(pointer: coarse\) \{([\s\S]*?)\n\}/gu)?.join('\n') ?? ''
