@@ -3261,7 +3261,7 @@ export type TaskWindow = {
  * TranscriptionCapabilityOut
  */
 export type TranscriptionCapabilityOut = {
-    app_limits?: TranscriptionLimitsOut;
+    app_limits: TranscriptionLimitsOut;
     /**
      * Checked At
      */
@@ -3295,15 +3295,15 @@ export type TranscriptionLimitsOut = {
     /**
      * Max Concurrent Requests
      */
-    max_concurrent_requests?: number;
+    max_concurrent_requests: number;
     /**
      * Max Duration Seconds
      */
-    max_duration_seconds?: number;
+    max_duration_seconds: number;
     /**
      * Max Upload Bytes
      */
-    max_upload_bytes?: number;
+    max_upload_bytes: number;
 };
 
 /**

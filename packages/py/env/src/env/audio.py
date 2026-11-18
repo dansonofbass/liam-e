@@ -1,4 +1,4 @@
-"""Model selection and reviewed release evidence for the two audio capabilities."""
+"""Model selection and reviewed Studio release evidence for the two audio capabilities."""
 
 from env._base import BaseEnv
 

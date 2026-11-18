@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 import re
 import time
+from typing import NoReturn
 
 SYNTHETIC = "Eine gelbe Ente schwimmt im Teich."
 TRANSCRIPTION_MODEL = "voxtral-mini-transcribe-3"
@@ -89,8 +90,15 @@ def run_probe(task: str, scratch: Path, result: dict) -> None:
         result["provider_audio_seconds"] = seconds if isinstance(seconds, (int, float)) else None
 
 
+class _QuietParser(argparse.ArgumentParser):
+    """Emit fixed usage errors because argparse can echo argument values."""
+
+    def error(self, message: str) -> NoReturn:
+        self.exit(2, "invalid arguments; see --help\n")
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Probe Mistral speech APIs with synthetic data")
+    parser = _QuietParser(description="Probe Mistral speech APIs with synthetic data")
     parser.add_argument("task", choices=("tts", *FIXTURES))
     parser.add_argument("scratch", type=Path, help="private scratch directory holding synthetic fixtures")
     parser.add_argument("--live", action="store_true", help="send one synthetic request to the official Mistral API")

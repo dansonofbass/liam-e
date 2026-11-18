@@ -5995,29 +5995,33 @@
           "status",
           "reason",
           "model",
-          "formats"
+          "formats",
+          "app_limits"
         ],
         "title": "TranscriptionCapabilityOut",
         "type": "object"
       },
       "TranscriptionLimitsOut": {
+        "additionalProperties": false,
         "properties": {
           "max_concurrent_requests": {
-            "default": 1,
             "title": "Max Concurrent Requests",
             "type": "integer"
           },
           "max_duration_seconds": {
-            "default": 120,
             "title": "Max Duration Seconds",
             "type": "integer"
           },
           "max_upload_bytes": {
-            "default": 10485760,
             "title": "Max Upload Bytes",
             "type": "integer"
           }
         },
+        "required": [
+          "max_upload_bytes",
+          "max_duration_seconds",
+          "max_concurrent_requests"
+        ],
         "title": "TranscriptionLimitsOut",
         "type": "object"
       },

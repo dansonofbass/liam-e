@@ -11,6 +11,8 @@ from conftest import build_app
 
 PATH = "/api/v1/audio/capabilities"
 CHECKED_AT = "2026-01-01T10:00:00Z"
+STT_LIMITS = {"max_upload_bytes": 10_485_760, "max_duration_seconds": 120, "max_concurrent_requests": 1}
+TTS_LIMITS = {"max_input_characters": 500, "max_response_bytes": 1_000_000, "timeout_seconds": 20}
 
 
 @pytest.mark.parametrize(
@@ -94,8 +96,8 @@ def test_audio_capabilities_default_to_unknown_without_provider_traffic(
 
 def test_a_failed_tts_verification_does_not_disable_verified_stt(owner_client: TestClient, audio_settings) -> None:
     audio_settings.audio_stt_verification = verification(
-        "voxtral-mini-transcribe-3", outcome="verified",
-        resolved_model="voxtral-mini-transcribe-3-test", formats=["audio/webm;codecs=opus"],
+        "voxtral-mini-transcribe-3", outcome="verified", scope="studio_release",
+        resolved_model="voxtral-mini-transcribe-3-test", formats=["audio/webm;codecs=opus"], app_limits=STT_LIMITS,
     )
     audio_settings.audio_tts_verification = verification("voxtral-mini-tts-3-0", outcome="failed")
 
@@ -114,9 +116,9 @@ def test_a_failed_tts_verification_does_not_disable_verified_stt(owner_client: T
 
 def test_a_failed_stt_verification_does_not_disable_verified_tts(owner_client: TestClient, audio_settings) -> None:
     audio_settings.audio_stt_verification = verification("voxtral-mini-transcribe-3", outcome="failed")
-    limits = {"max_input_characters": 500, "max_response_bytes": 1_000_000, "timeout_seconds": 20}
     audio_settings.audio_tts_verification = verification(
-        "voxtral-mini-tts-3-0", outcome="verified", formats=["audio/mpeg"], app_limits=limits,
+        "voxtral-mini-tts-3-0", outcome="verified", scope="studio_release",
+        formats=["audio/mpeg"], app_limits=TTS_LIMITS,
     )
 
     body = owner_client.get(PATH).json()
@@ -124,29 +126,35 @@ def test_a_failed_stt_verification_does_not_disable_verified_tts(owner_client: T
     assert body["stt"]["status"] == "unavailable"
     assert body["tts"]["status"] == "available"
     assert body["tts"]["formats"] == ["audio/mpeg"]
-    assert body["tts"]["app_limits"] == limits
+    assert body["tts"]["app_limits"] == TTS_LIMITS
 
 
 @pytest.mark.parametrize(
-    "unqualified",
+    "overrides",
     [
-        verification("voxtral-mini-transcribe-3-test", outcome="verified", formats=["audio/webm;codecs=opus"]),
-        verification("voxtral-mini-transcribe-3", outcome="verified"),
-        verification("voxtral-mini-transcribe-3", outcome="verified", formats=["audio/anything"]),
-        verification(
-            "voxtral-mini-transcribe-3", outcome="verified",
-            formats=["audio/webm;codecs=opus"], reason="private-probe-notes-test-only",
-        ),
-        json.dumps({
-            "model": "voxtral-mini-transcribe-3", "outcome": "verified",
-            "formats": ["audio/webm;codecs=opus"], "checked_at": "2999-01-01T00:00:00Z",
-        }),
+        {"model": "voxtral-mini-transcribe-3-test"},
+        {"formats": []},
+        {"formats": ["audio/anything"]},
+        {"reason": "private-probe-notes-test-only"},
+        {"checked_at": "2999-01-01T00:00:00Z"},
+        {"scope": None},
+        {"scope": "provider"},
+        {"app_limits": None},
+        {"app_limits": {}},
+        {"app_limits": {**STT_LIMITS, "max_upload_bytes": 1_000_000}},
+        {"app_limits": {**STT_LIMITS, "max_duration_seconds": 60}},
+        {"app_limits": {**STT_LIMITS, "max_concurrent_requests": 2}},
     ],
 )
 def test_unbound_or_incomplete_evidence_does_not_enable_stt(
-    owner_client: TestClient, audio_settings, unqualified: str
+    owner_client: TestClient, audio_settings, overrides: dict[str, Any]
 ) -> None:
-    audio_settings.audio_stt_verification = unqualified
+    release = {
+        "model": "voxtral-mini-transcribe-3", "checked_at": CHECKED_AT,
+        "outcome": "verified", "scope": "studio_release", "formats": ["audio/webm;codecs=opus"],
+        "app_limits": STT_LIMITS,
+    }
+    audio_settings.audio_stt_verification = json.dumps(release | overrides)
 
     response = owner_client.get(PATH)
 
@@ -156,9 +164,33 @@ def test_unbound_or_incomplete_evidence_does_not_enable_stt(
     assert response.json()["stt"]["formats"] == []
 
 
+def test_provider_success_without_release_scope_keeps_both_branches_unknown(
+    owner_client: TestClient, audio_settings
+) -> None:
+    audio_settings.audio_stt_verification = verification(
+        "voxtral-mini-transcribe-3", outcome="verified", formats=["audio/webm;codecs=opus"],
+    )
+    audio_settings.audio_tts_verification = verification(
+        "voxtral-mini-tts-3-0", outcome="verified", formats=["audio/mpeg"], app_limits=TTS_LIMITS,
+    )
+
+    body = owner_client.get(PATH).json()
+
+    assert [body[capability]["status"] for capability in ("stt", "tts")] == ["unknown", "unknown"]
+
+
+@pytest.mark.parametrize("scope", [None, "provider"])
+def test_provider_evidence_cannot_enable_tts(owner_client: TestClient, audio_settings, scope: str | None) -> None:
+    audio_settings.audio_tts_verification = verification(
+        "voxtral-mini-tts-3-0", outcome="verified", scope=scope, formats=["audio/mpeg"], app_limits=TTS_LIMITS,
+    )
+
+    assert owner_client.get(PATH).json()["tts"]["status"] == "unknown"
+
+
 def test_unbounded_speech_verification_cannot_enable_tts(owner_client: TestClient, audio_settings) -> None:
     audio_settings.audio_tts_verification = verification(
-        "voxtral-mini-tts-3-0", outcome="verified", formats=["audio/mpeg"],
+        "voxtral-mini-tts-3-0", outcome="verified", scope="studio_release", formats=["audio/mpeg"],
     )
 
     body = owner_client.get(PATH).json()

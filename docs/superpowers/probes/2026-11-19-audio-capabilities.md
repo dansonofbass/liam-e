@@ -88,12 +88,19 @@ objects. Both are `unknown` until their own current model and evidence match.
 `AUDIO_STT_MODEL` and `AUDIO_TTS_MODEL` default to the candidates above. The corresponding
 `AUDIO_STT_VERIFICATION` and `AUDIO_TTS_VERIFICATION` are optional JSON objects with a matching
 `model`, timezone-aware `checked_at`, `outcome` and optional `resolved_model`. A `failed` outcome
-reports `unavailable`. A `verified` outcome is an owner-reviewed release attestation and requires
-one or more checked formats. TTS also requires `app_limits` with positive
-`max_input_characters`, `max_response_bytes` and `timeout_seconds`. Missing, invalid or
-mismatched evidence stays unknown. No attestation is configured from this probe. When a
-deployment, credential, model, format or data-handling term changes, clear the affected
-attestation until its release checks have run again.
+reports `unavailable`. Availability requires `outcome: "verified"`, explicit
+`scope: "studio_release"`, one or more checked `formats` and `app_limits`. The release scope
+records the owner's review of the deployed Studio path for that capability, including the trusted
+owner check, runtime credential, gateway bounds, target devices and effective workspace data
+handling. A successful local provider check can use `scope: "provider"` and leaves the
+capability `unknown`. Missing or mismatched evidence also leaves it `unknown`.
+
+The STT attestation must explicitly match the app's limits of `max_upload_bytes: 10485760`,
+`max_duration_seconds: 120` and `max_concurrent_requests: 1`. Each listed input format needs
+proof that the deployed path enforces size, container and duration. TTS requires positive
+`max_input_characters`, `max_response_bytes` and `timeout_seconds` that the deployed path enforces.
+Both attestations remain unset. When a deployment, credential, model, format, limit or
+data-handling term changes, clear the affected attestation until its release checks have run again.
 
 ## Reproduce with synthetic data
 
@@ -151,3 +158,4 @@ processes and delete the scratch directory after inspecting the redacted results
 - `bash tools/uv.sh run --no-sync pytest -q apps/api/tests tests` passed 1,172 tests, including the owner boundary, separate capability states, and publication hygiene.
 - `bun run check` passed build, type checks, and generated-client drift checks. `bun run test -- --output-style=static` passed the three project test targets. The database target skipped 205 PostgreSQL cases.
 - The API suite emitted a pre-existing `Connection._cancel` coroutine warning, which also appeared on the unchanged baseline.
+- The follow-up review added offline regression tests for provider-only evidence, exact STT limits, and redaction of invalid probe arguments.

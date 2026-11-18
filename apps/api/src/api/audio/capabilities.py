@@ -31,9 +31,16 @@ class _CapabilityState(BaseModel):
 
 
 class TranscriptionLimitsOut(BaseModel):
-    max_upload_bytes: int = 10 * 1024 * 1024
-    max_duration_seconds: int = 120
-    max_concurrent_requests: int = 1
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    max_upload_bytes: int
+    max_duration_seconds: int
+    max_concurrent_requests: int
+
+
+_TRANSCRIPTION_APP_LIMITS = TranscriptionLimitsOut(
+    max_upload_bytes=10 * 1024 * 1024, max_duration_seconds=120, max_concurrent_requests=1,
+)
 
 
 class SpeechLimitsOut(BaseModel):
@@ -46,7 +53,7 @@ class SpeechLimitsOut(BaseModel):
 
 class TranscriptionCapabilityOut(_CapabilityState):
     formats: tuple[TranscriptionFormat, ...]
-    app_limits: TranscriptionLimitsOut = Field(default_factory=TranscriptionLimitsOut)
+    app_limits: TranscriptionLimitsOut
 
 
 class SpeechCapabilityOut(_CapabilityState):
@@ -66,15 +73,23 @@ class _Verification(BaseModel):
     checked_at: AwareDatetime
     resolved_model: AudioModelId | None = None
     outcome: Literal["verified", "failed"]
+    scope: Literal["provider", "studio_release"] | None = None
+
+    @model_validator(mode="after")
+    def require_studio_release_scope(self):
+        if self.outcome == "verified" and self.scope != "studio_release":
+            raise ValueError("availability requires a reviewed Studio release attestation")
+        return self
 
 
 class _TranscriptionVerification(_Verification):
     formats: tuple[TranscriptionFormat, ...] = Field(default=(), max_length=2)
+    app_limits: TranscriptionLimitsOut | None = None
 
     @model_validator(mode="after")
-    def require_formats(self):
-        if self.outcome == "verified" and not self.formats:
-            raise ValueError("a verified transcription capability requires a checked format")
+    def require_format_and_limits(self):
+        if self.outcome == "verified" and (not self.formats or self.app_limits != _TRANSCRIPTION_APP_LIMITS):
+            raise ValueError("verified transcription requires checked formats and the current application limits")
         return self
 
 
@@ -119,7 +134,11 @@ def audio_capabilities() -> AudioCapabilitiesOut:
     stt, stt_evidence = _resolve_verification(env.audio_stt_model, env.audio_stt_verification, _TranscriptionVerification)
     tts, tts_evidence = _resolve_verification(env.audio_tts_model, env.audio_tts_verification, _SpeechVerification)
     return AudioCapabilitiesOut(
-        stt=TranscriptionCapabilityOut(**stt.model_dump(), formats=stt_evidence.formats if stt_evidence else ()),
+        stt=TranscriptionCapabilityOut(
+            **stt.model_dump(),
+            formats=stt_evidence.formats if stt_evidence else (),
+            app_limits=_TRANSCRIPTION_APP_LIMITS,
+        ),
         tts=SpeechCapabilityOut(
             **tts.model_dump(),
             formats=tts_evidence.formats if tts_evidence else (),
