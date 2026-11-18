@@ -628,8 +628,8 @@ DESIGN.md follows the structure and rules of an older design brief from the owne
 Quoted German labels in this section are UI text.
 
 1. **New design system**, style direction C „Weich“; no existing design system is adopted.
-2. **Home page is chat** with quick actions: summarize unread, prioritize, clean up newsletters,
-   due today.
+2. **Home page is chat** with the quick actions „Ungelesenes zusammenfassen“, „Priorisieren“,
+   „Newsletter aufräumen“ and „Heute fällig“.
 3. **Propose and confirm with one click**, nothing without confirmation (§9.2). Rules that act
    without asking are to be decided separately later.
 4. **Design:** tidy, clearly recognizable buttons with tooltips, clean navigation, fluid transitions,
@@ -664,8 +664,8 @@ Quoted German labels in this section are UI text.
 6. **Gmail probe** (replies through the connector, To and Cc) is done by the owner personally.
 7. **CI:** a GitHub workflow runs the previously local-only checks.
 8. **Design system „liam-e“** in Claude Design is kept aligned with DESIGN.md and code (§10).
-9. **Theme switch** light, dark, system, stored in browser, at the bottom of the sidebar beside the
-   status line (§3).
+9. **Theme switch** „Hell“, „Dunkel“, „System“, stored in browser, at the bottom of the sidebar
+   beside the status line (§3).
 10. **Focus:** input and composer show the focus ring from §8 like all other controls.
 11. **Arbitrary values cleaned up:** font sizes only via tokens, spacing on the 4-px grid (§4, §5).
 
