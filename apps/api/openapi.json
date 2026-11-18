@@ -1586,21 +1586,6 @@
       },
       "GoogleCalendarOut": {
         "properties": {
-          "access": {
-            "anyOf": [
-              {
-                "enum": [
-                  "owner",
-                  "reader"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Access"
-          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1629,7 +1614,6 @@
           "id",
           "name",
           "timezone",
-          "access",
           "source_id"
         ],
         "title": "GoogleCalendarOut",

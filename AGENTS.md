@@ -321,11 +321,15 @@ bestehende Quellen unverändert. `calendar_google_calendars_list` bleibt wegen d
 und privater Kalendernamen browser-only und gehört nicht in die Studio-Leseliste.
 Die Verbindung bindet `connection_ref` an `google_calendar#<fingerprint>`: SHA-256 aus
 `google_calendar:` plus der obersten `summary` einer Hauptkalender-Terminliste, gekürzt auf
-16 Hexzeichen. Vor jedem Snapshot wird diese Identität mit einem kleinen Hauptkalenderfenster
-erneut geprüft. Abweichungen sperren den Abruf als `reconnect_required`, ohne den Index zu ändern.
+16 Hexzeichen. Vor und nach jedem Snapshot-Listing wird diese Identität mit einem kleinen Hauptkalenderfenster
+erneut geprüft; ein fehlender Kalender wird bei geänderter Identität ebenfalls als
+`reconnect_required` gemeldet. Abweichungen sperren den Abruf, ohne den Index zu ändern. Ein
+Kontowechsel genau zwischen der letzten Prüfung und dem Speichern bleibt ohne Unterstützung des
+Anbieters möglich.
 Ein anderes verbundenes Google-Konto erzeugt neue Quellen, übernimmt nie alte Quellen.
 Dies ist das verfügbare Identitätssignal des Connectors, keine unveränderliche Google-Account-ID;
-eine geänderte Hauptkalenderbezeichnung kann daher ebenfalls ein erneutes Verbinden erfordern.
+eine geänderte Hauptkalenderbezeichnung kann daher ebenfalls ein erneutes Verbinden erfordern,
+und zwei Konten mit gleicher Hauptkalenderbezeichnung sind nicht unterscheidbar.
 Snapshots lesen alle Seiten des festen Fensters heute −30 bis +180 Tage, höchstens 40 Seiten
 und 10.000 Instanzen. Fehlende Seiten, Fehler und Grenzen liefern nie einen Teilsnapshot.
 Instanz-ID und `recurringEventId` erhalten verschobene Instanzen und Serienbezug;

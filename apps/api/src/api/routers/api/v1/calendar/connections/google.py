@@ -1,7 +1,7 @@
 """Discover and connect read-only Studio calendars; never accept connection identities."""
 
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated
 
 from db.accessors import calendar_source
 from env.calendar import env
@@ -39,7 +39,6 @@ class GoogleCalendarOut(BaseModel):
     id: str
     name: str
     timezone: str
-    access: Literal["owner", "reader"] | None
     source_id: str | None
 
 

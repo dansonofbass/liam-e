@@ -43,8 +43,8 @@ def test_list_links_only_current_identity_and_redacts_connection_data(client, mo
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     assert response.json() == {"calendars": [
-        {"id": "work@example.org", "name": "Werkstatt", "timezone": "Europe/Berlin", "access": None, "source_id": row.id},
-        {"id": "garden@example.org", "name": "Garten", "timezone": "UTC", "access": None, "source_id": None},
+        {"id": "work@example.org", "name": "Werkstatt", "timezone": "Europe/Berlin", "source_id": row.id},
+        {"id": "garden@example.org", "name": "Garten", "timezone": "UTC", "source_id": None},
     ]}
     assert "description" not in response.text and "connection_ref" not in response.text
     assert [tool for tool, _ in discovery] == ["list_events", "list_calendars", "list_calendars", "list_events"]
@@ -63,7 +63,7 @@ def test_unknown_id_is_rejected_before_any_sources_are_created(client, monkeypat
 def test_connect_passes_only_server_metadata_and_returns_public_sources(client, monkeypatch, discovery):
     async def connect(ref, selected, **kwargs):
         assert ref.startswith("google_calendar#")
-        assert selected == [{"id": "garden@example.org", "name": "Garten", "timezone": "UTC", "access": None}]
+        assert selected == [{"id": "garden@example.org", "name": "Garten", "timezone": "UTC"}]
         assert kwargs["interval"] == 5
         return [CalendarSource(provider="google", connection_ref=ref, external_id=selected[0]["id"], name=selected[0]["name"], timezone="UTC", capabilities_json='["read"]')]
 

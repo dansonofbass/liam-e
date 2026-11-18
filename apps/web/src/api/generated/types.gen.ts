@@ -930,10 +930,6 @@ export type FeedPreviewOut = {
  */
 export type GoogleCalendarOut = {
     /**
-     * Access
-     */
-    access: 'owner' | 'reader' | null;
-    /**
      * Id
      */
     id: string;

@@ -115,6 +115,31 @@ async def test_failed_snapshot_records_only_public_code_and_never_activates(sour
         assert count == 40
 
 
+@pytest.mark.parametrize("switch", ["after_listing", "missing_calendar"])
+async def test_identity_switch_during_snapshot_never_stores_pages(source, monkeypatch, switch):
+    from db.accessors import calendar_feed_sync
+    errors = []
+    listed = False
+
+    async def call(tool, arguments):
+        nonlocal listed
+        if "calendarId" not in arguments:
+            return {"summary": "other@example.org" if listed else "work@example.org", "events": []}
+        listed = True
+        if switch == "missing_calendar":
+            raise google.GoogleError("calendar_unavailable")
+        return fixture("events_moved")
+
+    async def record(identifier, **kwargs):
+        errors.append(kwargs)
+
+    monkeypatch.setattr(calendar_feed_sync, "failure", record)
+    adapter = google.GoogleConnectorAdapter(call=call, clock=lambda: START)
+    with pytest.raises(google.GoogleError, match="^reconnect_required$"):
+        await adapter.snapshot(source.id, START, END)
+    assert errors[0]["code"] == "reconnect_required" and errors[0]["delay_seconds"] is None
+
+
 @pytest.mark.parametrize("status,expected", [(401, "reconnect_required"), (403, "reconnect_required"),
     (404, "calendar_unavailable"), (429, "provider_unavailable"), (500, "provider_unavailable")])
 async def test_http_errors_are_redacted(monkeypatch, status, expected):

@@ -7,9 +7,9 @@ import { CalendarSetup } from './FeedSetup'
 import { de } from '../i18n/de'
 
 const calendars = [
-  { id: 'work@example.org', name: 'Werkstatt', timezone: 'Europe/Berlin', access: null, source_id: null },
-  { id: 'garden@example.org', name: 'Garten', timezone: 'UTC', access: null, source_id: null },
-  { id: 'connected@example.org', name: 'Bereits da', timezone: 'UTC', access: null, source_id: 'test-only-source' },
+  { id: 'work@example.org', name: 'Werkstatt', timezone: 'Europe/Berlin', source_id: null },
+  { id: 'garden@example.org', name: 'Garten', timezone: 'UTC', source_id: null },
+  { id: 'connected@example.org', name: 'Bereits da', timezone: 'UTC', source_id: 'test-only-source' },
 ]
 
 afterEach(() => { cleanup(); mock.restore() })

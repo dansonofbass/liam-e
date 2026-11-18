@@ -183,9 +183,8 @@ async def calendars() -> tuple[str, list[dict]]:
                     or not isinstance(name, str)):
                 raise GoogleError()
             ids.add(identifier)
-            result.append({"id": identifier, "name": name,
-                           "timezone": timezone(raw.get("timeZone")),
-                           "access": raw.get("accessRole") if raw.get("accessRole") in ("owner", "reader") else None})
+            # list_calendars carries no per-calendar access role, so none is reported.
+            result.append({"id": identifier, "name": name, "timezone": timezone(raw.get("timeZone"))})
     # A connector switched during discovery must not attach old selections to a new identity.
     if await identity() != ref:
         raise GoogleError("reconnect_required")
@@ -214,10 +213,19 @@ class GoogleConnectorAdapter:
         try:
             if await identity(call=call, now=self.clock()) != source.connection_ref:
                 raise GoogleError("reconnect_required")
-            listing = await pages(call, "list_events", {
-                "calendarId": source.external_id, "startTime": start.astimezone(UTC).isoformat(),
-                "endTime": end.astimezone(UTC).isoformat(), "pageSize": 250,
-            })
+            try:
+                listing = await pages(call, "list_events", {
+                    "calendarId": source.external_id, "startTime": start.astimezone(UTC).isoformat(),
+                    "endTime": end.astimezone(UTC).isoformat(), "pageSize": 250,
+                })
+            except GoogleError as error:
+                # A connector switched mid-listing usually surfaces as a missing calendar.
+                if error.code == "calendar_unavailable" and await identity(call=call, now=self.clock()) != source.connection_ref:
+                    raise GoogleError("reconnect_required") from None
+                raise
+            # Check again after the listing: pages read under another account must never be stored.
+            if await identity(call=call, now=self.clock()) != source.connection_ref:
+                raise GoogleError("reconnect_required")
             snapshot = map_pages(listing, start, end, source.timezone)
             return GoogleSnapshot(snapshot.events, snapshot.occurrences, True, source.revision)
         except Exception as error:
