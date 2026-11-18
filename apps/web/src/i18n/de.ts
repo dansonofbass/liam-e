@@ -135,7 +135,7 @@ export const de = {
     all: 'Alle freigegebenen Kalender', loading: 'Termine werden geladen …', retry: 'Noch mal versuchen',
     error: 'Kalender konnten nicht geladen werden. Versuch es noch mal.', empty: 'Keine Termine im gespeicherten Zeitraum.',
     noSources: 'Noch kein Kalender verbunden. Verbinde Google Kalender über Mistral Studio oder abonniere einen Kalender über seine private Adresse im iCal-Format.',
-    manage: 'Kalender verwalten', refresh: 'Abrufen', more: 'Weitere Termine laden', allDay: 'Ganztägig',
+    manage: 'Kalender verwalten', refresh: 'Abrufen', more: 'Weitere Termine laden', allDay: 'Ganztägig', allDayGutter: 'Ganz\u00ADtägig',
     range: 'Wähle einen Zeitraum von 1 bis 90 Tagen.', select: 'Wähle einen Termin aus.', back: 'Zur Agenda',
     missing: 'Dieser Termin ist nicht mehr verfügbar oder sein Kalender ist nicht freigegeben.',
     readOnly: 'Nur lesen', ics: 'Abonnierter Kalender · Nur lesen', google: 'Google Kalender · Nur lesen',

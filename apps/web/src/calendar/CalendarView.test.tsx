@@ -72,7 +72,11 @@ test('all-day gutter wraps its complete label rather than clipping it', async ()
   const root = createRootRoute({ component: () => <TimeGrid from="2026-11-18" to="2026-11-19" rows={[]} sources={[]} onSlot={() => {}} onOpen={() => {}} /> })
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) })
   render(<RouterProvider router={router} />)
-  expect((await screen.findByText(de.calendar.allDay)).getAttribute('aria-hidden')).not.toBe('true')
+  const label = await screen.findByText(de.calendar.allDayGutter)
+  expect(label.getAttribute('aria-hidden')).not.toBe('true')
+  // A soft hyphen gives a German break point; Chromium on Linux has no hyphenation dictionary.
+  expect(de.calendar.allDayGutter).toBe('Ganz\u00ADtägig')
+  expect(rule).not.toContain('hyphens: auto')
 })
 test('mobile calendar targets have coarse pointer token sizing', async () => {
   const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
@@ -185,4 +189,9 @@ test('today is marked in the time header', async () => {
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) })
   render(<RouterProvider router={router} />)
   await waitFor(() => expect(document.querySelector('.le-time-days [aria-current="date"]')).toBeTruthy())
+})
+test('toolbar wraps instead of letting the period title run under the buttons', async () => {
+  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
+  const rule = css.match(/^\.le-calendar-toolbar \{([^}]+)\}/mu)?.[1] ?? ''
+  expect(rule).toContain('flex-wrap: wrap')
 })
