@@ -51,7 +51,9 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.isPrimary) suppressClick.current = 0
     if (active.current || event.pointerType !== 'touch' || !event.isPrimary || !current.current.enabled || !current.current.basis) return
-    if (event.clientX < 24 || event.clientX > window.innerWidth - 24 || (event.target as Element).closest('button, a, input, select, textarea, [role="menu"], [role="menuitem"]')) return
+    // A control keeps the gesture, except the row's own open link: it spans the subject line and is the row itself.
+    const control = (event.target as Element).closest('button, a, input, select, textarea, [role="menu"], [role="menuitem"]')
+    if (event.clientX < 24 || event.clientX > window.innerWidth - 24 || (control && !control.hasAttribute('data-swipe-start'))) return
     active.current = { pointer: event.pointerId, state: beginSwipe(current.current.basis, event.clientX, event.clientY, event.currentTarget.getBoundingClientRect().width), dragged: false, navigation: current.current.navigation }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
