@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { beginSwipe, moveSwipe, endSwipe, cancelSwipe, type SwipeBasis } from './swipeGesture'
+import { beginSwipe, blocksScroll, moveSwipe, endSwipe, cancelSwipe, type SwipeBasis } from './swipeGesture'
 
 const basis: SwipeBasis = { id: 'mail-1', isRead: false, revision: 1, left: 'archive', right: 'toggle_read' }
 const start = () => beginSwipe(basis, 200, 100, 300)
@@ -29,5 +29,23 @@ describe('swipe gesture', () => {
     expect(endSwipe(moveSwipe(beginSwipe(basis, 200, 0, 100), 128, 0, basis), basis)).toEqual({ id: 'mail-1', action: 'archive' })
     expect(endSwipe(moveSwipe(beginSwipe(basis, 200, 0, 1000), 89, 0, basis), basis)).toBeUndefined()
     expect(endSwipe(moveSwipe(beginSwipe(basis, 200, 0, 1000), 88, 0, basis), basis)).toEqual({ id: 'mail-1', action: 'archive' })
+  })
+  test('keeps a decided swipe from native scrolling, but never an undecided or vertical touch', () => {
+    expect(blocksScroll(start())).toBe(false)
+    // Leaning horizontal is not a swipe yet: the touch may still become a scroll.
+    const leaning = moveSwipe(start(), 204, 101, basis)
+    expect(leaning.phase).toBe('undecided')
+    expect(blocksScroll(leaning)).toBe(false)
+    const preview = moveSwipe(start(), 230, 110, basis)
+    expect(preview.phase).toBe('preview')
+    expect(blocksScroll(preview)).toBe(true)
+    // A thumb arc drifts far from the row's line once the swipe is decided; the row keeps the touch.
+    const armed = moveSwipe(preview, 300, 140, basis)
+    expect(armed.phase).toBe('armed')
+    expect(blocksScroll(armed)).toBe(true)
+    const scroll = moveSwipe(start(), 203, 120, basis)
+    expect(scroll.phase).toBe('scrolling')
+    expect(blocksScroll(scroll)).toBe(false)
+    expect(blocksScroll(cancelSwipe(preview))).toBe(false)
   })
 })

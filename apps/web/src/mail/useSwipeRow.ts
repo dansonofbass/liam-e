@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
-import { actionFor, beginSwipe, endSwipe, moveSwipe, type SwipeBasis, type SwipeState } from './swipeGesture'
+import { actionFor, beginSwipe, blocksScroll, endSwipe, moveSwipe, type SwipeBasis, type SwipeState } from './swipeGesture'
 
 type Action = NonNullable<ReturnType<typeof actionFor>>
 type Preview = { action: Action; armed: boolean; direction: 'left' | 'right' }
@@ -41,9 +41,18 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     const second = (event: globalThis.PointerEvent) => {
       if (active.current && event.pointerType === 'touch' && event.pointerId !== active.current.pointer) stop()
     }
+    // touch-action: pan-y is not enough on iOS: without a prevented touchmove WebKit hands a decided swipe to scrolling and
+    // cancels the pointer. React registers touchmove as passive, so the row listens natively. Two fingers stay free to pinch.
+    const hold = (event: TouchEvent) => {
+      const gesture = active.current
+      if (gesture && event.touches.length === 1 && event.cancelable && blocksScroll(gesture.state)) event.preventDefault()
+    }
+    const node = row.current
     document.addEventListener('pointerdown', second, true)
+    node?.addEventListener('touchmove', hold, { passive: false })
     return () => {
       document.removeEventListener('pointerdown', second, true)
+      node?.removeEventListener('touchmove', hold)
       active.current = null
       if (frame.current !== null) cancelAnimationFrame(frame.current)
     }
