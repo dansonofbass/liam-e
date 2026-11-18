@@ -8,13 +8,14 @@ import { ConfirmCard, Notice } from '../ds'
 import { de } from '../i18n/de'
 import { useRestartConversation } from './session'
 import { TaskProposal } from './TaskProposal'
+import type { TaskFormDraft } from '../tasks/TaskForm'
 
 type Clock = { now: () => number; setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>; clearTimeout: (id: ReturnType<typeof setTimeout>) => void }
 const systemClock: Clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id) }
 // A live card can be replaced by its history row; preserve edits and the undo deadline.
 // After a confirmation or cancellation the clicked button is gone; `focus` moves the focus to the outcome.
 // `handoff` passes a held focus to the history row that replaces a settled card in the same commit.
-type CardState = { deadline?: number; deselected?: Set<string>; body?: string; focus?: boolean; handoff?: boolean }
+type CardState = { deadline?: number; deselected?: Set<string>; body?: string; task?: TaskFormDraft; focus?: boolean; handoff?: boolean }
 const cards = new WeakMap<QueryClient, Map<string, CardState>>()
 function cardState(client: QueryClient, id: string): CardState {
   let entries = cards.get(client)
@@ -178,7 +179,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   if (current.proposal_status === 'failed') return settled(<Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code, proposal.kind)}</Notice>)
   if (current.proposal_status === 'done' || current.proposal_status === 'partial') return settled(<Result key={current.id} message={current} proposal={proposal} clock={clock} onUndone={() => outcome.current?.focus()} />)
   if (current.proposal_status !== 'pending') return null
-  if (proposal.kind === 'task') return <><TaskProposal key={current.id} proposal={proposal} busy={busy}
+  if (proposal.kind === 'task') return <><TaskProposal key={current.id} proposal={proposal} busy={busy} draft={cardState(client, current.id).task ??= {}}
     confirm={task_edit => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids: [], task_edit }, throwOnError: true })), true) }}
     cancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }}
   />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' || error === 'task_scope_invalid' ? { label: de.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind)}</Notice>}</>

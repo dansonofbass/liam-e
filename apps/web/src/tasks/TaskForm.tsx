@@ -34,12 +34,20 @@ export function SchedulePreview({ input, onValid }: { input: PreviewIn | null; o
   return <section aria-label={labels.preview}><h3>{labels.preview}</h3>{!input ? <p>{labels.invalid}</p> : query.isPending || query.isFetching ? <p role="status">{labels.previewLoading}</p> : query.isError ? <Notice tone="danger" action={{ label: labels.retry, onClick: () => { void query.refetch() } }}>{labels.previewError}</Notice> : <><ol>{query.data.occurrences.map(value => <li key={value}>{formatTaskDue(value)}</li>)}</ol>{query.data.exceptions.length > 0 && <><p>{labels.exceptions}</p><ul>{query.data.exceptions.map((entry, index) => <li key={`${entry.local}-${index}`}>{entry.reason === 'invalid_date' ? labels.invalidDay(entry.local, entry.monthday) : labels.invalidTime(formatTaskDue(entry.local))}</li>)}</ul></>}{!query.data.complete && <p>{labels.previewIncomplete}</p>}</>}</section>
 }
 
-export function TaskForm({ save, busy, error, initial, proposal = false }: { save: (body: TaskCreate) => void; busy: boolean; error?: string; initial?: TaskCreate; proposal?: boolean }) {
-  const [title, setTitle] = useState(initial?.title ?? ''), [description, setDescription] = useState('')
-  const [date, setDate] = useState(initial?.start.slice(0, 10) ?? ''), [time, setTime] = useState(initial?.start.split('T')[1] ?? ''), [zone, setZone] = useState(initial?.timezone ?? browserZone)
-  const [mode, setMode] = useState(initial?.rrule ? 'original' : 'none'), [frequency, setFrequency] = useState<Recurrence['frequency']>('DAILY')
-  const [interval, setInterval] = useState(1), [weekdays, setWeekdays] = useState<Weekday[]>([]), [monthday, setMonthday] = useState('1')
-  const [end, setEnd] = useState('none'), [endDate, setEndDate] = useState(''), [count, setCount] = useState(1)
+type TaskFormValues = { title: string; description: string; date: string; time: string; zone: string; mode: string; frequency: Recurrence['frequency']; interval: number; weekdays: Weekday[]; monthday: string; end: string; endDate: string; count: number }
+/** Caller-owned edits that outlive a remount, such as a chat card replaced by its history row. */
+export type TaskFormDraft = { values?: TaskFormValues }
+
+export function TaskForm({ save, busy, error, initial, proposal = false, draft }: { save: (body: TaskCreate) => void; busy: boolean; error?: string; initial?: TaskCreate; proposal?: boolean; draft?: TaskFormDraft }) {
+  const kept = draft?.values
+  const [title, setTitle] = useState(kept?.title ?? initial?.title ?? ''), [description, setDescription] = useState(kept?.description ?? '')
+  const [date, setDate] = useState(kept?.date ?? initial?.start.slice(0, 10) ?? ''), [time, setTime] = useState(kept?.time ?? initial?.start.split('T')[1] ?? ''), [zone, setZone] = useState(kept?.zone ?? initial?.timezone ?? browserZone)
+  const [mode, setMode] = useState(kept?.mode ?? (initial?.rrule ? 'original' : 'none')), [frequency, setFrequency] = useState<Recurrence['frequency']>(kept?.frequency ?? 'DAILY')
+  const [interval, setInterval] = useState(kept?.interval ?? 1), [weekdays, setWeekdays] = useState<Weekday[]>(kept?.weekdays ?? []), [monthday, setMonthday] = useState(kept?.monthday ?? '1')
+  const [end, setEnd] = useState(kept?.end ?? 'none'), [endDate, setEndDate] = useState(kept?.endDate ?? ''), [count, setCount] = useState(kept?.count ?? 1)
+  useEffect(() => {
+    if (draft) draft.values = { title, description, date, time, zone, mode, frequency, interval, weekdays, monthday, end, endDate, count }
+  }, [draft, title, description, date, time, zone, mode, frequency, interval, weekdays, monthday, end, endDate, count])
   const [previewValid, setPreviewValid] = useState(false)
   const [selectingMail, setSelectingMail] = useState(false), [mailSearch, setMailSearch] = useState('')
   const [mail, setMail] = useState<{ id: string; account_id: string; subject: string }>()

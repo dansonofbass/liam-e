@@ -4,19 +4,19 @@ import type { Proposal, TaskCreateCommand } from '../api/generated/types.gen'
 import { Button } from '../ds'
 import { de } from '../i18n/de'
 import { SourceMail } from '../tasks/SourceMail'
-import { SchedulePreview, TaskForm } from '../tasks/TaskForm'
+import { SchedulePreview, TaskForm, type TaskFormDraft } from '../tasks/TaskForm'
 import { formatTaskDue } from '../tasks/format'
 import { TaskRule } from '../tasks/TaskRule'
 import './task-proposal.css'
 
-export function TaskProposal({ proposal, busy, confirm, cancel }: { proposal: Proposal; busy: boolean; confirm: (edit?: TaskCreateCommand) => void; cancel: () => void }) {
+export function TaskProposal({ proposal, busy, confirm, cancel, draft }: { proposal: Proposal; busy: boolean; confirm: (edit?: TaskCreateCommand) => void; cancel: () => void; draft?: TaskFormDraft }) {
   const [previewValid, setPreviewValid] = useState(false)
   const task = proposal.task
   if (!task) return null
   const source = task.source_message_id ? <SourceMail id={task.source_message_id} /> : <p>{de.tasks.unlinked}</p>
   if (task.action === 'create') return <section className="le-confirm le-task-proposal">
     <p>{proposal.reason}</p>{source}
-    <TaskForm proposal busy={busy} initial={{ ...task, creation_key: 'proposal' }} save={body => confirm({
+    <TaskForm proposal busy={busy} draft={draft} initial={{ ...task, creation_key: 'proposal' }} save={body => confirm({
       action: 'create', title: body.title, start: body.start, timezone: body.timezone!, rrule: body.rrule,
       source_account_id: task.source_account_id, source_message_id: task.source_message_id,
     })} />
