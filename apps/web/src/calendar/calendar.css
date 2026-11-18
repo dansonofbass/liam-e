@@ -1,5 +1,10 @@
 .le-feed-form { display: flex; flex-direction: column; gap: var(--space-3); }
 .le-feed-form > * { min-width: 0; flex-shrink: 0; }
+/* TextField supplies the actual checkbox, label and hint; the complete name may wrap. */
+.le-google-choice .le-field { display: grid; grid-template-columns: var(--space-5) minmax(0, 1fr); align-items: center; column-gap: var(--space-2); }
+.le-google-choice .le-label { grid-column: 2; grid-row: 1; overflow-wrap: anywhere; min-width: 0; padding-block: var(--space-2); cursor: pointer; }
+.le-google-choice .le-input { grid-column: 1; grid-row: 1; width: var(--space-4); height: var(--space-4); min-height: var(--space-4); padding: 0; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.le-google-choice .le-hint { grid-column: 2; }
 .le-calendar { display: flex; min-height: 0; flex: 1; overflow: hidden; }
 .le-calendar-agenda, .le-calendar-detail { min-width: 0; overflow-y: auto; padding: var(--space-5); flex: 1; }
 .le-calendar-agenda > *, .le-calendar-detail > * { margin-bottom: var(--space-4); }
@@ -26,6 +31,9 @@
 @media (max-width: 639px) { .le-calendar-agenda, .le-calendar-detail { padding: var(--space-4); } }
 /* DESIGN.md §7.2: links are not base controls, so the calendar gives them the touch size itself. */
 @media (pointer: coarse) {
+  .le-google-choice .le-field { grid-template-columns: var(--control-height-lg) minmax(0, 1fr); }
+  .le-google-choice .le-label { grid-column: 1 / -1; min-height: var(--control-height-lg); padding-inline-start: calc(var(--control-height-lg) + var(--space-2)); display: flex; align-items: center; }
+  .le-google-choice .le-input { justify-self: center; }
   .le-calendar .le-link, .le-calendar-status > .le-link, .le-calendar-detail > .le-link, .le-calendar-back { min-height: var(--control-height-lg); }
   .le-calendar-detail > .le-link, .le-calendar-back { min-width: var(--control-height-lg); }
 }

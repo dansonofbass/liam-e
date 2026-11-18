@@ -33,7 +33,7 @@ function RemoveSource({ source, close, removed }: { source: SourceOut; close: ()
   </div></div>, document.body)
 }
 
-/** ICS setup shares the calendar query group and agenda with all sources. */
+/** Provider setup shares the calendar query group and agenda with all sources. */
 export function CalendarSources() {
   const sources = useQuery(calendarSourcesQuery()), client = useQueryClient()
   const [pending, setPending] = useState<string[]>([]), [messages, setMessages] = useState<Record<string, string>>({})
@@ -45,7 +45,7 @@ export function CalendarSources() {
     try {
       const result = refresh ? await calendarSourceSync({ path: { source_id: source.id } }) : await calendarSourceUpdate({ path: { source_id: source.id }, body: { is_active: !source.is_active } })
       if (result.error || !result.response?.ok) throw new Error()
-      setMessages(current => ({ ...current, [source.id]: refresh ? (result.data && 'queued' in result.data && result.data.queued ? de.calendar.queued : source.provider === 'ics' ? de.calendar.feedNotQueued : de.calendar.notQueued) : '' }))
+      setMessages(current => ({ ...current, [source.id]: refresh ? (result.data && 'queued' in result.data && result.data.queued ? de.calendar.queued : ['ics', 'google'].includes(source.provider) ? de.calendar.feedNotQueued : de.calendar.notQueued) : '' }))
       invalidate()
     } catch { setMessages(current => ({ ...current, [source.id]: refresh ? de.calendar.refreshError : de.calendar.actionError })) }
     finally { setPending(current => current.filter(id => id !== source.id)) }

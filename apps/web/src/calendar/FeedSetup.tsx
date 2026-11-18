@@ -7,6 +7,7 @@ import type { CalendarFeedValidateResponse, SourceOut } from '../api/generated/t
 import { Button, Notice, TextField } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
 import { de } from '../i18n/de'
+import { GoogleSetup } from './GoogleSetup'
 
 /** Secret addresses live only in this dialog's state, never in queries or browser storage. */
 export function FeedSetup({ source, close, saved }: { source?: SourceOut; close: () => void; saved: () => void }) {
@@ -76,9 +77,13 @@ export function FeedSetup({ source, close, saved }: { source?: SourceOut; close:
   </div></div>, document.body)
 }
 
-/** The one entry to a new subscription, on the accounts page and in the empty agenda. */
+/** Shared setup entries on the accounts page and in the empty agenda. */
 export function CalendarSetup({ primary = false }: { primary?: boolean }) {
-  const [open, setOpen] = useState(false), client = useQueryClient()
-  return <><Button variant={primary ? 'primary' : 'secondary'} onClick={() => setOpen(true)}>{de.calendar.subscribe}</Button>
-    {open && <FeedSetup close={() => setOpen(false)} saved={() => { setOpen(false); void client.invalidateQueries({ queryKey: ['calendar'] }) }} />}</>
+  const [open, setOpen] = useState<'ics' | 'google'>(), client = useQueryClient()
+  const close = () => setOpen(undefined)
+  const saved = () => { close(); void client.invalidateQueries({ queryKey: ['calendar'] }) }
+  return <><Button variant={primary ? 'primary' : 'secondary'} onClick={() => setOpen('ics')}>{de.calendar.subscribe}</Button>
+    <Button variant="secondary" onClick={() => setOpen('google')}>{de.calendar.googleConnect}</Button>
+    {open === 'ics' && <FeedSetup close={close} saved={saved} />}
+    {open === 'google' && <GoogleSetup close={close} saved={saved} />}</>
 }

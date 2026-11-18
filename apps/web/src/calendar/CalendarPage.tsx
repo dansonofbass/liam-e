@@ -13,12 +13,14 @@ import { AskAboutCalendar } from '../chat/CalendarContext'
 import { CalendarSetup } from './FeedSetup'
 
 export function SourceStatus({ source, from, to }: { source: SourceOut; from?: string; to?: string }) {
+  const googleError = source.last_error === 'reconnect_required' ? de.calendar.googleReconnectError
+    : source.last_error === 'calendar_unavailable' ? de.calendar.googleUnavailableError : de.calendar.googleProviderError
   return <div className="le-calendar-status">
     <strong>{source.name}</strong>
     <span>{source.provider === 'ics' ? de.calendar.ics : source.provider === 'google' ? de.calendar.google : de.calendar.readOnly}</span>
     <span>{source.last_success_at ? `${de.calendar.stored}: ${calendarDate(source.last_success_at)} ${calendarTime(source.last_success_at)}` : de.calendar.never}</span>
     {!source.is_active ? <Notice tone="info">{de.calendar.paused}</Notice> : <>
-      {source.last_error && <Notice tone="danger">{source.last_error === 'address_check' ? de.calendar.feedAddressError : de.calendar.feedSyncError}</Notice>}
+      {source.last_error && <Notice tone="danger">{source.provider === 'google' ? googleError : source.last_error === 'address_check' ? de.calendar.feedAddressError : de.calendar.feedSyncError}</Notice>}
       {source.incomplete && <Notice tone="info">{de.calendar.incomplete}</Notice>}
       {oldSource(source) && source.last_success_at && <Notice tone="info">{de.calendar.old}</Notice>}
       {from && to && !covers(source, from, to) && <Notice tone="info">{de.calendar.uncovered}</Notice>}
@@ -56,7 +58,7 @@ export function CalendarAgenda() {
       try {
         const result = await calendarSourceSync({ path: { source_id: source.id }, query: { due_only: dueOnly } })
         if (result.error || !result.response?.ok) throw new Error()
-        if (!dueOnly) setNotices(current => ({ ...current, [source.id]: result.data?.queued ? de.calendar.queued : source.provider === 'ics' ? de.calendar.feedNotQueued : de.calendar.notQueued }))
+        if (!dueOnly) setNotices(current => ({ ...current, [source.id]: result.data?.queued ? de.calendar.queued : ['ics', 'google'].includes(source.provider) ? de.calendar.feedNotQueued : de.calendar.notQueued }))
       } catch { if (!dueOnly) setNotices(current => ({ ...current, [source.id]: de.calendar.refreshError })) }
     }))
     setRefreshing(false)
@@ -64,7 +66,7 @@ export function CalendarAgenda() {
     if (valid && selected.length) void page.refetch()
   }
   useEffect(() => {
-    const due = (sources.data ?? []).filter(s => s.is_active && (s.provider === 'ics' || oldSource(s)) && !attempted.current.has(s.id))
+    const due = (sources.data ?? []).filter(s => s.is_active && (['ics', 'google'].includes(s.provider) || oldSource(s)) && !attempted.current.has(s.id))
     for (const source of due) attempted.current.add(source.id)
     if (due.length) void refreshSources(due, true)
   }, [sources.data])

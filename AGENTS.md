@@ -298,8 +298,12 @@ Die Oberfläche unter `/calendar` zeigt die gemeinsame Agenda; `/calendar/$occur
 in der Verwaltung und als Hinweis angezeigt, ihre Termine bleiben bis zur Aktivierung
 verborgen. Sie tragen nicht zu einer Aussage „Keine Termine“ bei und bleiben auch für
 Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
-`CalendarSetup` in `apps/web/src/calendar/FeedSetup.tsx` öffnet das ICS-Formular
-`FeedSetup`: Name, private Kalenderadresse und ausdrücklich angezeigte Fallbackzone.
+`CalendarSetup` in `apps/web/src/calendar/FeedSetup.tsx` bietet „Kalender abonnieren“
+(`FeedSetup`: Name, private Kalenderadresse und ausdrücklich angezeigte Fallbackzone) sowie
+„Google Kalender verbinden“ (`GoogleSetup`: aktuelle Kalenderliste mit Checkboxen, keine
+Neuauswahl vorgewählt, bestehende Verbindungen angehakt und gesperrt). Der Google-Dialog
+hält die Liste nur lokal und liest sie beim nächsten Öffnen erneut. Nach dem Verbinden wird
+die Query-Gruppe `calendar` invalidiert.
 `webcal` wird sichtbar zu `https`; die Serverprüfung normalisiert unabhängig nochmals.
 Adresse und Prüftoken bleiben nur im Dialogzustand, nie im Browser-Storage oder Query-Cache.
 Änderungen verwerfen die Prüfung; Abonnieren und Adresswechsel invalidieren die Query-Gruppe

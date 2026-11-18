@@ -338,7 +338,13 @@ prüft jedes Paar in beiden Themes gegen das Ziel, nicht gegen die Werte der let
   „Rückgängig“, §9.2) in `mail/`, der Dialog „Konto entfernen“ (`accounts/RemoveDialog.tsx`,
   Klasse `le-dialog`, mit `scrim`, Fokus bleibt im Dialog), der Dialog „Original der Mail“
   (`mail/OriginalDialog.tsx`, breiter mit `le-dialog--wide`, Kopf mit „Schließen“, der
-  Inhalt scrollt für sich) und ThemeMenu (`shell/`, §3).
+  Inhalt scrollt für sich) und ThemeMenu (`shell/`, §3). Kalender verbindet man über
+  `CalendarSetup` (`calendar/FeedSetup.tsx`): „Kalender abonnieren“ öffnet `FeedSetup`,
+  „Google Kalender verbinden“ öffnet `GoogleSetup`. Beide Dialoge nutzen `le-dialog` und
+  Fokusführung. Google zeigt statische Platzhalter beim Laden und echte Checkboxen aus
+  `TextField`; bestehende Verbindungen sind angehakt, gesperrt und als „Schon verbunden“
+  erklärt. Neue Auswahlen sind nie vorgewählt. Nur die gewählte Zahl neuer Kalender zählt
+  für „N Kalender verbinden“. Lange Kalendernamen dürfen umbrechen.
 - **Varianten:**
   - Button `primary`, `secondary`, `ghost`, `danger`; klein mit `le-btn--sm` (obere Leiste
     der Mail am Desktop, §7.4).

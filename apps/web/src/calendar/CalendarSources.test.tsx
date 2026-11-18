@@ -3,12 +3,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router'
 import * as sdk from '../api/generated/sdk.gen'
+import type { SourceOut } from '../api/generated/types.gen'
 import { CalendarSources } from './CalendarSources'
 import { de } from '../i18n/de'
 
 afterEach(() => { cleanup(); mock.restore() })
 const source = { id: 'test-only', name: 'Verein', provider: 'ics', timezone: 'UTC', is_active: true, revision: 2, capabilities: ['read'], coverage_start: null, coverage_end: null, last_success_at: null, stale: true, incomplete: true }
-function setup(sources = [source]) {
+function setup(sources: SourceOut[] = [source]) {
   const list = spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
   const query = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   const invalidated = spyOn(query, 'invalidateQueries')
@@ -69,4 +70,16 @@ test('a failed reload after an empty list shows the error, not the claim that no
   await act(async () => { await query.refetchQueries({ queryKey: ['calendar', 'sources'] }) })
   expect(await screen.findByText(de.calendar.error)).toBeTruthy()
   expect(screen.queryByText(de.calendar.noSources)).toBeNull()
+})
+
+test.each([
+  ['reconnect_required', de.calendar.googleReconnectError],
+  ['calendar_unavailable', de.calendar.googleUnavailableError],
+  ['provider_unavailable', de.calendar.googleProviderError],
+])('Google source error %s names the next step without offering an address replacement', async (last_error, message) => {
+  setup([{ ...source, provider: 'google', last_error }])
+  expect(await screen.findByText(message!)).toBeTruthy()
+  expect(screen.getByText(de.calendar.google)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: de.calendar.replaceAddress })).toBeNull()
+  expect(screen.getByRole('button', { name: de.calendar.refresh })).toBeTruthy()
 })

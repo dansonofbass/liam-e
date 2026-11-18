@@ -95,7 +95,7 @@ test('a fully covered empty window without another page shows no events', async 
   expect(screen.queryByRole('button', { name: de.calendar.more })).toBeNull()
 })
 
-test('mount requests one sync POST per old active source, including after the sources refetch', async () => {
+test('mount requests one due-only sync per active Google source, including fresh sources, but never paused ones', async () => {
   const fresh = coveredSource()
   const old = { ...fresh, last_success_at: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() }
   const sources = [old, { ...old, id: 'other-old' }, { ...old, id: 'paused', is_active: false }, { ...fresh, id: 'fresh' }]
@@ -115,7 +115,9 @@ test('mount requests one sync POST per old active source, including after the so
     expect(requests.map(request => [request.method, new URL(request.url).pathname])).toEqual([
       ['POST', `/api/v1/calendar/sources/${old.id}/sync`],
       ['POST', '/api/v1/calendar/sources/other-old/sync'],
+      ['POST', '/api/v1/calendar/sources/fresh/sync'],
     ])
+    expect(requests.every(request => new URL(request.url).searchParams.get('due_only') === 'true')).toBe(true)
   } finally { apiClient.setConfig({ ...config, fetch: config.fetch }) }
 })
 
