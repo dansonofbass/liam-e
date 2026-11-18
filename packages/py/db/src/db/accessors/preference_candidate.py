@@ -74,11 +74,23 @@ async def validate(session, row):
 
 
 async def erase(session, row, status='expired'):
+    """Return whether an open card was cancelled, preserving cancellation counts."""
     row.value, row.status = None, status
     if row.proposal_id:
         card = await session.get(ChatMessage, row.proposal_id)
         if card and card.proposal_status == 'pending':
             card.proposal_status = 'cancelled'
+            return True
+    return False
+
+
+async def expire_conversations(session, conversation_ids):
+    rows = (await session.execute(select(PreferenceCandidate).where(
+        PreferenceCandidate.owner_scope == OWNER_SCOPE,
+        PreferenceCandidate.conversation_id.in_(conversation_ids),
+    ))).scalars()
+    for row in rows:
+        await erase(session, row)
 
 
 async def expire_scope(session, key=None, scope=None, preference_id=None):

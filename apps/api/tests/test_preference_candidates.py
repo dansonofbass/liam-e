@@ -67,6 +67,22 @@ def test_confirm_rejects_untyped_or_extra_authority():
         candidates.PreferenceDecision.model_validate({'choice': 'replace', 'expected_version': 1, 'expected_revision_id': 'revision', 'value': 'override'})
 
 
+@pytest.mark.asyncio
+async def test_database_failures_never_expose_candidate_values(monkeypatch):
+    from sqlalchemy.exc import SQLAlchemyError
+    from fastapi import HTTPException
+    class BrokenSession:
+        async def __aenter__(self):
+            raise SQLAlchemyError('synthetic-private-value')
+        async def __aexit__(self, *args):
+            return False
+    monkeypatch.setattr(candidates, 'get_session_maker', lambda: BrokenSession)
+    with pytest.raises(HTTPException) as error:
+        await candidates.listing()
+    assert error.value.status_code == 503
+    assert 'synthetic-private-value' not in str(error.value.detail)
+
+
 def test_card_payload_has_no_value_copy():
     proposal = proposals.Proposal(kind='preference', reason='', items=[], preference=candidates.PreferenceReference(candidate_id='candidate'))
     assert proposal.preference.model_dump() == {'candidate_id': 'candidate'}

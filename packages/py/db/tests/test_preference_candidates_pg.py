@@ -240,6 +240,142 @@ def test_account_and_source_removal_and_mail_replacement_erase_candidates(pg_db)
     asyncio.run(run())
 
 
+def test_concurrent_candidates_for_same_field_cannot_overwrite_each_other(pg_db):
+    async def run():
+        from db.accessors import preference_candidate as c, user_preference as p, chat_message as m
+        one = await candidate(*(await setup_source()), value='Kurz')
+        two = await candidate(*(await setup_source()), value='Ausführlich')
+        results = await asyncio.gather(confirm(*one), confirm(*two), return_exceptions=True)
+        assert results.count('saved') == 1
+        assert sum(isinstance(result, c.CandidateConflict) for result in results) == 1
+        assert len(await p.list_preferences()) == 1
+        assert (await p.list_preferences())[0].version == 1
+        statuses = [(await m.get_message(card.id)).proposal_status for _, card in [one, two]]
+        assert sorted(statuses) == ['done', 'pending']
+    asyncio.run(run())
+
+
+def test_failure_after_revision_and_finish_rolls_back_everything(pg_db, monkeypatch):
+    async def run():
+        from db.accessors import chat_message as m, user_preference as p, preference_candidate as c
+        from api.mail import proposals
+        from api.preferences.candidates import PreferenceDecision
+        from db.engine import get_session_maker
+        row, card = await candidate(*(await setup_source()))
+        finish = m.finish_proposal_in_session
+        async def fail_after_finish(*args, **kwargs):
+            await finish(*args, **kwargs)
+            raise RuntimeError('test-only')
+        monkeypatch.setattr(m, 'finish_proposal_in_session', fail_after_finish)
+        with pytest.raises(RuntimeError):
+            await proposals.confirm(card.id, selected_ids=[], preference_decision=PreferenceDecision(
+                choice='replace', expected_version=0, expected_revision_id=None))
+        assert not await p.list_preferences()
+        assert (await m.get_message(card.id)).proposal_status == 'pending'
+        async with get_session_maker()() as session:
+            assert (await c.get(session, row.id)).status == 'pending'
+    asyncio.run(run())
+
+
+def test_legacy_removed_preferences_block_history_but_allow_a_fresh_turn(pg_db):
+    async def run():
+        from db.accessors import user_preference as p, preference_candidate as c
+        from db.models.user_preference import UserPreference
+        from db.engine import get_session_maker
+        old_conversation, old_message = await setup_source()
+        async with get_session_maker()() as session:
+            session.add(UserPreference(key='answer_length', status='removed'))
+            await session.commit()
+        # The existing resolver runs before storing each new user message.
+        async with get_session_maker()() as session:
+            await p.lock(session)
+            await p.resolve_in_session(session, None)
+            await session.commit()
+        with pytest.raises(c.CandidateGone):
+            await candidate(old_conversation, old_message)
+        row, card = await candidate(*(await setup_source()))
+        assert await confirm(row, card) == 'saved'
+    asyncio.run(run())
+
+
+def test_seed_source_removal_erases_values_in_same_transaction(pg_db):
+    async def run():
+        from db.accessors import dev_seed, preference_candidate as c
+        from db.engine import get_session_maker
+        conversation, message = await setup_source()
+        row, _ = await candidate(conversation, message)
+        from db.models.chat_conversation import ChatConversation
+        await dev_seed.replace_conversations([ChatConversation(id=conversation.id)])
+        async with get_session_maker()() as session:
+            erased = await c.get(session, row.id)
+            assert erased.value is None and erased.status == 'expired'
+    asyncio.run(run())
+
+
+def test_request_tool_confirmation_and_next_answer_with_mocked_model(pg_db, monkeypatch):
+    async def run():
+        import copy
+        import json
+        from types import SimpleNamespace as NS
+        from api.mail import agent, proposals
+        from api.preferences.candidates import PreferenceDecision
+        from db.accessors import user_preference as p
+        class Stream:
+            def __init__(self, delta):
+                self.delta = delta
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                return None
+            def __aiter__(self):
+                return self.generate()
+            async def generate(self):
+                yield NS(data=NS(choices=[NS(delta=self.delta)]))
+        class Model:
+            def __init__(self):
+                self.chat, self.requests = self, []
+            async def stream_async(self, **kwargs):
+                self.requests.append(copy.deepcopy(kwargs))
+                if len(self.requests) == 1:
+                    source_id = kwargs['messages'][0]['content'].split('ID der aktuellen eigenen Nachricht für propose_preference: ')[1].split()[0]
+                    arguments = json.dumps({'source_message_id': source_id, 'key': 'answer_length', 'scope': '*', 'value': 'synthetic-short'})
+                    call = NS(id='call-preference', index=0, type='function', function=NS(name='propose_preference', arguments=arguments))
+                    return Stream(NS(content=None, tool_calls=[call]))
+                return Stream(NS(content='Die Karte wartet auf deine Bestätigung.', tool_calls=None))
+        model = Model()
+        monkeypatch.setattr(agent, 'mistral_client', lambda: model)
+        events = [event async for event in agent.run_turn_events(conversation_id=None, text='Merke dir: Antworte kurz.')]
+        assert events[-1].event == 'done'
+        card = next(event.message for event in events if event.event == 'proposal')
+        assert not await p.list_preferences()
+        await proposals.confirm(card.id, selected_ids=[], preference_decision=PreferenceDecision(
+            choice='replace', expected_version=0, expected_revision_id=None))
+        conversation_id = events[-1].conversation_id
+        await anext_turn(agent, conversation_id)
+        prefix = 'Passende manuell bestätigte Stilpräferenzen'
+        assert not any(m.get('content', '').startswith(prefix) for m in model.requests[-1]['messages'])
+        await p.update_settings(1, use_preferences=True)
+        await anext_turn(agent, conversation_id)
+        injected = [m for m in model.requests[-1]['messages'] if m.get('content', '').startswith(prefix)]
+        assert len(injected) == 1 and injected[0]['role'] == 'user'
+        assert 'synthetic-short' in injected[0]['content']
+        assert 'synthetic-short' not in model.requests[-1]['messages'][0]['content']
+    async def anext_turn(agent, conversation_id):
+        events = [event async for event in agent.run_turn_events(conversation_id=conversation_id, text='Fasse das kurz zusammen.')]
+        assert events[-1].event == 'done'
+    asyncio.run(run())
+
+
+def test_cross_conversation_source_is_not_owned_by_the_current_turn(pg_db):
+    async def run():
+        from db.accessors import preference_candidate as c
+        other, _ = await setup_source()
+        _, source = await setup_source()
+        with pytest.raises(c.CandidateGone):
+            await candidate(other, source)
+    asyncio.run(run())
+
+
 def test_candidate_quota_and_confirm_rechecks_preference_quota(pg_db):
     async def run():
         from db.accessors import user_preference as p

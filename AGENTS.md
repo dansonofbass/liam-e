@@ -570,7 +570,10 @@ erhält inhaltsfreie Referenzen und widerruft laufende Kontexte. Historische Anz
 „Präferenz entfernt“. Ursprüngliche Chatnachrichten und Antworten bleiben bestehen.
 Entfernte `user_preference`-Zeilen mit Schlüssel, Scope und `removed_at` sind die
 Unterdrückungsreferenz: Nachrichten vor dem Entfernen dürfen den Wert nicht wiederherstellen;
-eine neue ausdrückliche Bitte bleibt möglich. Entfernte Revisionen werden nie aufgelöst.
+eine neue ausdrückliche Bitte bleibt möglich. Altdaten aus #38 ohne Löschzeitpunkt bekommen
+beim ersten regulären Turn unter der Präferenzsperre einen konservativen Grenzzeitpunkt,
+noch bevor dessen eigene Nachricht gespeichert wird. Ältere Quellen bleiben gesperrt;
+neue Bitten nach dieser Grenze sind möglich. Entfernte Revisionen werden nie aufgelöst.
 
 ### Bestätigte Merke-dir-Karten (#39)
 
@@ -594,7 +597,9 @@ einer verdrängten Präferenzkarte aber deren Kandidatenwert.
 
 `GET /preferences/candidates` liest offene Kandidaten; mit `candidate_id` eine genaue Referenz,
 auch für historische Karten. Quelle und Bisher/Vorschlag werden aus aktuellen zugreifbaren
-Zeilen geladen. Fehlende Quellen und Konten entwerten die Referenz und entfernen den Wert.
+Zeilen geladen. Fehlende Quellen und Konten entwerten die Referenz und entfernen den Wert. Der vorhandene
+Löschpfad für Seed-Unterhaltungen entfernt Kandidatenwerte in derselben Transaktion; beim
+Nachlesen werden auch anderweitig fehlende Quellen inhaltsfrei markiert.
 `POST /preferences/candidates/{candidate_id}/propose` öffnet idempotent eine Karte, nur wenn
 der gemeinsame Slot frei ist. Eine bestehende Karten-ID wird wiederverwendet.
 `refresh: true` bedeutet ausdrücklich erneute Prüfung nach einem Versionskonflikt, nicht

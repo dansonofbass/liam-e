@@ -140,6 +140,14 @@ async def change(id, expected_version, *, delete=False, **changes):
 
 async def resolve_in_session(session, account_id, *, skip=False):
     """Explicit account overrides global per key; all-accounts never mixes signatures."""
+    # Old #38 tombstones have no deletion timestamp. Seal their replay boundary
+    # before this turn's user message is stored, under the caller's preference lock.
+    # A fresh explicit request can then work without permitting any historical source.
+    from db.models._common import utcnow
+    await session.execute(update(UserPreference).where(
+        UserPreference.owner_scope == OWNER_SCOPE, UserPreference.status == 'removed',
+        UserPreference.removed_at.is_(None),
+    ).values(removed_at=utcnow()))
     config = await settings_in_session(session)
     if skip or not config.use_preferences:
         return False, []

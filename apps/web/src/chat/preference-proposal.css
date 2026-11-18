@@ -5,6 +5,13 @@
   padding: var(--space-4);
 }
 .le-preference-values > div { min-width: 0; }
+.le-preference-proposal .le-confirm-head p {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .le-preference-values p, .le-preference-source blockquote, .le-preference-conflict p {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

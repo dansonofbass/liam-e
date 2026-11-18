@@ -1,11 +1,23 @@
 """Browser candidate views and the single proposal/confirmation transaction."""
+from contextlib import asynccontextmanager
 from typing import Literal
+from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel, ConfigDict, Field
 from fastapi import HTTPException
 from db.engine import get_session_maker
 from db.accessors import preference_candidate as candidates, user_preference as preferences
 from db.accessors import chat_message as messages
 from api.errors import refuse
+
+
+@asynccontextmanager
+async def private_session():
+    """Never let database diagnostics expose candidate values through API errors."""
+    try:
+        async with get_session_maker()() as session:
+            yield session
+    except SQLAlchemyError:
+        raise refuse(503, 'preferences_unavailable', 'Die Präferenzen sind gerade nicht erreichbar. Versuch es gleich noch einmal.') from None
 
 
 class PreferenceReference(BaseModel):
@@ -68,7 +80,7 @@ def unavailable():
 
 
 async def listing(candidate_id=None):
-    async with get_session_maker()() as session:
+    async with private_session() as session:
         await preferences.lock(session)
         rows = await candidates.list_rows(session, candidate_id)
         result = [await view(session, row) for row in rows]
@@ -77,7 +89,7 @@ async def listing(candidate_id=None):
 
 
 async def propose(id, *, refresh=False):
-    async with get_session_maker()() as session:
+    async with private_session() as session:
         await preferences.lock(session)
         row = await candidates.get(session, id)
         try:
@@ -99,7 +111,7 @@ async def prepare(arguments, ctx):
     allowed = ctx.account_ids if ctx.account_ids is not None else ([ctx.account_id] if ctx.account_id else [])
     if data.scope != '*' and data.scope not in allowed:
         raise preferences.InvalidPreference
-    async with get_session_maker()() as session:
+    async with private_session() as session:
         await preferences.lock(session)
         source = await candidates.source(session, ctx.conversation_id, data.source_message_id)
         # A conservative explicit-request gate, not a classifier. Quoted/forwarded text
@@ -115,7 +127,7 @@ async def prepare(arguments, ctx):
 
 async def cancel(message):
     from api.mail.proposals import ProposalStateError
-    async with get_session_maker()() as session:
+    async with private_session() as session:
         await preferences.lock(session)
         row = await candidates.get(session, message.preference.candidate_id)
         card = await candidates.cancel_card(session, row)
@@ -127,7 +139,7 @@ async def cancel(message):
 
 async def confirm(message_id, decision):
     from api.mail import proposals
-    async with get_session_maker()() as session:
+    async with private_session() as session:
         await preferences.lock(session)
         claimed = await messages.claim_proposal_in_session(session, message_id)
         if claimed is None:
