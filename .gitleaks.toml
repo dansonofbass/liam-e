@@ -5,7 +5,7 @@
 # rule, the file it occurs in AND a regex for the exact synthetic value (`condition = "AND"`),
 # with a description of why it is harmless. .gitleaksignore stays empty and `gitleaks:allow`
 # comments are ignored. A real secret is never allowlisted: rotate it, then remove it (AGENTS.md,
-# "Veröffentlichung und private Daten").
+# "Publication and private data").
 
 title = "liam-e"
 
