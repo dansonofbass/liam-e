@@ -13,6 +13,7 @@ from db.models.calendar_event import CalendarEvent
 from db.models.calendar_feed_config import CalendarFeedConfig
 from db.models.calendar_occurrence import CalendarOccurrence
 from db.models.calendar_sync_state import CalendarSyncState
+from db.models.calendar_write import CalendarWrite
 from db.models.mail_job import MailJob
 
 
@@ -45,7 +46,7 @@ async def remove(source_id: str) -> bool:
         row = (await session.execute(select(CalendarSource).where(CalendarSource.id == source_id).with_for_update())).scalar_one_or_none()
         if row is None:
             return False
-        for model in (CalendarOccurrence, CalendarEvent, CalendarSyncState, CalendarFeedConfig):
+        for model in (CalendarOccurrence, CalendarEvent, CalendarSyncState, CalendarFeedConfig, CalendarWrite):
             await session.execute(delete(model).where(model.source_id == source_id))
         await session.delete(row)
         await session.commit()

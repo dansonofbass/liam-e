@@ -33,3 +33,79 @@ def test_replace_window_sets_capabilities_in_the_same_transaction(pg_db):
             await replace_window(**{**args, "attempt": claim.attempts + 1}, capabilities_json='["read","write"]')
         assert (await calendar_source.get(source.id)).capabilities_json == '["read"]'
     asyncio.run(run())
+
+
+def write_row(**changes):
+    from db.models.calendar_write import CalendarWrite
+    from uuid import uuid4
+    return CalendarWrite(**{**dict(id=str(uuid4()), source_id="synthetic-source", operation="update",
+                                  target_external_id="synthetic-event", request_json='{"title":"Example"}',
+                                  request_hash="synthetic-hash", status="running"), **changes})
+
+
+def test_claim_is_idempotent_for_same_hash(pg_db):
+    async def run():
+        from db.accessors.calendar_write import claim
+        row = write_row()
+        assert (await claim(row))[1]
+        existing, created = await claim(row)
+        assert existing.id == row.id and not created
+    asyncio.run(run())
+
+
+def test_claim_conflicts_on_other_hash(pg_db):
+    async def run():
+        from db.accessors.calendar_write import claim, WriteConflict
+        row = write_row()
+        await claim(row)
+        with pytest.raises(WriteConflict):
+            await claim(write_row(id=row.id, request_hash="other"))
+    asyncio.run(run())
+
+
+def test_second_running_write_on_target_is_refused(pg_db):
+    async def run():
+        from db.accessors.calendar_write import claim, WriteInProgress
+        results = await asyncio.gather(claim(write_row()), claim(write_row()), return_exceptions=True)
+        assert sum(isinstance(r, WriteInProgress) for r in results) == 1
+        assert sum(isinstance(r, tuple) and r[1] for r in results) == 1
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("status", ["done", "failed", "not_applied", "unknown"])
+def test_finish_clears_request_text_on_final_states(pg_db, status):
+    async def run():
+        from db.accessors.calendar_write import claim, finish
+        row = write_row()
+        await claim(row)
+        result = await finish(row.id, status=status)
+        assert (result.request_json is None) == (status != "unknown")
+        assert result.finished_at is not None
+    asyncio.run(run())
+
+
+def test_expire_running_only_after_threshold(pg_db):
+    async def run():
+        from db.accessors.calendar_write import claim, expire_running
+        now = datetime.now(UTC)
+        row = write_row(started_at=now)
+        await claim(row)
+        assert (await expire_running(row.id, before=now)).status == "running"
+        assert (await expire_running(row.id, before=now + timedelta(seconds=1))).status == "unknown"
+        assert (await expire_running(row.id, before=now + timedelta(days=1))).status == "unknown"
+    asyncio.run(run())
+
+
+def test_remove_source_deletes_write_rows(pg_db):
+    async def run():
+        from db.accessors import calendar_write, calendar_source
+        from db.engine import get_session_maker
+        from db.models.calendar_source import CalendarSource
+        row = write_row()
+        async with get_session_maker()() as session:
+            session.add(CalendarSource(id=row.source_id, provider="google", connection_ref="synthetic", external_id="synthetic", name="Example", timezone="UTC"))
+            await session.commit()
+        await calendar_write.claim(row)
+        await calendar_source.remove(row.source_id)
+        assert await calendar_write.get(row.id) is None
+    asyncio.run(run())
