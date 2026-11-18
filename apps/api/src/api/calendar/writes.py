@@ -135,9 +135,14 @@ async def _source(source_id: str, *, writable=True):
     source = await calendar_source.get(source_id)
     if source is None or not source.is_active:
         raise WriteError("calendar_unavailable", 404)
-    if writable and (source.provider != "google" or "write" not in json.loads(source.capabilities_json)):
-        raise WriteError("calendar_not_writable", 403)
+    if writable:
+        _require_writable(source)
     return source
+
+
+def _require_writable(source):
+    if source.provider != "google" or "write" not in json.loads(source.capabilities_json):
+        raise WriteError("calendar_not_writable", 403)
 
 
 async def _identity(source):
@@ -264,19 +269,21 @@ async def execute(request: WriteRequest, *, write_id: str | None = None) -> Writ
     request = WriteRequest.model_validate(request.model_dump())
     payload = request.model_dump(mode="json", exclude={"write_id"}, exclude_none=True)
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    source = await _source(request.source_id)
+    source = await _source(request.source_id, writable=False)
     identifier = write_id or str(request.write_id)
     existing = await calendar_write.get(identifier)
     if existing is not None:
+        # Returning a stored outcome is a read even through the original write endpoint.
         if existing.request_hash != digest: raise WriteError("calendar_write_conflict")
         return await get(identifier)
+    _require_writable(source)
     target = None
     if request.operation != "create":
         target = await calendar_occurrence.get_visible(request.occurrence_id)
         if target is None or target.source_id != source.id:
             raise WriteError("calendar_event_gone", 404)
     bound = dict(request=request.model_dump(mode="json"), connection_ref=source.connection_ref,
-                 source_revision=source.revision, proposal=write_id is not None)
+                 source_revision=source.revision, proposal=write_id is not None, dispatched=False)
     record = CalendarWrite(id=identifier, source_id=source.id, operation=request.operation,
         target_external_id=target.external_id if target else None, request_json=json.dumps(bound), request_hash=digest,
         expected_revision=request.expected_revision)
@@ -314,7 +321,7 @@ async def execute(request: WriteRequest, *, write_id: str | None = None) -> Writ
         current_source = await _source(source.id)
         if current_source.revision != source.revision or current_source.connection_ref != source.connection_ref:
             raise WriteError("calendar_unavailable")
-        if not await calendar_write.mark_dispatch(identifier):
+        if not await calendar_write.mark_dispatch(identifier, request_json=json.dumps({**bound, "dispatched": True})):
             # A concurrent read expired the claim while we prepared; it may already have been
             # reconciled as not applied, so sending now could contradict the stored outcome.
             return await get(identifier)
@@ -365,12 +372,18 @@ async def _checked(record, bound, outcome):
 async def check(write_id: str) -> WriteOutcome:
     record = await calendar_write.expire_running(write_id, before=datetime.now(UTC) - timedelta(seconds=120))
     if record is None: raise WriteError("calendar_unavailable", 404)
-    if record.status != "unknown" or not record.request_json: return _out(record)
+    if record.status != "unknown" or not record.request_json or record.source_id in SEED_CALENDAR_IDS:
+        return _out(record)
     try:
-        source = await _source(record.source_id)
-        if source.id in SEED_CALENDAR_IDS:
-            return _out(record)
         bound = json.loads(record.request_json)
+        if record.operation == "create" and bound.get("dispatched") is False:
+            # An expired claim cannot change its dispatch marker or send anything.
+            result = await calendar_write.finish(record.id, status="not_applied", error_code="calendar_write_not_applied")
+            return await _checked(record, bound, _out(result))
+
+        # Reading back needs read access only: a calendar that lost write access since must
+        # not strand an outcome that may already have been applied.
+        source = await _source(record.source_id, writable=False)
         if source.connection_ref != bound["connection_ref"]:
             return _out(record)
         await _identity(source)
@@ -385,20 +398,31 @@ async def check(write_id: str) -> WriteOutcome:
             pages = await google.pages(google.live_call, "list_events", {
                 "calendarId": source.external_id, "startTime": (start - timedelta(minutes=1)).isoformat(),
                 "endTime": (end + timedelta(minutes=1)).isoformat(), "pageSize": 250})
-            recent, matches = [], []
+            recent = False
+            matches = []
+            indeterminate_match = False
+            criteria = _create_match_args(args)
             for page in pages:
                 for candidate in page["events"]:
                     if not (isinstance(candidate.get("id"), str) and candidate["id"] and candidate.get("status") != "cancelled"):
                         continue
                     try:
-                        fresh = google.instant(candidate.get("created")) >= record.started_at - timedelta(minutes=5)
+                        created = google.instant(candidate.get("created"))
                     except (TypeError, ValueError):
-                        fresh = True  # Unknown creation time: treat as possibly ours.
-                    if fresh:
-                        recent.append(candidate)
-                        if _matches(candidate, _create_match_args(args)):
-                            matches.append(candidate)
-            if len(matches) == 1: raw = matches[0]
+                        created = None
+                    # Recent events keep the outcome open. Only a proven post-dispatch match
+                    # can resolve it, and a second match of uncertain age prevents attribution.
+                    if created is not None and created < record.started_at - CREATE_SETTLE:
+                        continue
+                    recent = True
+                    if not _matches(candidate, criteria):
+                        continue
+                    if created is None or created == record.started_at:
+                        indeterminate_match = True
+                    elif bound.get("dispatched") is True and created > record.started_at:
+                        matches.append(candidate)
+            if len(matches) == 1 and not indeterminate_match:
+                raw = matches[0]
             # Any event created in the window since the claim (even renamed) keeps the outcome
             # open, and so does a write that has not had time to settle at the provider.
             not_applied = not recent and datetime.now(UTC) - record.started_at >= CREATE_SETTLE

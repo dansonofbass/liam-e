@@ -288,7 +288,9 @@ task description. After confirm the card invalidates the `tasks` query group.
 
 The UI at `/calendar` is a calendar with the views month, week, day and list. View and date are
 in the URL (`/calendar?view=week&date=2026-11-18`); invalid values fall back to week (on mobile:
-day) and today. Week and day show an all-day row and an hour grid with a now line; month shows six
+day) and today. Week and day show an all-day row and an hour grid with a now line, placed on the
+wall clock of the hour labels (`wallMinute`, `dayHours` in `grid.ts`; a nonexistent hour gets no
+slot) with lanes that count the drawn minimum height; month shows six
 weeks from Monday with up to three entries per day and “+N weitere”; list is the earlier agenda
 with its from and to fields. `useRangeOccurrences` loads the visible range from the index endpoint
 and follows up to ten cursor pages of 100; beyond that the view says that not everything was
@@ -363,20 +365,23 @@ The connector has no precondition and no idempotency key, so `api/calendar/write
   differs from the expected revision, the write ends as `not_applied` with `calendar_event_changed`
   and the current values, without sending anything. A change in Google between this read and the
   write remains possible; the dialog and the card say so.
-- **Dispatch:** right before the call the claim is confirmed again (`mark_dispatch`), which also
-  restarts its expiry clock; an expired claim sends nothing. Every write sends
+- **Dispatch:** right before the call `mark_dispatch` records the dispatch marker and restarts the
+  expiry clock in the same update. An expired claim sends nothing. Every write sends
   `notificationLevel: "NONE"`, waits at most 30 seconds and is never retried automatically.
 - **Outcome:** `done` updates the index together with the record. `failed` is used only for a
   definite refusal: a 4xx text saying "not applied", a validation-error text, or a check before
   sending. Everything else is `unknown`, and a `running` record older than 120 seconds counts as
   unknown.
-- **Check:** `check` resolves an unknown record by reading back. An update counts as done when
+- **Check:** `check` resolves an unknown record by reading back; it needs read access only, so a
+  calendar that lost write access since can still be reconciled. An update counts as done when
   `get_event` shows the requested values. A delete counts as done when the event is cancelled, or
   when it is missing and the calendar can still be listed. A create lists its time window without a
-  text filter and compares locally: exactly one matching event created since dispatch makes it
-  done. A create becomes `not_applied` only when no event was created in that window since dispatch
-  and five minutes have passed; otherwise it stays unknown. Terminal states clear the stored
-  request text.
+  text filter and compares locally: the stored dispatch marker and exactly one matching event
+  with a creation time strictly after dispatch are required for success. A missing timestamp or
+  one within five minutes before dispatch keeps the outcome open without proving success. An
+  additional match with an indeterminate timestamp prevents a success claim. A create becomes `not_applied` when the claim expired before dispatch, or when no candidate keeps the
+  outcome open after five minutes. Legacy records lack a dispatch marker and cannot prove a
+  create succeeded. Terminal states clear the stored request text.
 - **Source removal:** finished write records go with the source. Records whose outcome is open
   (`running` or `unknown`) stay as `unknown` without their request text, so a later check still
   reports the outcome as open instead of a failure that would invite a duplicate.
@@ -406,8 +411,12 @@ delete. It checks the turn's calendar scope, writability and live editability, a
 revision. Confirmation uses the existing confirm endpoint with the card ID as `write_id`; the
 context, scope, source and connection are checked again first. An unknown card, or a card left
 running by an interrupted confirm, is resolved with `POST /chat/proposals/{proposal_id}/check`
-(`chat_proposal_check`). A card whose write was never claimed fails, because nothing was sent. The
-private `connection_ref` is stored with the card but never sent to the browser, SSE or history,
+(`chat_proposal_check`). A card whose write was never claimed fails, because nothing was sent: for
+a running card the check first takes the card's write ID as a final `not_applied` record, so a
+confirm that is still alive finds it taken at its own claim and sends nothing. Removing a calendar
+deletes its finished records, so without the calendar a missing record proves nothing: such a card
+ends with `calendar_unavailable`, never with "not applied". A late check preserves a card's
+terminal result. The private `connection_ref` is stored with the card but never sent to the browser, SSE or history,
 and cards do not keep the provider's `htmlLink`. The prompt rules are `APP_PROMPT_VERSION` 8.
 
 The live run of 2026-11-18 is in `docs/superpowers/probes/2026-11-18-google-calendar-write-probe.md`.

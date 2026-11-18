@@ -94,7 +94,8 @@
 .le-calendar-issues { font-size: var(--font-size-small); color: var(--ink-muted); }
 .le-calendar-detail-header { display: flex; justify-content: space-between; align-items: center; }
 .le-calendar-close { display: none; }
-.le-time-grid { display: flex; flex-direction: column; min-height: 0; }
+.le-time-grid { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-x: auto; overflow-y: hidden; }
+.le-time-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .le-time-days, .le-time-columns, .le-time-all-days { display: grid; }
 .le-time-days > div { border: 0; text-align: center; padding: var(--space-2); }
 .le-time-days [aria-current="date"] strong, .le-month-date[aria-current="date"] { background: var(--accent-soft); color: var(--accent); border-radius: var(--radius-pill); }

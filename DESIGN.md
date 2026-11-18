@@ -457,7 +457,11 @@ Quoted German labels in this section are UI text.
   own range with „Heute“, „Von“, „Bis“ and „Abrufen“, and scrolls inside the page.
 - `desktop` and `tablet` open in week, `mobile` in day with a seven-day strip on top. Week and day:
   an all-day row, then an hour grid in its own scroll area, scrolled to 07:00 or to the hour before
-  now; a now-line in today's column; overlapping appointments share the column width. The gutter
+  now; a now-line in today's column; overlapping appointments share the column width, counting
+  the drawn minimum height (20 px, with a coarse pointer 44 px) so short ones never cover the next.
+  At narrow touch widths the header and time grid scroll together to keep lanes at least 44 px wide.
+  Rows follow the wall clock like the hour labels, also on DST days: a spring-forward day leaves its
+  missing hour empty, and the repeated hour of a fall-back day shares one row. The gutter
   label carries a soft hyphen („Ganz-tägig“), because browsers may lack German hyphenation. Month:
   six weeks from Monday, up to three entries per day and „+N weitere“, which opens that day; days
   outside the month are dimmed. With `pointer: coarse` a week grows with its 44 px entries and the
