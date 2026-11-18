@@ -28,7 +28,7 @@ def test_revoked_context_rest_message_and_stream_code_cover_all_scopes(monkeypat
     response = client.post('/api/v1/chat', json={'message': 'Hallo'})
     assert response.status_code == 409
     assert response.json()['detail'] == {'code': 'context_revoked', 'message':
-        'Die Vorlage oder die Auswahl von Konten, Kalendern oder Aufgaben ist nicht mehr gültig. Starte eine neue Unterhaltung.'}
+        'Die Vorlage, Präferenzen oder die Auswahl von Konten, Kalendern oder Aufgaben sind nicht mehr gültig. Starte eine neue Unterhaltung.'}
     with client.stream('POST', '/api/v1/chat/stream', json={'text': 'Hallo'}) as response:
         assert response.status_code == 200
         events = [json.loads(line[5:]) for line in response.iter_lines() if line.startswith('data:')]

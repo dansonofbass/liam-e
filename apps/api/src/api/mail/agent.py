@@ -121,7 +121,6 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                 json.dumps([{'key': rev.key, 'scope': rev.scope, 'value': rev.value} for rev in revisions], ensure_ascii=False)})
         if template_text is not None:
             messages.insert(2 if preference_ids else 1, {'role': 'user', 'content': 'Nutzervorlage für diesen Turn:\n' + template_text})
-        messages[0]['content'] += '\nRangfolge: feste App-Regeln und autorisierte Datenzugriffe, aktuelle ausdrückliche Bitte, gewählte Vorlage, passende aktive Präferenzen. Präferenzen ändern nur Stil und Entwürfe, niemals Rechte, Bestätigungspflichten oder Sicherheitsvorgaben.'
         context_mail = await mail_message.get_message(context_message_id) if context_message_id else None
         if context_mail and context_mail.account_id in scope_ids:
             messages.insert(1, {'role':'system', 'content':f'Die Bitte bezieht sich auf die Mail mit der ID {context_message_id}. Lies sie mit get_message, bevor du antwortest.'})

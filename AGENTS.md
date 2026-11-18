@@ -518,7 +518,10 @@ Ohne Opt-in oder mit ausdrücklich gesetztem `without_preferences: true` gibt es
 Ein Ladefehler liefert `preferences_unavailable` vor dem Modellaufruf; erst die bewusste Aktion
 „Ohne Präferenzen fortfahren“ setzt den Schalter für den erneuten Versuch. Es gibt keinen stillen
 Fallback. Ausschalten, Pausieren, Scopewechsel und Löschen widerrufen betroffene Kontexte in
-derselben Transaktion. Die vorhandenen Live-Prüfungen vor Modell-/Werkzeugaufrufen und nach zehn
+derselben Transaktion: Ausschalten alle Turns mit mindestens einer verwendeten Revision, die
+anderen Aktionen die Turns mit einer Revision der geänderten Präferenz. Turns ohne verwendete
+Präferenz bleiben gültig, auch ihre offenen Vorschläge. Die Rangfolge steht in den festen
+App-Regeln (`agent_prompt.py`, `APP_PROMPT_VERSION` 6). Die vorhandenen Live-Prüfungen vor Modell-/Werkzeugaufrufen und nach zehn
 Deltas bleiben maßgeblich; bereits gesendete Anfragen sind nicht rückholbar.
 
 Die gemeinsame transaktionale Präferenzsperre serialisiert Quoten, Änderungen, Auflösung und

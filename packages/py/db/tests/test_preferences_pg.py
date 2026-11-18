@@ -73,6 +73,7 @@ def test_http_crud_stale_version_and_private_validation(pg_db):
             assert (await client.delete(path, params={'expected_version': 1})).status_code == 409
             assert (await client.delete(path, params={'expected_version': 2})).status_code == 204
             assert (await client.get('/api/v1/preferences')).json() == []
+            assert (await client.get('/api/v1/preferences/contexts/missing')).status_code == 404
             for scope in ['*', 'missing']:
                 result = await client.post('/api/v1/preferences', json={'key': 'signature', 'scope': scope, 'value': 'test-only'})
                 assert result.status_code == 422 and 'test-only' not in result.text

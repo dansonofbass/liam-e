@@ -39,7 +39,7 @@ async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
                 conversation_id, user_id = event.conversation_id, event.user_message_id
             elif event.event == 'error':
                 if event.code == 'context_revoked':
-                    raise refuse(409, 'context_revoked', 'Die Vorlage oder die Auswahl von Konten, Kalendern oder Aufgaben ist nicht mehr gültig. Starte eine neue Unterhaltung.')
+                    raise refuse(409, 'context_revoked', 'Die Vorlage, Präferenzen oder die Auswahl von Konten, Kalendern oder Aufgaben sind nicht mehr gültig. Starte eine neue Unterhaltung.')
                 if event.code == 'preferences_unavailable':
                     raise refuse(503, 'preferences_unavailable', 'Die Präferenzen konnten nicht geladen werden. Du kannst ausdrücklich ohne Präferenzen fortfahren.')
                 if event.code == 'model_unavailable':

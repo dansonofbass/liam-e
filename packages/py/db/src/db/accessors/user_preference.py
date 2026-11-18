@@ -29,7 +29,10 @@ async def lock(session):
 
 
 async def revoke(session, revision_ids=None):
-    rows = (await session.execute(select(ChatContext).where(ChatContext.preferences_enabled.is_(True)))).scalars()
+    """Revoke turns that used the given revisions, or any revision at all; turns without one are unaffected."""
+    rows = (await session.execute(select(ChatContext).where(
+        ChatContext.preferences_enabled.is_(True), ChatContext.revoked.is_(False),
+        ChatContext.preference_revision_ids_json != '[]'))).scalars()
     for row in rows:
         if revision_ids is None or set(json.loads(row.preference_revision_ids_json)) & set(revision_ids):
             row.revoked = True
