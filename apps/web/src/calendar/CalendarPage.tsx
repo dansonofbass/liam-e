@@ -15,6 +15,7 @@ import { parseSearch } from './url'
 import { useBreakpoint } from '../shell/useBreakpoint'
 import { Dot } from '../ds/Chip'
 import { DeleteEventDialog } from './DeleteEventDialog'
+import { EventDialog } from './EventDialog'
 import { eventWhen } from './EventReading'
 import { safeCalendarLink, writeError } from './write-state'
 import { errorCode } from '../api/unwrap'
@@ -38,8 +39,8 @@ export function CalendarDetail({ id }: { id: string }) {
   const breakpoint = useBreakpoint(), location = useLocation(), navigate = useNavigate()
   const search = parseSearch(location.search as Record<string, unknown>, breakpoint === 'mobile')
   const client = useQueryClient()
-  const [deleting, setDeleting] = useState(false)
-  useEffect(() => { setDeleting(false) }, [id])
+  const [deleting, setDeleting] = useState(false), [editing, setEditing] = useState(false)
+  useEffect(() => { setDeleting(false); setEditing(false) }, [id])
   const detail = useQuery({ queryKey: ['calendar', 'live', id], retry: false, gcTime: 0, queryFn: async () => {
     const result = await calendarOccurrenceLive({ path: { occurrence_id: id } })
     if (!result.data || (result.response && result.response.status >= 400)) throw new Error(writeError(errorCode(result.error)))
@@ -59,7 +60,8 @@ export function CalendarDetail({ id }: { id: string }) {
       {row.location && <p>{row.location}</p>}{row.description && <p className="le-event-description">{row.description}</p>}
       {!writable && <><span className="le-tag">{de.calendar.readOnlyTag}</span><p>{reason}</p></>}
       {href && <a className="le-link" href={href} target="_blank" rel="noopener noreferrer">{de.calendar.googleOpen}</a>}
-      <div className="le-calendar-controls">{writable && <Button variant="danger" onClick={() => setDeleting(true)}>{de.calendar.deleteEvent}</Button>}<AskAboutCalendar occurrenceId={id} sourceId={source.id} /></div>
+      <div className="le-calendar-controls">{writable && <><Button variant="secondary" onClick={() => setEditing(true)}>{de.calendar.editEvent}</Button><Button variant="danger" onClick={() => setDeleting(true)}>{de.calendar.deleteEvent}</Button></>}<AskAboutCalendar occurrenceId={id} sourceId={source.id} /></div>
+      {editing && <EventDialog key={id} mode="edit" initial={{ ...row, occurrence_id: id }} sources={sources.data!} onClose={() => setEditing(false)} />}
       {deleting && <DeleteEventDialog key={id} event={{ ...row, occurrence_id: id }} onClose={() => setDeleting(false)} onDone={() => { void client.invalidateQueries({ queryKey: ['calendar'] }); void navigate({ to: '/calendar', search }) }} />}
     </>}
   </article>

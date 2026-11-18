@@ -23,6 +23,22 @@ function setup(initial = '/calendar?view=week&date=2026-11-18') {
   render(<RouterProvider router={router} />)
   return router
 }
+for (const writable of [true, false]) test(`slot writing follows capability: ${writable}`, async () => {
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ ...source, capabilities: writable ? ['read', 'write'] : ['read'] }] } as never)
+  spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [], next_cursor: null } } as never)
+  spyOn(sdk, 'calendarSourceSync').mockResolvedValue({ data: { queued: false }, response: { ok: true } } as never)
+  setup('/calendar?view=day&date=2026-11-18')
+  await screen.findByText(de.calendar.empty)
+  fireEvent.click(screen.getByRole('button', { name: /18\.11\.2026, 09:00/ }))
+  if (writable) {
+    expect(screen.getByRole('dialog', { name: de.calendar.newEvent })).toBeTruthy()
+    expect((screen.getByLabelText(de.calendar.eventStart) as HTMLInputElement).value).toBe('2026-11-18T09:00')
+    expect((screen.getByLabelText(de.calendar.eventEnd) as HTMLInputElement).value).toBe('2026-11-18T10:00')
+  } else {
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('button', { name: de.calendar.addEvent })).toBeNull()
+  }
+})
 test('mobile defaults to day and offers seven dates with the selected day pressed', async () => {
   mobile()
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [source] } as never)
