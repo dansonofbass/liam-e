@@ -1,7 +1,8 @@
 """Explicit, bounded preferences; removed rows are content-free suppression references."""
+from datetime import datetime
 from sqlalchemy import CheckConstraint, Index, text
 from sqlmodel import Field, SQLModel
-from db.models._common import new_id
+from db.models._common import new_id, utc_datetime_column
 from db.models.prompt_template import OWNER_SCOPE
 
 GLOBAL_SCOPE = '*'
@@ -23,3 +24,4 @@ class UserPreference(SQLModel, table=True):
     status: str = 'active'
     revision_id: str | None = None
     version: int = 1
+    removed_at: datetime | None = Field(default=None, sa_column=utc_datetime_column(nullable=True))
