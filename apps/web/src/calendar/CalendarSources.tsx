@@ -55,7 +55,7 @@ export function CalendarSources() {
     <div className="le-calendar-controls"><CalendarSetup /><Link to="/calendar" className="le-link le-calendar-back">{de.calendar.back}</Link></div>
     {sources.isPending && <p role="status">{de.calendar.loading}</p>}
     {sources.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void sources.refetch() } }}>{de.calendar.error}</Notice>}
-    {sources.data?.length === 0 && <p className="small le-muted">{de.calendar.noSources}</p>}
+    {sources.isSuccess && sources.data.length === 0 && <p className="small le-muted">{de.calendar.noSources}</p>}
     {Boolean(sources.data?.length) && <div className="le-calendar-source-list">{sources.data?.map(source => <section key={source.id} className="le-calendar-source" aria-label={source.name}>
       <SourceStatus source={source} />
       <div className="le-calendar-controls">
