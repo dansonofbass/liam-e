@@ -4,14 +4,21 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
 import type { InsightOut } from '../api/generated/types.gen'
-import { ChatSessionProvider } from '../chat/session'
+import { ChatSessionProvider, useChatSession, type TaskScope } from '../chat/session'
 import { Route as MailRoute } from '../routes/_app/mail'
 import { inboxSearchSchema } from './filters'
 import { MailView } from './MailView'
+import { useEffect } from 'react'
 
 const originalMatchMedia = window.matchMedia, originalFetch = globalThis.fetch
 const mail = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', to: ['ich@example.com'], cc: [], subject: 'Termin', snippet: '', body_text: '<b>fett</b>', internal_date: null, deadline: null, has_attachments: true, attachments: [{ name: 'Abrechnung_2025.pdf', size: 217088, content_type: 'application/pdf' }], is_flagged: false, is_read: true, needs_reply: false, can_unsubscribe: true, can_show_original: true, thread_id: null }
-function setup({ mobile = false, unread = false, missing = false, loading = false, failed = false, path = '/mail/m1', stream = false, insight }: { mobile?: boolean; unread?: boolean; missing?: boolean; loading?: boolean; failed?: boolean; path?: string; stream?: boolean; insight?: () => Promise<{ data: InsightOut }> } = {}) {
+// Stands for a task choice left on the start page before the mail was opened.
+function StartPageTasks({ scope }: { scope?: TaskScope }) {
+  const { setTaskScope } = useChatSession()
+  useEffect(() => { if (scope) setTaskScope('new', scope) }, [])
+  return null
+}
+function setup({ mobile = false, unread = false, missing = false, loading = false, failed = false, path = '/mail/m1', stream = false, insight, startTasks }: { mobile?: boolean; unread?: boolean; missing?: boolean; loading?: boolean; failed?: boolean; path?: string; stream?: boolean; insight?: () => Promise<{ data: InsightOut }>; startTasks?: TaskScope } = {}) {
   window.matchMedia = ((q: string) => ({ matches: !mobile && (q.includes('1024px') || q.includes('640px')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   let request: Record<string, unknown> | undefined
   globalThis.fetch = ((_url: unknown, init: RequestInit) => {
@@ -25,7 +32,7 @@ function setup({ mobile = false, unread = false, missing = false, loading = fals
   const get = spyOn(sdk, 'mailMessageGet').mockImplementation((async (options: { path: { message_id: string } }) => { if (missing) return { error: { detail: 'Mail nicht gefunden.' }, response: new Response(null, { status: 404 }) }; if (failed) return { error: { detail: 'down' }, response: new Response(null, { status: 500 }) }; if (loading) return await new Promise(() => {}); return { data: rows.find(row => row.id === options.path.message_id) ?? mail } }) as never)
   const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => ({ data: { action_id: 'act', message: rows.find(row => row.id === options.path.message_id) }, response: { status: 200 } })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
-  const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
+  const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><StartPageTasks scope={startTasks} /><Outlet /></ChatSessionProvider></QueryClientProvider> })
   const inbox = createRoute({ getParentRoute: () => root, path: '/mail', validateSearch: inboxSearchSchema, component: MailRoute.options.component })
   const index = createRoute({ getParentRoute: () => inbox, path: '/', component: () => <div>Inbox index</div> })
   const detail = createRoute({ getParentRoute: () => inbox, path: '$messageId', component: () => { const { messageId } = useParams({ strict: false }) as { messageId: string }; return <MailView id={messageId} /> } })
@@ -191,6 +198,14 @@ test('draft reply starts a turn with context and opens conversation', async () =
   await waitFor(() => expect(request()).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', context_message_id: 'm1' }))
   expect(request()?.account_id).toBeUndefined()
   await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c1'))
+})
+
+test('mail reader turns never inherit the task choice left on the start page', async () => {
+  const { request } = setup({ stream: true, startTasks: { source: 'account_and_unlinked', account_id: 'a' } }); await screen.findByRole('heading', { name: 'Termin' })
+  fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
+  await waitFor(() => expect(request()?.context_message_id).toBe('m1'))
+  expect(request()?.task_source).toBe('none')
+  expect(request()?.task_source_account_id).toBeUndefined()
 })
 
 test('ask in chat opens start page with mail reference', async () => {

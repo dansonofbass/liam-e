@@ -47,7 +47,8 @@ export function MailView({ id }: { id: string }) {
   const start = (text: string) => {
     if (busy) return
     setStarted(true)
-    void send({ text, context_message_id: id })
+    // Mail reader turns name their task access: a choice left on the start page belongs to that composer.
+    void send({ text, context_message_id: id, task_source: 'none' })
   }
   const remove = (kind: 'archive' | 'trash' | 'spam') => {
     if (!checkCapacity()) return
