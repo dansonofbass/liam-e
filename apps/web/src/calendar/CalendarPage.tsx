@@ -17,7 +17,8 @@ import { Dot } from '../ds/Chip'
 import { DeleteEventDialog } from './DeleteEventDialog'
 import { EventDialog } from './EventDialog'
 import { eventWhen } from './EventReading'
-import { safeCalendarLink, writeError } from './write-state'
+import { safeCalendarLink, useUnresolvedWrites, writeError } from './write-state'
+import { UnresolvedNotice } from './UnresolvedNotice'
 import { errorCode } from '../api/unwrap'
 
 export function SourceStatus({ source, from, to }: { source: SourceOut; from?: string; to?: string }) {
@@ -47,7 +48,10 @@ export function CalendarDetail({ id }: { id: string }) {
     return result.data
   } }), sources = useQuery(calendarSourcesQuery())
   const row = detail.data, source = sources.data?.find(s => s.id === row?.source_id)
+  const open = useUnresolvedWrites().filter(write => write.occurrenceId === id)
   const writable = row?.editable && source?.capabilities.includes('write') && !!row.revision
+  // A conflict or an open outcome makes the shown revision stale: reread it once the dialog closes.
+  const reread = () => { void client.invalidateQueries({ queryKey: ['calendar', 'live', id] }) }
   const href = safeCalendarLink(row?.html_link)
   const reason = de.calendar.reasons[(row?.reason ?? 'calendar_not_writable') as keyof typeof de.calendar.reasons] ?? de.calendar.reasons.calendar_not_writable
   return <article className="le-calendar-detail">
@@ -60,9 +64,10 @@ export function CalendarDetail({ id }: { id: string }) {
       {row.location && <p>{row.location}</p>}{row.description && <p className="le-event-description">{row.description}</p>}
       {!writable && <><span className="le-tag">{de.calendar.readOnlyTag}</span><p>{reason}</p></>}
       {href && <a className="le-link" href={href} target="_blank" rel="noopener noreferrer">{de.calendar.googleOpen}</a>}
-      <div className="le-calendar-controls">{writable && <><Button variant="secondary" onClick={() => setEditing(true)}>{de.calendar.editEvent}</Button><Button variant="danger" onClick={() => setDeleting(true)}>{de.calendar.deleteEvent}</Button></>}<AskAboutCalendar occurrenceId={id} sourceId={source.id} /></div>
-      {editing && <EventDialog key={id} mode="edit" initial={{ ...row, occurrence_id: id }} sources={sources.data!} onClose={() => setEditing(false)} />}
-      {deleting && <DeleteEventDialog key={id} event={{ ...row, occurrence_id: id }} onClose={() => setDeleting(false)} onDone={() => { void client.invalidateQueries({ queryKey: ['calendar'] }); void navigate({ to: '/calendar', search }) }} />}
+      <UnresolvedNotice writes={open} />
+      <div className="le-calendar-controls">{writable && <><Button variant="secondary" disabled={open.length > 0} onClick={() => setEditing(true)}>{de.calendar.editEvent}</Button><Button variant="danger" disabled={open.length > 0} onClick={() => setDeleting(true)}>{de.calendar.deleteEvent}</Button></>}<AskAboutCalendar occurrenceId={id} sourceId={source.id} /></div>
+      {editing && <EventDialog key={id} mode="edit" initial={{ ...row, occurrence_id: id }} sources={sources.data!} onClose={() => { setEditing(false); reread() }} />}
+      {deleting && <DeleteEventDialog key={id} event={{ ...row, occurrence_id: id }} onClose={() => { setDeleting(false); reread() }} onDone={() => { void client.invalidateQueries({ queryKey: ['calendar'] }); void navigate({ to: '/calendar', search }) }} />}
     </>}
   </article>
 }

@@ -9,10 +9,11 @@ import { MonthView } from './MonthView'
 import { TimeGrid } from './TimeGrid'
 import { de } from '../i18n/de'
 import { calendarTime } from './state'
+import { resetUnresolvedWrites, trackWrite } from './write-state'
 
 const originalMatchMedia = window.matchMedia
 const mobile = () => { window.matchMedia = ((query: string) => ({ matches: query === '(pointer: coarse)', media: query, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia }
-afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia })
+afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia; resetUnresolvedWrites() })
 const source = { id: 'test-only', name: 'Planung', provider: 'google', timezone: 'UTC', is_active: true, capabilities: ['read'], coverage_start: '2026-01-01T00:00:00Z', coverage_end: '2027-01-01T00:00:00Z', last_success_at: '2026-11-18T00:00:00Z', stale: false, incomplete: false }
 const event = (id: string) => ({ id, event_id: id, source_id: source.id, title: `Termin ${id}`, start_at: '2026-11-18T09:00:00Z', end_at: '2026-11-18T10:00:00Z', start_date: null, end_date: null, timezone: 'UTC' })
 function setup(initial = '/calendar?view=week&date=2026-11-18') {
@@ -194,4 +195,20 @@ test('toolbar wraps instead of letting the period title run under the buttons', 
   const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
   const rule = css.match(/^\.le-calendar-toolbar \{([^}]+)\}/mu)?.[1] ?? ''
   expect(rule).toContain('flex-wrap: wrap')
+})
+test('an unresolved create blocks new appointments until it is checked', async () => {
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ ...source, capabilities: ['read', 'write'] }] } as never)
+  spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [], next_cursor: null } } as never)
+  spyOn(sdk, 'calendarSourceSync').mockResolvedValue({ data: { queued: false }, response: { ok: true } } as never)
+  const check = spyOn(sdk, 'calendarWriteCheck').mockResolvedValue({ data: { write_id: 'test-only', status: 'done' }, response: { status: 200 } } as never)
+  trackWrite({ writeId: 'test-only', kind: 'create' }, 'unknown')
+  setup('/calendar?view=day&date=2026-11-18')
+  await screen.findByText(de.calendar.empty)
+  expect((screen.getByRole('button', { name: de.calendar.addEvent }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: /18\.11\.2026, 09:00/ }))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.check }))
+  await waitFor(() => expect((screen.getByRole('button', { name: de.calendar.addEvent }) as HTMLButtonElement).disabled).toBe(false))
+  expect(check.mock.calls[0]?.[0]?.path.write_id).toBe('test-only')
+  expect(screen.queryByText(de.calendar.unresolved)).toBeNull()
 })

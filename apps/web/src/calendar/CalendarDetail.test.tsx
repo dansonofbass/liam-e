@@ -47,3 +47,13 @@ test('changed revision displays current values without deletion success', async 
   expect(router.state.location.pathname).toBe('/calendar/event')
   expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Löschen' })).toBeNull()
 })
+test('closing a conflicted edit rereads the live event before the next attempt', async () => {
+  spyOn(sdk, 'calendarEventUpdate').mockResolvedValue({ error: { detail: { status: 'not_applied', error_code: 'calendar_event_changed', current: { ...live, title: 'Neue Planung', revision: 'v2' } } }, response: { status: 409 } } as never)
+  mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+  fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Andere Planung' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+  await screen.findByText('Neue Planung')
+  fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+  await waitFor(() => expect(sdk.calendarOccurrenceLive).toHaveBeenCalledTimes(2))
+})

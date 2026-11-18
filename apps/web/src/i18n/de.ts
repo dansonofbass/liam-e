@@ -83,7 +83,7 @@ export const de = {
     deleteWarning: 'Das Löschen kann nicht garantiert rückgängig gemacht werden.',
     writeRisk: 'Eine gleichzeitige Änderung in Google kann überschrieben werden.',
     readOnlyTag: 'Nur lesbar', googleOpen: 'In Google Kalender öffnen', checking: 'Wird geprüft …', check: 'Prüfen',
-    retryWrite: 'Erneut versuchen', adoptEdit: 'Übernehmen und neu bearbeiten', currentValues: 'Aktueller Stand',
+    retryWrite: 'Erneut versuchen', unresolved: 'Bei einer Änderung ist das Ergebnis noch unklar. Prüfe sie, bevor du einen neuen Termin anlegst oder diesen Termin erneut änderst.', adoptEdit: 'Übernehmen und neu bearbeiten', currentValues: 'Aktueller Stand',
     reasons: { cancelled: 'Dieser Termin wurde abgesagt.', series: 'Serientermine bearbeitest du in Google Kalender.', guests: 'Termine mit Gästen bearbeitest du in Google Kalender.', organizer: 'Du bist nicht der Veranstalter dieses Termins.', event_type: 'Diese Terminart bearbeitest du in Google Kalender.', calendar_not_writable: 'Dieser Kalender erlaubt hier keine Änderungen.' },
     writeErrors: {
       calendar_not_writable: 'Dieser Kalender erlaubt keine Änderungen. Prüfe seine Freigabe in Google Kalender.',
@@ -98,6 +98,8 @@ export const de = {
       calendar_unavailable: 'Der Kalender ist nicht erreichbar. Prüfe seine Verbindung und Freigabe.',
       calendar_write_rejected: 'Google hat die Änderung abgelehnt. Prüfe den Termin und die Schreibrechte.',
       calendar_write_not_applied: 'Die Änderung wurde nicht ausgeführt. Du kannst es erneut versuchen.',
+      calendar_out_of_scope: 'Dieser Kalender gehört nicht zur Kalenderauswahl dieser Unterhaltung. Starte eine neue Unterhaltung mit ihm.',
+      proposal_context_revoked: 'Dieser Vorschlag stammt aus einem widerrufenen Kontext. Starte eine neue Unterhaltung.',
     },
     view: 'Ansicht', close: 'Schließen', month: 'Monat', week: 'Woche', day: 'Tag', list: 'Liste', dayStrip: 'Tage dieser Woche', previous: 'Vorheriger Zeitraum', next: 'Nächster Zeitraum',
     capped: 'Nicht alle Termine wurden geladen. Wähle einen kürzeren Zeitraum.',

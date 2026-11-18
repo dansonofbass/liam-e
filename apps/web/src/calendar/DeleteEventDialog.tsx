@@ -7,7 +7,7 @@ import { Button, Notice } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
 import { de } from '../i18n/de'
 import { EventReading } from './EventReading'
-import { writeError, writeOutcome } from './write-state'
+import { trackWrite, writeError, writeOutcome } from './write-state'
 
 export function DeleteEventDialog({ event, onClose, onDone }: { event: LiveEvent; onClose(): void; onDone(): void }) {
   const [writeId, setWriteId] = useState(() => crypto.randomUUID())
@@ -15,15 +15,16 @@ export function DeleteEventDialog({ event, onClose, onDone }: { event: LiveEvent
   const [busy, setBusy] = useState(false), pending = useRef(false)
   const close = () => { if (!pending.current) onClose() }
   const ref = useFocusTrap(true, close), titleId = useId()
+  const entry = { writeId, kind: 'delete' as const, occurrenceId: event.occurrence_id ?? undefined }
   const run = async (check = false) => {
     if (pending.current) return
     pending.current = true; setBusy(true)
     try {
       const result = check ? await calendarWriteCheck({ path: { write_id: writeId } }) : await calendarEventDelete({ path: { occurrence_id: event.occurrence_id! }, body: { write_id: writeId, expected_revision: event.revision! } })
-      const next = writeOutcome(result); setOutcome(next)
+      const next = writeOutcome(result); setOutcome(next); trackWrite(entry, next.status)
       if (next.status === 'done') onDone()
       else ref.current?.focus()
-    } catch { setOutcome({ write_id: writeId, status: 'unknown', error_code: 'calendar_write_unknown' }) }
+    } catch { setOutcome({ write_id: writeId, status: 'unknown', error_code: 'calendar_write_unknown' }); trackWrite(entry, 'unknown') }
     finally { pending.current = false; setBusy(false) }
   }
   const checking = outcome?.status === 'unknown' || outcome?.status === 'running'

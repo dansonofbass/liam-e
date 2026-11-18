@@ -9,7 +9,7 @@ import { useFocusTrap } from '../ds/useFocusTrap'
 import { de } from '../i18n/de'
 import { addDays, browserZone } from './state'
 import { EventReading } from './EventReading'
-import { writeError, writeOutcome } from './write-state'
+import { trackWrite, writeError, writeOutcome } from './write-state'
 
 type Slot = { date: string; minute?: number }
 type Form = { source: string; title: string; allDay: boolean; start: string; end: string; location: string; description: string }
@@ -50,6 +50,7 @@ export function EventDialog({ mode, initial, sources, onClose }: { mode: 'create
     }
     return result
   }
+  const entry = () => mode === 'create' ? { writeId, kind: 'create' as const } : { writeId, kind: 'update' as const, occurrenceId: live?.occurrence_id ?? undefined }
   const run = async (check = false) => {
     if (pending.current || (!check && (!valid || outcome || (mode === 'edit' && !changed)))) return
     pending.current = true; setBusy(true); setError(undefined)
@@ -58,10 +59,10 @@ export function EventDialog({ mode, initial, sources, onClose }: { mode: 'create
       const result = check ? await calendarWriteCheck({ path: { write_id: writeId } }) : mode === 'create'
         ? await calendarEventCreate({ body: { ...fields, source_id: form.source, title: form.title, write_id: writeId } })
         : await calendarEventUpdate({ path: { occurrence_id: live!.occurrence_id! }, body: { ...fields, expected_revision: live!.revision!, write_id: writeId } as EventUpdateIn })
-      const next = writeOutcome(result); setOutcome(next)
+      const next = writeOutcome(result); setOutcome(next); trackWrite(entry(), next.status)
       if (next.status === 'done') { void client.invalidateQueries({ queryKey: ['calendar'] }); onClose() }
       else ref.current?.focus()
-    } catch { setOutcome({ status: 'unknown', write_id: writeId, error_code: 'calendar_write_unknown' }); ref.current?.focus() }
+    } catch { setOutcome({ status: 'unknown', write_id: writeId, error_code: 'calendar_write_unknown' }); trackWrite(entry(), 'unknown'); ref.current?.focus() }
     finally { pending.current = false; setBusy(false) }
   }
   const adopt = async () => {

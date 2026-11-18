@@ -17,6 +17,8 @@ import { addDays, covers, localBoundary, todayLocal } from './state'
 import { parseSearch, type CalendarView as View } from './url'
 import { useRangeOccurrences } from './useRangeOccurrences'
 import { EventDialog } from './EventDialog'
+import { UnresolvedNotice } from './UnresolvedNotice'
+import { useUnresolvedWrites } from './write-state'
 
 export function CalendarView() {
   const mobile = useBreakpoint() === 'mobile'
@@ -27,7 +29,8 @@ export function CalendarView() {
   const [excluded, setExcluded] = useState<string[]>([])
   const [slot, setSlot] = useState<{ date: string; minute?: number }>()
   const writable = (sources.data ?? []).filter(s => s.is_active && s.capabilities.includes('write'))
-  const onSlot = (value: { date: string; minute?: number }) => { if (writable.length) setSlot(value) }
+  const unresolved = useUnresolvedWrites(), creating = unresolved.some(write => write.kind === 'create')
+  const onSlot = (value: { date: string; minute?: number }) => { if (writable.length && !creating) setSlot(value) }
   const selected = (sources.data ?? []).filter(s => s.is_active && !excluded.includes(s.id))
   const page = useRangeOccurrences(range.from, range.to, selected.map(s => s.id))
   const attempted = useRef(new Set<string>())
@@ -64,13 +67,14 @@ export function CalendarView() {
       <IconButton className="le-calendar-prev" size={mobile ? 'lg' : 'md'} icon="chevron-left" label={de.calendar.previous} onClick={() => change(view, shift(view, date, -1))} />
       <IconButton className="le-calendar-next" size={mobile ? 'lg' : 'md'} icon="chevron-right" label={de.calendar.next} onClick={() => change(view, shift(view, date, 1))} />
       <h2 className="heading le-calendar-period">{periodTitle(view, date)}</h2>
-      {writable.length > 0 && <Button className="le-calendar-add le-btn--sm" variant="secondary" icon="plus" onClick={() => onSlot({ date, minute: 540 })}>{de.calendar.addEvent}</Button>}
+      {writable.length > 0 && <Button className="le-calendar-add le-btn--sm" variant="secondary" icon="plus" disabled={creating} onClick={() => onSlot({ date, minute: 540 })}>{de.calendar.addEvent}</Button>}
       <div className="le-calendar-switch" role="group" aria-label={de.calendar.view}>{(['month', 'week', 'day', 'list'] as const).map(v => <Button variant="ghost" key={v} aria-pressed={v === view} onClick={() => change(v, date)}>{de.calendar[v]}</Button>)}</div>
       <IconButton className="le-calendar-refresh" icon="refresh-cw" label={de.calendar.refresh} disabled={!selected.length || refreshing} onClick={() => { void refresh(selected.map(s => s.id), false) }} />
     </div>
     {view === 'list' ? <ListView /> : <>
     {sources.isPending && <p role="status">{de.calendar.loading}</p>}
     {sources.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void sources.refetch() } }}>{de.calendar.error}</Notice>}
+    <UnresolvedNotice writes={unresolved} />
     <SourceBar sources={sources.data ?? []} selected={selected.map(s => s.id)} onToggle={id => setExcluded(current => current.includes(id) ? current.filter(x => x !== id) : [...current, id])} from={range.from} to={range.to} />
     {selected.map(s => notices[s.id] && <Notice key={s.id} tone="info">{s.name}: {notices[s.id]}</Notice>)}
     {page.isPending && <p role="status">{de.calendar.loading}</p>}

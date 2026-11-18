@@ -4,8 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as sdk from '../api/generated/sdk.gen'
 import type { SourceOut, LiveEvent } from '../api/generated/types.gen'
 import { EventDialog } from './EventDialog'
+import { resetUnresolvedWrites, unresolvedWrites } from './write-state'
 const sources = [{ id: 's', name: 'Planung', is_active: true, capabilities: ['read', 'write'] }, { id: 'r', name: 'Nur lesen', is_active: true, capabilities: ['read'] }] as SourceOut[]
-afterEach(() => { cleanup(); mock.restore() })
+afterEach(() => { cleanup(); mock.restore(); resetUnresolvedWrites() })
 function mount(initial: { date: string; minute?: number } | LiveEvent = { date: '2026-11-20', minute: 540 }, mode: 'create' | 'edit' = 'create') {
   const close = mock(() => {})
   render(<QueryClientProvider client={new QueryClient()}><EventDialog mode={mode} initial={initial} sources={sources} onClose={close} /></QueryClientProvider>)
@@ -81,4 +82,12 @@ test('a definite refusal unlocks the form for a corrected attempt with a new ID'
   fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
   await waitFor(() => expect(close).toHaveBeenCalledTimes(1))
   expect(create.mock.calls[0]?.[0]?.body.write_id).not.toBe(create.mock.calls[1]?.[0]?.body.write_id)
+})
+test('closing with an unknown outcome keeps the write for a later check', async () => {
+  const create = spyOn(sdk, 'calendarEventCreate').mockResolvedValue({ data: { status: 'unknown' }, response: { status: 202 } } as never)
+  const close = mount(); title(); fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+  await screen.findByRole('button', { name: 'Prüfen' })
+  fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+  expect(close).toHaveBeenCalledTimes(1)
+  expect(unresolvedWrites()).toEqual([{ writeId: String(create.mock.calls[0]?.[0]?.body.write_id), kind: 'create' }])
 })

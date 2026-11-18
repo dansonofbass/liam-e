@@ -49,3 +49,8 @@ test('a card left running after an interrupted confirm can be checked', async ()
   await screen.findByText('Termin geändert.')
   expect(check).toHaveBeenCalledTimes(1)
 })
+test('a definite refusal outside the conversation scope is not called unclear', async () => {
+  mount({ ...message, proposal_status: 'failed', proposal: { ...message.proposal!, result: { done: 0, failed: [{ id: 'proposal', code: 'calendar_out_of_scope' }] } } } as ChatMessageOut)
+  await screen.findByText(/nicht zur Kalenderauswahl/)
+  expect(screen.queryByText(/noch unklar/)).toBeNull()
+})
