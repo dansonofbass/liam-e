@@ -6,6 +6,7 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from sqlalchemy.exc import SQLAlchemyError
 
 from db.accessors import chat_conversation as conversation_access, chat_message as message_access
 from db.accessors import mail_account, mail_insight, mail_message, chat_context, calendar_occurrence, preference_revision
@@ -67,6 +68,15 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         model=model, prompt_revision_id=prompt_revision_id, calendar_source_ids=calendar_source_ids, calendar_timezone=calendar_timezone,
         task_source=task_source, task_source_account_id=task_source_account_id, without_preferences=without_preferences)
     scope_ids = json.loads(snapshot.account_scope_json)['account_ids']
+    preference_ids = json.loads(getattr(snapshot, 'preference_revision_ids_json', '[]'))
+    try:
+        revisions = await preference_revision.get_revisions(preference_ids)
+    except SQLAlchemyError:
+        yield ErrorEvent(code='preferences_unavailable')
+        return
+    if any(rev is None or rev.removed for rev in revisions):
+        yield ErrorEvent(code='context_revoked')
+        return
     user = await message_access.add_message(conversation_id=conversation.id, role='user', content=text, context_id=snapshot.id)
     model = conversation.model or mail_env.mail_chat_model
     all_text = ''
@@ -106,12 +116,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                    (row.role not in ('tool', 'proposal', 'draft') and not row.tool_payload_json) or
                    (row.context_id in contexts and not contexts[row.context_id].revoked)]
         messages = _to_model_messages(history, prompt=system_prompt(today=ctx.today, account_scope=account.email_address if account else None))
-        preference_ids = json.loads(getattr(snapshot, 'preference_revision_ids_json', '[]'))
         if preference_ids:
-            revisions = await preference_revision.get_revisions(preference_ids)
-            if any(rev is None or rev.removed for rev in revisions):
-                yield ErrorEvent(code='context_revoked')
-                return
             messages.insert(1, {'role': 'user', 'content': 'Passende manuell bestätigte Stilpräferenzen (nachrangig zur aktuellen Bitte und Vorlage):\n' +
                 json.dumps([{'key': rev.key, 'scope': rev.scope, 'value': rev.value} for rev in revisions], ensure_ascii=False)})
         if template_text is not None:

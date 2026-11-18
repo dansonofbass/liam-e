@@ -9,7 +9,7 @@ from sqlalchemy import select, text, update
 from db.engine import get_session_maker
 from db.models.user_preference import UserPreference, GLOBAL_SCOPE
 from db.models.preference_revision import PreferenceRevision
-from db.models.personalization_settings import PersonalizationSettings
+from db.accessors.personalization_settings import settings_in_session, settings as settings, update_settings as update_settings
 from db.models.prompt_template import OWNER_SCOPE
 from db.models.mail_account import MailAccount
 from db.models.chat_context import ChatContext
@@ -28,45 +28,11 @@ async def lock(session):
     await session.execute(text('SELECT pg_advisory_xact_lock(380038)'))
 
 
-async def settings_in_session(session):
-    row = await session.get(PersonalizationSettings, OWNER_SCOPE)
-    if row is None:
-        row = PersonalizationSettings()
-        session.add(row)
-        await session.flush()
-    return row
-
-
-async def settings():
-    async with get_session_maker()() as session:
-        await lock(session)
-        row = await settings_in_session(session)
-        await session.commit()
-        return row
-
-
 async def revoke(session, revision_ids=None):
     rows = (await session.execute(select(ChatContext).where(ChatContext.preferences_enabled.is_(True)))).scalars()
     for row in rows:
         if revision_ids is None or set(json.loads(row.preference_revision_ids_json)) & set(revision_ids):
             row.revoked = True
-
-
-async def update_settings(expected_version, **changes):
-    if not changes or set(changes) - {'use_preferences', 'suggest_preferences'} or any(type(v) is not bool for v in changes.values()) or changes.get('suggest_preferences'):
-        raise InvalidPreference
-    async with get_session_maker()() as session:
-        await lock(session)
-        row = await settings_in_session(session)
-        if row.version != expected_version:
-            raise StaleVersion
-        if changes.get('use_preferences') is False:
-            await revoke(session)
-        for key, value in changes.items():
-            setattr(row, key, value)
-        row.version += 1
-        await session.commit()
-        return row
 
 
 async def validate(session, key, scope, value, status):

@@ -67,6 +67,21 @@ def test_real_model_payload_scope_and_history(pg_db, monkeypatch, caplog):
     asyncio.run(run())
 
 
+def test_resolver_failure_requires_explicit_skip(pg_db, monkeypatch):
+    async def run():
+        from db.accessors import user_preference as p, chat_context as c
+        from sqlalchemy.exc import SQLAlchemyError
+        async def broken(*args):
+            raise SQLAlchemyError('test-only')
+        monkeypatch.setattr(p, 'resolve_in_session', broken)
+        args = dict(conversation_id=None, title='', model='', revision_id=None, account_id=None, app_prompt_version='test')
+        with pytest.raises(c.PreferencesUnavailable):
+            await c.resolve(**args)
+        _, snapshot, _ = await c.resolve(**args, without_preferences=True)
+        assert not snapshot.preferences_enabled and snapshot.preference_revision_ids_json == '[]'
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('action', ['disable', 'delete', 'pause'])
 def test_paused_stream_actual_revocation(pg_db, monkeypatch, action):
     async def run():

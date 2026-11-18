@@ -85,6 +85,20 @@ async def test_paused_stream_keeps_snapshot_or_stops_before_tools(store, monkeyp
 
 
 @pytest.mark.anyio
+async def test_preference_read_failure_offers_explicit_skip_before_saving_user(store, monkeypatch, caplog):
+    from sqlalchemy.exc import SQLAlchemyError
+    async def resolve(**kw):
+        return await store.create(), NS(id='context', account_scope_json=json.dumps({'account_ids': []}), preference_revision_ids_json='["r"]'), None
+    monkeypatch.setattr(agent, 'resolve_context', resolve)
+    monkeypatch.setattr(agent.preference_revision, 'get_revisions', AsyncMock(side_effect=SQLAlchemyError('test-only')))
+    fake = FakeMistral(streams=[['Antwort']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    events = [event async for event in agent.run_turn_events(conversation_id=None, text='Hallo')]
+    assert len(events) == 1 and events[0].code == 'preferences_unavailable'
+    assert fake.requests == [] and store.rows == [] and 'test-only' not in caplog.text
+
+
+@pytest.mark.anyio
 async def test_revocation_immediately_before_model_call_sends_no_template(store, monkeypatch):
     async def resolve(**kw):
         return await store.create(), NS(id='context', account_scope_json=json.dumps({'account_ids': []})), 'Synthetic template'

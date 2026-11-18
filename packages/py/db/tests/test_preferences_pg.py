@@ -54,6 +54,42 @@ def test_unique_double_click_and_value_limit(pg_db):
     asyncio.run(run())
 
 
+def test_http_crud_stale_version_and_private_validation(pg_db):
+    async def run():
+        import httpx
+        from fastapi import FastAPI
+        from api.routers.api.v1.preferences.route import router
+        app = FastAPI()
+        app.include_router(router, prefix='/api/v1/preferences')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='https://api.example.test') as client:
+            result = await client.post('/api/v1/preferences', json={'key': 'answer_length', 'value': 'test-only'})
+            assert result.status_code == 201
+            row = result.json()
+            path = '/api/v1/preferences/' + row['id']
+            assert (await client.patch(path, json={'expected_version': 1, 'value': 'test-only updated'})).status_code == 200
+            conflict = await client.patch(path, json={'expected_version': 1, 'value': 'test-only stale'})
+            assert conflict.status_code == 409 and 'test-only' not in conflict.text
+            assert (await client.get('/api/v1/preferences')).json()[0]['value'] == 'test-only updated'
+            assert (await client.delete(path, params={'expected_version': 1})).status_code == 409
+            assert (await client.delete(path, params={'expected_version': 2})).status_code == 204
+            assert (await client.get('/api/v1/preferences')).json() == []
+            for scope in ['*', 'missing']:
+                result = await client.post('/api/v1/preferences', json={'key': 'signature', 'scope': scope, 'value': 'test-only'})
+                assert result.status_code == 422 and 'test-only' not in result.text
+    asyncio.run(run())
+
+
+def test_account_removal_serializes_with_preference_creation(pg_db):
+    async def run():
+        from db.accessors import user_preference as p, mail_account as a
+        account = await a.create_account(provider='imap', auth_type='imap_password', email_address='race@example.test')
+        results = await asyncio.gather(a.delete_account(account.id),
+            p.create(key='signature', scope=account.id, value='test-only'), return_exceptions=True)
+        assert results[0] is True
+        assert not await p.list_preferences()
+    asyncio.run(run())
+
+
 def test_stored_and_active_limits(pg_db):
     async def run():
         from db.accessors import user_preference as p, mail_account as a
