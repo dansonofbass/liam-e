@@ -44,7 +44,7 @@ async def update(source_id: str, body: SourcePatch) -> SourceOut:
     row = await calendar_source.set_active(source_id, body.is_active)
     if row is None:
         raise HTTPException(404, "source_not_found")
-    if row.provider == "ics" and row.is_active:
+    if row.provider in {"ics", "google"} and row.is_active:
         from api.calendar.feed_jobs import enqueue
         await enqueue(row.id, manual=True)
     return await source_out(row)
@@ -62,7 +62,7 @@ async def refresh(source_id: str, due_only: bool = False) -> SyncOut:
     source = await calendar_source.get(source_id)
     if source is None or not source.is_active:
         raise HTTPException(404, "source_not_found")
-    if source.provider == "ics":
+    if source.provider in {"ics", "google"}:
         from api.calendar.feed_jobs import enqueue
         return SyncOut(queued=await enqueue(source_id, manual=not due_only))
     today = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)

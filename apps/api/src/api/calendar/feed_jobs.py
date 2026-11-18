@@ -1,4 +1,4 @@
-"""ICS adapter registration and persistent, bounded polling of private feeds."""
+"""ICS adapter and persistent, bounded polling of ICS and Google calendars."""
 
 import json
 import random
@@ -57,12 +57,15 @@ class StoredICSAdapter:
 async def enqueue(source_id: str, *, manual: bool, now: datetime | None = None) -> bool:
     if source_id in SEED_CALENDAR_IDS:
         return False
+    source = await calendar_source.get(source_id)
+    interval = (env.calendar_google_sync_interval_minutes if source and source.provider == "google"
+                else env.calendar_sync_interval_minutes)
     return await calendar_feed_sync.enqueue(source_id, now=now or datetime.now(UTC),
-                                            interval=env.calendar_sync_interval_minutes, manual=manual)
+                                            interval=interval, manual=manual)
 
 
 async def enqueue_due(now: datetime) -> None:
     await feeds.purge(now)
     for source in await calendar_source.list_active():
-        if source.provider == "ics":
+        if source.provider in {"ics", "google"}:
             await enqueue(source.id, manual=False, now=now)

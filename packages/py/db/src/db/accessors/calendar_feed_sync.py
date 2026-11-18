@@ -1,4 +1,4 @@
-"""Private ICS snapshot inputs and persistent scheduling, fenced by source revision."""
+"""Calendar snapshot inputs and persistent scheduling, fenced by source revision."""
 
 import json
 from datetime import datetime, timedelta
@@ -13,6 +13,8 @@ from db.models.calendar_feed_config import CalendarFeedConfig
 from db.models.calendar_source import CalendarSource
 from db.models.calendar_sync_state import CalendarSyncState
 from db.models.mail_job import MailJob
+
+STOP_ERRORS = frozenset({"address_check", "reconnect_required", "calendar_unavailable"})
 
 
 async def inputs(source_id: str):
@@ -32,7 +34,7 @@ async def enqueue(source_id: str, *, now: datetime, interval: int, manual: bool)
         await lock_source(session, source_id)
         source = (await session.execute(select(CalendarSource).where(
             CalendarSource.id == source_id).with_for_update())).scalar_one_or_none()
-        if source is None or source.provider != "ics" or not source.is_active:
+        if source is None or source.provider not in {"ics", "google"} or not source.is_active:
             return False
         state = await session.get(CalendarSyncState, source_id)
         if state:
@@ -40,7 +42,7 @@ async def enqueue(source_id: str, *, now: datetime, interval: int, manual: bool)
                 if state.last_checked_at and now < state.last_checked_at + timedelta(minutes=1):
                     # A manual request or resume inside the cooldown still lifts an address stop;
                     # the scheduler fetches as soon as the cooldown ends.
-                    if state.last_error == "address_check":
+                    if state.last_error in STOP_ERRORS:
                         state.last_error = None
                         state.failure_count = 0
                         state.next_attempt_at = state.last_checked_at + timedelta(minutes=1)
@@ -48,7 +50,7 @@ async def enqueue(source_id: str, *, now: datetime, interval: int, manual: bool)
                         await session.commit()
                     return False
             else:
-                if state.last_error == "address_check":
+                if state.last_error in STOP_ERRORS:
                     return False
                 due = state.next_attempt_at or (state.last_checked_at + timedelta(minutes=interval) if state.last_checked_at else now)
                 if now < due:
