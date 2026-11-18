@@ -10,14 +10,19 @@ from db.accessors import chat_context as context_access
 from db.accessors import mail_account as account_access
 from db.accessors import mail_message as mail_access
 from db.models.chat_message import ChatMessage
+from db.engine import get_session_maker
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.exc import IntegrityError
 
 from api.mail import actions, netguard, newsletters, send, service, transport
+from api.errors import refuse
+from api.tasks import patch as task_patch
+from api.tasks import proposals as task_proposals
+from api.tasks import state as task_state
 
 logger = logging.getLogger(__name__)
-ProposalKind = Literal["send", "archive", "trash", "mark_read", "unsubscribe"]
+ProposalKind = Literal["send", "archive", "trash", "mark_read", "unsubscribe", "task"]
 
 
 class ProposalItem(BaseModel):
@@ -59,6 +64,7 @@ class ProposalResult(BaseModel):
     failed: list[ItemProblem] = Field(default_factory=list)
     manual: list[ManualStep] = Field(default_factory=list)
     undo_action_ids: list[str] = Field(default_factory=list)
+    task_series_id: str | None = None
 
 
 class Proposal(BaseModel):
@@ -66,6 +72,7 @@ class Proposal(BaseModel):
     reason: str
     items: list[ProposalItem]
     draft: SendDraft | None = None
+    task: task_proposals.TaskProposal | None = None
     irreversible: bool = False
     result: ProposalResult | None = None
 
@@ -74,6 +81,10 @@ class Proposal(BaseModel):
         self.irreversible = self.kind in {"send", "unsubscribe"}
         if self.kind == "send" and self.draft is None:
             raise ValueError("send requires a draft")
+        if (self.kind == 'task') != (self.task is not None):
+            raise ValueError('task requires exactly one typed command')
+        if self.kind == 'task' and (self.items or self.draft):
+            raise ValueError('task commands do not select mail items')
         expected = "sender" if self.kind == "unsubscribe" else "mail"
         if self.kind != "send" and any(item.kind != expected for item in self.items):
             raise ValueError("item kind does not match proposal")
@@ -216,10 +227,62 @@ async def _apply(item: ProposalItem, kind: ProposalKind, result: ProposalResult)
         fail("action_failed")
 
 
-async def confirm(proposal_id: str, *, selected_ids: list[str], body: str | None = None) -> ChatMessage:
+async def _confirm_task(message: ChatMessage, edit: task_proposals.TaskCreateCommand | None = None) -> ChatMessage:
+    """One local transaction; retries use the existing not-pending conflict."""
+    async with get_session_maker()() as session:
+        claimed = await message_access.claim_proposal_in_session(session, message.id)
+        if claimed is None:
+            current = await message_access.get_message(message.id)
+            if current and current.proposal_status == 'pending' and current.context_id and not await context_access.is_live(current.context_id):
+                raise ProposalContextRevokedError
+            raise ProposalStateError
+        proposal = proposal_view(claimed)
+        assert proposal is not None and proposal.task is not None
+        if edit is not None:
+            if not isinstance(proposal.task, task_proposals.TaskCreateCommand) or (
+                edit.source_account_id, edit.source_message_id
+            ) != (proposal.task.source_account_id, proposal.task.source_message_id):
+                raise ProposalSelectionError('selection_invalid')
+            proposal.task = edit
+        context = await context_access.get_context_in_session(session, claimed.context_id) if claimed.context_id else None
+        if context is None or context.revoked or context.conversation_id != claimed.conversation_id:
+            raise ProposalContextRevokedError
+        scope = json.loads(context.task_scope_json)
+        account_scope = json.loads(context.account_scope_json)
+        source = proposal.task.source_account_id
+        selection = account_scope.get('selection')
+        from api.tasks.chat import allowed_in_selection
+        if not allowed_in_selection(scope, selection, source, proposal.task.source_message_id):
+            raise refuse(403, 'task_scope_invalid', 'Die Aufgabe gehört nicht zur gewählten Auswahl.')
+        try:
+            series_id = await task_proposals.execute(session, proposal.task, proposal_id=claimed.id)
+        except task_patch.RevisionConflict:
+            raise refuse(409, 'task_revision_conflict', 'Die neue Wiederholung überschneidet sich mit einer erledigten Fälligkeit. Wähle einen anderen Zeitplan.') from None
+        except task_state.StateConflict:
+            raise refuse(409, 'task_version_conflict', 'Die Aufgabe wurde inzwischen geändert. Prüfe den aktuellen Stand.') from None
+        except task_state.StateNotFound:
+            raise refuse(404, 'task_not_found', 'Die Aufgabe ist nicht mehr verfügbar.') from None
+        except task_proposals.TaskSourceGone:
+            raise refuse(409, 'task_source_gone', 'Die verknüpfte Mail ist nicht mehr verfügbar.') from None
+        except ValueError:
+            raise refuse(422, 'task_invalid', 'Die Aufgabe konnte nicht geändert werden. Prüfe ihre Angaben.') from None
+        proposal.result = ProposalResult(done=1, task_series_id=series_id)
+        updated = await message_access.finish_proposal_in_session(session, claimed.id, proposal_json=proposal.model_dump_json())
+        await session.commit()
+        return updated
+
+
+async def confirm(proposal_id: str, *, selected_ids: list[str], body: str | None = None,
+                  task_edit: task_proposals.TaskCreateCommand | None = None) -> ChatMessage:
     message = await _get_proposal(proposal_id)
     proposal = proposal_view(message)
     assert proposal is not None
+    if proposal.kind == 'task':
+        if selected_ids or body is not None:
+            raise ProposalSelectionError('selection_invalid')
+        return await _confirm_task(message, task_edit)
+    if task_edit is not None:
+        raise ProposalSelectionError('selection_invalid')
     selected = set(selected_ids)
     if not selected.issubset({item.id for item in proposal.items}):
         raise ProposalSelectionError("selection_invalid")

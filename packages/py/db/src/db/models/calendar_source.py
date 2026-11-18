@@ -1,6 +1,6 @@
 """Calendar source selection and provider connection reference."""
 
-from sqlalchemy import Index, UniqueConstraint
+from sqlalchemy import Column, Index, Integer, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 from db.models._common import new_id
@@ -21,3 +21,4 @@ class CalendarSource(SQLModel, table=True):
     timezone: str
     capabilities_json: str = "[]"
     is_active: bool = True
+    revision: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default=text("1")))

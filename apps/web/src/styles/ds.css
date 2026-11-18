@@ -127,7 +127,9 @@ small { font-size: var(--font-size-small); }
 .le-composer:has(textarea:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .le-composer textarea { display: block; width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; padding: var(--space-4) calc(var(--space-4) + var(--space-1)) var(--space-1); font: inherit; font-size: var(--font-size-body); color: var(--ink); }
 .le-composer textarea::placeholder { color: var(--ink-muted); }
-.le-composer-bar { display: flex; align-items: center; gap: 8px; padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3); }
+.le-composer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3); }
+/* When the chips wrap, the send button stays at the end of its own line instead of starting the next one. */
+.le-composer-bar > :last-child { margin-inline-start: auto; }
 .le-composer .le-chip--quiet { background: var(--surface); }
 .le-composer:focus-within .le-chip--quiet, .le-composer.is-focus .le-chip--quiet { background: var(--surface-soft); }
 .le-composer-hint { margin-left: auto; font-size: var(--font-size-small); color: var(--ink-muted); }
@@ -160,6 +162,19 @@ small { font-size: var(--font-size-small); }
 .le-mailref-actions { display: flex; gap: var(--space-1); flex: none; }
 
 /* Mail row (inbox list) */
+.le-mailrow-swipe { position: relative; overflow: hidden; border-radius: var(--radius-sm); touch-action: pan-y pinch-zoom; }
+.le-mailrow-swipe .le-mailrow { background-color: var(--surface); }
+.le-mailrow-swipe .le-mailrow:hover { background-color: var(--surface-soft); }
+.le-mailrow-swipe .le-mailrow[aria-current="true"] { background-color: var(--accent-soft); }
+.le-mailrow-preview { position: absolute; inset: 0; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); background: var(--accent-soft); color: var(--accent); }
+.le-mailrow-preview.is-danger { background: var(--danger-soft); color: var(--danger); }
+.le-mailrow-preview.is-left { justify-content: flex-end; }
+.le-mailrow-preview-label { position: absolute; z-index: 2; left: var(--space-2); top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: var(--space-2); max-width: calc(100% - 2 * var(--space-2)); padding: var(--space-2); border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); pointer-events: none; }
+.le-mailrow-preview-label.is-danger { background: var(--danger-soft); color: var(--danger); }
+.le-mailrow-preview-label.is-left { left: auto; right: var(--space-2); }
+@media (any-pointer: coarse) { .le-mailrow-link::after { pointer-events: none; } }
+.le-mailrow-swipe:has(.le-mailrow-link:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+@media (pointer: coarse) { .le-mailrow-link { min-width: var(--control-height-lg); min-height: var(--control-height-lg); display: inline-flex; align-items: center; } }
 .le-maillist { list-style: none; margin: 0; padding: var(--space-2); display: flex; flex-direction: column; gap: var(--space-1); }
 .le-mailrow { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 var(--space-3); align-items: start; padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3); border-radius: var(--radius-sm); transition: background-color var(--le-dur-fast) ease; }
 .le-mailrow:hover, .le-mailrow.is-hover { background: var(--surface-soft); }

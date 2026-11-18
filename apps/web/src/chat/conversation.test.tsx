@@ -15,6 +15,8 @@ let signal: AbortSignal
 let history: ChatMessageOut[] = []
 let requestBody: Record<string, unknown>
 let summary: MailSummaryOut = { accounts: [], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
+// A test can hold the account summary back to see the state while it loads.
+let summaryGate: Promise<void> | null = null
 function setup(path = '/', historyGone = false, selection: string | null = null) {
   history = []
   summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
@@ -23,7 +25,7 @@ function setup(path = '/', historyGone = false, selection: string | null = null)
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
   spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatHistory').mockImplementation((async () => { if (historyGone) throw { detail: { code: 'conversation_not_found' } }; return { data: history } }) as never)
-  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => { await summaryGate; return { data: summary } }) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatConversationsList').mockImplementation((async () => ({ data: [{ id: 'c', title: 'Test', model: 'm1', version: 5, prompt_revision_id: null, account_scope_json: JSON.stringify({ account_ids: selection ? [selection] : ['a'], selection }), created_at: '', updated_at: '' }] })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
@@ -41,7 +43,51 @@ async function send() {
   fireEvent.change(input, { target: { value: 'Meine Frage' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
 }
-afterEach(() => { cleanup(); mock.restore(); globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
+afterEach(() => { cleanup(); mock.restore(); summaryGate = null; globalThis.fetch = originalFetch; window.matchMedia = originalMatchMedia })
+
+// The task chip opens its menu; the choices are radio items, the chip names the current one.
+const taskChoice = async (chip: string, choice: string) => {
+  const trigger = await screen.findByRole('button', { name: chip })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(trigger)
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: new RegExp(`^${choice}`) }))
+}
+
+test('account chat explicitly includes personal tasks without granting other accounts', async () => {
+  setup('/chat/c', false, 'a')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(trigger)
+  const items = await screen.findAllByRole('menuitemradio')
+  expect(items.map(item => item.querySelector('.le-menu-title')?.textContent)).toEqual(['Keine Aufgaben', 'Alle Aufgaben', 'Aufgaben dieses Kontos'])
+  expect(items[1]!.textContent).toContain('persönliche Aufgaben ohne Konto- und Mailbezug')
+  expect(items[0]!.getAttribute('aria-checked')).toBe('true')
+  fireEvent.click(items[1]!)
+  expect(await screen.findByRole('button', { name: 'Alle Aufgaben' })).toBeTruthy()
+  await send()
+  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.task_source).toBe('account_and_unlinked')
+  expect(requestBody.task_source_account_id).toBe('a')
+})
+
+for (const choice of ['Aufgaben dieses Kontos', 'Alle Aufgaben']) test(`changing the mail account clears the explicit task choice: ${choice}`, async () => {
+  setup()
+  summary.accounts.push({ ...summary.accounts[0]!, id: 'b', display_name: 'Arbeit', email_address: 'work@example.org' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
+  await taskChoice('Keine Aufgaben', choice)
+  expect(await screen.findByRole('button', { name: choice })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Privat' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Arbeit' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Keine Aufgaben' }))
+  expect((await screen.findByRole('menuitemradio', { name: /^Keine Aufgaben/ })).getAttribute('aria-checked')).toBe('true')
+  expect(screen.getByRole('menuitemradio', { name: /^Aufgaben dieses Kontos/ }).getAttribute('aria-checked')).toBe('false')
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+  await send()
+  expect(requestBody.account_id).toBe('b')
+  expect(requestBody.task_source).toBe('none')
+  expect(requestBody.task_source_account_id).toBeUndefined()
+})
 
 test('shows status, streams text and stops the answer', async () => {
   setup('/chat/c'); await send()
@@ -287,12 +333,96 @@ test('account change in a conversation offers a new conversation instead of a re
   fireEvent.click(screen.getByRole('menuitem', { name: 'Alle Konten' }))
   globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'conversation_scope_change_requires_new' } }), { status: 409 }))) as unknown as typeof fetch
   await send()
-  const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten/)).closest('[role="alert"]') as HTMLElement
+  const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
   expect(within(notice).queryByRole('button', { name: 'Noch mal versuchen' })).toBeNull()
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   expect((await screen.findByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Meine Frage')
   expect(screen.getByRole('button', { name: 'Alle Konten' })).toBeTruthy()
+})
+
+test('in a conversation the other task choices say they need a new conversation', async () => {
+  setup('/chat/c')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(trigger)
+  const items = await screen.findAllByRole('menuitemradio')
+  expect(items[0]!.textContent).not.toContain('Braucht eine neue Unterhaltung.')
+  for (const item of items.slice(1)) expect(item.textContent).toContain('Braucht eine neue Unterhaltung.')
+})
+
+test('a restored task choice the list cannot offer still names itself', async () => {
+  const { client } = setup('/chat/c')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  const context = { id: 'ctx', account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: false, task_scope_json: JSON.stringify({ source: 'account', account_id: 'gone' }) } as ChatMessageOut['context']
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context }]) })
+  expect(await screen.findByRole('button', { name: 'Aufgaben: Gespeichertes Konto nicht verfügbar' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Keine Aufgaben' })).toBeNull()
+})
+
+const restoredContext = (scope: object) => ({ id: 'ctx', account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: false, task_scope_json: JSON.stringify(scope) }) as ChatMessageOut['context']
+
+test('a restored task choice never repeats an offered label', async () => {
+  const { client } = setup('/chat/c', false, 'a')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context: restoredContext({ source: 'all' }) }]) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Gespeichert: Alle Aufgaben' }))
+  const names = (await screen.findAllByRole('menuitemradio')).map(item => item.querySelector('.le-menu-title')?.textContent)
+  expect(names).toEqual(['Keine Aufgaben', 'Alle Aufgaben', 'Aufgaben dieses Kontos', 'Gespeichert: Alle Aufgaben'])
+})
+
+test('a restored account-and-personal choice without a mail account is marked as saved', async () => {
+  const { client } = setup('/chat/c')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context: restoredContext({ source: 'account_and_unlinked', account_id: 'a' }) }]) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Gespeichert: Alle Aufgaben' }))
+  const names = (await screen.findAllByRole('menuitemradio')).map(item => item.querySelector('.le-menu-title')?.textContent)
+  expect(new Set(names).size).toBe(names.length)
+})
+
+test('a restored account the menu does not offer shows its listed name', async () => {
+  const { client } = setup('/chat/c', false, 'a')
+  summary.accounts.push({ ...summary.accounts[0]!, id: 'b', display_name: 'Arbeit', email_address: 'work@example.org' })
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context: restoredContext({ source: 'account', account_id: 'b' }) }]) })
+  expect(await screen.findByRole('button', { name: 'Aufgaben: Arbeit' })).toBeTruthy()
+})
+
+test('a restored account choice waits for the account list before calling the account unavailable', async () => {
+  let release = () => {}
+  summaryGate = new Promise<void>(resolve => { release = resolve })
+  const { client } = setup('/chat/c')
+  const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context: restoredContext({ source: 'account', account_id: 'gone' }) }]) })
+  expect(await screen.findByRole('button', { name: 'Aufgaben: …' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /nicht verfügbar/ })).toBeNull()
+  await act(async () => { release() })
+  expect(await screen.findByRole('button', { name: 'Aufgaben: Gespeichertes Konto nicht verfügbar' })).toBeTruthy()
+})
+
+test('task selection conflict restarts visibly without the old conversation', async () => {
+  const { router } = setup('/chat/c')
+  await taskChoice('Keine Aufgaben', 'Alle Aufgaben')
+  globalThis.fetch = ((_url: unknown, init: RequestInit) => {
+    requestBody = JSON.parse(String(init.body))
+    return Promise.resolve(Response.json({ detail: { code: 'conversation_scope_change_requires_new' } }, { status: 409 }))
+  }) as typeof fetch
+  await send()
+  const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
+  expect(requestBody.task_source).toBe('all')
+  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect(await screen.findByRole('button', { name: 'Alle Aufgaben' })).toBeTruthy()
+  await send()
+  await waitFor(() => expect(requestBody.conversation_id).toBeUndefined())
+  expect(requestBody.task_source).toBe('all')
+  expect(requestBody.text).toBe('Meine Frage')
+  expect(requestBody.history).toBeUndefined()
 })
 
 test('calendar selection is separate from mail and survives a scope-conflict restart', async () => {
@@ -307,7 +437,7 @@ test('calendar selection is separate from mail and survives a scope-conflict res
     return Promise.resolve(Response.json({ detail: { code: 'conversation_scope_change_requires_new' } }, { status: 409 }))
   }) as typeof fetch
   await send()
-  const notice = (await screen.findByText(/Diese Unterhaltung gilt für andere Konten oder Kalender/)).closest('[role="alert"]') as HTMLElement
+  const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
   expect(requestBody.calendar_source_ids).toEqual(['work'])
   expect(requestBody.account_id).toBe('a')
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
@@ -321,7 +451,7 @@ test('revoked context during an answer offers a fresh conversation', async () =>
   const frames = ['event: start\ndata: {"event":"start","conversation_id":"c","user_message_id":"u"}\n\n', 'event: error\ndata: {"event":"error","code":"context_revoked"}\n\n']
   globalThis.fetch = (() => Promise.resolve(new Response(frames.join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))) as unknown as typeof fetch
   await send()
-  const notice = (await screen.findByText(/Die Vorlage oder Kalenderfreigabe ist nicht mehr gültig/)).closest('[role="alert"]') as HTMLElement
+  const notice = (await screen.findByText(/Die Vorlage, Präferenzen oder die Auswahl von Konten, Kalendern oder Aufgaben sind nicht mehr gültig/)).closest('[role="alert"]') as HTMLElement
   expect(within(notice).getByRole('button', { name: 'Neue Unterhaltung' })).toBeTruthy()
 })
 

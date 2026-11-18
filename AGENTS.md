@@ -37,11 +37,12 @@ managed Postgres (Modul in mistral.json)                Mail-Index, Credentials,
 - `/tasks` und `/tasks/$taskId` — Aufgabenliste, manuelle Anlage und Fälligkeiten mit Verlauf.
 - `/settings` und `/settings/prompts` — Einstellungen mit Vorlagenbibliothek; `settingsSections` ist der Navigationseinstieg für weitere implementierte Bereiche.
 - `/settings/prompts/new` und `/settings/prompts/$promptId` — Vorlage anlegen oder bearbeiten, auf allen Bildschirmgrößen als eigene Ansicht.
+- `/settings/preferences`, `/settings/preferences/new` und `/settings/preferences/$preferenceId` — Präferenzen, Verwendungsschalter und eigene Anlege-/Bearbeitungsansichten, auch mobil.
 
 ### Mail-Domäne (`apps/api/src/api/mail/`)
 
 - `agent.py` — gestreamter Chat-Turn, Tool-Loop und gespeicherter Verlauf.
-- `agent_tools.py` — lesende Agentenwerkzeuge und Erstellen von Vorschlägen.
+- `agent_tools.py` — lesende Agentenwerkzeuge und Erstellen von Vorschlägen. Aufgabenwerkzeuge delegieren an `api/tasks/chat.py`; typisierte Aufgabenbefehle und ihre lokale Ausführung liegen in `api/tasks/proposals.py`.
 - `agent_prompt.py` — deutsche Systemanweisungen für den Agenten.
 - `chat_events.py` — typisierte Streaming-Ereignisse; `chat_schemas.py` — Chat-Ausgabemodelle.
 - `actions.py` — Indexänderungen und einmaliges Rückgängigmachen; `action_backends.py` — Provider-Aktionen.
@@ -87,6 +88,9 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages` | `liam_mail_search` |
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/messages/{message_id}` | `liam_mail_read` |
 | Agent-Lesefassade | GET | `/api/agent-read/v1/mail/summary` | `liam_mail_summary` |
+| Kalender | POST | `/api/v1/calendar/feeds/validate` | `calendar_feed_validate` |
+| Kalender | POST | `/api/v1/calendar/feeds` | `calendar_feed_subscribe` |
+| Kalender | POST | `/api/v1/calendar/feeds/validations/discard` | `calendar_feed_validation_discard` |
 | Kalender | GET | `/api/v1/calendar/sources` | `calendar_sources_list` |
 | Kalender | PATCH | `/api/v1/calendar/sources/{source_id}` | `calendar_source_update` |
 | Kalender | DELETE | `/api/v1/calendar/sources/{source_id}` | `calendar_source_delete` |
@@ -98,6 +102,13 @@ Inventar aus `apps/api/openapi.json`; jede Zeile nennt Methode, Pfad und `operat
 | Vorlagen | GET | `/api/v1/prompts/{id}` | `prompt_get` |
 | Vorlagen | PATCH | `/api/v1/prompts/{id}` | `prompt_update` |
 | Vorlagen | DELETE | `/api/v1/prompts/{id}` | `prompt_delete` |
+| Präferenzen | GET | `/api/v1/preferences` | `preferences_list` |
+| Präferenzen | POST | `/api/v1/preferences` | `preference_create` |
+| Präferenzen | PATCH | `/api/v1/preferences/{id}` | `preference_update` |
+| Präferenzen | DELETE | `/api/v1/preferences/{id}` | `preference_delete` |
+| Präferenzen | GET | `/api/v1/preferences/contexts/{context_id}` | `preference_context_get` |
+| Einstellungen | GET | `/api/v1/settings` | `settings_get` |
+| Einstellungen | PATCH | `/api/v1/settings` | `settings_update` |
 | Einstellungen | GET | `/api/v1/settings/ui` | `settings_ui_get` |
 | Einstellungen | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
@@ -249,6 +260,34 @@ Datumsrevisionen mit `timezone: null` verwenden für Tagesgrenzen UTC, ohne die
 Daten umzuschreiben. Heute gilt als bereits fällig, überfällig erst ab dem nächsten
 lokalen Tag. Eine neue Serienrevision kann die Zeitzone ausdrücklich setzen.
 
+### Aufgaben im Chat
+
+`task_source=none|all|unlinked|account|account_and_unlinked` und gegebenenfalls
+`task_source_account_id` bilden im Composer einen eigenen sichtbaren Umfang. Bei gewähltem
+Mailkonto X gibt es „Keine Aufgaben“, „Aufgaben dieses Kontos“ und „Alle Aufgaben“.
+Letzteres speichert ausdrücklich `{"source":"account_and_unlinked","account_id":X}`
+und erlaubt nur Aufgaben von X plus persönliche Aufgaben ohne Konto- und Mailbezug, nie andere Konten
+(auch nicht deren Aufgaben ohne Quellmail).
+Lesen, Vorschlagen und Bestätigen prüfen dieselbe Grenze. Ohne Mailkontoauswahl bleiben
+`none|all|unlinked|account` unverändert; `account_and_unlinked` braucht ein gewähltes Mailkonto. Der Umfang steht
+je Turn in `chat_context.task_scope_json`; Altverlauf erhält durch den Serverstandard
+`{"source":"none"}` keinen Zugriff. Jede Änderung verlangt bei vorhandenem Verlauf eine neue
+Unterhaltung. Resolver und Agent prüfen alle historischen Kontexte vor Modellanfragen erneut.
+`search_tasks`/`get_task` lesen ohne Reconcile, mit inklusivem Datumsfenster bis 90 Tage,
+Serien- und Instanzcursor sowie Vollständigkeit je Serie/Fenster; Texte stehen in
+`untrusted_task_data`. `propose_task` erzeugt eine Karte für Anlage, Fälligkeitsänderung,
+Erledigen, Überspringen, Wiederöffnen oder Archivieren, niemals für endgültiges Löschen.
+Quellen und Darstellungsdaten stammen aus serverseitigen Reads. Das gemeinsame Proposal-Modell
+bindet Zielversionen und Quelle; neue Aufgaben lassen sich in der Karte bearbeiten, ohne die
+Quelle zu wechseln. Confirm nimmt dafür ausschließlich einen typisierten `task_edit` der Anlage.
+Die Vorschau wird bei Zeitplanänderungen neu gelesen. Claim, erneute Quellen-/Versionsprüfung,
+Aufgabenmutation und erfolgreicher Abschluss liegen in genau einer DB-Transaktion. Fehler vor
+Commit lassen die Karte `pending`; ein zweiter Confirm nach Commit liefert wie im Mailpfad
+409 `proposal_not_pending`, ohne zweite Wirkung. Mail-/Versandaktionen behalten ihren bisherigen
+Providerpfad. Eine entfernte Quellmail wird nicht ersetzt. „Weitere Aktionen → Aufgabe
+vorschlagen“ an der geöffneten Mail startet eine neue Unterhaltung mit ausdrücklichem Mail- und Aufgaben-Kontoumfang; Mailtexte werden nicht als
+Aufgabenbeschreibung kopiert. Nach Confirm invalidiert die Karte die Query-Gruppe `tasks`.
+
 ## Kalenderdomäne
 
 Die Oberfläche unter `/calendar` zeigt die gemeinsame Agenda; `/calendar/$occurrenceId`
@@ -256,10 +295,12 @@ Die Oberfläche unter `/calendar` zeigt die gemeinsame Agenda; `/calendar/$occur
 in der Verwaltung und als Hinweis angezeigt, ihre Termine bleiben bis zur Aktivierung
 verborgen. Sie tragen nicht zu einer Aussage „Keine Termine“ bei und bleiben auch für
 Chatwerkzeuge und alte Referenzen gesperrt (Entscheidung zu #22: Option A).
-`CalendarSetup` in `apps/web/src/calendar/CalendarSources.tsx` ist der Anschluss für
-spätere geprüfte Providerformulare. Aktuell zeigt er nur die fehlende Verfügbarkeit;
-er registriert keinen Adapter und bietet keine Verbindungsaktion an. Ein späteres
-Formular muss nach erfolgreicher Einrichtung die Query-Gruppe `calendar` invalidieren.
+`CalendarSetup` in `apps/web/src/calendar/CalendarSources.tsx` öffnet das ICS-Formular
+`FeedSetup`: Name, private Kalenderadresse und ausdrücklich angezeigte Fallbackzone.
+`webcal` wird sichtbar zu `https`; die Serverprüfung normalisiert unabhängig nochmals.
+Adresse und Prüftoken bleiben nur im Dialogzustand, nie im Browser-Storage oder Query-Cache.
+Änderungen verwerfen die Prüfung; Abonnieren und Adresswechsel invalidieren die Query-Gruppe
+`calendar`. Google-Einrichtung ist weiterhin nicht freigegeben.
 Die Agenda gruppiert und zeigt Zeitpunkte in der Browser-Zeitzone; Ganztägiges bleibt
 bei seinem Datum. Lokale Tagesgrenzen werden in Zeitpunkte umgerechnet. Weil der
 Index-Endpunkt nur ganze UTC-Daten akzeptiert, wird das Abfragefenster nach außen
@@ -300,6 +341,46 @@ Termindaten. Ort und Beschreibung fehlen im Indexvertrag und werden nicht vorget
 Die autogenerierte Migration ergänzt die Spalte mit Serverstandard und führt die bestehenden
 Migrationsköpfe zusammen; sie wurde nicht von Hand geändert.
 
+ICS-Abonnements verwenden die privaten Tabellen `calendar_feed_config` und
+`calendar_feed_validation`. `POST /calendar/feeds/validate` verwendet denselben sicheren
+Abruf und isolierten Parser wie Jobs. Erst nach vollständiger Prüfung wird die gesamte
+Konfiguration verschlüsselt gespeichert; die redigierte Vorschau enthält nur den selbst
+gewählten Namen, Fenster und Anzahl. Prüftokens gelten genau zehn Minuten und werden
+per `DELETE RETURNING` in der Anlagetransaktion einmalig verbraucht. Der feste serverseitige
+Scope ist `installation`; Konfiguration einschließlich Ersatzquelle und Quellenrevision
+ist gebunden. `feed_secrets.py` nutzt den bestehenden Fernet-Schlüssel; nur ein Hash
+zufälliger Prüftokens wird gespeichert, Konfigurationsprüfsummen sind mit dem Token
+gekeyt. Abbruch verwirft die Prüfung ausdrücklich über `POST /calendar/feeds/validations/discard`:
+Der Prüftoken steht ausschließlich als `validation_id` im JSON-Body, nie in Pfad oder Query;
+die Antwort ist 204 mit `Cache-Control: no-store`. Der Worker bereinigt Ablauf jede Minute
+sowie bei weiteren Prüfungen/Anlagen. Schemafehler geben keine Eingabewerte zurück.
+`POST /calendar/feeds` legt die Quelle und den ersten Job atomar an; mit geprüfter
+`source_id`/`expected_revision` ersetzt derselbe Endpunkt die alte Adresse atomar.
+Die bestehende Generation bleibt bis zum erfolgreichen Abruf erhalten; alte Validatoren
+werden beim Adresswechsel entfernt. Verwaltungsoperationen sind keine Agenten-Lesetools.
+
+`StoredICSAdapter` wird im gemeinsamen Dispatch registriert. Jobpayloads enthalten nur
+`source_id`; Fenster werden zur Ausführung als heute −30 bis +180 Tage bestimmt.
+HTTP-Validatoren sind verschlüsselt und werden mit dem vollständig validierten Snapshot
+atomar aktiviert. 304 expandiert gespeicherte Komponenten erneut, auch für ein neues Fenster.
+Ein gültiger leerer Snapshot leert den Bestand; Fehler erhalten Generation und Abdeckung.
+Quellenrevisionen sperren veraltete Snapshot-Commits auch nach Pause/Resume oder Adresswechsel.
+Ein gemeinsames transaktionales Advisory-Lock serialisiert Queue, Ersatz, Entfernen und
+Snapshotaktivierung; Entfernen löscht Jobs, Index, Status und private Konfiguration.
+Historische Chattexte bleiben bestehen; aktive Quellenscope-Prüfungen sperren entfernte Quellen.
+
+`CALENDAR_SYNC_INTERVAL_MINUTES` ist standardmäßig 30. Der gemeinsame Worker prüft jede Minute
+aktive ICS-Quellen, unabhängig von der Mailperiodik. Beim Öffnen fragt die Agenda über den
+Verwaltungsendpunkt mit `due_only=true` nur fällige Abrufe an. Manuelles Abrufen hat eine
+persistierte Minute Wartezeit. 429/5xx und Transportfehler erhalten begrenzten exponentiellen
+Backoff mit Jitter; nach drei Fehlern endet die kurze Wiederholung und die Quelle kehrt zum
+regulären Intervall ab `last_checked_at` zurück. Weitere Fehler starten keine neue kurze
+Wiederholung; ein Erfolg setzt den Fehlerzustand zurück.
+401/403/404 fordern eine Adressprüfung und stoppen automatische Versuche bis zu manuellem
+Abruf, Resume oder Adressersatz. Fällt ein manueller Abruf oder ein Resume in die Wartezeit
+von einer Minute, hebt er die Sperre trotzdem auf; der Abruf folgt nach Ablauf der Minute. Pausierte
+Quellen und Seeds werden nicht abgerufen; gestoppte Studio-Instanzen garantieren keine Periodik.
+
 `api/calendar/` enthält Adaptervertrag, Snapshot-Dispatch und eine Quellen-Scope-Prüfung. Der
 Kalenderindex speichert Quellen, Ereignisse, Instanzen und Abdeckung; Anbieteradapter müssen
 vollständige Snapshots liefern. Die lesenden Endpunkte greifen ausschließlich auf den Index zu.
@@ -315,7 +396,7 @@ Instanz sie referenziert; enthaltene Ereignisse bleiben auch ohne Instanzen erha
 Snapshot vorliegt oder der Index unvollständig ist; ohne periodischen Abruf sagt das Alter des
 letzten Erfolgs allein nichts über die Aktualität beim Anbieter aus.
 
-`ics_fetch.py` provides the unregistered HTTPS acquisition layer for ICS. It shares the
+`ics_fetch.py` provides the HTTPS acquisition layer for ICS. It shares the
 numeric-pinned streaming transport in `mail/netguard.py`, rejects non-public/mixed DNS
 answers and mapped/transition addresses, and permits only HTTPS:443 with three same-origin
 redirects within one 15-second deadline. Wire and decoded bodies each have a 5 MiB limit;
@@ -324,7 +405,8 @@ the HTTPS spelling (including private path/query data) for owner confirmation; n
 Fetch results hide body and validators from repr, and task-local filtering suppresses
 httpcore traces that could expose headers or protocol content.
 
-`ics.py` combines acquisition and isolated parsing in `ICSAdapter` (not registered). It
+`ics.py` combines acquisition and isolated parsing in `ICSAdapter`, used per request by
+`feed_jobs.StoredICSAdapter` and the privileged validation service. It
 accepts an explicit fallback IANA zone and UTC-midnight window; `default_window` supplies
 today −30 to +180 days. A 304 requires previously normalized events and re-expands them for
 the requested window; it never treats an old window as fresh coverage. `ics_parse.py` uses
@@ -365,6 +447,7 @@ never executed or loaded; instructions in descriptions remain plain data.
 ## Domänenmodell (Tabellen in Postgres)
 
 - `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — Kalenderquelle mit Verbindungsreferenz und Freigabe (`is_active`), Serienstamm je Quelle, Instanz als halboffenes Intervall oder Zeitpunkt ohne Dauer (ganztägig als Datum mit positivem Intervall, sonst UTC mit Zeitzone; eindeutig je Quelle und `external_id`) sowie Abdeckung, letzter Erfolg und Unvollständigkeit je Quelle.
+- `calendar_feed_config`, `calendar_feed_validation` — verschlüsselte Feedkonfiguration und kurzlebige, einmalig verbrauchbare Prüfungen; keine öffentlichen Ausgabemodelle.
 - `task_series`, `task_schedule_revision`, `task_occurrence` — Aufgabenserie, Zeitplanrevision und materialisierte Fälligkeit; Erstellungskennung und Instanzschlüssel sind eindeutig.
 - `mail_account` — verbundenes Konto: `provider` z.B. `google`, `microsoft`, `imap` oder Connector-Name wie `gmail`; `auth_type` ist `oauth2`, `imap_password` oder `mistral_connector`.
 - `mail_credential` — verschlüsseltes Payload pro Konto+Art (`oauth2_tokens` | `imap_password`), unique (`account_id`, `kind`).
@@ -374,6 +457,9 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `mail_insight` — Kurzfassung (`points_json`), Frist, Antwortbedarf, Folgevorschläge und Modell je Mail.
 - `mail_job` — dauerhafte Sync-/Insight-Warteschlange mit Status, Deduplizierung, Versuchen und Sperrzeit.
 - `chat_conversation`, `chat_message` — Verlauf; Vorschläge in `proposal_json` mit `proposal_status`, Mailreferenzen/Vorschläge/Modell in `extras_json`; ältere Entwürfe tragen `draft_json`.
+- `user_preference` — serverseitiger Eigentümer `installation`, Schlüssel, kanonischer Scope (`*` global oder Konto-ID), Status, Revisionszeiger und Objektversion; entfernte Zeilen bleiben als inhaltsfreie Unterdrückungsreferenz.
+- `preference_revision` — unveränderlicher Wert, damaliger Schlüssel/Scope, Quelle `manual` und Bestätigungszeit je Revision; beim Löschen wird der Wert entfernt und `removed` gesetzt.
+- `personalization_settings` — serverseitiger Singleton mit `use_preferences`, `suggest_preferences` (beide standardmäßig false) und Version; Vorschläge können noch nicht aktiviert werden.
 - `ui_settings` — die eine geräteübergreifende Bedienungskonfiguration mit festem serverseitigem Scope (`installation`, unique): `swipe_left`/`swipe_right` aus der Allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` für bedingte Updates und `updated_at`; Erstinitialisierung mit links `archive`, rechts `toggle_read`.
 
 ## Vorlagen und Turn-Kontext
@@ -390,7 +476,7 @@ Neue Turns speichern Revisionsreferenz/Hash, App-Prompt-Version und den aufgelö
 Kontoumfang in `chat_context`; `chat_message.context_id` verbindet den Verlauf damit.
 Der JSON-Kontoumfang enthält `account_ids`, `selection` (Konto-ID oder `null` für alle)
 und bei unbelegtem Altverlauf `legacy_mixed: true`.
-`preference_revision_id` bleibt als Erweiterungspunkt leer. Text wird nur als
+`preference_revision_id` bleibt für Altclients leer; die tatsächlich verwendeten Präferenzrevisionen stehen jetzt in `preference_revision_ids_json` mit `preference_resolver_version` und `preferences_enabled`. Text wird nur als
 Nutzerinhalt an das Modell gegeben, nie als App-Regel oder Chat-Extra gespeichert.
 Löschen entfernt Vorlageninhalt und Revisionsinhalt, hinterlässt `removed`-Markierungen,
 widerruft Kontexte und setzt aktive Auswahlen zurück. Bereits gesendete Modellanfragen
@@ -403,6 +489,55 @@ Für einen Verlauf werden die zugehörigen Kontexte jeweils in einer Datenbankab
 Rückgängig-Anfragen im Posteingang werden nach 15 Sekunden abgebrochen; bei unklarem Ergebnis
 bleibt die Aktion für einen erneuten Versuch noch zehn Sekunden verfügbar.
 Kontowechsel mit Verlauf benötigen eine neue Unterhaltung; „Alle Konten“ bleibt dieselbe Auswahl, auch wenn Konten hinzukommen oder wegfallen.
+
+## Explizite Präferenzen (#38)
+
+Die festen App-Regeln und autorisierten Zugriffe stehen über der aktuellen Bitte, diese über
+der gewählten Vorlage und diese über passenden aktiven Präferenzen. Werte kommen ausschließlich
+als Nutzerinhalt an das Modell, nicht als App-Regel und nicht in Chat-Extras oder Traces.
+Antwortlänge darf global oder für ein Konto gelten; ein Kontowert überschreibt für dieses Feld
+die globale Vorgabe. Anrede und Signatur brauchen genau ein vorhandenes Konto. Bei „Alle Konten“
+werden nur globale Werte aufgelöst, nie Kontosignaturen vermischt. Die bestehenden Mail-,
+Kalender- und Aufgaben-Scope-Prüfungen und die Bestätigungsmechanik bleiben unverändert.
+
+`GET /settings` liefert ausschließlich
+`{"personalization":{"use_preferences":false,"suggest_preferences":false,"version":1}}`.
+PATCH nimmt `{"personalization":{"expected_version":1,"use_preferences":true}}` und ändert
+nur ausdrücklich gelieferte Felder. `suggest_preferences: true`, null und fremde Abschnitte
+werden abgelehnt. `/settings/ui` behält seinen eigenen Vertrag und seine eigene Revision.
+Speichern einer Präferenz ist die manuelle Bestätigung, schaltet die Verwendung aber nie ein.
+POST nimmt `key=answer_length|salutation|signature`, `scope`, `value` und optional
+`status=active|paused`; PATCH nimmt `expected_version` und Änderungen von Wert, Scope oder Status.
+DELETE braucht `expected_version` als Queryparameter. Grenzen: 50 gespeicherte (ohne entfernte),
+20 aktive Werte, 500 Zeichen je Wert. Ein partieller Unique-Index sichert einen aktiven Wert je
+Eigentümer/Schlüssel/Scope, auch bei globalem, nicht-null Scope. Versions- und Quotenkonflikte
+antworten mit 409 ohne Eingabewerte im Fehlertext.
+
+Der vorhandene Turn-Resolver bindet exakte Revisions-IDs und Resolver-Version 1. Neue Revisionen
+wirken ab dem nächsten Turn; der historische Dialog liest nur diese IDs, niemals heutige Werte.
+Ohne Opt-in oder mit ausdrücklich gesetztem `without_preferences: true` gibt es keine Injektion.
+Ein Ladefehler liefert `preferences_unavailable` vor dem Modellaufruf; erst die bewusste Aktion
+„Ohne Präferenzen fortfahren“ setzt den Schalter für den erneuten Versuch. Es gibt keinen stillen
+Fallback. Ausschalten, Pausieren, Scopewechsel und Löschen widerrufen betroffene Kontexte in
+derselben Transaktion: Ausschalten alle Turns mit mindestens einer verwendeten Revision, die
+anderen Aktionen die Turns mit einer Revision der geänderten Präferenz. Turns ohne verwendete
+Präferenz bleiben gültig, auch ihre offenen Vorschläge. Die Rangfolge steht in den festen
+App-Regeln (`agent_prompt.py`, `APP_PROMPT_VERSION` 6). Die vorhandenen Live-Prüfungen vor Modell-/Werkzeugaufrufen und nach zehn
+Deltas bleiben maßgeblich; bereits gesendete Anfragen sind nicht rückholbar.
+
+Die gemeinsame transaktionale Präferenzsperre serialisiert Quoten, Änderungen, Auflösung und
+Kontolöschung. `mail_account.delete_account` entfernt Kontopräferenzen in der Kontotransaktion;
+`mail/service.py` ist im aktuellen Stand nicht der Löschpfad. Löschen entfernt alle Revisionswerte,
+erhält inhaltsfreie Referenzen und widerruft laufende Kontexte. Historische Anzeige:
+„Präferenz entfernt“. Ursprüngliche Chatnachrichten und Antworten bleiben bestehen.
+Für #39 sind entfernte `user_preference`-Zeilen mit Schlüssel und Scope die Unterdrückungsreferenz;
+Kandidaten müssen diese vor Vorschlägen prüfen und dürfen entfernte Revisionen nie auflösen.
+Kandidaten, „Merke dir“-Werkzeuge und Vorschlagskarten gehören nicht zu diesem Schnitt.
+
+Die GETs `preferences_list`, `preference_context_get` und `settings_get` bleiben ausdrücklich in
+`BROWSER_ONLY_GET_OPERATIONS` der MCP-Inventur und außerhalb der Studio-Leseliste: lesend allein
+macht persönliche Werte nicht agentensicher. Die vier Schreiboperationen stehen in
+`MUTATING_OPERATIONS`. Neue Präferenzen werden nicht zu Werkzeugberechtigungen.
 
 ## Worker und periodischer Abruf
 

@@ -180,9 +180,11 @@ class ICSAdapter:
     etag: str | None = field(default=None, repr=False)
     last_modified: str | None = field(default=None, repr=False)
     limits: Limits = Limits()
+    last_result: FetchResult | None = field(default=None, init=False, repr=False)
 
     async def snapshot(self, source_id: str, start: datetime, end: datetime) -> Snapshot:
         result: FetchResult = await fetch(self.url, etag=self.etag, last_modified=self.last_modified)
+        self.last_result = result
         if result.code == "not_modified":
             if self.previous_events is None:
                 raise ICSError("missing_cached_components")

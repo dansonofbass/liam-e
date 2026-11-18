@@ -4,6 +4,7 @@ Proposals are confirmed via ``POST /api/v1/chat/proposals/{proposal_id}/confirm`
 """
 
 from sqlalchemy import select, update
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.engine import get_session_maker
 from db.models.chat_message import ChatMessage
@@ -57,6 +58,38 @@ async def claim_proposal(message_id: str) -> ChatMessage | None:
         message = result.scalar_one_or_none()
         await session.commit()
         return message
+
+
+async def claim_proposal_in_session(session: AsyncSession, message_id: str) -> ChatMessage | None:
+    """Claim a local mutation without committing; UPDATE holds the row lock.
+
+    The caller must keep claim, domain mutation and finish in one transaction.
+    A rollback restores pending. Provider actions must keep using claim_proposal.
+    The context predicate deliberately matches the existing claim boundary.
+    """
+    result = await session.execute(
+        update(ChatMessage).where(
+            ChatMessage.id == message_id, ChatMessage.role == "proposal",
+            ChatMessage.proposal_status == "pending",
+            (ChatMessage.context_id.is_(None) | select(ChatContext.id).where(
+                ChatContext.id == ChatMessage.context_id, ChatContext.revoked.is_(False)
+            ).exists()),
+        ).values(proposal_status="running").returning(ChatMessage)
+    )
+    return result.scalar_one_or_none()
+
+
+async def finish_proposal_in_session(
+    session: AsyncSession, message_id: str, *, proposal_json: str,
+) -> ChatMessage:
+    """Finish a claimed local mutation; never commit independently of its effect."""
+    result = await session.execute(
+        update(ChatMessage).where(
+            ChatMessage.id == message_id, ChatMessage.role == "proposal",
+            ChatMessage.proposal_status == "running",
+        ).values(proposal_json=proposal_json, proposal_status="done").returning(ChatMessage)
+    )
+    return result.scalar_one()
 
 
 async def cancel_proposal(message_id: str) -> ChatMessage | None:

@@ -17,6 +17,24 @@ def mock_context_resolution(monkeypatch):
     monkeypatch.setattr(stream, 'resolve_context', AsyncMock(return_value=None))
 
 
+def test_revoked_context_rest_message_and_stream_code_cover_all_scopes(monkeypatch):
+    from api.routers.api.v1.chat import stream
+    from api.mail.chat_events import ErrorEvent
+    async def revoked(**kwargs):
+        yield ErrorEvent(code='context_revoked')
+    monkeypatch.setattr(agent, 'run_turn_events', revoked)
+    monkeypatch.setattr(stream, 'run_turn_events', revoked)
+    client = TestClient(build_app())
+    response = client.post('/api/v1/chat', json={'message': 'Hallo'})
+    assert response.status_code == 409
+    assert response.json()['detail'] == {'code': 'context_revoked', 'message':
+        'Die Vorlage, Präferenzen oder die Auswahl von Konten, Kalendern oder Aufgaben sind nicht mehr gültig. Starte eine neue Unterhaltung.'}
+    with client.stream('POST', '/api/v1/chat/stream', json={'text': 'Hallo'}) as response:
+        assert response.status_code == 200
+        events = [json.loads(line[5:]) for line in response.iter_lines() if line.startswith('data:')]
+    assert events == [{'event': 'error', 'code': 'context_revoked'}]
+
+
 def test_stream_emits_sse_frames(monkeypatch):
     from api.routers.api.v1.chat import stream
     from api.mail.chat_events import StartEvent, DeltaEvent, DoneEvent

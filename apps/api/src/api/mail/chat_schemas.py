@@ -28,7 +28,11 @@ class ContextOut(BaseModel):
     app_prompt_version: str
     account_scope_json: str
     calendar_scope_json: str = '[]'
+    task_scope_json: str = '{"source":"none"}'
     preference_revision_id: str | None
+    preference_revision_ids_json: str = '[]'
+    preference_resolver_version: str = '1'
+    preferences_enabled: bool = False
     revoked: bool
 
 

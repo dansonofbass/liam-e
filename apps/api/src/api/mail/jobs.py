@@ -94,8 +94,16 @@ async def worker_loop(
     clock = clock or (lambda: datetime.now(timezone.utc))
     wait = wait or _wait_for_stop
     last_poll = None
+    last_calendar_poll = None
     while not stop.is_set():
         now = clock()
+        if poll_due(now, last_calendar_poll, 1):
+            last_calendar_poll = now
+            try:
+                from api.calendar.feed_jobs import enqueue_due
+                await enqueue_due(now)
+            except Exception:
+                _logger.warning("Calendar scheduling failed")
         interval = mail_env.mail_sync_interval_minutes
         if poll_due(now, last_poll, interval):
             last_poll = now

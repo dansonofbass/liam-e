@@ -14,7 +14,9 @@ import { ProposalCard } from './ProposalCard'
 import { useFollowScroll } from './useFollowScroll'
 import { SafeMarkdown } from './SafeMarkdown'
 import { CalendarReference, CalendarScope } from './CalendarContext'
-import { useCalendarScope, useChatSession, useConversationScope, useRestartConversation } from './session'
+import { useCalendarScope, useChatSession, useConversationScope, useRestartConversation, useTaskScope } from './session'
+import { TaskScopeSelector } from './TaskContext'
+import { PreferenceContext } from './PreferenceContext'
 
 type Accounts = AccountSummaryOut[]
 // A retry would send the same request and be refused again.
@@ -25,16 +27,17 @@ export function ChatComposer({ conversationId, contextMessageId, contextOccurren
   const { state, send, stop, composerTexts, setComposerText } = useChatSession()
   const { scope, setScope, ready } = useConversationScope(conversationId)
   const calendar = useCalendarScope(conversationId)
+  const tasks = useTaskScope(conversationId)
   const accounts = (summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name || account.email_address }))
   if (scope && !accounts.some(account => account.id === scope)) accounts.push({ id: scope, label: de.prompts.scopeUnavailable })
   const value = composerTexts[conversationId ?? 'new'] ?? ''
   const setValue = (text: string) => setComposerText(conversationId ?? 'new', text)
   const busy = state.phase === 'working' || state.phase === 'streaming'
   return <><CalendarScope conversationId={conversationId} disabled={busy} /><Composer value={value} onChange={setValue} onSubmit={() => {
-    if (busy || !ready || !calendar.ready || !value.trim()) return
+    if (busy || !ready || !calendar.ready || !tasks.ready || !value.trim()) return
     onSend?.()
-    void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, context_occurrence_id: contextOccurrenceId, calendar_source_ids: calendar.ids, model, ...(!conversationId ? { prompt_revision_id: promptRevisionId } : {}) })
-  }} onStop={stop} busy={busy} scope={scope} accounts={accounts} onScopeChange={setScope} placeholder={de.chat.placeholder} autoFocus={autoFocus} /></>
+    void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, context_occurrence_id: contextOccurrenceId, calendar_source_ids: calendar.ids, task_source: tasks.scope.source, task_source_account_id: tasks.scope.account_id, model, ...(!conversationId ? { prompt_revision_id: promptRevisionId } : {}) })
+  }} onStop={stop} busy={busy} scope={scope} accounts={accounts} onScopeChange={value => { setScope(value); if (value !== scope) tasks.set({ source: 'none' }) }} placeholder={de.chat.placeholder} autoFocus={autoFocus} controls={<TaskScopeSelector conversationId={conversationId} disabled={busy} />} /></>
 }
 
 type Draft = { onDraft: (id: string) => void; disabled: boolean }
@@ -71,7 +74,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const history = useQuery(historyQuery(conversationId))
   const { data: summary } = useQuery(summaryQuery())
   const { data: models = [] } = useQuery(modelsQuery())
-  const { state, send, retry } = useChatSession()
+  const { state, send, retry, retryWithoutPreferences } = useChatSession()
   const { scope, ready } = useConversationScope(conversationId)
   const calendar = useCalendarScope(conversationId)
   const restart = useRestartConversation(conversationId)
@@ -98,7 +101,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
     if (message.role === 'proposal' || message.role === 'draft') return <ProposalCard key={message.id} message={message} />
     if (message.role !== 'assistant') return null
-    return <>{message.context?.revoked && <Notice tone="info" action={{ label: de.prompts.restart, onClick: restart }}>{de.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}{message.extras.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}</>
+    return <>{message.context && <PreferenceContext context={message.context} />}{message.context?.revoked && <Notice tone="info" action={{ label: de.prompts.restart, onClick: restart }}>{message.context.preferences_enabled ? de.errors.context_revoked : de.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}{message.extras.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}</>
   }
   const status = state.status?.code === 'searching' ? de.status.searching(state.status.count ?? 0) : state.status ? de.status[state.status.code] : null
   const liveModel = modelLabel(selectedModel?.conversationId === conversationId ? selectedModel.id : lastAssistant?.extras.model) ?? models.find(model => model.is_default)?.label
@@ -110,7 +113,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     {ordered.map((message, index) => <div className="le-chat-entry" key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={submitSuggestion} />}</div>)}
     {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={liveModel} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{de.chat.askAgain}</Button></div>}
-      {state.phase === 'error' && <Notice tone="danger" action={state.errorCode && NEEDS_NEW_CONVERSATION.has(state.errorCode) ? newConversation : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
+      {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: de.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : state.errorCode && NEEDS_NEW_CONVERSATION.has(state.errorCode) ? newConversation : { label: de.chat.retry, onClick: () => { void retry() } }}>{state.errorCode === 'conversation_scope_change_requires_new' ? de.taskChat.scopeConflict : de.errors[state.errorCode ?? 'internal']}</Notice>}
       {state.phase === 'done' && <>{state.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}
     </div>}
     <div className="le-sr" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>

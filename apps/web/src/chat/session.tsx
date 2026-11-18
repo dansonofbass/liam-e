@@ -8,7 +8,8 @@ import { calendarSourcesQuery, conversationsQuery, historyQuery } from '../api/q
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | ChatRefusal
 type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
-type Session = { calendarScopes: Record<string, string[]>; setCalendarScope: (id: string, ids: string[]) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
+export type TaskScope = { source: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked'; account_id?: string }
+type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; calendarScopes: Record<string, string[]>; setCalendarScope: (id: string, ids: string[]) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void>; retryWithoutPreferences: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
 
@@ -34,6 +35,8 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient()
   const [state, setState] = useState<State>(initial)
   const [scope, setScope] = useState<string | null>(null)
+  const [taskScopes, setTaskScopes] = useState<Record<string, TaskScope>>({})
+  const setTaskScope = (id: string, scope: TaskScope) => setTaskScopes(previous => ({ ...previous, [id]: scope }))
   const [calendarScopes, setCalendarScopes] = useState<Record<string, string[]>>({})
   const setCalendarScope = (id: string, ids: string[]) => setCalendarScopes(previous => ({ ...previous, [id]: ids }))
   const [composerTexts, setComposerTexts] = useState<Record<string, string>>({})
@@ -59,7 +62,9 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const send = useCallback(async (request: ChatStreamRequest) => {
     if (active.current) return
     const calendarIds = request.calendar_source_ids ?? calendarScopes[request.conversation_id ?? 'new'] ?? savedCalendarScope(request.conversation_id ? client.getQueryData(historyQuery(request.conversation_id).queryKey) : undefined)
-    request = { ...request, calendar_source_ids: calendarIds, calendar_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }
+    const liveTasks = request.conversation_id && conversation.current === request.conversation_id ? last.current : undefined
+    const tasks = taskScopes[request.conversation_id ?? 'new'] ?? (liveTasks ? { source: liveTasks.task_source ?? 'none', account_id: liveTasks.task_source_account_id ?? undefined } : savedTaskScope(request.conversation_id ? client.getQueryData(historyQuery(request.conversation_id).queryKey) : undefined))
+    request = { ...request, task_source: request.task_source ?? tasks.source, task_source_account_id: request.task_source !== undefined ? request.task_source_account_id : tasks.account_id, calendar_source_ids: calendarIds, calendar_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }
     last.current = request
     conversation.current = request.conversation_id ?? undefined
     setState({ ...initial(), phase: 'working', request, conversationId: request.conversation_id ?? undefined })
@@ -102,9 +107,10 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
       setState(s => ({ ...s, phase: 'error', status: undefined, errorCode: error instanceof ChatStreamError ? error.code : 'aborted' }))
       invalidate(turn.conversationId)
     }
-  }, [client, invalidate, calendarScopes])
+  }, [client, invalidate, calendarScopes, taskScopes])
   const retry = useCallback(async () => { if (last.current) await send({ ...last.current, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
-  return <Context.Provider value={{ state, scope, setScope, calendarScopes, setCalendarScope, composerTexts, setComposerText, scopeOverrides, setConversationScope, send, stop, retry }}>{children}</Context.Provider>
+  const retryWithoutPreferences = useCallback(async () => { if (last.current) await send({ ...last.current, without_preferences: true, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
+  return <Context.Provider value={{ state, scope, setScope, taskScopes, setTaskScope, calendarScopes, setCalendarScope, composerTexts, setComposerText, scopeOverrides, setConversationScope, send, stop, retry, retryWithoutPreferences }}>{children}</Context.Provider>
 }
 // Shared restoration for every entry point; explicit edits are isolated by conversation.
 export function useConversationScope(id?: string) {
@@ -151,6 +157,8 @@ export function useRestartConversation(id?: string) {
         const activeIds = sources && new Set(sources.filter(source => source.is_active).map(source => source.id))
         const ids = now.session.calendarScopes[now.id] ?? (now.session.state.conversationId === now.id ? now.session.state.request?.calendar_source_ids : undefined) ?? savedCalendarScope(client.getQueryData(historyQuery(now.id).queryKey))
         now.session.setCalendarScope('new', activeIds ? ids.filter(sourceId => activeIds.has(sourceId)) : ids)
+        const liveTask = now.session.state.conversationId === now.id ? now.session.state.request : undefined
+        now.session.setTaskScope('new', now.session.taskScopes[now.id] ?? (liveTask ? { source: liveTask.task_source ?? 'none', account_id: liveTask.task_source_account_id ?? undefined } : savedTaskScope(client.getQueryData(historyQuery(now.id).queryKey))))
       }
       if (text) now.session.setComposerText('new', text)
       void navigate({ to: '/' })
@@ -182,6 +190,27 @@ export function useCalendarScope(id?: string) {
     ids: session.calendarScopes[key] ?? live ?? savedCalendarScope(history.data),
     ready: !id || session.calendarScopes[key] !== undefined || live !== undefined || history.isSuccess,
     set: (ids: string[]) => session.setCalendarScope(key, ids),
+  }
+}
+
+function savedTaskScope(messages?: ChatMessageOut[]): TaskScope {
+  try {
+    const raw = JSON.parse(messages?.findLast(message => message.context)?.context?.task_scope_json ?? '{"source":"none"}') as TaskScope
+    if (['none', 'all', 'unlinked'].includes(raw.source)) return { source: raw.source }
+    if (['account', 'account_and_unlinked'].includes(raw.source) && typeof raw.account_id === 'string') return raw
+  } catch { /* Unknown provenance grants no access. */ }
+  return { source: 'none' }
+}
+
+export function useTaskScope(id?: string) {
+  const session = useChatSession()
+  const history = useQuery({ ...historyQuery(id ?? ''), enabled: !!id })
+  const live = session.state.conversationId === id ? session.state.request : undefined
+  const key = id ?? 'new'
+  return {
+    scope: session.taskScopes[key] ?? (live ? { source: live.task_source ?? 'none', account_id: live.task_source_account_id ?? undefined } : savedTaskScope(history.data)),
+    ready: !id || session.taskScopes[key] !== undefined || live !== undefined || history.isSuccess,
+    set: (scope: TaskScope) => session.setTaskScope(key, scope),
   }
 }
 

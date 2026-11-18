@@ -20,6 +20,8 @@ def register_adapter(provider: str, adapter: Adapter) -> None:
 
 def register_worker() -> None:
     from api.mail.jobs import register_claim_handler
+    from api.calendar.feed_jobs import StoredICSAdapter
+    register_adapter("ics", StoredICSAdapter())
     register_claim_handler("calendar_sync", run_sync)
 
 
@@ -32,6 +34,10 @@ async def enqueue(source_id: str, start: datetime, end: datetime) -> bool:
         raise ValueError("window must use UTC date boundaries")
     if source_id in SEED_CALENDAR_IDS:
         return False
+    source = await calendar_source.get(source_id)
+    if source is not None and source.provider == "ics":
+        from api.calendar.feed_jobs import enqueue as enqueue_feed
+        return await enqueue_feed(source_id, manual=True)
     payload = {"source_id": source_id, "start": start.isoformat(), "end": end.isoformat()}
     return await mail_job.enqueue("calendar_sync", payload, dedupe_key=f"calendar_sync:{source_id}") is not None
 
@@ -45,8 +51,14 @@ async def run_sync(payload: dict, job_id: str, attempt: int) -> None:
     adapter = _adapters.get(source.provider)
     if adapter is None:
         raise LookupError("adapter unavailable")
-    start, end = datetime.fromisoformat(payload["start"]), datetime.fromisoformat(payload["end"])
+    if source.provider == "ics":
+        from api.calendar.ics import default_window
+        start, end = default_window()
+    else:
+        start, end = datetime.fromisoformat(payload["start"]), datetime.fromisoformat(payload["end"])
     snapshot = await adapter.snapshot(source.id, start, end)
+    if source.provider == "ics" and snapshot.source_revision != source.revision:
+        raise LookupError("source_changed")
     if not snapshot.complete:
         raise ValueError("incomplete snapshot")
     if len(snapshot.events) > 10000 or len(snapshot.occurrences) > 50000:
@@ -72,4 +84,7 @@ async def run_sync(payload: dict, job_id: str, attempt: int) -> None:
                                                start_date=row.start_date, end_date=row.end_date,
                                                start_at=row.start_at, end_at=row.end_at, timezone=row.timezone))
     await replace_window(source_id=source.id, job_id=job_id, attempt=attempt, start=start, end=end,
-                         start_date=start.date(), end_date=end.date(), events=events, occurrences=occurrences)
+                         start_date=start.date(), end_date=end.date(), events=events, occurrences=occurrences,
+                         expected_revision=source.revision,
+                         replace_all=source.provider == "ics",
+                         encrypted_validators=getattr(snapshot, "encrypted_validators", None))

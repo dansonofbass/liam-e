@@ -121,8 +121,11 @@ def test_point_migration_round_trip(pg_db):
     async def verify():
         from sqlalchemy import select
         async with get_session_maker()() as session:
-            assert (await session.get(CalendarSyncState, "point-source")).incomplete
-            assert not (await session.get(CalendarSyncState, "other-source")).incomplete
+            # Inspect only columns present at the downgraded schema version.
+            assert (await session.execute(select(CalendarSyncState.incomplete).where(
+                CalendarSyncState.source_id == "point-source"))).scalar_one()
+            assert not (await session.execute(select(CalendarSyncState.incomplete).where(
+                CalendarSyncState.source_id == "other-source"))).scalar_one()
             assert not (await session.execute(select(CalendarOccurrence).where(CalendarOccurrence.source_id == "point-source"))).scalars().all()
     project = Path(__file__).resolve().parents[1]
     config = Config(str(project / "alembic.ini"))

@@ -17,6 +17,7 @@ export function SourceStatus({ source, from, to }: { source: SourceOut; from?: s
     <span>{source.provider === 'ics' ? de.calendar.ics : source.provider === 'google' ? de.calendar.google : de.calendar.readOnly}</span>
     <span>{source.last_success_at ? `${de.calendar.stored}: ${calendarDate(source.last_success_at)} ${calendarTime(source.last_success_at)}` : de.calendar.never}</span>
     {!source.is_active ? <Notice tone="info">{de.calendar.paused}</Notice> : <>
+      {source.last_error && <Notice tone="danger">{source.last_error === 'address_check' ? de.calendar.feedAddressError : de.calendar.feedSyncError}</Notice>}
       {source.incomplete && <Notice tone="info">{de.calendar.incomplete}</Notice>}
       {oldSource(source) && source.last_success_at && <Notice tone="info">{de.calendar.old}</Notice>}
       {from && to && !covers(source, from, to) && <Notice tone="info">{de.calendar.uncovered}</Notice>}
@@ -48,23 +49,23 @@ export function CalendarAgenda() {
   const page = useInfiniteQuery({ ...calendarAgendaQuery(from, to, timeZone, sourceId), enabled: valid && selected.length > 0 })
   const complete = selected.length > 0 && selected.every(s => covers(s, from, to))
   const attempted = useRef(new Set<string>())
-  const refreshSources = async (targets: SourceOut[]) => {
+  const refreshSources = async (targets: SourceOut[], dueOnly = false) => {
     setRefreshing(true)
     await Promise.all(targets.map(async source => {
       try {
-        const result = await calendarSourceSync({ path: { source_id: source.id } })
+        const result = await calendarSourceSync({ path: { source_id: source.id }, query: { due_only: dueOnly } })
         if (result.error || !result.response?.ok) throw new Error()
-        setNotices(current => ({ ...current, [source.id]: result.data?.queued ? de.calendar.queued : de.calendar.notQueued }))
-      } catch { setNotices(current => ({ ...current, [source.id]: de.calendar.refreshError })) }
+        if (!dueOnly) setNotices(current => ({ ...current, [source.id]: result.data?.queued ? de.calendar.queued : source.provider === 'ics' ? de.calendar.feedNotQueued : de.calendar.notQueued }))
+      } catch { if (!dueOnly) setNotices(current => ({ ...current, [source.id]: de.calendar.refreshError })) }
     }))
     setRefreshing(false)
     void sources.refetch()
     if (valid && selected.length) void page.refetch()
   }
   useEffect(() => {
-    const due = (sources.data ?? []).filter(s => s.is_active && oldSource(s) && !attempted.current.has(s.id))
+    const due = (sources.data ?? []).filter(s => s.is_active && (s.provider === 'ics' || oldSource(s)) && !attempted.current.has(s.id))
     for (const source of due) attempted.current.add(source.id)
-    if (due.length) void refreshSources(due)
+    if (due.length) void refreshSources(due, true)
   }, [sources.data])
   // Adjacent padded windows can return the same spanning instance. Keep its stable identity once.
   const unique = new Map(page.data?.pages.flatMap(p => p.items).map(row => [row.id, row]))

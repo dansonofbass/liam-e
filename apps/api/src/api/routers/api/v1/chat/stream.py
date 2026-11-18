@@ -1,6 +1,7 @@
 """Stream one agent turn as server-sent events."""
 import asyncio
 import logging
+from typing import Literal
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
 
@@ -29,10 +30,13 @@ class ChatStreamRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     account_id: str | None = None
     prompt_revision_id: str | None = None
+    without_preferences: bool = False
     context_message_id: str | None = None
     context_occurrence_id: str | None = None
     calendar_source_ids: list[str] = Field(default_factory=list, max_length=50)
     calendar_timezone: str = Field(default='Europe/Berlin', max_length=100)
+    task_source: Literal['none', 'all', 'unlinked', 'account', 'account_and_unlinked'] = 'none'
+    task_source_account_id: str | None = Field(default=None, max_length=200)
     model: str | None = Field(default=None, description='Model for a new conversation; ignored when conversation_id is set (use PATCH on the conversation).')
 
 

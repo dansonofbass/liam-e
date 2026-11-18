@@ -91,6 +91,58 @@ async def test_calendar_context_reference_only_reaches_model_when_visible_and_in
     assert all(requested not in row.content and requested not in row.extras_json for row in store.rows)
 
 
+@pytest.mark.parametrize('boundary', ['task', 'mail'])
+async def test_task_scope_boundary_blocks_all_old_roles_before_model_payload(store, monkeypatch, boundary):
+    old = NS(id='old-task-context', account_scope_json=json.dumps({'account_ids': [store.account.id]}),
+             task_scope_json='{"source":"all"}', calendar_scope_json='[]', revoked=False)
+    narrow = NS(id='new-task-context', account_scope_json=old.account_scope_json,
+                task_scope_json='{"source":"unlinked"}', calendar_scope_json='[]', revoked=False)
+    if boundary == 'mail':
+        narrow.account_scope_json = json.dumps({'account_ids': [store.account.id], 'selection': store.account.id})
+        old.task_scope_json = narrow.task_scope_json = '{"source":"none"}'
+    selected_account = store.account.id if boundary == 'mail' else None
+    conversation = await store.create()
+    for role in ('user', 'assistant', 'tool'):
+        store.rows.append(ChatMessage(conversation_id=conversation.id, role=role, context_id=old.id,
+                                      content='excluded-mail-and-task-' + role))
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(return_value={old.id: old, narrow.id: narrow}))
+    fake = FakeMistral(streams=[['Antwort']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    events = [event async for event in agent.run_turn_events(conversation_id=conversation.id, text='Weiter', account_id=selected_account,
+        resolved_context=(conversation, narrow, None))]
+    assert events[-1].event == 'error' and events[-1].code == 'context_revoked'
+    assert fake.requests == []
+    fresh = await store.create()
+    events = [event async for event in agent.run_turn_events(conversation_id=fresh.id, text='Neue Bitte', account_id=selected_account,
+        resolved_context=(fresh, narrow, None))]
+    assert events[-1].event == 'done'
+    assert fake.requests
+    payload = json.dumps(fake.requests[0]['messages'])
+    assert 'excluded-mail-and-task' not in payload
+    assert 'Neue Bitte' in payload
+
+
+async def test_account_and_personal_tasks_reach_model_but_other_accounts_do_not(store, monkeypatch):
+    from api.tasks import chat as task_chat
+    scope = {'source': 'account_and_unlinked', 'account_id': store.account.id}
+    snapshot = NS(id='task-context', account_scope_json=json.dumps({'account_ids': [store.account.id], 'selection': store.account.id}),
+                  task_scope_json=json.dumps(scope), calendar_scope_json='[]', revoked=False)
+    conversation = await store.create()
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(return_value={snapshot.id: snapshot}))
+    async def read(name, args, actual_scope):
+        assert actual_scope == scope
+        rows = [(store.account.id, 'mail-x', 'account-task'), (None, None, 'personal-task'), ('other', 'mail-y', 'excluded-task')]
+        return {'untrusted_task_data': [title for account, message, title in rows if task_chat.allowed(actual_scope, account, message)]}
+    monkeypatch.setattr(task_chat, 'read', read)
+    events, fake = await run(store, monkeypatch, [[chunk('search_tasks', {'from': '2026-11-13', 'to': '2026-11-13'})], ['Antwort']],
+        account_id=store.account.id, resolved_context=(conversation, snapshot, None))
+    assert events[-1].event == 'done'
+    payload = json.dumps(fake.requests[1]['messages'])
+    assert 'account-task' in payload and 'personal-task' in payload
+    assert 'excluded-task' not in payload
+    assert 'account_and_unlinked' in payload
+
+
 async def test_turn_streams_text_deltas_in_order(store, monkeypatch):
     events, _ = await run(store, monkeypatch, [['Hallo', ' Welt']])
     assert [e.text for e in events if e.event == 'delta'] == ['Hallo', ' Welt']

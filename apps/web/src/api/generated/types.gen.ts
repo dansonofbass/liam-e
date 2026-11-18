@@ -437,9 +437,21 @@ export type ChatStreamRequest = {
      */
     prompt_revision_id?: string | null;
     /**
+     * Task Source
+     */
+    task_source?: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked';
+    /**
+     * Task Source Account Id
+     */
+    task_source_account_id?: string | null;
+    /**
      * Text
      */
     text: string;
+    /**
+     * Without Preferences
+     */
+    without_preferences?: boolean;
 };
 
 /**
@@ -484,6 +496,18 @@ export type ChatTurnRequest = {
      * Prompt Revision Id
      */
     prompt_revision_id?: string | null;
+    /**
+     * Task Source
+     */
+    task_source?: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked';
+    /**
+     * Task Source Account Id
+     */
+    task_source_account_id?: string | null;
+    /**
+     * Without Preferences
+     */
+    without_preferences?: boolean;
 };
 
 /**
@@ -555,9 +579,21 @@ export type ContextOut = {
      */
     id: string;
     /**
+     * Preference Resolver Version
+     */
+    preference_resolver_version?: string;
+    /**
      * Preference Revision Id
      */
     preference_revision_id: string | null;
+    /**
+     * Preference Revision Ids Json
+     */
+    preference_revision_ids_json?: string;
+    /**
+     * Preferences Enabled
+     */
+    preferences_enabled?: boolean;
     /**
      * Prompt Hash
      */
@@ -570,6 +606,10 @@ export type ContextOut = {
      * Revoked
      */
     revoked: boolean;
+    /**
+     * Task Scope Json
+     */
+    task_scope_json?: string;
 };
 
 /**
@@ -653,6 +693,16 @@ export type DependencyStatus = {
 };
 
 /**
+ * DiscardInput
+ */
+export type DiscardInput = {
+    /**
+     * Validation Id
+     */
+    validation_id: string;
+};
+
+/**
  * DoneEvent
  */
 export type DoneEvent = {
@@ -681,11 +731,71 @@ export type ErrorEvent = {
     /**
      * Code
      */
-    code: 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked';
+    code: 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | 'preferences_unavailable';
     /**
      * Event
      */
     event: 'error';
+};
+
+/**
+ * FeedInput
+ */
+export type FeedInput = {
+    /**
+     * Expected Revision
+     */
+    expected_revision?: number | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Source Id
+     */
+    source_id?: string | null;
+    /**
+     * Timezone
+     */
+    timezone: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * FeedPreviewOut
+ */
+export type FeedPreviewOut = {
+    /**
+     * Coverage End
+     */
+    coverage_end: string;
+    /**
+     * Coverage Start
+     */
+    coverage_start: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Format Issues
+     */
+    format_issues: Array<string>;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Occurrence Count
+     */
+    occurrence_count: number;
+    /**
+     * Validation Id
+     */
+    validation_id: string;
 };
 
 /**
@@ -716,6 +826,40 @@ export type HealthResponse = {
      * Status
      */
     status: 'ok' | 'degraded';
+};
+
+/**
+ * HistoricalPreferenceOut
+ */
+export type HistoricalPreferenceOut = {
+    /**
+     * Confirmed At
+     */
+    confirmed_at?: string | null;
+    /**
+     * Key
+     */
+    key?: 'answer_length' | 'salutation' | 'signature' | null;
+    /**
+     * Removed
+     */
+    removed?: boolean;
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Scope
+     */
+    scope?: string | null;
+    /**
+     * Source
+     */
+    source?: 'manual';
+    /**
+     * Value
+     */
+    value?: string | null;
 };
 
 /**
@@ -1218,6 +1362,146 @@ export type OAuthAuthorizeOut = {
 };
 
 /**
+ * PersonalizationOut
+ */
+export type PersonalizationOut = {
+    /**
+     * Suggest Preferences
+     */
+    suggest_preferences: boolean;
+    /**
+     * Use Preferences
+     */
+    use_preferences: boolean;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * PersonalizationUpdate
+ */
+export type PersonalizationUpdate = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Suggest Preferences
+     */
+    suggest_preferences?: boolean | null;
+    /**
+     * Use Preferences
+     */
+    use_preferences?: boolean | null;
+};
+
+/**
+ * PreferenceContextOut
+ */
+export type PreferenceContextOut = {
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Resolver Version
+     */
+    resolver_version: string;
+    /**
+     * Revisions
+     */
+    revisions: Array<HistoricalPreferenceOut>;
+};
+
+/**
+ * PreferenceCreate
+ */
+export type PreferenceCreate = {
+    /**
+     * Key
+     */
+    key: 'answer_length' | 'salutation' | 'signature';
+    /**
+     * Scope
+     */
+    scope?: string;
+    /**
+     * Status
+     */
+    status?: 'active' | 'paused';
+    /**
+     * Value
+     */
+    value: string;
+};
+
+/**
+ * PreferenceOut
+ */
+export type PreferenceOut = {
+    /**
+     * Confirmed At
+     */
+    confirmed_at: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Key
+     */
+    key: 'answer_length' | 'salutation' | 'signature';
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Scope
+     */
+    scope: string;
+    /**
+     * Source
+     */
+    source?: 'manual';
+    /**
+     * Status
+     */
+    status: 'active' | 'paused';
+    /**
+     * Value
+     */
+    value: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * PreferenceUpdate
+ */
+export type PreferenceUpdate = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Scope
+     */
+    scope?: string | null;
+    /**
+     * Status
+     */
+    status?: 'active' | 'paused' | null;
+    /**
+     * Value
+     */
+    value?: string | null;
+};
+
+/**
  * PreviewException
  */
 export type PreviewException = {
@@ -1425,12 +1709,24 @@ export type Proposal = {
     /**
      * Kind
      */
-    kind: 'send' | 'archive' | 'trash' | 'mark_read' | 'unsubscribe';
+    kind: 'send' | 'archive' | 'trash' | 'mark_read' | 'unsubscribe' | 'task';
     /**
      * Reason
      */
     reason: string;
     result?: ProposalResult | null;
+    /**
+     * Task
+     */
+    task?: ({
+        action: 'create';
+    } & TaskCreateCommand) | ({
+        action: 'archive';
+    } & TaskArchiveCommand) | ({
+        action: 'complete' | 'reopen' | 'skip';
+    } & TaskStateCommand) | ({
+        action: 'patch';
+    } & TaskPatchCommand) | null;
 };
 
 /**
@@ -1445,6 +1741,7 @@ export type ProposalConfirmIn = {
      * Selected Ids
      */
     selected_ids: Array<string>;
+    task_edit?: TaskCreateCommand | null;
 };
 
 /**
@@ -1520,6 +1817,10 @@ export type ProposalResult = {
      * Manual
      */
     manual?: Array<ManualStep>;
+    /**
+     * Task Series Id
+     */
+    task_series_id?: string | null;
     /**
      * Undo Action Ids
      */
@@ -1832,6 +2133,20 @@ export type SeriesVersionIn = {
 };
 
 /**
+ * SettingsOut
+ */
+export type SettingsOut = {
+    personalization: PersonalizationOut;
+};
+
+/**
+ * SettingsUpdate
+ */
+export type SettingsUpdate = {
+    personalization: PersonalizationUpdate;
+};
+
+/**
  * SourceOut
  */
 export type SourceOut = {
@@ -1848,6 +2163,10 @@ export type SourceOut = {
      */
     coverage_start: string | null;
     /**
+     * Data Revision
+     */
+    data_revision?: number;
+    /**
      * Id
      */
     id: string;
@@ -1860,9 +2179,21 @@ export type SourceOut = {
      */
     is_active: boolean;
     /**
+     * Last Checked At
+     */
+    last_checked_at?: string | null;
+    /**
+     * Last Error
+     */
+    last_error?: string | null;
+    /**
      * Last Success At
      */
     last_success_at: string | null;
+    /**
+     * Last Validated At
+     */
+    last_validated_at?: string | null;
     /**
      * Name
      */
@@ -1871,6 +2202,10 @@ export type SourceOut = {
      * Provider
      */
     provider: string;
+    /**
+     * Revision
+     */
+    revision?: number;
     /**
      * Stale
      */
@@ -1925,6 +2260,36 @@ export type StatusEvent = {
      * Event
      */
     event: 'status';
+};
+
+/**
+ * SubscribeInput
+ */
+export type SubscribeInput = {
+    /**
+     * Expected Revision
+     */
+    expected_revision?: number | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Source Id
+     */
+    source_id?: string | null;
+    /**
+     * Timezone
+     */
+    timezone: string;
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Validation Id
+     */
+    validation_id: string;
 };
 
 /**
@@ -2012,6 +2377,60 @@ export type SyncOut = {
 };
 
 /**
+ * TaskArchiveCommand
+ */
+export type TaskArchiveCommand = {
+    /**
+     * Action
+     */
+    action: 'archive';
+    /**
+     * Display Rrule
+     */
+    display_rrule?: string | null;
+    /**
+     * Display Timezone
+     */
+    display_timezone?: string | null;
+    /**
+     * Due Local
+     */
+    due_local?: string | null;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Next Due
+     */
+    next_due?: Array<string>;
+    /**
+     * Occurrence Key
+     */
+    occurrence_key?: string | null;
+    /**
+     * Payload Version
+     */
+    payload_version?: 1;
+    /**
+     * Series Id
+     */
+    series_id: string;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Title
+     */
+    title?: string;
+};
+
+/**
  * TaskCreate
  */
 export type TaskCreate = {
@@ -2045,6 +2464,44 @@ export type TaskCreate = {
      * Required IANA timezone, including for date-only tasks; missing or invalid values return task_invalid.
      */
     timezone?: string | null;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * TaskCreateCommand
+ */
+export type TaskCreateCommand = {
+    /**
+     * Action
+     */
+    action: 'create';
+    /**
+     * Payload Version
+     */
+    payload_version?: 1;
+    /**
+     * Rrule
+     */
+    rrule?: string | null;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * Timezone
+     */
+    timezone: string;
     /**
      * Title
      */
@@ -2110,6 +2567,88 @@ export type TaskPatch = {
 };
 
 /**
+ * TaskPatchCommand
+ */
+export type TaskPatchCommand = {
+    /**
+     * Action
+     */
+    action: 'patch';
+    /**
+     * Display Rrule
+     */
+    display_rrule?: string | null;
+    /**
+     * Display Timezone
+     */
+    display_timezone?: string | null;
+    /**
+     * Due Local
+     */
+    due_local?: string | null;
+    /**
+     * Expected Occurrence Version
+     */
+    expected_occurrence_version: number;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Next Due
+     */
+    next_due?: Array<string>;
+    /**
+     * Occurrence Id
+     */
+    occurrence_id: string;
+    /**
+     * Occurrence Key
+     */
+    occurrence_key?: string | null;
+    /**
+     * Payload Version
+     */
+    payload_version?: 1;
+    /**
+     * Rrule
+     */
+    rrule?: string | null;
+    /**
+     * Rule Supplied
+     */
+    rule_supplied?: boolean;
+    /**
+     * Scope
+     */
+    scope: 'occurrence' | 'this_and_following';
+    /**
+     * Series Id
+     */
+    series_id: string;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
+    /**
+     * Title
+     */
+    title?: string;
+};
+
+/**
  * TaskPatched
  */
 export type TaskPatched = {
@@ -2125,6 +2664,68 @@ export type TaskPatched = {
      * Version
      */
     version: number;
+};
+
+/**
+ * TaskStateCommand
+ */
+export type TaskStateCommand = {
+    /**
+     * Action
+     */
+    action: 'complete' | 'skip' | 'reopen';
+    /**
+     * Display Rrule
+     */
+    display_rrule?: string | null;
+    /**
+     * Display Timezone
+     */
+    display_timezone?: string | null;
+    /**
+     * Due Local
+     */
+    due_local?: string | null;
+    /**
+     * Expected Occurrence Version
+     */
+    expected_occurrence_version: number;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Next Due
+     */
+    next_due?: Array<string>;
+    /**
+     * Occurrence Id
+     */
+    occurrence_id: string;
+    /**
+     * Occurrence Key
+     */
+    occurrence_key?: string | null;
+    /**
+     * Payload Version
+     */
+    payload_version?: 1;
+    /**
+     * Series Id
+     */
+    series_id: string;
+    /**
+     * Source Account Id
+     */
+    source_account_id?: string | null;
+    /**
+     * Source Message Id
+     */
+    source_message_id?: string | null;
+    /**
+     * Title
+     */
+    title?: string;
 };
 
 /**
@@ -2552,6 +3153,81 @@ export type HealthResponses = {
 
 export type HealthResponse2 = HealthResponses[keyof HealthResponses];
 
+export type CalendarFeedSubscribeData = {
+    body: SubscribeInput;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/feeds';
+};
+
+export type CalendarFeedSubscribeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarFeedSubscribeError = CalendarFeedSubscribeErrors[keyof CalendarFeedSubscribeErrors];
+
+export type CalendarFeedSubscribeResponses = {
+    /**
+     * Successful Response
+     */
+    201: SourceOut;
+};
+
+export type CalendarFeedSubscribeResponse = CalendarFeedSubscribeResponses[keyof CalendarFeedSubscribeResponses];
+
+export type CalendarFeedValidateData = {
+    body: FeedInput;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/feeds/validate';
+};
+
+export type CalendarFeedValidateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarFeedValidateError = CalendarFeedValidateErrors[keyof CalendarFeedValidateErrors];
+
+export type CalendarFeedValidateResponses = {
+    /**
+     * Successful Response
+     */
+    200: FeedPreviewOut;
+};
+
+export type CalendarFeedValidateResponse = CalendarFeedValidateResponses[keyof CalendarFeedValidateResponses];
+
+export type CalendarFeedValidationDiscardData = {
+    body: DiscardInput;
+    path?: never;
+    query?: never;
+    url: '/api/v1/calendar/feeds/validations/discard';
+};
+
+export type CalendarFeedValidationDiscardErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarFeedValidationDiscardError = CalendarFeedValidationDiscardErrors[keyof CalendarFeedValidationDiscardErrors];
+
+export type CalendarFeedValidationDiscardResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CalendarFeedValidationDiscardResponse = CalendarFeedValidationDiscardResponses[keyof CalendarFeedValidationDiscardResponses];
+
 export type CalendarOccurrencesListData = {
     body?: never;
     path?: never;
@@ -2714,7 +3390,12 @@ export type CalendarSourceSyncData = {
          */
         source_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Due Only
+         */
+        due_only?: boolean;
+    };
     url: '/api/v1/calendar/sources/{source_id}/sync';
 };
 
@@ -3486,6 +4167,144 @@ export type MailSyncAllResponses = {
 
 export type MailSyncAllResponse = MailSyncAllResponses[keyof MailSyncAllResponses];
 
+export type PreferencesListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/preferences';
+};
+
+export type PreferencesListResponses = {
+    /**
+     * Response Preferences List
+     *
+     * Successful Response
+     */
+    200: Array<PreferenceOut>;
+};
+
+export type PreferencesListResponse = PreferencesListResponses[keyof PreferencesListResponses];
+
+export type PreferenceCreateData = {
+    body: PreferenceCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/preferences';
+};
+
+export type PreferenceCreateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceCreateError = PreferenceCreateErrors[keyof PreferenceCreateErrors];
+
+export type PreferenceCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: PreferenceOut;
+};
+
+export type PreferenceCreateResponse = PreferenceCreateResponses[keyof PreferenceCreateResponses];
+
+export type PreferenceContextGetData = {
+    body?: never;
+    path: {
+        /**
+         * Context Id
+         */
+        context_id: string;
+    };
+    query?: never;
+    url: '/api/v1/preferences/contexts/{context_id}';
+};
+
+export type PreferenceContextGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceContextGetError = PreferenceContextGetErrors[keyof PreferenceContextGetErrors];
+
+export type PreferenceContextGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PreferenceContextOut;
+};
+
+export type PreferenceContextGetResponse = PreferenceContextGetResponses[keyof PreferenceContextGetResponses];
+
+export type PreferenceDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query: {
+        /**
+         * Expected Version
+         */
+        expected_version: number;
+    };
+    url: '/api/v1/preferences/{id}';
+};
+
+export type PreferenceDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceDeleteError = PreferenceDeleteErrors[keyof PreferenceDeleteErrors];
+
+export type PreferenceDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type PreferenceDeleteResponse = PreferenceDeleteResponses[keyof PreferenceDeleteResponses];
+
+export type PreferenceUpdateData = {
+    body: PreferenceUpdate;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/preferences/{id}';
+};
+
+export type PreferenceUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreferenceUpdateError = PreferenceUpdateErrors[keyof PreferenceUpdateErrors];
+
+export type PreferenceUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: PreferenceOut;
+};
+
+export type PreferenceUpdateResponse = PreferenceUpdateResponses[keyof PreferenceUpdateResponses];
+
 export type PromptsListData = {
     body?: never;
     path?: never;
@@ -3662,6 +4481,47 @@ export type PromptUpdateResponses = {
 };
 
 export type PromptUpdateResponse = PromptUpdateResponses[keyof PromptUpdateResponses];
+
+export type SettingsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings';
+};
+
+export type SettingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsOut;
+};
+
+export type SettingsGetResponse = SettingsGetResponses[keyof SettingsGetResponses];
+
+export type SettingsUpdateData = {
+    body: SettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings';
+};
+
+export type SettingsUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SettingsUpdateError = SettingsUpdateErrors[keyof SettingsUpdateErrors];
+
+export type SettingsUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsOut;
+};
+
+export type SettingsUpdateResponse = SettingsUpdateResponses[keyof SettingsUpdateResponses];
 
 export type SettingsUiGetData = {
     body?: never;

@@ -5,14 +5,17 @@ from pydantic import BaseModel
 
 from api.errors import refuse
 from api.mail import proposals
+from api.tasks.proposals import TaskCreateCommand
+from api.errors import quiet_validation_route
 from api.mail.chat_schemas import ChatMessageOut, to_message_out
 
-router = APIRouter()
+router = APIRouter(route_class=quiet_validation_route('proposal_invalid', 'Prüfe die Angaben des Vorschlags.'))
 
 
 class ProposalConfirmIn(BaseModel):
     selected_ids: list[str]
     body: str | None = None
+    task_edit: TaskCreateCommand | None = None
 
 
 def _refuse(error: Exception):
@@ -31,7 +34,7 @@ def _refuse(error: Exception):
 @router.post("/{proposal_id}/confirm", operation_id="chat_proposal_confirm", description="Führt die ausgewählten Einträge eines offenen Vorschlags nach Bestätigung aus.")
 async def confirm(proposal_id: str, body: ProposalConfirmIn) -> ChatMessageOut:
     try:
-        return to_message_out(await proposals.confirm(proposal_id, selected_ids=body.selected_ids, body=body.body))
+        return to_message_out(await proposals.confirm(proposal_id, selected_ids=body.selected_ids, body=body.body, task_edit=body.task_edit))
     except (proposals.ProposalNotFoundError, proposals.ProposalStateError, proposals.ProposalSelectionError, proposals.ProposalContextRevokedError) as error:
         _refuse(error)
 

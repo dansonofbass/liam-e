@@ -707,11 +707,40 @@
             ],
             "title": "Prompt Revision Id"
           },
+          "task_source": {
+            "default": "none",
+            "enum": [
+              "none",
+              "all",
+              "unlinked",
+              "account",
+              "account_and_unlinked"
+            ],
+            "title": "Task Source",
+            "type": "string"
+          },
+          "task_source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Source Account Id"
+          },
           "text": {
             "maxLength": 8000,
             "minLength": 1,
             "title": "Text",
             "type": "string"
+          },
+          "without_preferences": {
+            "default": false,
+            "title": "Without Preferences",
+            "type": "boolean"
           }
         },
         "required": [
@@ -802,6 +831,35 @@
               }
             ],
             "title": "Prompt Revision Id"
+          },
+          "task_source": {
+            "default": "none",
+            "enum": [
+              "none",
+              "all",
+              "unlinked",
+              "account",
+              "account_and_unlinked"
+            ],
+            "title": "Task Source",
+            "type": "string"
+          },
+          "task_source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Source Account Id"
+          },
+          "without_preferences": {
+            "default": false,
+            "title": "Without Preferences",
+            "type": "boolean"
           }
         },
         "required": [
@@ -892,6 +950,11 @@
             "title": "Id",
             "type": "string"
           },
+          "preference_resolver_version": {
+            "default": "1",
+            "title": "Preference Resolver Version",
+            "type": "string"
+          },
           "preference_revision_id": {
             "anyOf": [
               {
@@ -902,6 +965,16 @@
               }
             ],
             "title": "Preference Revision Id"
+          },
+          "preference_revision_ids_json": {
+            "default": "[]",
+            "title": "Preference Revision Ids Json",
+            "type": "string"
+          },
+          "preferences_enabled": {
+            "default": false,
+            "title": "Preferences Enabled",
+            "type": "boolean"
           },
           "prompt_hash": {
             "anyOf": [
@@ -928,6 +1001,11 @@
           "revoked": {
             "title": "Revoked",
             "type": "boolean"
+          },
+          "task_scope_json": {
+            "default": "{\"source\":\"none\"}",
+            "title": "Task Scope Json",
+            "type": "string"
           }
         },
         "required": [
@@ -1074,6 +1152,22 @@
         "title": "DependencyStatus",
         "type": "object"
       },
+      "DiscardInput": {
+        "additionalProperties": false,
+        "properties": {
+          "validation_id": {
+            "maxLength": 100,
+            "minLength": 40,
+            "title": "Validation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "validation_id"
+        ],
+        "title": "DiscardInput",
+        "type": "object"
+      },
       "DoneEvent": {
         "properties": {
           "conversation_id": {
@@ -1111,7 +1205,8 @@
               "model_unavailable",
               "aborted",
               "internal",
-              "context_revoked"
+              "context_revoked",
+              "preferences_unavailable"
             ],
             "title": "Code",
             "type": "string"
@@ -1128,6 +1223,106 @@
           "code"
         ],
         "title": "ErrorEvent",
+        "type": "object"
+      },
+      "FeedInput": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "timezone": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "timezone"
+        ],
+        "title": "FeedInput",
+        "type": "object"
+      },
+      "FeedPreviewOut": {
+        "properties": {
+          "coverage_end": {
+            "format": "date-time",
+            "title": "Coverage End",
+            "type": "string"
+          },
+          "coverage_start": {
+            "format": "date-time",
+            "title": "Coverage Start",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "format_issues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Format Issues",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "occurrence_count": {
+            "title": "Occurrence Count",
+            "type": "integer"
+          },
+          "validation_id": {
+            "title": "Validation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "validation_id",
+          "name",
+          "coverage_start",
+          "coverage_end",
+          "occurrence_count",
+          "expires_at",
+          "format_issues"
+        ],
+        "title": "FeedPreviewOut",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1177,6 +1372,80 @@
           "deps"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "HistoricalPreferenceOut": {
+        "properties": {
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "enum": [
+                  "answer_length",
+                  "salutation",
+                  "signature"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "removed": {
+            "default": true,
+            "title": "Removed",
+            "type": "boolean"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "source": {
+            "const": "manual",
+            "default": "manual",
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "revision_id"
+        ],
+        "title": "HistoricalPreferenceOut",
         "type": "object"
       },
       "ImapConnectRequest": {
@@ -1942,6 +2211,254 @@
         "title": "OAuthAuthorizeOut",
         "type": "object"
       },
+      "PersonalizationOut": {
+        "properties": {
+          "suggest_preferences": {
+            "title": "Suggest Preferences",
+            "type": "boolean"
+          },
+          "use_preferences": {
+            "title": "Use Preferences",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "use_preferences",
+          "suggest_preferences",
+          "version"
+        ],
+        "title": "PersonalizationOut",
+        "type": "object"
+      },
+      "PersonalizationUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "suggest_preferences": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggest Preferences"
+          },
+          "use_preferences": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Preferences"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "PersonalizationUpdate",
+        "type": "object"
+      },
+      "PreferenceContextOut": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "resolver_version": {
+            "title": "Resolver Version",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/HistoricalPreferenceOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "resolver_version",
+          "revisions"
+        ],
+        "title": "PreferenceContextOut",
+        "type": "object"
+      },
+      "PreferenceCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "enum": [
+              "answer_length",
+              "salutation",
+              "signature"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "scope": {
+            "default": "*",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "enum": [
+              "active",
+              "paused"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "PreferenceCreate",
+        "type": "object"
+      },
+      "PreferenceOut": {
+        "properties": {
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "enum": [
+              "answer_length",
+              "salutation",
+              "signature"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "const": "manual",
+            "default": "manual",
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "paused"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "scope",
+          "value",
+          "status",
+          "version",
+          "revision_id",
+          "confirmed_at"
+        ],
+        "title": "PreferenceOut",
+        "type": "object"
+      },
+      "PreferenceUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "paused"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "PreferenceUpdate",
+        "type": "object"
+      },
       "PreviewException": {
         "properties": {
           "local": {
@@ -2289,7 +2806,8 @@
               "archive",
               "trash",
               "mark_read",
-              "unsubscribe"
+              "unsubscribe",
+              "task"
             ],
             "title": "Kind",
             "type": "string"
@@ -2307,6 +2825,41 @@
                 "type": "null"
               }
             ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "archive": "#/components/schemas/TaskArchiveCommand",
+                    "complete": "#/components/schemas/TaskStateCommand",
+                    "create": "#/components/schemas/TaskCreateCommand",
+                    "patch": "#/components/schemas/TaskPatchCommand",
+                    "reopen": "#/components/schemas/TaskStateCommand",
+                    "skip": "#/components/schemas/TaskStateCommand"
+                  },
+                  "propertyName": "action"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TaskCreateCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TaskArchiveCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TaskStateCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TaskPatchCommand"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task"
           }
         },
         "required": [
@@ -2336,6 +2889,16 @@
             },
             "title": "Selected Ids",
             "type": "array"
+          },
+          "task_edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskCreateCommand"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2476,6 +3039,17 @@
             },
             "title": "Manual",
             "type": "array"
+          },
+          "task_series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Series Id"
           },
           "undo_action_ids": {
             "items": {
@@ -3017,6 +3591,31 @@
         "title": "SeriesVersionIn",
         "type": "object"
       },
+      "SettingsOut": {
+        "properties": {
+          "personalization": {
+            "$ref": "#/components/schemas/PersonalizationOut"
+          }
+        },
+        "required": [
+          "personalization"
+        ],
+        "title": "SettingsOut",
+        "type": "object"
+      },
+      "SettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "personalization": {
+            "$ref": "#/components/schemas/PersonalizationUpdate"
+          }
+        },
+        "required": [
+          "personalization"
+        ],
+        "title": "SettingsUpdate",
+        "type": "object"
+      },
       "SourceOut": {
         "properties": {
           "capabilities": {
@@ -3050,6 +3649,11 @@
             ],
             "title": "Coverage Start"
           },
+          "data_revision": {
+            "default": 0,
+            "title": "Data Revision",
+            "type": "integer"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -3061,6 +3665,29 @@
           "is_active": {
             "title": "Is Active",
             "type": "boolean"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
           },
           "last_success_at": {
             "anyOf": [
@@ -3074,6 +3701,18 @@
             ],
             "title": "Last Success At"
           },
+          "last_validated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Validated At"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -3081,6 +3720,11 @@
           "provider": {
             "title": "Provider",
             "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
           },
           "stale": {
             "title": "Stale",
@@ -3183,6 +3827,64 @@
           "count"
         ],
         "title": "StatusEvent",
+        "type": "object"
+      },
+      "SubscribeInput": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "timezone": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          },
+          "validation_id": {
+            "maxLength": 100,
+            "minLength": 40,
+            "title": "Validation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "timezone",
+          "validation_id"
+        ],
+        "title": "SubscribeInput",
         "type": "object"
       },
       "SuggestionsEvent": {
@@ -3317,6 +4019,122 @@
         "title": "SyncOut",
         "type": "object"
       },
+      "TaskArchiveCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "archive",
+            "title": "Action",
+            "type": "string"
+          },
+          "display_rrule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Rrule"
+          },
+          "display_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Timezone"
+          },
+          "due_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Local"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "next_due": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Next Due",
+            "type": "array"
+          },
+          "occurrence_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Key"
+          },
+          "payload_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Payload Version",
+            "type": "integer"
+          },
+          "series_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Series Id",
+            "type": "string"
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_id",
+          "expected_version",
+          "action"
+        ],
+        "title": "TaskArchiveCommand",
+        "type": "object"
+      },
       "TaskCreate": {
         "properties": {
           "creation_key": {
@@ -3399,6 +4217,84 @@
           "start"
         ],
         "title": "TaskCreate",
+        "type": "object"
+      },
+      "TaskCreateCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "create",
+            "title": "Action",
+            "type": "string"
+          },
+          "payload_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Payload Version",
+            "type": "integer"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrule"
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "start": {
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "title",
+          "start",
+          "timezone"
+        ],
+        "title": "TaskCreateCommand",
         "type": "object"
       },
       "TaskCreated": {
@@ -3495,6 +4391,180 @@
         "title": "TaskPatch",
         "type": "object"
       },
+      "TaskPatchCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "patch",
+            "title": "Action",
+            "type": "string"
+          },
+          "display_rrule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Rrule"
+          },
+          "display_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Timezone"
+          },
+          "due_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Local"
+          },
+          "expected_occurrence_version": {
+            "minimum": 1.0,
+            "title": "Expected Occurrence Version",
+            "type": "integer"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "next_due": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Next Due",
+            "type": "array"
+          },
+          "occurrence_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Occurrence Id",
+            "type": "string"
+          },
+          "occurrence_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Key"
+          },
+          "payload_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Payload Version",
+            "type": "integer"
+          },
+          "rrule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrule"
+          },
+          "rule_supplied": {
+            "default": false,
+            "title": "Rule Supplied",
+            "type": "boolean"
+          },
+          "scope": {
+            "enum": [
+              "occurrence",
+              "this_and_following"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "series_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Series Id",
+            "type": "string"
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "start": {
+            "maxLength": 26,
+            "minLength": 10,
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_id",
+          "expected_version",
+          "occurrence_id",
+          "expected_occurrence_version",
+          "action",
+          "scope",
+          "start"
+        ],
+        "title": "TaskPatchCommand",
+        "type": "object"
+      },
       "TaskPatched": {
         "properties": {
           "id": {
@@ -3516,6 +4586,139 @@
           "revision_id"
         ],
         "title": "TaskPatched",
+        "type": "object"
+      },
+      "TaskStateCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "complete",
+              "skip",
+              "reopen"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "display_rrule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Rrule"
+          },
+          "display_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Timezone"
+          },
+          "due_local": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Local"
+          },
+          "expected_occurrence_version": {
+            "minimum": 1.0,
+            "title": "Expected Occurrence Version",
+            "type": "integer"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "next_due": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Next Due",
+            "type": "array"
+          },
+          "occurrence_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Occurrence Id",
+            "type": "string"
+          },
+          "occurrence_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Key"
+          },
+          "payload_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Payload Version",
+            "type": "integer"
+          },
+          "series_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Series Id",
+            "type": "string"
+          },
+          "source_account_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Account Id"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "series_id",
+          "expected_version",
+          "occurrence_id",
+          "expected_occurrence_version",
+          "action"
+        ],
+        "title": "TaskStateCommand",
         "type": "object"
       },
       "TaskWindow": {
@@ -4303,6 +5506,113 @@
         "summary": "Report dependency status; always answers 200"
       }
     },
+    "/api/v1/calendar/feeds": {
+      "post": {
+        "operationId": "calendar_feed_subscribe",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscribeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Subscribe"
+      }
+    },
+    "/api/v1/calendar/feeds/validate": {
+      "post": {
+        "operationId": "calendar_feed_validate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate"
+      }
+    },
+    "/api/v1/calendar/feeds/validations/discard": {
+      "post": {
+        "operationId": "calendar_feed_validation_discard",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscardInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discard"
+      }
+    },
     "/api/v1/calendar/occurrences": {
       "get": {
         "operationId": "calendar_occurrences_list",
@@ -4546,6 +5856,16 @@
             "schema": {
               "title": "Source Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Due Only",
+              "type": "boolean"
             }
           }
         ],
@@ -5724,6 +7044,192 @@
         "summary": "Mail Sync All"
       }
     },
+    "/api/v1/preferences": {
+      "get": {
+        "operationId": "preferences_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PreferenceOut"
+                  },
+                  "title": "Response Preferences List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Preferences"
+      },
+      "post": {
+        "operationId": "preference_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Preference"
+      }
+    },
+    "/api/v1/preferences/contexts/{context_id}": {
+      "get": {
+        "operationId": "preference_context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "context_id",
+            "required": true,
+            "schema": {
+              "title": "Context Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Preference Context"
+      }
+    },
+    "/api/v1/preferences/{id}": {
+      "delete": {
+        "operationId": "preference_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Preference"
+      },
+      "patch": {
+        "operationId": "preference_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Preference"
+      }
+    },
     "/api/v1/prompts": {
       "get": {
         "operationId": "prompts_list",
@@ -5911,6 +7417,60 @@
           }
         },
         "summary": "Update Prompt"
+      }
+    },
+    "/api/v1/settings": {
+      "get": {
+        "operationId": "settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Settings"
+      },
+      "patch": {
+        "operationId": "settings_update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Settings"
       }
     },
     "/api/v1/settings/ui": {

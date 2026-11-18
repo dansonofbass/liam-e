@@ -30,6 +30,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
   const [reserved, setReserved] = useState(0)
   const pending = useRef(0)
   const queues = useRef(new Map<string, Promise<unknown>>())
+  const [, setQueueVersion] = useState(0)
   const reconcile = useRef(false)
   const settle = () => {
     if (--pending.current === 0 && reconcile.current) {
@@ -88,7 +89,14 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     const previous = queues.current.get(id)
     const work = previous ? previous.catch(() => {}).then(execute) : execute()
     queues.current.set(id, work)
-    void work.then(() => { if (queues.current.get(id) === work) queues.current.delete(id) }, () => { if (queues.current.get(id) === work) queues.current.delete(id) })
+    setQueueVersion(version => version + 1)
+    const finished = () => {
+      if (queues.current.get(id) === work) {
+        queues.current.delete(id)
+        setQueueVersion(version => version + 1)
+      }
+    }
+    void work.then(finished, finished)
     return work
   }
   const checkCapacity = () => {
@@ -199,7 +207,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
   }
   const latest = entries.at(-1)
   const toast: Toast | null = notice ? { tone: 'danger', text: notice, undoable: false } : latest ? { tone: 'success', text: latest.text, undoable: true } : null
-  return { run, undo, notify, toast, entries, checkCapacity, capacityAvailable: entries.filter(entry => entry.pending || entry.deadline > clock.now()).length + reserved < LIMIT }
+  return { run, undo, notify, toast, entries, checkCapacity, isBusy: (id: string) => queues.current.has(id), capacityAvailable: entries.filter(entry => entry.pending || entry.deadline > clock.now()).length + reserved < LIMIT }
 }
 
 const MailActionsContext = createContext<ReturnType<typeof useMailActions> | null>(null)

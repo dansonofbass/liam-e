@@ -1,14 +1,15 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams, useRouter, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { mailSyncAll } from '../api/generated/sdk.gen'
-import type { MessageListItemOut } from '../api/generated/types.gen'
+import type { MessageListItemOut, MessagePageOut, UiSettingsOut } from '../api/generated/types.gen'
 import { messagesInfiniteQuery, summaryQuery } from '../api/queries'
 import { Chip, Icon, IconButton, MailRow, Menu, Notice, TextField } from '../ds'
 import { providerLabel } from '../ds/providerLabel'
 import { de } from '../i18n/de'
 import { formatTime } from '../i18n/format'
 import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
+import { useSwipeSettings } from '../settings/useSwipeSettings'
 import { hasActiveFilters, toMessageFilters, type InboxSearch } from './filters'
 import { groupByDay } from './groups'
 import { useInboxKeys } from './useInboxKeys'
@@ -25,7 +26,8 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   const breakpoint = useBreakpoint(), coarse = useCoarsePointer()
   const summary = useQuery(summaryQuery())
   const messages = useInfiniteQuery(messagesInfiniteQuery(toMessageFilters(search)))
-  const { run, notify, checkCapacity } = useMailActionsContext()
+  const { run, notify, checkCapacity, capacityAvailable, isBusy } = useMailActionsContext()
+  const swipeSettings = useSwipeSettings()
   const [localSelected, setLocalSelected] = useState<string | undefined>()
   const [searchOpen, setSearchOpen] = useState(Boolean(search.q))
   const [value, setValue] = useState(search.q ?? '')
@@ -132,7 +134,7 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
       {messages.isPending && <><span className="le-sr" role="status">{de.inbox.loading}</span><div aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <div key={i} className="le-mailrow le-mailrow--placeholder"><span /><span /></div>)}</div></>}
       {messages.isError && !messages.data && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void messages.refetch() } }}>{de.inbox.loadError}</Notice>}
       {messages.data && !items.length && <p className="le-hint">{hasActiveFilters(search) ? de.inbox.emptyFiltered : de.inbox.empty}</p>}
-      {groups.map(group => <div key={group.label}><div className="le-side-label">{group.label}</div><ul className="le-maillist" aria-label={group.label}>{group.items.map(mail => <li key={mail.id} ref={node => { if (node) rowRefs.current.set(mail.id, node); else rowRefs.current.delete(mail.id) }}><MailRow mail={mail} selected={selected === mail.id} coarse={coarse} accountLabel={labels.get(mail.account_id)} onOpen={() => { setLocalSelected(mail.id); onOpen(mail.id) }} onArchive={() => remove(mail, 'archive')} onToggleRead={() => toggleRead(mail)} onTrash={() => remove(mail, 'trash')} /></li>)}</ul></div>)}
+      {groups.map(group => <div key={group.label}><div className="le-side-label">{group.label}</div><ul className="le-maillist" aria-label={group.label}>{group.items.map(mail => <li key={mail.id} ref={node => { if (node) rowRefs.current.set(mail.id, node); else rowRefs.current.delete(mail.id) }}><MailRow mail={mail} selected={selected === mail.id} coarse={coarse} accountLabel={labels.get(mail.account_id)} onOpen={() => { setLocalSelected(mail.id); onOpen(mail.id) }} onArchive={() => remove(mail, 'archive')} onToggleRead={() => toggleRead(mail)} onTrash={() => remove(mail, 'trash')} swipe={{ basis: swipeSettings.assignment && swipeSettings.revision !== undefined ? { id: mail.id, isRead: mail.is_read, revision: swipeSettings.revision, ...swipeSettings.assignment } : undefined, enabled: swipeSettings.status === 'ready' && (swipeSettings.assignment?.left !== 'none' || swipeSettings.assignment?.right !== 'none') && capacityAvailable && !isBusy(mail.id), navigation: location.href, valid: basis => { const settings = client.getQueryData<UiSettingsOut>(['ui-settings']); const data = client.getQueryData<InfiniteData<MessagePageOut>>(messagesInfiniteQuery(toMessageFilters(search)).queryKey); const currentMail = data?.pages.flatMap(page => page.items).find(item => item.id === basis.id); return client.getQueryState(['ui-settings'])?.status === 'success' && settings?.revision === basis.revision && settings.swipe_left === basis.left && settings.swipe_right === basis.right && currentMail?.is_read === basis.isRead && !isBusy(basis.id) && checkCapacity() }, run: action => { if (isBusy(mail.id) || !checkCapacity()) return; if (action === 'archive' || action === 'trash') remove(mail, action); else void run(mail.id, action) } }} /></li>)}</ul></div>)}
       <div ref={sentinel} />{messages.isFetchingNextPage && <p className="le-hint">{de.inbox.loadingMore}</p>}
     </div>
     <ActionToast />

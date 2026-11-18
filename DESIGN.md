@@ -564,6 +564,12 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
 - **Composer:** Das Textfeld wächst bis 200 px Höhe. Enter sendet, Umschalt+Enter beginnt
   eine neue Zeile. Der Konto-Chip links unten („Alle Konten“ oder der Name eines Kontos)
   legt fest, in welchen Konten der Assistent sucht.
+  Daneben legt der Aufgaben-Chip fest, welche Aufgaben der Assistent lesen darf (Vorgabe
+  „Keine Aufgaben“). Sein Menü zeigt die Wahl als Einfachauswahl mit Hinweiszeilen; in einer
+  Unterhaltung mit Verlauf steht bei den anderen Einträgen „Braucht eine neue Unterhaltung.“
+  Die Leiste bricht um, der Senden-Button bleibt am Ende. Auswahlen gehören als Chip in diese
+  Leiste, nicht als Chipgruppe über den Composer: Auf kleinen Telefonen schiebt eine solche
+  Gruppe den Composer aus dem Bild.
 - **Mailbezug:** „Im Chat fragen“ öffnet die Startseite mit der Mail als Bezug. Über dem
   Composer steht dann ihre Mail-Karte mit dem Symbol-Button „Bezug entfernen“ (`x`).
 
@@ -586,6 +592,26 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
   Versionen bieten „Version übernehmen“. Während einer Antwort ist die Wahl gesperrt.
 - Bei einem abgelehnten Kontowechsel führt „Neue Unterhaltung“ ohne bisherigen Verlauf
   zur Startseite. Kontoauswahl und noch nicht angenommener Composertext bleiben erhalten.
+
+### 9.8 Präferenzen
+
+- `/settings/preferences` ergänzt die Abschnittsnavigation. Anlegen und Bearbeiten öffnen
+  eigene Ansichten auf allen Bildschirmgrößen; Controls, Abstände und Dialoge folgen den Vorlagen.
+- Manuelles Speichern bestätigt nur den Wert. Bei ausgeschalteter Verwendung steht
+  „Gespeichert. Verwendung ist ausgeschaltet.“ mit „Verwendung einschalten“. Erst dessen Dialog
+  bestätigt: „Passende Präferenzen werden für Antworten an Mistral übermittelt.“
+- Die ausdrücklich abgestimmte Aktion heißt „Präferenz hinzufügen“; das ist keine Ausnahme
+  für das Verbinden von Konten. Leere Listen nennen keine Prozentwerte. Quelle manueller Werte:
+  „Von dir eingetragen“. Feld und Geltungsbereich sind Chips mit sichtbarer Beschriftung darüber.
+  Vorschläge erscheinen nur als Hinweis, dass sie noch nicht verfügbar sind, nicht als
+  deaktivierter Button: Sekundäre Buttons sehen deaktiviert nicht anders aus.
+- Löschen erklärt, dass Chatnachrichten und Antworten bleiben und bereits übermittelte Anfragen
+  nicht zurückholbar sind. Es verspricht weder Löschung beim Anbieter noch aus Backups und bietet
+  einen neuen Chat ohne bisherigen Kontext. Fokus bleibt im Dialog und kehrt beim Schließen zurück.
+- „N Präferenzen verwendet“ an einer Antwort öffnet deren gespeicherte Revisionen, keine aktuellen
+  Ersatzwerte. Entfernte Revisionen zeigen „Präferenz entfernt“. Antworten ohne verwendete
+  Präferenzen zeigen nichts, auch bei ausgeschalteter Verwendung; ein Hinweis unter jeder Antwort
+  wäre Rauschen. Ein Ladefehler bietet ausdrücklich „Ohne Präferenzen fortfahren“.
 
 ## 10. Erweitern und pflegen
 

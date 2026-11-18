@@ -53,6 +53,76 @@ async function setupConfirmed(done: ChatMessageOut, clock?: Parameters<typeof se
   return client
 }
 
+test('task revision collisions explain the conflicting completed occurrence', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'patch', series_id: 'task', expected_version: 1, occurrence_id: 'occurrence', expected_occurrence_version: 1, scope: 'this_and_following', start: '2027-01-01', timezone: 'UTC' } }
+  spyOn(sdk, 'tasksPreview').mockResolvedValue({ data: { occurrences: ['2027-01-01'], exceptions: [], through: '2028-01-01', complete: true } } as never)
+  spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => { throw { detail: { code: 'task_revision_conflict' } } }) as never)
+  setup(initial)
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' }))
+  expect(await screen.findByText('Die neue Wiederholung überschneidet sich mit einer erledigten Fälligkeit. Wähle einen anderen Zeitplan.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeTruthy()
+})
+
+test('task creation edits use a fresh preview and confirmation invalidates tasks with outcome focus', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'create', title: 'Example', start: '2027-01-01', timezone: 'UTC' } }
+  const preview = spyOn(sdk, 'tasksPreview').mockImplementation((async () => ({ data: { occurrences: ['2027-01-01'], exceptions: [], through: '2028-01-01', complete: true } })) as never)
+  const done = { ...initial, proposal_status: 'done', proposal: { ...initial.proposal, result: { done: 1, task_series_id: 'task' } } }
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)
+  const client = setup(initial)
+  const invalidate = spyOn(client, 'invalidateQueries')
+  await screen.findByLabelText('Titel')
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Edited example' } })
+  fireEvent.change(screen.getByLabelText('Erstes Datum'), { target: { value: '2027-02-01' } })
+  expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(true)
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(false))
+  expect(preview.mock.calls.at(-1)?.[0]?.body?.start).toBe('2027-02-01')
+  expect(confirm).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' }))
+  await waitFor(() => expect(confirm.mock.calls[0]?.[0]?.body?.task_edit?.title).toBe('Edited example'))
+  expect(confirm.mock.calls[0]?.[0]?.body?.task_edit?.start).toBe('2027-02-01')
+  const outcome = await screen.findByText('Aufgabenänderung gespeichert.')
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] })
+  expect(outcome.closest('.le-proposal-outcome')).toBe(document.activeElement)
+})
+
+test('task card edits survive the replacement by the history row and are confirmed', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'create', title: 'Example', start: '2027-01-01', timezone: 'UTC' } }
+  spyOn(sdk, 'tasksPreview').mockImplementation((async () => ({ data: { occurrences: ['2027-01-01'], exceptions: [], through: '2028-01-01', complete: true } })) as never)
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: { ...initial, proposal_status: 'done' } })) as never)
+  const client = testClient()
+  // The live card and the history row sit in different places, so React mounts a new card.
+  const card = () => <QueryClientProvider client={client}><TestRouter><ProposalCard message={initial} /></TestRouter></QueryClientProvider>
+  const view = render(card())
+  fireEvent.change(await screen.findByLabelText('Titel'), { target: { value: 'Edited example' } })
+  fireEvent.change(screen.getByLabelText('Erstes Datum'), { target: { value: '2027-02-01' } })
+  fireEvent.change(screen.getByLabelText('Uhrzeit (optional)'), { target: { value: '09:30' } })
+  view.unmount()
+  render(card())
+  expect((screen.getByLabelText('Titel') as HTMLInputElement).value).toBe('Edited example')
+  expect((screen.getByLabelText('Erstes Datum') as HTMLInputElement).value).toBe('2027-02-01')
+  expect((screen.getByLabelText('Uhrzeit (optional)') as HTMLInputElement).value).toBe('09:30')
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' }))
+  await waitFor(() => expect(confirm.mock.calls[0]?.[0]?.body?.task_edit).toMatchObject({ title: 'Edited example', start: '2027-02-01T09:30' }))
+})
+
+test('cancelling a task card never confirms or invalidates tasks', async () => {
+  const initial = message()
+  initial.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'archive', series_id: 'task', expected_version: 1, title: 'Example' } }
+  const confirm = spyOn(sdk, 'chatProposalConfirm')
+  spyOn(sdk, 'chatProposalCancel').mockImplementation((async () => ({ data: { ...initial, proposal_status: 'cancelled' } })) as never)
+  const client = setup(initial), invalidate = spyOn(client, 'invalidateQueries')
+  fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
+  await screen.findByText('Abgebrochen, es wurde nichts geändert.')
+  expect(confirm).not.toHaveBeenCalled()
+  expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['tasks'] })
+})
+
 test('confirmation submits selected ids and replaces the card in history', async () => {
   const done = message('done', { done: 1, undo_action_ids: ['u'] })
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: done })) as never)

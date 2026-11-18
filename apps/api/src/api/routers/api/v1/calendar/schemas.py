@@ -17,6 +17,11 @@ class SourceOut(BaseModel):
     last_success_at: datetime | None
     stale: bool
     incomplete: bool
+    revision: int = 1
+    last_checked_at: datetime | None = None
+    last_validated_at: datetime | None = None
+    last_error: str | None = None
+    data_revision: int = 0
 
 
 class SourcePatch(BaseModel):
