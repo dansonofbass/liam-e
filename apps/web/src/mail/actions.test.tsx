@@ -63,6 +63,26 @@ test('bulk partial failure rolls back only failed rows and keeps one group undo'
   expect(undo.mock.calls[0]?.[0]?.body).toEqual({ action_ids: ['a1'] })
 })
 
+test('bulk not_found stays removed while a failed mark_read rolls back its row', async () => {
+  spyOn(sdk, 'mailMessagesBulkAction').mockImplementation((async () => ({ data: { results: [{ message_id: '1', status: 'not_found', action_id: null, message: null }, { message_id: '2', status: 'failed', action_id: null, message: null }] }, response: { ok: true } })) as never)
+  setup(); fireEvent.click(screen.getByText('bulk archive'))
+  expect(await screen.findByText('0 von 2 Mails archiviert. 2 ließen sich nicht archivieren.')).toBeTruthy()
+  expect(screen.queryByText('Erste:false')).toBeNull()
+  expect(screen.getByText('Zweite:false')).toBeTruthy()
+})
+
+test('bulk mark_read rolls back a failed row and group undo restores the read state of the rest', async () => {
+  spyOn(sdk, 'mailMessagesBulkAction').mockImplementation((async () => ({ data: { results: [{ message_id: '1', status: 'done', action_id: 'a1', message: { ...rows[0], is_read: true } }, { message_id: '2', status: 'failed', action_id: null, message: null }] }, response: { ok: true } })) as never)
+  spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['a1'], skipped: [], expired: [], failed: [] } })) as never)
+  setup(); fireEvent.click(screen.getByText('bulk read'))
+  expect(await screen.findByText('1 von 2 Mails als gelesen markiert. 1 ließ sich nicht als gelesen markieren.')).toBeTruthy()
+  expect(screen.getByText('Erste:true')).toBeTruthy()
+  expect(screen.getByText('Zweite:false')).toBeTruthy()
+  fireEvent.click(screen.getByText('Rückgängig'))
+  await waitFor(() => expect(screen.getByText('Erste:false')).toBeTruthy())
+  expect(screen.getByText('Zweite:false')).toBeTruthy()
+})
+
 test('bulk request failure restores all rows', async () => {
   spyOn(sdk, 'mailMessagesBulkAction').mockImplementation((async () => { throw new Error('network') }) as never)
   setup(); fireEvent.click(screen.getByText('bulk archive'))

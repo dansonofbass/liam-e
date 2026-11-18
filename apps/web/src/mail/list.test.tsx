@@ -286,6 +286,8 @@ test('selection mode, row tap, avatar range and escape', async () => {
   expect(screen.getByRole('button', { name: 'Auswählen: Zweite' }).getAttribute('aria-pressed')).toBe('true')
   fireEvent.click(screen.getByRole('button', { name: 'Auswahl beenden' }))
   expect(screen.queryByText('1 ausgewählt')).toBeNull()
+  // Outside the selection mode the list leaves Escape to the browser.
+  expect(fireEvent.keyDown(document.body, { key: 'Escape' })).toBe(true)
 })
 
 test('select all caps at 100 and coarse controls are large', async () => {

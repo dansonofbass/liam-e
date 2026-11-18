@@ -86,6 +86,14 @@ async def list_messages(
 async def bulk_message_action(body: BulkMessageActionIn) -> BulkMessageActionOut:
     """Apply actions independently, with bounded provider concurrency."""
     semaphore = asyncio.Semaphore(4)
+    accounts: asyncio.Future | None = None
+
+    async def colors() -> dict:
+        # One account read per request, shared by all rows; a failure only drops the display rows.
+        nonlocal accounts
+        if accounts is None:
+            accounts = asyncio.ensure_future(account_access.list_accounts())
+        return color_indexes(await accounts)
 
     async def apply(message_id: str) -> BulkMessageActionResult:
         async with semaphore:
@@ -105,8 +113,7 @@ async def bulk_message_action(body: BulkMessageActionIn) -> BulkMessageActionOut
                 message = await message_access.get_message(message_id)
                 if message is not None:
                     insights = await insight_access.get_for_messages([message.id])
-                    colors = color_indexes(await account_access.list_accounts())
-                    result.message = list_item(message, colors, insights.get(message.id))
+                    result.message = list_item(message, await colors(), insights.get(message.id))
             except Exception as error:
                 logger.warning("Bulk action display failed: %s", type(error).__name__)
             return result

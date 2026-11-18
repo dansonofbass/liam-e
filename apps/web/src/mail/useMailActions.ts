@@ -203,7 +203,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         if (!result.data || !result.response?.ok) throw new Error('bulk action failed') // i18n-exempt
         const failed = result.data.results.filter(row => row.status === 'failed' || row.status === 'unsupported').map(row => row.message_id)
         rollback(failed)
-        for (const row of result.data.results) if (row.status === 'not_found') update(row.message_id, 'remove')
+        for (const row of result.data.results) if (row.status === 'not_found') { update(row.message_id, 'remove'); void client.invalidateQueries({ queryKey: ['message', row.message_id], exact: true }) }
         const group = result.data.results.filter(row => row.status === 'done' && row.action_id).map(row => ({ actionId: row.action_id!, messageId: row.message_id, changes: changes.filter(change => change.row.id === row.message_id), previousRead: reads.get(row.message_id) }))
         const text = de.inbox.bulkResult(kind, group.length, ids.length)
         if (group.length) {

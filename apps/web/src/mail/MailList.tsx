@@ -140,7 +140,8 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
     onToggleRead: () => { if (selection.size) bulk(bulkRead); else if (current) toggleRead(current) },
     onTrash: () => { if (selection.size) bulk('trash'); else if (current) remove(current, 'trash') },
     onSelect: () => { if (current) toggleSelection(current.id) },
-    onEscape: () => { if (selectionMode) endSelection() },
+    // Only claim Escape while selecting; otherwise the browser keeps its own Escape behaviour.
+    onEscape: selectionMode ? endSelection : undefined,
   })
   const refresh = async () => {
     if (syncing) return
