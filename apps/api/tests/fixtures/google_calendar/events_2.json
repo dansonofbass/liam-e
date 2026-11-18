@@ -1,0 +1,20 @@
+{
+  "summary": "work@example.org", "timeZone": "Europe/Berlin", "accessRole": "owner",
+  "events": [
+    {
+      "id": "synthetic-weekly_20261025T080000Z", "status": "confirmed", "summary": "Material sortieren",
+      "start": {"date": null, "dateTime": "2026-10-25T09:00:00+01:00", "timeZone": "Europe/Berlin"},
+      "end": {"date": null, "dateTime": "2026-10-25T10:00:00+01:00", "timeZone": "Europe/Berlin"},
+      "recurringEventId": "synthetic-weekly", "recurrence": null,
+      "originalStartTime": {"date": null, "dateTime": "2026-10-25T09:00:00+01:00", "timeZone": "Europe/Berlin"}
+    },
+    {
+      "id": "synthetic-point", "status": "confirmed", "summary": "Erinnerungszeitpunkt",
+      "start": {"date": null, "dateTime": "2026-10-20T12:00:00+02:00", "timeZone": null},
+      "end": {"date": null, "dateTime": "2026-10-20T12:00:00+02:00", "timeZone": null},
+      "recurringEventId": null, "recurrence": null
+    },
+    {"id": "synthetic-cancelled", "status": "cancelled"}
+  ],
+  "nextPageToken": ""
+}

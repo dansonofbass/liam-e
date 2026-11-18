@@ -1,0 +1,6 @@
+{
+  "calendars": [
+    {"id": "work@example.org", "summary": "Werkstatt", "description": "Erfundener Kalender", "timeZone": "Europe/Berlin"}
+  ],
+  "nextPageToken": "synthetic-calendars-page-2"
+}

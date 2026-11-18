@@ -1,0 +1,13 @@
+{
+  "summary": "work@example.org", "timeZone": "Europe/Berlin", "accessRole": "reader",
+  "events": [
+    {
+      "id": "synthetic-weekly_20261018T070000Z", "status": "confirmed", "summary": "Material sortieren",
+      "start": {"date": null, "dateTime": "2026-10-19T11:00:00+02:00", "timeZone": "Europe/Berlin"},
+      "end": {"date": null, "dateTime": "2026-10-19T12:00:00+02:00", "timeZone": "Europe/Berlin"},
+      "recurringEventId": "synthetic-weekly", "recurrence": null,
+      "originalStartTime": {"date": null, "dateTime": "2026-10-18T09:00:00+02:00", "timeZone": "Europe/Berlin"}
+    }
+  ],
+  "nextPageToken": null
+}
