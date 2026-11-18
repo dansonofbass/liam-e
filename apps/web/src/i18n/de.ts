@@ -19,7 +19,7 @@ export const de = {
     reload: 'Aktuelle Fassung laden', unavailable: 'Diese Präferenz gibt es nicht mehr. Lade die Übersicht neu.',
     saved: 'Gespeichert.', savedOff: 'Gespeichert. Verwendung ist ausgeschaltet.', enable: 'Verwendung einschalten', disable: 'Verwendung ausschalten',
     transfer: 'Passende Präferenzen werden für Antworten an Mistral übermittelt.',
-    suggestions: 'Präferenzen vorschlagen', suggestionsUnavailable: 'Vorschläge sind noch nicht verfügbar.',
+    suggestionsUnavailable: 'Vorschläge für Präferenzen sind noch nicht verfügbar.',
     off: 'Präferenzen aus', on: 'Verwendung eingeschaltet', back: 'Zur Übersicht',
     removeTitle: 'Präferenz löschen?',
     removeDescription: 'Der Wert und seine gespeicherten Revisionen werden entfernt. Ursprüngliche Chatnachrichten und Antworten bleiben erhalten. Bereits an Mistral gesendete Anfragen lassen sich nicht zurückholen. Das löscht keine Daten aus der Verarbeitung beim Anbieter oder aus Backups.',

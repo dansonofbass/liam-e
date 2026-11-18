@@ -602,13 +602,16 @@ bleibt sie stehen, und ein Button „Zum Ende“ erscheint.
   bestätigt: „Passende Präferenzen werden für Antworten an Mistral übermittelt.“
 - Die ausdrücklich abgestimmte Aktion heißt „Präferenz hinzufügen“; das ist keine Ausnahme
   für das Verbinden von Konten. Leere Listen nennen keine Prozentwerte. Quelle manueller Werte:
-  „Von dir eingetragen“. Vorschläge bleiben sichtbar deaktiviert und erklären den fehlenden Stand.
+  „Von dir eingetragen“. Feld und Geltungsbereich sind Chips mit sichtbarer Beschriftung darüber.
+  Vorschläge erscheinen nur als Hinweis, dass sie noch nicht verfügbar sind, nicht als
+  deaktivierter Button: Sekundäre Buttons sehen deaktiviert nicht anders aus.
 - Löschen erklärt, dass Chatnachrichten und Antworten bleiben und bereits übermittelte Anfragen
   nicht zurückholbar sind. Es verspricht weder Löschung beim Anbieter noch aus Backups und bietet
   einen neuen Chat ohne bisherigen Kontext. Fokus bleibt im Dialog und kehrt beim Schließen zurück.
 - „N Präferenzen verwendet“ an einer Antwort öffnet deren gespeicherte Revisionen, keine aktuellen
-  Ersatzwerte. Entfernte Revisionen zeigen „Präferenz entfernt“, abgeschaltete Verwendung
-  „Präferenzen aus“. Ein Ladefehler bietet ausdrücklich „Ohne Präferenzen fortfahren“.
+  Ersatzwerte. Entfernte Revisionen zeigen „Präferenz entfernt“. Antworten ohne verwendete
+  Präferenzen zeigen nichts, auch bei ausgeschalteter Verwendung; ein Hinweis unter jeder Antwort
+  wäre Rauschen. Ein Ladefehler bietet ausdrücklich „Ohne Präferenzen fortfahren“.
 
 ## 10. Erweitern und pflegen
 

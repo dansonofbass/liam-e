@@ -12,7 +12,9 @@ export function PreferenceContext({ context }: { context: ContextOut }) {
   const [open, setOpen] = useState(false)
   const query = useQuery({ queryKey: ['preference-context', context.id], queryFn: () => unwrap(preferenceContextGet({ path: { context_id: context.id }, throwOnError: true })), enabled: open, gcTime: 0 })
   const ids = JSON.parse(context.preference_revision_ids_json ?? '[]') as string[]
-  if (!context.preferences_enabled) return <small className="le-hint">{de.preferences.off}</small>
+  // Only an answer that used preferences names them: with usage off or nothing matching there is nothing to open,
+  // and a hint under every answer would be noise.
+  if (!context.preferences_enabled || ids.length === 0) return null
   return <><Button variant="ghost" onClick={() => setOpen(true)}>{de.preferences.used(ids.length)}</Button>
     {open && <PreferenceDialog title={de.preferences.historical} close={() => setOpen(false)}>
       {query.isPending && <p role="status">{de.preferences.loading}</p>}

@@ -35,16 +35,26 @@ export function Personalization({ saved = false }: { saved?: boolean }) {
   if (!config) return query.isPending ? <p role="status">{t.loading}</p> : <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{t.error}</Notice>
   return <div className="le-prompts">
     <Notice tone="info" action={{ label: config.use_preferences ? t.disable : t.enable, onClick: () => { if (busy) return; if (config.use_preferences) void change(false); else setConfirm(true) } }}>{saved ? config.use_preferences ? t.saved : t.savedOff : config.use_preferences ? t.on : t.off}</Notice>
-    <Button variant="secondary" disabled>{t.suggestions}</Button><p className="le-hint">{t.suggestionsUnavailable}</p>
+    <p className="le-hint">{t.suggestionsUnavailable}</p>
     {error && <Notice tone="danger" action={{ label: t.reload, onClick: () => { void query.refetch() } }}>{t.conflict}</Notice>}
     {confirm && <PreferenceDialog title={t.enable} close={() => { if (!busy) setConfirm(false) }}><p>{t.transfer}</p><div className="le-dialog-actions"><Button variant="secondary" disabled={busy} onClick={() => setConfirm(false)}>{de.controls.cancel}</Button><Button variant="primary" disabled={busy} onClick={() => { void change(true) }}>{t.enable}</Button></div></PreferenceDialog>}
   </div>
 }
 
+// A scope names its account; while the accounts load it waits, and a scope whose account is gone says so.
+function useScopeLabel() {
+  const summary = useQuery(summaryQuery())
+  return (id: string) => {
+    if (id === '*') return t.global
+    if (!id) return t.chooseAccount
+    const account = summary.data?.accounts.find(item => item.id === id)
+    return account ? account.display_name || account.email_address : summary.isPending ? de.taskChat.accountLoading : de.prompts.scopeUnavailable
+  }
+}
+
 export function Preferences() {
   const query = useQuery(preferencesQuery())
-  const { data: summary } = useQuery(summaryQuery())
-  const scope = (id: string) => id === '*' ? t.global : summary?.accounts.find(a => a.id === id)?.display_name || summary?.accounts.find(a => a.id === id)?.email_address || t.chooseAccount
+  const scope = useScopeLabel()
   return <section className="le-prompts"><div className="le-prompt-actions"><h2 className="heading">{t.title}</h2><Link className="le-btn le-btn--primary" to="/settings/preferences/new">{t.add}</Link></div>
     <Personalization />
     {query.isPending && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div className="le-prompt-placeholder" key={i} aria-hidden="true" />)}</>}
@@ -63,7 +73,7 @@ export function PreferenceEditor({ id }: { id?: string }) {
 }
 
 function PreferenceForm({ initial, reload }: { initial?: PreferenceOut; reload: () => Promise<void> }) {
-  const { data: summary } = useQuery(summaryQuery()), refresh = useRefresh()
+  const { data: summary } = useQuery(summaryQuery()), refresh = useRefresh(), scopeLabel = useScopeLabel()
   const [base, setBase] = useState(initial), [key, setKey] = useState<PreferenceCreate['key']>(initial?.key ?? 'answer_length')
   const [scope, setScope] = useState(initial?.scope ?? '*'), [value, setValue] = useState(initial?.value ?? '')
   const [busy, setBusy] = useState(false), [error, setError] = useState<string>(), [conflict, setConflict] = useState(false)
@@ -88,10 +98,9 @@ function PreferenceForm({ initial, reload }: { initial?: PreferenceOut; reload: 
     finally { lock.current = false; setBusy(false) }
   }
   if (removed) return <section className="le-prompts"><p role="status">{t.removed}</p><Link to="/settings/preferences">{t.back}</Link><Link to="/">{t.restart}</Link></section>
-  const selectedAccount = accounts.find(a => a.id === scope)
   return <form className="le-prompts" onSubmit={event => { event.preventDefault(); void execute('save') }}><h2 className="heading">{base ? t.edit : t.add}</h2>
-    <Menu trigger={props => <Chip {...props} disabled={!!base || busy} aria-label={t.field}>{t.keys[key]}</Chip>} items={(['answer_length', 'salutation', 'signature'] as const).map(k => ({ label: t.keys[k], checked: k === key, onSelect: () => { setKey(k); if (k !== 'answer_length' && scope === '*') setScope('') } }))} />
-    <Menu trigger={props => <Chip {...props} disabled={busy} aria-label={t.scope}>{scope === '*' ? t.global : selectedAccount?.display_name || selectedAccount?.email_address || t.chooseAccount}</Chip>} items={[...(key === 'answer_length' ? [{ label: t.global, checked: scope === '*', onSelect: () => setScope('*') }] : []), ...accounts.map(a => ({ label: a.display_name || a.email_address, checked: a.id === scope, onSelect: () => setScope(a.id) }))]} />
+    <div className="le-field"><span className="le-label">{t.field}</span><Menu trigger={props => <Chip {...props} disabled={!!base || busy} aria-label={`${t.field}: ${t.keys[key]}`}>{t.keys[key]}</Chip>} items={(['answer_length', 'salutation', 'signature'] as const).map(k => ({ label: t.keys[k], checked: k === key, onSelect: () => { setKey(k); if (k !== 'answer_length' && scope === '*') setScope('') } }))} /></div>
+    <div className="le-field"><span className="le-label">{t.scope}</span><Menu trigger={props => <Chip {...props} disabled={busy} aria-label={`${t.scope}: ${scopeLabel(scope)}`}>{scopeLabel(scope)}</Chip>} items={[...(key === 'answer_length' ? [{ label: t.global, checked: scope === '*', onSelect: () => setScope('*') }] : []), ...accounts.map(a => ({ label: a.display_name || a.email_address, checked: a.id === scope, onSelect: () => setScope(a.id) }))]} /></div>
     <TextField multiline rows={5} label={t.value} value={value} onChange={e => setValue(e.target.value)} maxLength={500} required autoFocus hint={de.prompts.count(Array.from(value).length, 500)} />
     <p className="le-hint">{t.source}{base && <> · {t.statuses[base.status]}</>}</p><Notice tone="info">{t.safety}</Notice>
     {saved && <Personalization saved />}

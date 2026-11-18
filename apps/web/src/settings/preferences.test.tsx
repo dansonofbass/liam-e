@@ -119,3 +119,31 @@ for (const removed of [false, true]) test(`history uses exact revisions; removed
   await screen.findByText(removed ? 'Präferenz entfernt' : 'test-only old')
   expect(screen.queryByText('test-only')).toBeNull()
 })
+
+test('an answer names its preferences only when it used some', async () => {
+  for (const context of [{ preferences_enabled: false, preference_revision_ids_json: '[]' }, { preferences_enabled: true, preference_revision_ids_json: '[]' }]) {
+    const { container } = render(<QueryClientProvider client={new QueryClient()}><PreferenceContext context={{ id: 'c', ...context } as ContextOut} /></QueryClientProvider>)
+    expect(container.textContent).toBe('')
+    cleanup()
+  }
+})
+
+test('suggestions are explained, not offered as a dead button', async () => {
+  setup('/settings/preferences')
+  expect(await screen.findByText('Vorschläge für Präferenzen sind noch nicht verfügbar.')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /vorschlagen/ })).toBeNull()
+})
+
+test('a scope whose account is gone says so once the accounts are loaded', async () => {
+  setup('/settings/preferences', async req => new URL(req.url).pathname.endsWith('/preferences') ? Response.json([{ ...row, key: 'signature', scope: 'gone' }]) : undefined)
+  expect(await screen.findByText(/Gespeichertes Konto nicht verfügbar · Von dir eingetragen · Aktiv/)).toBeTruthy()
+  expect(screen.queryByText(/Konto wählen/)).toBeNull()
+})
+
+test('the form names what each choice sets', async () => {
+  setup('/settings/preferences/new')
+  expect(await screen.findByRole('button', { name: 'Feld: Antwortlänge' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Geltungsbereich: Alle Konten' })).toBeTruthy()
+  expect(screen.getByText('Feld', { selector: '.le-label' })).toBeTruthy()
+  expect(screen.getByText('Geltungsbereich', { selector: '.le-label' })).toBeTruthy()
+})
