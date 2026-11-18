@@ -600,6 +600,8 @@ bleibt ohne Karte unter Einstellungen → Präferenzen → Vorschläge prüfbar.
 Ersetzen einer offenen Karte durch Mail-/Aufgabenwerkzeuge bleibt erhalten. Eine verdrängte
 Präferenzkarte gilt nicht als Ablehnung: Ihr Kandidat bleibt offen, verliert nur die Kartenreferenz
 und lässt sich über „Vorschlag prüfen“ erneut öffnen, sobald keine andere Karte offen ist.
+Abbrechen wirkt nur auf die aktuelle Karte des Kandidaten; eine verdrängte oder veraltete Karte
+(etwa aus einem anderen Tab) ergibt 409 `proposal_not_pending` und lässt die neue Karte offen.
 
 `GET /preferences/candidates` liest offene Kandidaten; mit `candidate_id` eine genaue Referenz,
 auch für historische Karten. Quelle und Bisher/Vorschlag werden aus aktuellen zugreifbaren

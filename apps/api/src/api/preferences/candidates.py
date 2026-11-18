@@ -126,12 +126,13 @@ async def prepare(arguments, ctx):
         return row, card
 
 
-async def cancel(message):
+async def cancel(message, proposal_id):
+    """Cancel exactly the requested card; a displaced or stale card never reaches its successor."""
     from api.mail.proposals import ProposalStateError
     async with private_session() as session:
         await preferences.lock(session)
         row = await candidates.get(session, message.preference.candidate_id)
-        card = await candidates.cancel_card(session, row)
+        card = await candidates.cancel_card(session, row, proposal_id)
         if card is None:
             raise ProposalStateError
         await session.commit()

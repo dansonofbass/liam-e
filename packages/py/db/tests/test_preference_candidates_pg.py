@@ -232,6 +232,15 @@ def test_account_and_source_removal_erase_and_mail_replacement_keeps_candidates(
         reopened = await propose(row.id)
         assert reopened.proposal_id and reopened.proposal_id != card.id
         assert (await m.get_message(reopened.proposal_id)).proposal_status == 'pending'
+        # A stale tab cancelling the displaced card must not reach the reopened one.
+        with pytest.raises(proposals.ProposalStateError):
+            await proposals.cancel(card.id)
+        assert (await m.get_message(reopened.proposal_id)).proposal_status == 'pending'
+        async with get_session_maker()() as session:
+            assert (await c.get(session, row.id)).status == 'pending'
+        assert (await proposals.cancel(reopened.proposal_id)).id == reopened.proposal_id
+        async with get_session_maker()() as session:
+            assert (await c.get(session, row.id)).status == 'rejected'
         account = await a.create_account(provider='imap', auth_type='imap_password', email_address='candidate@example.test')
         conversation, message = await setup_source()
         async with get_session_maker()() as session:

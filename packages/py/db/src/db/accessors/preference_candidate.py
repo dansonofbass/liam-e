@@ -213,8 +213,11 @@ async def presentation(session, row):
     return previous, target, revision, account
 
 
-async def cancel_card(session, row):
-    card = await session.get(ChatMessage, row.proposal_id) if row.proposal_id else None
+async def cancel_card(session, row, proposal_id):
+    """Only the candidate's current card can be cancelled; a stale ID is a state conflict."""
+    if row is None or not proposal_id or row.proposal_id != proposal_id:
+        return None
+    card = await session.get(ChatMessage, row.proposal_id)
     if card is None or card.proposal_status != 'pending':
         return None
     await erase(session, row, 'rejected')

@@ -154,7 +154,7 @@ async def cancel(proposal_id: str) -> ChatMessage:
     row = await _get_proposal(proposal_id)
     proposal = proposal_view(row)
     if proposal and proposal.kind == 'preference':
-        return await preference_candidates.cancel(proposal)
+        return await preference_candidates.cancel(proposal, proposal_id)
     message = await message_access.cancel_proposal(proposal_id)
     if message is None:
         raise ProposalStateError
