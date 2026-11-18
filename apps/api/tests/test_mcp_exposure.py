@@ -28,6 +28,7 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "calendar_source_sync",
         "calendar_source_update",
         "preference_create",
+        "preference_candidate_propose",
         "preference_update",
         "preference_delete",
         "settings_update",
@@ -70,6 +71,7 @@ BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
         # Provider calls expose private calendar names; never an agent discovery tool.
         "calendar_google_calendars_list",
         "preferences_list",
+        "preference_candidates_list",  # Private candidate values and own source messages.
         "preference_context_get",
         "settings_get",
         "mail_account_oauth_authorize",

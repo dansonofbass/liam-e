@@ -1,7 +1,8 @@
 """Explicit confirmation and cancellation of proposed mail actions."""
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from api.preferences.candidates import PreferenceDecision
 
 from api.errors import refuse
 from api.mail import proposals
@@ -13,6 +14,8 @@ router = APIRouter(route_class=quiet_validation_route('proposal_invalid', 'Prüf
 
 
 class ProposalConfirmIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    preference_decision: PreferenceDecision | None = None
     selected_ids: list[str]
     body: str | None = None
     task_edit: TaskCreateCommand | None = None
@@ -34,7 +37,8 @@ def _refuse(error: Exception):
 @router.post("/{proposal_id}/confirm", operation_id="chat_proposal_confirm", description="Führt die ausgewählten Einträge eines offenen Vorschlags nach Bestätigung aus.")
 async def confirm(proposal_id: str, body: ProposalConfirmIn) -> ChatMessageOut:
     try:
-        return to_message_out(await proposals.confirm(proposal_id, selected_ids=body.selected_ids, body=body.body, task_edit=body.task_edit))
+        return to_message_out(await proposals.confirm(proposal_id, selected_ids=body.selected_ids, body=body.body, task_edit=body.task_edit,
+                                                      preference_decision=body.preference_decision))
     except (proposals.ProposalNotFoundError, proposals.ProposalStateError, proposals.ProposalSelectionError, proposals.ProposalContextRevokedError) as error:
         _refuse(error)
 

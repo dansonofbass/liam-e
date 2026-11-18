@@ -127,6 +127,17 @@ async def open_proposal(conversation_id: str) -> ChatMessage | None:
 
 async def cancel_open_proposals(conversation_id: str) -> int:
     async with get_session_maker()() as session:
+        from db.accessors import user_preference, preference_candidate
+        from db.models.preference_candidate import PreferenceCandidate
+        await user_preference.lock(session)
+        candidates = (await session.execute(select(PreferenceCandidate).where(
+            PreferenceCandidate.conversation_id == conversation_id,
+            PreferenceCandidate.status == 'pending', PreferenceCandidate.proposal_id.is_not(None),
+        ))).scalars()
+        for candidate in candidates:
+            # Existing mail/task replacement semantics remain unchanged, but a
+            # displaced preference must not retain hidden rejected content.
+            await preference_candidate.erase(session, candidate, 'rejected')
         result = await session.execute(
             update(ChatMessage).where(ChatMessage.conversation_id == conversation_id, ChatMessage.proposal_status == "pending")
             .values(proposal_status="cancelled").returning(ChatMessage.id)

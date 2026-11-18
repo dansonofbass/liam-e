@@ -5,7 +5,7 @@ also compares source time with the preference's removal marker, allowing a new
 explicit request but never replay of an old source. Cards hold only candidate IDs.
 """
 import json
-from sqlalchemy import select
+from sqlalchemy import select, and_, or_
 from sqlalchemy.exc import IntegrityError
 from db.accessors import user_preference as preferences
 from db.models.preference_candidate import PreferenceCandidate
@@ -84,8 +84,10 @@ async def erase(session, row, status='expired'):
 async def expire_scope(session, key=None, scope=None, preference_id=None):
     rows = (await session.execute(select(PreferenceCandidate).where(
         PreferenceCandidate.owner_scope == OWNER_SCOPE,
-        PreferenceCandidate.key == key if key else True,
-        PreferenceCandidate.scope == scope if scope else True,
+        or_(and_(PreferenceCandidate.key == key if key else True,
+                 PreferenceCandidate.scope == scope if scope else True),
+            PreferenceCandidate.target_id == preference_id if preference_id else False,
+            PreferenceCandidate.accepted_preference_id == preference_id if preference_id else False),
     ))).scalars()
     for row in rows:
         await erase(session, row)
@@ -180,6 +182,23 @@ async def accept(session, row, *, decision, expected_version, expected_revision_
     session.add(revision)
     row.status, row.accepted_preference_id = 'accepted', target.id
     return 'saved'
+
+
+async def presentation(session, row):
+    from db.models.mail_account import MailAccount
+    previous = await session.get(PreferenceRevision, row.expected_revision_id) if row.expected_revision_id else None
+    target = await current(session, row)
+    revision = await session.get(PreferenceRevision, target.revision_id) if target else None
+    account = await session.get(MailAccount, row.scope) if row.scope != '*' else None
+    return previous, target, revision, account
+
+
+async def cancel_card(session, row):
+    card = await session.get(ChatMessage, row.proposal_id) if row.proposal_id else None
+    if card is None or card.proposal_status != 'pending':
+        return None
+    await erase(session, row, 'rejected')
+    return card
 
 
 async def list_rows(session):

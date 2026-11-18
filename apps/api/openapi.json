@@ -488,6 +488,173 @@
         "title": "CalendarsEvent",
         "type": "object"
       },
+      "CandidateOut": {
+        "properties": {
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "current_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Revision Id"
+          },
+          "current_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Value"
+          },
+          "current_version": {
+            "default": 0,
+            "title": "Current Version",
+            "type": "integer"
+          },
+          "expected_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision Id"
+          },
+          "expected_version": {
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "enum": [
+              "answer_length",
+              "salutation",
+              "signature"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "previous_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Value"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "source_message_id": {
+            "title": "Source Message Id",
+            "type": "string"
+          },
+          "source_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Text"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "use_preferences": {
+            "title": "Use Preferences",
+            "type": "boolean"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "source_message_id",
+          "key",
+          "scope",
+          "value",
+          "status",
+          "proposal_id",
+          "expected_version",
+          "expected_revision_id",
+          "use_preferences"
+        ],
+        "title": "CandidateOut",
+        "type": "object"
+      },
+      "CandidateProposeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "refresh": {
+            "default": false,
+            "title": "Refresh",
+            "type": "boolean"
+          }
+        },
+        "title": "CandidateProposeIn",
+        "type": "object"
+      },
       "ChatConversationUpdateIn": {
         "properties": {
           "expected_version": {
@@ -1605,8 +1772,11 @@
             "title": "Scope"
           },
           "source": {
-            "const": "manual",
             "default": "manual",
+            "enum": [
+              "manual",
+              "confirmed_candidate"
+            ],
             "title": "Source",
             "type": "string"
           },
@@ -2519,6 +2689,42 @@
         "title": "PreferenceCreate",
         "type": "object"
       },
+      "PreferenceDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "replace",
+              "keep"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "expected_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision Id"
+          },
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "choice",
+          "expected_version",
+          "expected_revision_id"
+        ],
+        "title": "PreferenceDecision",
+        "type": "object"
+      },
       "PreferenceOut": {
         "properties": {
           "confirmed_at": {
@@ -2548,8 +2754,11 @@
             "type": "string"
           },
           "source": {
-            "const": "manual",
             "default": "manual",
+            "enum": [
+              "manual",
+              "confirmed_candidate"
+            ],
             "title": "Source",
             "type": "string"
           },
@@ -2581,6 +2790,20 @@
           "confirmed_at"
         ],
         "title": "PreferenceOut",
+        "type": "object"
+      },
+      "PreferenceReference": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id"
+        ],
+        "title": "PreferenceReference",
         "type": "object"
       },
       "PreferenceUpdate": {
@@ -2987,10 +3210,21 @@
               "trash",
               "mark_read",
               "unsubscribe",
-              "task"
+              "task",
+              "preference"
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "preference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reason": {
             "title": "Reason",
@@ -3051,6 +3285,7 @@
         "type": "object"
       },
       "ProposalConfirmIn": {
+        "additionalProperties": false,
         "properties": {
           "body": {
             "anyOf": [
@@ -3062,6 +3297,16 @@
               }
             ],
             "title": "Body"
+          },
+          "preference_decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "selected_ids": {
             "items": {
@@ -3219,6 +3464,33 @@
             },
             "title": "Manual",
             "type": "array"
+          },
+          "preference_outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "saved",
+                  "unchanged",
+                  "kept"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preference Outcome"
+          },
+          "preferences_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferences Enabled"
           },
           "task_series_id": {
             "anyOf": [
@@ -7379,6 +7651,105 @@
           }
         },
         "summary": "Create Preference"
+      }
+    },
+    "/api/v1/preferences/candidates": {
+      "get": {
+        "operationId": "preference_candidates_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "candidate_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Candidate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CandidateOut"
+                  },
+                  "title": "Response Preference Candidates List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing"
+      }
+    },
+    "/api/v1/preferences/candidates/{candidate_id}/propose": {
+      "post": {
+        "operationId": "preference_candidate_propose",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateProposeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Propose"
       }
     },
     "/api/v1/preferences/contexts/{context_id}": {
