@@ -98,6 +98,12 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Calendar | POST | `/api/v1/calendar/sources/{source_id}/sync` | `calendar_source_sync` |
 | Calendar | GET | `/api/v1/calendar/occurrences` | `calendar_occurrences_list` |
 | Calendar | GET | `/api/v1/calendar/occurrences/{occurrence_id}` | `calendar_occurrence_get` |
+| Calendar | GET | `/api/v1/calendar/occurrences/{occurrence_id}/live` | `calendar_occurrence_live` |
+| Calendar | PATCH | `/api/v1/calendar/occurrences/{occurrence_id}` | `calendar_event_update` |
+| Calendar | DELETE | `/api/v1/calendar/occurrences/{occurrence_id}` | `calendar_event_delete` |
+| Calendar | POST | `/api/v1/calendar/events` | `calendar_event_create` |
+| Calendar | GET | `/api/v1/calendar/writes/{write_id}` | `calendar_write_get` |
+| Calendar | POST | `/api/v1/calendar/writes/{write_id}/check` | `calendar_write_check` |
 | Templates | GET | `/api/v1/prompts` | `prompts_list` |
 | Templates | POST | `/api/v1/prompts` | `prompt_create` |
 | Templates | GET | `/api/v1/prompts/{id}` | `prompt_get` |
@@ -122,6 +128,7 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Chat | GET | `/api/v1/chat/models` | `chat_models_list` |
 | Chat | POST | `/api/v1/chat/proposals/{proposal_id}/confirm` | `chat_proposal_confirm` |
 | Chat | POST | `/api/v1/chat/proposals/{proposal_id}/cancel` | `chat_proposal_cancel` |
+| Chat | POST | `/api/v1/chat/proposals/{proposal_id}/check` | `chat_proposal_check` |
 | Mail / accounts | GET | `/api/v1/mail/accounts` | `mail_accounts_list` |
 | Mail / accounts | POST | `/api/v1/mail/accounts/imap` | `mail_account_connect_imap` |
 | Mail / accounts | GET | `/api/v1/mail/accounts/oauth/{provider}/authorize` | `mail_account_oauth_authorize` |
@@ -319,9 +326,74 @@ independently of encrypted ICS HTTP validators. `CALENDAR_GOOGLE_SYNC_INTERVAL_M
 to 5. The shared worker checks Google and ICS every minute. `reconnect_required` and
 `calendar_unavailable` stop automatic attempts until manual sync or resume;
 `provider_unavailable` uses bounded backoff. Removal cleans up only locally, never at Google.
-Writing remains blocked: #23 is `BLOCKED: calendar_write_capability_missing` (no version
-precondition, no idempotent creation). Evidence and open live questions are in
-`docs/superpowers/probes/2026-11-18-google-kalender.md`.
+Read evidence and open live questions are in `docs/superpowers/probes/2026-11-18-google-kalender.md`.
+
+### Writing to Google calendars (#23)
+
+Own single appointments can be created, changed and deleted through the same connector
+(owner decision: path A). `api/calendar/google_write.py` allows only `create_event`,
+`update_event`, `delete_event` and `get_event`; the read allowlist above is unchanged. A source is
+writable when it is active, comes from Google and has the capability `write`, which a successful
+snapshot sets when the listing's `accessRole` is `owner` or `writer`. An event is editable when it
+is not cancelled, not part of a series, has no attendees other than the owner, has an own or
+missing organizer, and has event type `default`. The type is compared case-insensitively because
+the connector reports `DEFAULT`. Seed sources write only to the index and never call the connector.
+
+The connector has no precondition and no idempotency key, so `api/calendar/writes.py` supplies both:
+
+- **Claim:** every write carries a client-generated `write_id`. `calendar_write` claims it
+  atomically under the source lock together with a hash of the request. The same ID with the same
+  request returns the first outcome; with another request it is a 409. A partial unique index
+  allows one running write per target event.
+- **Live comparison:** before an update or delete, `get_event` reads the event. If its `updated`
+  differs from the expected revision, the write ends as `not_applied` with `calendar_event_changed`
+  and the current values, without sending anything. A change in Google between this read and the
+  write remains possible; the dialog and the card say so.
+- **Dispatch:** right before the call the claim is confirmed again (`mark_dispatch`), which also
+  restarts its expiry clock; an expired claim sends nothing. Every write sends
+  `notificationLevel: "NONE"`, waits at most 30 seconds and is never retried automatically.
+- **Outcome:** `done` updates the index together with the record. `failed` is used only for a
+  definite refusal: a 4xx text saying "not applied", a validation-error text, or a check before
+  sending. Everything else is `unknown`, and a `running` record older than 120 seconds counts as
+  unknown.
+- **Check:** `check` resolves an unknown record by reading back. An update counts as done when
+  `get_event` shows the requested values. A delete counts as done when the event is cancelled, or
+  when it is missing and the calendar can still be listed. A create lists its time window without a
+  text filter and compares locally: exactly one matching event created since dispatch makes it
+  done. A create becomes `not_applied` only when no event was created in that window since dispatch
+  and five minutes have passed; otherwise it stays unknown. Terminal states clear the stored
+  request text.
+
+Error codes are fixed: `calendar_event_changed`, `calendar_event_gone`,
+`calendar_event_not_editable`, `calendar_not_writable`, `calendar_out_of_scope`,
+`calendar_time_invalid`, `calendar_unavailable`, `calendar_write_conflict`,
+`calendar_write_in_progress`, `calendar_write_not_applied`, `calendar_write_rejected`,
+`calendar_write_unknown`, plus the shared `proposal_context_revoked` and `reconnect_required`.
+Logs name only these codes or an exception class, never titles, descriptions, locations, calendar
+IDs or provider text.
+
+Local times are `YYYY-MM-DDTHH:MM` in an IANA zone; a time that does not exist in that zone is
+rejected and an ambiguous one takes the first offset. Timed appointments last more than zero and at
+most 14 days. All-day appointments use an exclusive end date (the connector does not check this
+itself) and span at most 366 days.
+
+Browser routes: `POST /calendar/events` creates, `PATCH` and `DELETE /calendar/occurrences/{id}`
+change and delete, `GET /calendar/occurrences/{id}/live` reads the event from Google for a dialog,
+and `GET /calendar/writes/{write_id}` and `POST .../check` read or resolve a record. Answers:
+201 or 200 for done, 202 for unknown or running, 409 for `calendar_event_changed` (with the
+current values) and other conflicts, 403 for a source or event that may not be written, 404 for a
+missing event or source. Validation errors are 422 `calendar_time_invalid` without echoing input.
+
+In chat, `propose_calendar_change` creates a card of kind `calendar` for one create, update or
+delete. It checks the turn's calendar scope, writability and live editability, and binds the live
+revision. Confirmation uses the existing confirm endpoint with the card ID as `write_id`; the
+context, scope, source and connection are checked again first. An unknown card, or a card left
+running by an interrupted confirm, is resolved with `POST /chat/proposals/{proposal_id}/check`
+(`chat_proposal_check`). A card whose write was never claimed fails, because nothing was sent. The
+private `connection_ref` is stored with the card but never sent to the browser, SSE or history,
+and cards do not keep the provider's `htmlLink`. The prompt rules are `APP_PROMPT_VERSION` 8.
+
+The live run of 2026-11-18 is in `docs/superpowers/probes/2026-11-18-google-calendar-write-probe.md`.
 The agenda groups and displays instants in the browser timezone; all-day entries stay on their
 date. Local day boundaries are converted to instants. Because the index endpoint accepts only
 whole UTC dates, the query window is rounded outward and also includes all-day dates. Windows
@@ -459,6 +531,7 @@ never executed or loaded; instructions in descriptions remain plain data.
 
 - `calendar_source`, `calendar_event`, `calendar_occurrence`, `calendar_sync_state` — calendar source with connection reference and permission (`is_active`), series master per source, occurrence as half-open interval or instant without duration (all-day as date with positive interval, otherwise UTC with timezone; unique per source and `external_id`) and coverage, last success and incompleteness per source.
 - `calendar_feed_config`, `calendar_feed_validation` — encrypted feed configuration and short-lived, single-use validations; no public output models.
+- `calendar_write` — one record per `write_id`: source, operation, target event, request hash, status (`running`, `done`, `failed`, `unknown`, `not_applied`), fixed error code and result event; the request text is kept only while the outcome is open. A partial unique index allows one running write per target.
 - `task_series`, `task_schedule_revision`, `task_occurrence` — task series, schedule revision and materialized due date; creation ID and occurrence key are unique.
 - `mail_account` — connected account: `provider` e.g. `google`, `microsoft`, `imap` or connector name such as `gmail`; `auth_type` is `oauth2`, `imap_password` or `mistral_connector`.
 - `mail_credential` — encrypted payload per account+kind (`oauth2_tokens` | `imap_password`), unique (`account_id`, `kind`).
@@ -531,7 +604,7 @@ returns `preferences_unavailable` before the model call; only the deliberate act
 changing scope and deleting revoke affected contexts in the same transaction: disabling revokes
 all turns with at least one used revision, the other actions turns with a revision of the changed
 preference. Turns without a used preference remain valid, including open proposals. Precedence is
-in the fixed app rules (`agent_prompt.py`, `APP_PROMPT_VERSION` 7). Existing live checks before
+in the fixed app rules (`agent_prompt.py`, `APP_PROMPT_VERSION` 8). Existing live checks before
 model/tool calls and after ten deltas remain authoritative; already sent requests cannot be recalled.
 
 The shared transactional preference lock serializes quotas, changes, resolution and account
@@ -721,6 +794,7 @@ label, `send_email` takes `replyToMessageId`; the Outlook connector returned HTT
   `mail_message_insight` generates a missing summary with the model and stores it in `mail_insight` (model cost, no mail changes; never for seed accounts, where only seeded summaries are available).
   `mail_message_original` fetches the mail from the provider read-only, without marking it read, and stores nothing.
   `settings_ui_get` creates the default assignment in `ui_settings` once on the very first read; it never changes an existing assignment.
+  The calendar write routes (`calendar_event_create`, `calendar_event_update`, `calendar_event_delete`, `calendar_write_check`), `chat_proposal_check`, `calendar_occurrence_live` and `calendar_write_get` are deliberately not in this list: they write to Google, resolve a write or read private live event data.
   Every OpenAPI import turns every operation into an MCP tool; otherwise a Studio agent could confirm proposals, perform actions or connect accounts without the owner seeing it — individual tools can be disabled in Studio after import.
   New mutating operations must deliberately be added to `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, otherwise the inventory test fails.
 

@@ -76,9 +76,34 @@ the dialog and on the card and is not hidden.
   end ≤ start itself, because the connector does not.
 - **Delete check:** a later check treats `status: cancelled` as a completed delete.
 - **No notifications:** every write sends `notificationLevel: "NONE"`.
+- **Event type in capitals:** the connector reports `eventType` as `"DEFAULT"`, in create, get
+  and list results alike, while the Google REST documentation spells it `default`. The first
+  editability rule compared the lowercase value and would have made every real event read-only.
+  The rule now compares case-insensitively; a fixture-shaped test pins `"DEFAULT"`.
 - **Read path finding (not changed in this task):** the existing read path's HTTP 401/403
   mapping in `live_call` never sees connector failures, because they arrive as HTTP 200 text.
   Reads report them as `provider_unavailable`.
+
+## End-to-end run of the write service
+
+Later on 2026-11-18 the controller ran `api/calendar/writes.py` itself (commit 3566ba9) against
+the same test calendar, with a throwaway local database. It connected the calendar as a source,
+ran the first snapshot and then went through the service, not the connector. The script printed
+states and codes only. The calendar held 0 events before and after, and the local source was
+removed afterwards.
+
+| Step | Result |
+| --- | --- |
+| First snapshot | capabilities `read` and `write` |
+| Create (timed, with location and description) | `done`; the live read reports the event as editable |
+| Event renamed in Google, then update with the old revision | `not_applied`, `calendar_event_changed`, current title returned; nothing sent |
+| Update with the current revision (title, time, location cleared) | `done`; description kept, location empty |
+| Update whose response was discarded after the real call | `unknown`; `check` → `done` |
+| All-day create whose response was discarded after the real call | `unknown`; `check` → `done` |
+| Delete of both events | `done` |
+
+The lost responses were simulated by running the real tool call and then discarding its result,
+so Google applied each write while the service saw no answer.
 
 ## Not probed
 
@@ -86,6 +111,7 @@ the dialog and on the card and is not hidden.
   birthday or other special event types. The test calendar was empty and owned.
   - The editability rules come from the keys in the responses and the schema, not from live
     behaviour on such events.
-- The behaviour when a write succeeds at Google but the response is lost. The probe could not
-  provoke this; the unknown path is tested with fakes.
+- A real lost response from the connector, such as a timeout after Google applied the write. The
+  end-to-end run simulated it by discarding a real result. A `not_applied` result after five
+  quiet minutes was not waited for live; it is tested with fakes.
 - Rate limits and quotas.
