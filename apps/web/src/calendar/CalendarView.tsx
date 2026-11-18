@@ -1,10 +1,10 @@
 // i18n-exempt: route paths and CSS classes.
 import { useQuery } from '@tanstack/react-query'
-import { Link, useLocation, useNavigate } from '@tanstack/react-router'
+import { useLocation, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { calendarSourcesQuery } from '../api/queries'
 import { calendarSourceSync } from '../api/generated/sdk.gen'
-import { Button, Chip, Notice } from '../ds'
+import { Button, Chip, IconButton, Notice } from '../ds'
 import { de } from '../i18n/de'
 import { useBreakpoint } from '../shell/useBreakpoint'
 import { CalendarSetup } from './FeedSetup'
@@ -13,7 +13,7 @@ import { MonthView } from './MonthView'
 import { SourceBar } from './SourceBar'
 import { TimeGrid } from './TimeGrid'
 import { periodTitle, shift, visibleRange } from './grid'
-import { addDays, calendarDate, covers, localBoundary, todayLocal } from './state'
+import { addDays, covers, localBoundary, todayLocal } from './state'
 import { parseSearch, type CalendarView as View } from './url'
 import { useRangeOccurrences } from './useRangeOccurrences'
 
@@ -53,13 +53,17 @@ export function CalendarView() {
   const start = localBoundary(range.from), end = localBoundary(range.to)
   const rows = page.rows.filter(row => row.start_date && row.end_date ? row.start_date < range.to && row.end_date > range.from : row.start_at && row.end_at && Date.parse(row.start_at) < end && (Date.parse(row.end_at) > start || (row.start_at === row.end_at && Date.parse(row.start_at) >= start)))
   if (sources.isSuccess && sources.data.length === 0) return <section className="le-calendar-agenda"><h1 className="title">{de.calendar.title}</h1><Notice tone="info">{de.calendar.noSources}</Notice><CalendarSetup primary /></section>
-  if (view === 'list') return <section className="le-calendar-grid-page"><div className="le-calendar-controls">{(['month', 'week', 'day', 'list'] as const).map(v => <Chip key={v} pressed={v === view} onClick={() => change(v, date)}>{de.calendar[v]}</Chip>)}</div><ListView /></section>
   return <section className="le-calendar-grid-page" aria-label={de.calendar.title}>
     <h1 className="title">{de.calendar.title}</h1>
-    <div className="le-calendar-controls"><Button variant="secondary" onClick={() => change(view, todayLocal())}>{de.calendar.today}</Button><Button variant="ghost" onClick={() => change(view, shift(view, date, -1))}>{de.calendar.previous}</Button><Button variant="ghost" onClick={() => change(view, shift(view, date, 1))}>{de.calendar.next}</Button><strong>{periodTitle(view, date)}</strong>
-      {(['month', 'week', 'day', 'list'] as const).map(v => <Chip key={v} pressed={v === view} onClick={() => change(v, date)}>{de.calendar[v]}</Chip>)}
-      <Button variant="ghost" disabled={!selected.length || refreshing} onClick={() => { void refresh(selected.map(s => s.id), false) }}>{de.calendar.refresh}</Button><Link to="/accounts" className="le-link">{de.calendar.manage}</Link>
+    <div className="le-calendar-toolbar">
+      <Button className="le-calendar-today le-btn--sm" variant="secondary" onClick={() => change(view, todayLocal())}>{de.calendar.today}</Button>
+      <IconButton className="le-calendar-prev" size={mobile ? 'lg' : 'md'} icon="chevron-left" label={de.calendar.previous} onClick={() => change(view, shift(view, date, -1))} />
+      <IconButton className="le-calendar-next" size={mobile ? 'lg' : 'md'} icon="chevron-right" label={de.calendar.next} onClick={() => change(view, shift(view, date, 1))} />
+      <h2 className="heading le-calendar-period">{periodTitle(view, date)}</h2>
+      <div className="le-calendar-switch" role="group" aria-label={de.calendar.view}>{(['month', 'week', 'day', 'list'] as const).map(v => <Button variant="ghost" key={v} aria-pressed={v === view} onClick={() => change(v, date)}>{de.calendar[v]}</Button>)}</div>
+      <IconButton className="le-calendar-refresh" icon="refresh-cw" label={de.calendar.refresh} disabled={!selected.length || refreshing} onClick={() => { void refresh(selected.map(s => s.id), false) }} />
     </div>
+    {view === 'list' ? <ListView /> : <>
     {sources.isPending && <p role="status">{de.calendar.loading}</p>}
     {sources.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void sources.refetch() } }}>{de.calendar.error}</Notice>}
     <SourceBar sources={sources.data ?? []} selected={selected.map(s => s.id)} onToggle={id => setExcluded(current => current.includes(id) ? current.filter(x => x !== id) : [...current, id])} from={range.from} to={range.to} />
@@ -70,8 +74,9 @@ export function CalendarView() {
     {selected.length > 0 && !page.isPending && !page.isError && rows.length === 0 && <p>{page.complete && !page.capped && selected.every(s => covers(s, range.from, range.to)) ? de.calendar.empty : de.calendar.unknown}</p>}
     {mobile && view === 'day' && <div className="le-day-strip" role="group" aria-label={de.calendar.dayStrip}>{Array.from({ length: 7 }, (_, i) => {
       const day = addDays(visibleRange('week', date).from, i)
-      return <Chip key={day} pressed={day === date} onClick={() => change('day', day)}>{calendarDate(day)}</Chip>
+      return <Chip key={day} pressed={day === date} onClick={() => change('day', day)}><span>{new Intl.DateTimeFormat('de-DE', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day)).replace(/\.?$/, '.')}</span><strong>{Number(day.slice(8))}</strong></Chip>
     })}</div>}
-    {view === 'month' ? <MonthView date={date} rows={rows} sources={selected} mobile={mobile} onSelectDay={d => change('month', d)} onDay={d => change('day', d)} onSlot={() => {}} onOpen={open} /> : <TimeGrid from={range.from} to={range.to} rows={rows} sources={selected} onSlot={() => {}} onOpen={open} />}
+    {view === 'month' ? <MonthView date={date} rows={rows} sources={(sources.data ?? []).filter(s => s.is_active)} mobile={mobile} onSelectDay={d => change('month', d)} onDay={d => change('day', d)} onSlot={() => {}} onOpen={open} /> : <TimeGrid from={range.from} to={range.to} rows={rows} sources={(sources.data ?? []).filter(s => s.is_active)} onSlot={() => {}} onOpen={open} />}
+    </>}
   </section>
 }

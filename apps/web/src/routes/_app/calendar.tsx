@@ -12,5 +12,5 @@ function Calendar() {
   const breakpoint = useBreakpoint()
   const path = useLocation({ select: location => location.pathname })
   const split = breakpoint === 'desktop' || breakpoint === 'wide'
-  return <div className="le-calendar">{(split || path === '/calendar') && <CalendarView />}{(split || path !== '/calendar') && <Outlet />}</div>
+  return <div className="le-calendar">{(split || path === '/calendar') && <CalendarView />}{path !== '/calendar' && <Outlet />}</div>
 }

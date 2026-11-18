@@ -1,16 +1,18 @@
 // i18n-exempt: route paths and CSS classes are technical identifiers.
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { calendarAgendaQuery, calendarSourcesQuery, calendarDetailQuery } from '../api/queries'
 import { calendarSourceSync } from '../api/generated/sdk.gen'
 import type { SourceOut } from '../api/generated/types.gen'
-import { Button, Chip, Notice, TextField } from '../ds'
+import { Button, Chip, IconButton, Notice, TextField } from '../ds'
 import { de } from '../i18n/de'
 import { addDays, browserZone, calendarDate, calendarTime, covers, inLocalWindow, occurrenceDay, oldSource, todayLocal, validWindow } from './state'
 import './calendar.css'
 import { AskAboutCalendar } from '../chat/CalendarContext'
 import { CalendarSetup } from './FeedSetup'
+import { parseSearch } from './url'
+import { useBreakpoint } from '../shell/useBreakpoint'
 
 export function SourceStatus({ source, from, to }: { source: SourceOut; from?: string; to?: string }) {
   const googleError = source.last_error === 'reconnect_required' ? de.calendar.googleReconnectError
@@ -28,10 +30,12 @@ export function SourceStatus({ source, from, to }: { source: SourceOut; from?: s
   </div>
 }
 export function CalendarDetail({ id }: { id: string }) {
+  const breakpoint = useBreakpoint(), location = useLocation(), navigate = useNavigate()
+  const search = parseSearch(location.search as Record<string, unknown>, breakpoint === 'mobile')
   const detail = useQuery(calendarDetailQuery(id)), sources = useQuery(calendarSourcesQuery())
   const row = detail.data, source = sources.data?.find(s => s.id === row?.source_id)
   return <article className="le-calendar-detail">
-    <Link className="le-link" to="/calendar">{de.calendar.back}</Link>
+    <div className="le-calendar-detail-header"><Link className="le-link le-calendar-back" to="/calendar" search={search}>{de.calendar.back}</Link><IconButton className="le-calendar-close" label={de.calendar.close} icon="x" onClick={() => { void navigate({ to: '/calendar', search }) }} /></div>
     {detail.isPending && <p role="status">{de.calendar.loading}</p>}
     {(detail.isError || sources.isError || (sources.isSuccess && row && !source?.is_active)) && <Notice tone="danger">{de.calendar.missing}</Notice>}
     {row && !detail.isError && !sources.isError && source?.is_active && <><h1 className="title">{row.title}</h1><p>{calendarDate(occurrenceDay(row))} · {row.start_date ? de.calendar.allDay : calendarTime(row.start_at!)}</p>
