@@ -13,7 +13,7 @@ from api.routers.api.v1.calendar.schemas import OccurrenceOut, OccurrencePage, E
 from api.routers.api.v1.calendar import _writes
 from api.calendar import writes
 
-router = APIRouter(route_class=_writes.QuietWriteRoute)
+router = APIRouter()
 
 # A selection, not a bulk export: the calendar view filters by a handful of sources at most.
 MAX_SOURCE_IDS = 50
@@ -94,11 +94,17 @@ async def _change(occurrence_id, body, response, operation):
         "source_id": row.source_id if row else previous.source_id, "occurrence_id": occurrence_id}, response)
 
 
-@router.patch("/{occurrence_id}", operation_id="calendar_event_update")
 async def update(occurrence_id: str, body: EventUpdateIn, response: Response) -> writes.WriteOutcome:
     return await _change(occurrence_id, body, response, "update")
 
 
-@router.delete("/{occurrence_id}", operation_id="calendar_event_delete")
 async def delete(occurrence_id: str, body: EventDeleteIn, response: Response) -> writes.WriteOutcome:
     return await _change(occurrence_id, body, response, "delete")
+
+
+# Only the write routes redact their 422s as calendar_time_invalid; the read routes above
+# keep their existing validation contract.
+router.add_api_route("/{occurrence_id}", update, methods=["PATCH"], operation_id="calendar_event_update",
+                     response_model=writes.WriteOutcome, route_class_override=_writes.QuietWriteRoute)
+router.add_api_route("/{occurrence_id}", delete, methods=["DELETE"], operation_id="calendar_event_delete",
+                     response_model=writes.WriteOutcome, route_class_override=_writes.QuietWriteRoute)

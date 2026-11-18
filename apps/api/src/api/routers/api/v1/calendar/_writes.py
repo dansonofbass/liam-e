@@ -31,5 +31,8 @@ async def execute(payload, response: Response, *, created=False):
         return outcome(await writes.execute(request), response, created=created)
     except writes.WriteError as exc:
         raise error(exc) from None
+    except LookupError:
+        # The source and its write records were removed while the write ran.
+        raise error(writes.WriteError("calendar_unavailable", 404)) from None
     except ValidationError:
         raise refuse(422, "calendar_time_invalid", "Prüfe die Angaben zum Termin.") from None

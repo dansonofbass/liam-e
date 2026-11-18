@@ -64,6 +64,10 @@ def card(context, monkeypatch):
         state.calls.append((request, write_id))
         return writes.WriteOutcome(write_id=write_id, status=state.outcome)
     async def check(identifier): return writes.WriteOutcome(write_id=identifier, status="done")
+    async def record(_): return SimpleNamespace(id=message.id)
+    from db.accessors import calendar_write
+    monkeypatch.setattr(calendar_write, "get", record)
+    monkeypatch.setattr(writes, "get", check)
     monkeypatch.setattr(chat_message, "get_message", get)
     monkeypatch.setattr(chat_message, "claim_proposal", claim)
     monkeypatch.setattr(chat_message, "set_proposal", set_proposal)
@@ -116,3 +120,59 @@ def test_prompt_version_8_and_rules_present():
     text = system_prompt(today=date(2026, 12, 5), account_scope=None)
     assert APP_PROMPT_VERSION == "8" and "propose_calendar_change" in text
     assert "ICS bleibt nur lesbar" in text
+
+
+async def test_propose_nonexistent_local_time_refused(context):
+    # 2026-03-29 02:30 does not exist in Europe/Berlin; the card must not open.
+    with pytest.raises(writes.WriteError, match="calendar_time_invalid"):
+        await chat.prepare({"action": "create", "source_id": "synthetic-source", "title": "Example",
+                            "start_local": "2026-03-29T02:30", "end_local": "2026-03-29T03:30"}, context)
+
+
+async def test_card_does_not_keep_the_provider_link(context, monkeypatch):
+    # Google's htmlLink encodes event and calendar IDs; cards reach chat history and SSE.
+    async def live(_): return writes.LiveEvent(occurrence_id="synthetic-occurrence", source_id="synthetic-source",
+        title="Before", start_date=date(2026, 12, 5), end_date=date(2026, 12, 6), revision="old", editable=True,
+        html_link="https://calendar.example.org/event?eid=synthetic-encoded-id")
+    monkeypatch.setattr(writes, "live", live)
+    command = await chat.prepare({"action": "update", "occurrence_id": "synthetic-occurrence", "title": "After"}, context)
+    assert command.before.html_link is None
+    assert "synthetic-encoded-id" not in command.model_dump_json(context={"storage": True})
+
+
+async def test_running_card_with_write_record_resolves_on_check(card, monkeypatch):
+    from db.accessors import calendar_write
+    card.message.proposal_status = "running"  # The process died after claiming the card.
+    async def record(_): return SimpleNamespace(id=card.message.id)
+    async def get(identifier): return writes.WriteOutcome(write_id=identifier, status="done")
+    monkeypatch.setattr(calendar_write, "get", record)
+    monkeypatch.setattr(writes, "get", get)
+    assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "done"
+
+
+async def test_error_before_the_write_claim_fails_the_card(card, monkeypatch):
+    from db.accessors import calendar_write
+    async def broken(request, *, write_id): raise RuntimeError("test-only")
+    async def record(_): return None
+    monkeypatch.setattr(writes, "execute", broken)
+    monkeypatch.setattr(calendar_write, "get", record)
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "failed"
+
+
+async def test_error_after_the_write_claim_keeps_the_card_unknown(card, monkeypatch):
+    from db.accessors import calendar_write
+    async def broken(request, *, write_id): raise RuntimeError("test-only")
+    async def record(_): return SimpleNamespace(id=card.message.id)
+    monkeypatch.setattr(writes, "execute", broken)
+    monkeypatch.setattr(calendar_write, "get", record)
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "unknown"
+
+
+async def test_unknown_card_without_write_record_settles_failed(card, monkeypatch):
+    from db.accessors import calendar_write
+    card.message.proposal_status = "unknown"
+    async def record(_): return None
+    monkeypatch.setattr(calendar_write, "get", record)
+    assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "failed"

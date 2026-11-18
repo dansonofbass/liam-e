@@ -30,7 +30,7 @@ def state(monkeypatch):
     event = {"id": "synthetic-event", "summary": "Example", "start": {"dateTime": "2026-12-05T09:00:00Z"},
         "end": {"dateTime": "2026-12-05T10:00:00Z"}, "updated": "old", "eventType": "default"}
     s = SimpleNamespace(source=source, occurrence=occurrence, event=event, records={}, calls=[], applied=[],
-                        mode="done", matches=None)
+                        mode="done", matches=None, dispatch_ok=True, gone=False, calendar_gone=False)
     async def source_get(_): return s.source
     async def occurrence_get(_): return s.occurrence
     async def claim(row):
@@ -58,8 +58,10 @@ def state(monkeypatch):
         if tool == "list_events":
             if "calendarId" not in arguments:
                 return json.dumps({"summary": "synthetic-primary", "events": []})
+            if s.calendar_gone: return "Google Calendar request failed (HTTP 404, reason notFound, not applied): Example."
             return json.dumps({"events": s.matches if s.matches is not None else [s.event]})
-        if tool == "get_event": return json.dumps(s.event)
+        if tool == "get_event":
+            return "Google Calendar request failed (HTTP 404, reason notFound, not applied): Example." if s.gone else json.dumps(s.event)
         assert arguments["notificationLevel"] == "NONE"
         assert kwargs["timeout"] == 30
         if s.mode == "403":
@@ -84,6 +86,15 @@ def state(monkeypatch):
     monkeypatch.setattr(calendar_write, "get", get)
     monkeypatch.setattr(calendar_write, "finish", finish)
     monkeypatch.setattr(calendar_write, "expire_running", expire)
+    async def mark_dispatch(identifier):
+        row = s.records[identifier]
+        if not s.dispatch_ok:
+            row.status = "unknown"  # Expired by a concurrent read before dispatch.
+        if row.status != "running":
+            return False
+        row.started_at = datetime.now(UTC)
+        return True
+    monkeypatch.setattr(calendar_write, "mark_dispatch", mark_dispatch)
     async def find(source_id, external_id): return s.occurrence
     monkeypatch.setattr(calendar_index_write, "find", find)
     monkeypatch.setattr(calendar_index_write, "apply", apply)
@@ -181,11 +192,60 @@ async def test_timeout_unknown_then_check_done_single_match(state):
     assert sum(t == "create_event" for t, _ in state.calls) == 1
 
 
+def age(state, write_id, minutes):
+    state.records[write_id].started_at = datetime.now(UTC) - timedelta(minutes=minutes)
+
+
 async def test_timeout_unknown_then_check_not_applied(state):
     state.mode = "timeout"
     result = await writes.execute(request())
     state.matches = []
+    age(state, result.write_id, 6)
     assert (await writes.check(result.write_id)).status == "not_applied"
+
+
+async def test_check_young_create_without_events_stays_unknown(state):
+    # The connector may still be working after the client timeout, or search may lag.
+    state.mode = "timeout"
+    result = await writes.execute(request())
+    state.matches = []
+    assert (await writes.check(result.write_id)).status == "unknown"
+    assert (await writes.get(result.write_id)).status == "unknown"
+
+
+async def test_check_renamed_recent_event_stays_unknown(state):
+    state.mode = "timeout"
+    result = await writes.execute(request())
+    state.matches = [{**state.event, "summary": "Renamed in Google"}]
+    age(state, result.write_id, 6)
+    assert (await writes.check(result.write_id)).status == "unknown"
+
+
+async def test_check_create_lists_the_window_without_free_text(state):
+    state.mode = "timeout"
+    result = await writes.execute(request(title="C++ ✓"))
+    state.event["summary"] = "C++ ✓"
+    assert (await writes.check(result.write_id)).status == "done"
+    listing = [args for tool, args in state.calls if tool == "list_events" and "calendarId" in args]
+    assert listing and all("fullText" not in args for args in listing)
+
+
+async def test_expired_claim_before_dispatch_sends_nothing(state):
+    state.dispatch_ok = False
+    state.matches = []
+    result = await writes.execute(request())
+    assert result.status == "unknown"
+    assert not any(tool == "create_event" for tool, _ in state.calls)
+
+
+async def test_seed_write_failure_ends_the_claim(state, monkeypatch):
+    from api.mail.seed_ids import seed_id
+    from db.accessors import calendar_index_write
+    async def broken(**_): raise RuntimeError("test-only")
+    monkeypatch.setattr(calendar_index_write, "apply", broken)
+    state.source.id = seed_id("calendar", "work")
+    result = await writes.execute(request(source_id=state.source.id))
+    assert result.status == "failed" and result.error_code == "calendar_unavailable"
 
 
 async def test_create_resolution_matches_identity_fields_not_optional_text(state):
@@ -201,6 +261,16 @@ async def test_check_ambiguous_create_stays_unknown(state):
     result = await writes.execute(request())
     state.matches = [state.event, {**state.event, "id": "synthetic-other"}]
     assert (await writes.check(result.write_id)).status == "unknown"
+
+
+@pytest.mark.parametrize("calendar_gone,expected", [(False, "done"), (True, "unknown")])
+async def test_check_delete_404_needs_a_reachable_calendar(state, calendar_gone, expected):
+    # A 404 also answers for a calendar that was deleted or unshared; only a reachable
+    # calendar makes the missing event a completed delete.
+    state.mode = "timeout"
+    result = await writes.execute(request("delete"))
+    state.gone, state.calendar_gone = True, calendar_gone
+    assert (await writes.check(result.write_id)).status == expected
 
 
 async def test_check_delete_cancelled_is_done(state):
@@ -235,6 +305,21 @@ async def test_all_day_end_is_exclusive_midnight_utc(state):
     await writes.execute(request(start_local=None, end_local=None, timezone=None, start_date="2026-12-05", end_date="2026-12-06"))
     args = next(a for t, a in state.calls if t == "create_event")
     assert args["allDay"] is True and args["endTime"] == "2026-12-06T00:00:00Z"
+
+
+@pytest.mark.parametrize("changes,valid", [
+    (dict(start_date="2026-01-01", end_date="2027-01-02"), True),   # 366 days
+    (dict(start_date="2026-01-01", end_date="2027-01-03"), False),  # 367 days
+    (dict(start_local="2026-12-01T09:00", end_local="2026-12-15T09:00", timezone="UTC"), True),
+    (dict(start_local="2026-12-01T09:00", end_local="2026-12-15T09:01", timezone="UTC"), False),
+])
+def test_duration_limits(changes, valid):
+    base = dict(write_id=uuid4(), operation="create", source_id="synthetic-source", title="Example")
+    if valid:
+        writes.WriteRequest(**base, **changes)
+    else:
+        with pytest.raises(writes.WriteError, match="calendar_time_invalid"):
+            writes.WriteRequest(**base, **changes)
 
 
 def test_all_day_equal_dates_refused():

@@ -266,6 +266,22 @@ def test_expire_running_only_after_threshold(pg_db):
     asyncio.run(run())
 
 
+def test_mark_dispatch_only_while_running_and_refreshes_the_clock(pg_db):
+    async def run():
+        from db.accessors.calendar_write import claim, expire_running, get, mark_dispatch
+        old = datetime.now(UTC) - timedelta(seconds=30)
+        row = write_row(started_at=old)
+        await claim(row)
+        assert await mark_dispatch(row.id) is True
+        assert (await get(row.id)).started_at > old
+        expired = write_row(target_external_id="synthetic-other", started_at=old)
+        await claim(expired)
+        await expire_running(expired.id, before=datetime.now(UTC))
+        assert await mark_dispatch(expired.id) is False
+        assert (await get(expired.id)).status == "unknown"
+    asyncio.run(run())
+
+
 def test_remove_source_deletes_write_rows(pg_db):
     async def run():
         from db.accessors import calendar_write, calendar_source

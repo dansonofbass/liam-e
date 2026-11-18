@@ -298,8 +298,17 @@ async def _store_calendar(message: ChatMessage, proposal: Proposal, outcome: cal
         calendar_status=outcome.status, failed=[ItemProblem(id=message.id, code=code)] if code else [])
     status = "done" if outcome.status == "done" else "unknown" if outcome.status in {"unknown", "running"} else "failed"
     updated = await message_access.set_proposal(message.id, proposal_json=proposal.model_dump_json(context={"storage": True}), proposal_status=status)
-    assert updated is not None
+    if updated is None:  # The card vanished concurrently, e.g. with its conversation.
+        raise ProposalNotFoundError
     return updated
+
+
+async def _unclaimed_outcome(proposal_id: str) -> calendar_writes.WriteOutcome:
+    """Without a write record nothing was dispatched: the claim precedes every provider call."""
+    from db.accessors import calendar_write
+    if await calendar_write.get(proposal_id) is None:
+        return calendar_writes.WriteOutcome(write_id=proposal_id, status="failed", error_code="calendar_unavailable")
+    return calendar_writes.WriteOutcome(write_id=proposal_id, status="unknown", error_code="calendar_write_unknown")
 
 
 async def _confirm_calendar(message: ChatMessage) -> ChatMessage:
@@ -327,18 +336,27 @@ async def _confirm_calendar(message: ChatMessage) -> ChatMessage:
         outcome = await calendar_writes.execute(command.request(message.id), write_id=message.id)
     except calendar_writes.WriteError as error:
         outcome = calendar_writes.WriteOutcome(write_id=message.id, status="failed", error_code=error.code)
-    except Exception:
+    except Exception as error:
         # The write may already have reached the provider. Never release the card for retry.
-        outcome = calendar_writes.WriteOutcome(write_id=message.id, status="unknown", error_code="calendar_write_unknown")
+        logger.warning("calendar_confirm_failed %s", type(error).__name__)
+        outcome = await _unclaimed_outcome(message.id)
     return await _store_calendar(message, proposal, outcome)
 
 
 async def recheck_calendar_card(proposal_id: str) -> ChatMessage:
+    """Resolve an unknown card, or a running one whose confirm call died after claiming it."""
     message = await _get_proposal(proposal_id)
     proposal = proposal_view(message)
-    if proposal is None or proposal.kind != "calendar" or message.proposal_status != "unknown":
+    if proposal is None or proposal.kind != "calendar" or message.proposal_status not in {"unknown", "running"}:
         raise ProposalStateError
-    outcome = await calendar_writes.check(proposal_id)
+    from db.accessors import calendar_write
+    if await calendar_write.get(proposal_id) is None:
+        if message.proposal_status == "running":
+            # A confirm may be between its card claim and its write claim right now.
+            raise ProposalStateError
+        return await _store_calendar(message, proposal, await _unclaimed_outcome(proposal_id))
+    # get() first expires a running record older than 120 s, then checks an unknown one.
+    outcome = await calendar_writes.get(proposal_id)
     return await _store_calendar(message, proposal, outcome)
 
 

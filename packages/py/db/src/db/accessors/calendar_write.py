@@ -61,6 +61,20 @@ async def finish(write_id: str, *, status: str, error_code: str | None = None,
         return row
 
 
+async def mark_dispatch(write_id: str) -> bool:
+    """Re-confirm the claim right before the provider call and restart its expiry clock.
+
+    Returns False when a concurrent read already expired the record: the caller must then
+    send nothing, because a check may already have reconciled the record.
+    """
+    async with get_session_maker()() as session:
+        row = (await session.execute(update(CalendarWrite).where(CalendarWrite.id == write_id,
+               CalendarWrite.status == "running").values(started_at=utcnow())
+               .returning(CalendarWrite.id))).scalar_one_or_none()
+        await session.commit()
+        return row is not None
+
+
 async def get(write_id: str) -> CalendarWrite | None:
     async with get_session_maker()() as session:
         return await session.get(CalendarWrite, write_id)

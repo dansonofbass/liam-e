@@ -6,6 +6,7 @@ never retried. Connector revision checks are best effort, not provider-side comp
 
 import hashlib
 import json
+import logging
 import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
@@ -22,6 +23,14 @@ from db.models.calendar_write import CalendarWrite
 from api.calendar import google, google_write
 from api.calendar.seed_ids import SEED_CALENDAR_IDS
 from api.mail.sync_types import html_to_text
+
+logger = logging.getLogger(__name__)
+
+# Builder's call: an all-day span longer than a year is almost certainly a mistake.
+MAX_ALL_DAY_DAYS = 366
+# A create check concludes "not applied" only after this settle time since dispatch: the
+# connector may keep working after the client timeout, and provider listings may lag.
+CREATE_SETTLE = timedelta(minutes=5)
 
 
 class WriteError(Exception):
@@ -74,7 +83,8 @@ class WriteRequest(BaseModel):
                 raise WriteError("calendar_time_invalid", 422)
         elif self.timezone is not None:
             raise WriteError("calendar_time_invalid", 422)
-        if dated and (self.start_date is None or self.end_date is None or self.end_date <= self.start_date):
+        if dated and (self.start_date is None or self.end_date is None or self.end_date <= self.start_date
+                      or (self.end_date - self.start_date).days > MAX_ALL_DAY_DAYS):
             raise WriteError("calendar_time_invalid", 422)
         if self.operation == "create":
             if not self.title or not self.title.strip() or not (timed or dated) or self.occurrence_id is not None:
@@ -278,7 +288,12 @@ async def execute(request: WriteRequest, *, write_id: str | None = None) -> Writ
         raise WriteError("calendar_write_in_progress") from None
     if not claimed: return await get(identifier)
     if source.id in SEED_CALENDAR_IDS:
-        return await _seed_execute(record, request, source, target)
+        try:
+            return await _seed_execute(record, request, source, target)
+        except Exception as error:
+            # Seed writes never reach a provider, so a failure is definite and the claim must end.
+            logger.warning("calendar_seed_write_failed %s", type(error).__name__)
+            return _out(await calendar_write.finish(identifier, status="failed", error_code="calendar_unavailable"))
     dispatched = False
     try:
         await _identity(source)
@@ -299,6 +314,10 @@ async def execute(request: WriteRequest, *, write_id: str | None = None) -> Writ
         current_source = await _source(source.id)
         if current_source.revision != source.revision or current_source.connection_ref != source.connection_ref:
             raise WriteError("calendar_unavailable")
+        if not await calendar_write.mark_dispatch(identifier):
+            # A concurrent read expired the claim while we prepared; it may already have been
+            # reconciled as not applied, so sending now could contradict the stored outcome.
+            return await get(identifier)
         dispatched = True
         result = await google_write.call(f"{request.operation}_event", args)
         if result.kind == "event" and (request.operation != "create" or _matches(result.event, _create_match_args(args))):
@@ -314,9 +333,9 @@ async def execute(request: WriteRequest, *, write_id: str | None = None) -> Writ
         if not dispatched:
             code = error.code if isinstance(error, WriteError) else "calendar_unavailable"
             return _out(await calendar_write.finish(identifier, status="failed", error_code=code))
-    except Exception:
-        # Fixed code only: transport/provider exceptions may contain private values.
-        pass
+    except Exception as error:
+        # Class name only: transport/provider exceptions may contain private values.
+        logger.warning("calendar_write_unexpected %s", type(error).__name__)
     return _out(await calendar_write.finish(identifier, status="unknown", error_code="calendar_write_unknown"))
 
 
@@ -335,7 +354,8 @@ async def _checked(record, bound, outcome):
         try:
             message = await proposals._get_proposal(record.id)
             proposal = proposals.proposal_view(message)
-            if proposal and proposal.kind == "calendar" and message.proposal_status == "unknown":
+            # "running" covers a card whose confirm call died after claiming it.
+            if proposal and proposal.kind == "calendar" and message.proposal_status in {"unknown", "running"}:
                 await proposals._store_calendar(message, proposal, outcome)
         except proposals.ProposalNotFoundError:
             pass
@@ -361,21 +381,37 @@ async def check(write_id: str) -> WriteOutcome:
         if record.operation == "create":
             start = google.instant(args["startTime"])
             end = google.instant(args["endTime"])
+            # No free-text filter: its tokenisation could hide the event and fake "not applied".
             pages = await google.pages(google.live_call, "list_events", {
                 "calendarId": source.external_id, "startTime": (start - timedelta(minutes=1)).isoformat(),
-                "endTime": (end + timedelta(minutes=1)).isoformat(), "fullText": request.title, "pageSize": 250})
-            matches = []
+                "endTime": (end + timedelta(minutes=1)).isoformat(), "pageSize": 250})
+            recent, matches = [], []
             for page in pages:
                 for candidate in page["events"]:
-                    if (isinstance(candidate.get("id"), str) and candidate["id"] and candidate.get("status") != "cancelled"
-                            and _matches(candidate, _create_match_args(args))
-                            and google.instant(candidate.get("created")) >= record.started_at - timedelta(minutes=5)):
-                        matches.append(candidate)
+                    if not (isinstance(candidate.get("id"), str) and candidate["id"] and candidate.get("status") != "cancelled"):
+                        continue
+                    try:
+                        fresh = google.instant(candidate.get("created")) >= record.started_at - timedelta(minutes=5)
+                    except (TypeError, ValueError):
+                        fresh = True  # Unknown creation time: treat as possibly ours.
+                    if fresh:
+                        recent.append(candidate)
+                        if _matches(candidate, _create_match_args(args)):
+                            matches.append(candidate)
             if len(matches) == 1: raw = matches[0]
-            not_applied = not matches
+            # Any event created in the window since the claim (even renamed) keeps the outcome
+            # open, and so does a write that has not had time to settle at the provider.
+            not_applied = not recent and datetime.now(UTC) - record.started_at >= CREATE_SETTLE
         else:
             result = await google_write.call("get_event", {"calendarId": source.external_id, "eventId": record.target_external_id})
             if record.operation == "delete" and result.status == 404:
+                # A 404 also answers for a calendar that was deleted or unshared: only a
+                # reachable calendar makes the missing event a completed delete.
+                page = await google.live_call("list_events", {
+                    "calendarId": source.external_id, "startTime": datetime.now(UTC).isoformat(),
+                    "endTime": (datetime.now(UTC) + timedelta(seconds=1)).isoformat(), "pageSize": 1})
+                if not isinstance(page, dict) or not isinstance(page.get("events"), list):
+                    raise google.GoogleError()
                 raw = {"id": record.target_external_id}
             elif result.kind == "event" and result.event["id"] == record.target_external_id:
                 candidate = result.event
@@ -390,6 +426,7 @@ async def check(write_id: str) -> WriteOutcome:
         if not_applied:
             result = _out(await calendar_write.finish(record.id, status="not_applied", error_code="calendar_write_not_applied"))
             return await _checked(record, bound, result)
-    except Exception:
-        pass
+    except Exception as error:
+        # The record stays unknown; class name only, never provider text.
+        logger.warning("calendar_write_check_failed %s", type(error).__name__)
     return _out(record)

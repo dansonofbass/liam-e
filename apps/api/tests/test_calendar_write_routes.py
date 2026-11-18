@@ -42,3 +42,18 @@ def test_live_and_write_reads(client, monkeypatch):
     assert client.get("/api/v1/calendar/occurrences/synthetic/live").json()["title"] == "Example"
     assert client.get("/api/v1/calendar/writes/synthetic").status_code == 202
     assert client.post("/api/v1/calendar/writes/synthetic/check").status_code == 202
+
+
+def test_occurrence_reads_keep_their_validation_contract(client):
+    # The write routes' quiet 422 must not relabel errors of the existing read routes.
+    response = client.get("/api/v1/calendar/occurrences")
+    assert response.status_code == 422
+    assert "calendar_time_invalid" not in response.text
+
+
+def test_write_record_removed_with_its_source_is_404(client, monkeypatch):
+    async def execute(request): raise LookupError("calendar_unavailable")
+    monkeypatch.setattr(writes, "execute", execute)
+    response = client.post("/api/v1/calendar/events", json=dict(write_id=str(uuid4()), source_id="synthetic",
+        title="Example", start_date="2026-12-05", end_date="2026-12-06"))
+    assert response.status_code == 404

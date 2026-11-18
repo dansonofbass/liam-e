@@ -34,6 +34,9 @@ async def prepare(arguments: dict, ctx) -> CalendarCommand:
     before = await writes.live(occurrence_id) if action in {"update", "delete"} else None
     if before and (before.source_id != source_id or not before.editable):
         raise writes.WriteError("calendar_event_not_editable")
+    if before is not None:
+        # Google's htmlLink encodes event and calendar IDs; cards reach chat history and SSE.
+        before = before.model_copy(update={"html_link": None})
     zone = arguments.get("timezone") or ctx.calendar_timezone
     try:
         ZoneInfo(zone)
