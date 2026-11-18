@@ -3,7 +3,7 @@ import type { ChatEvent, ChatStreamRequest } from '../api/generated/types.gen'
 import { parseSse } from './sse'
 
 // Refusals before the stream starts that the conversation view explains on their own.
-const KNOWN_REFUSALS = ['conversation_not_found', 'model_unknown', 'conversation_scope_change_requires_new', 'context_unavailable', 'context_invalid', 'version_conflict'] as const
+const KNOWN_REFUSALS = ['preferences_unavailable', 'conversation_not_found', 'model_unknown', 'conversation_scope_change_requires_new', 'context_unavailable', 'context_invalid', 'version_conflict'] as const
 export type ChatRefusal = typeof KNOWN_REFUSALS[number]
 const isKnownRefusal = (code: string | undefined): code is ChatRefusal => (KNOWN_REFUSALS as readonly (string | undefined)[]).includes(code)
 

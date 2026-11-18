@@ -32,6 +32,26 @@ test('buffers cards until done and text', async () => {
 test('stop aborts and displays notice', async () => { setup(); await act(async () => { frame({ event: 'delta', text: 'Hallo' }) }); fireEvent.click(screen.getByText('stop')); expect(signal.aborted).toBe(true); expect(screen.getByText(de.chat.stopped)).toBeTruthy(); expect(screen.getByTestId('phase').textContent).toBe('stopped') })
 test('network break reports aborted', async () => { setup(); await act(async () => { frame({ event: 'delta', text: 'Hallo' }) }); await act(async () => { controller.error(new TypeError('network')) }); await waitFor(() => expect(screen.getByText(de.errors.aborted)).toBeTruthy()); expect(screen.getByTestId('phase').textContent).toBe('error') })
 
+test('preference failure never silently retries; explicit continuation sets only this request flag', async () => {
+  const bodies: Record<string, unknown>[] = []
+  globalThis.fetch = (async (_url: unknown, init: RequestInit) => {
+    bodies.push(JSON.parse(init.body as string))
+    return Response.json({ detail: { code: 'preferences_unavailable' } }, { status: 503 })
+  }) as typeof fetch
+  function Consumer() {
+    const { state, send, retryWithoutPreferences } = useChatSession()
+    return <><button onClick={() => void send({ text: 'test-only', account_id: 'a' })}>send</button>{state.errorCode === 'preferences_unavailable' && <button onClick={() => void retryWithoutPreferences()}>{de.preferences.continueWithout}</button>}</>
+  }
+  render(<QueryClientProvider client={new QueryClient()}><ChatSessionProvider><Consumer /></ChatSessionProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('send'))
+  const continueButton = await screen.findByRole('button', { name: de.preferences.continueWithout })
+  expect(bodies).toHaveLength(1)
+  expect(bodies[0]?.without_preferences).toBeUndefined()
+  fireEvent.click(continueButton)
+  await waitFor(() => expect(bodies).toHaveLength(2))
+  expect(bodies[1]).toMatchObject({ text: 'test-only', account_id: 'a', without_preferences: true })
+})
+
 // Restarting is the only place that hands a conversation's unsent text to the start page.
 function restartHarness(id?: string, seed = true) {
   const sources = spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)

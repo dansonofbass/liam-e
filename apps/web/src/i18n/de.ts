@@ -7,6 +7,27 @@ const noticeSubject = (subject: string) => {
 }
 
 export const de = {
+  preferences: {
+    title: 'Präferenzen', empty: 'Noch keine Präferenzen gespeichert. Lege fest, wie liam-e für dich schreiben soll.',
+    add: 'Präferenz hinzufügen', edit: 'Bearbeiten', pause: 'Pausieren', activate: 'Aktivieren', remove: 'Löschen',
+    save: 'Präferenz speichern', field: 'Feld', value: 'Wert', scope: 'Geltungsbereich', global: 'Alle Konten',
+    keys: { answer_length: 'Antwortlänge', salutation: 'Anrede', signature: 'Signatur' },
+    statuses: { active: 'Aktiv', paused: 'Pausiert' }, source: 'Von dir eingetragen',
+    loading: 'Präferenzen werden geladen …', error: 'Die Präferenzen konnten nicht geladen werden. Versuch es noch einmal.',
+    saveError: 'Die Änderung konnte nicht gespeichert werden. Prüfe deine Angaben und versuch es noch einmal.',
+    conflict: 'Die Präferenzen wurden inzwischen geändert oder die Grenze ist erreicht. Lade sie neu. Höchstens 50 gespeicherte und 20 aktive Werte sind möglich; je Feld und Geltungsbereich nur ein aktiver Wert.',
+    reload: 'Aktuelle Fassung laden', unavailable: 'Diese Präferenz gibt es nicht mehr. Lade die Übersicht neu.',
+    saved: 'Gespeichert.', savedOff: 'Gespeichert. Verwendung ist ausgeschaltet.', enable: 'Verwendung einschalten', disable: 'Verwendung ausschalten',
+    transfer: 'Passende Präferenzen werden für Antworten an Mistral übermittelt.',
+    suggestions: 'Präferenzen vorschlagen', suggestionsUnavailable: 'Vorschläge sind noch nicht verfügbar.',
+    off: 'Präferenzen aus', on: 'Verwendung eingeschaltet', back: 'Zur Übersicht',
+    removeTitle: 'Präferenz löschen?',
+    removeDescription: 'Der Wert und seine gespeicherten Revisionen werden entfernt. Ursprüngliche Chatnachrichten und Antworten bleiben erhalten. Bereits an Mistral gesendete Anfragen lassen sich nicht zurückholen. Das löscht keine Daten aus der Verarbeitung beim Anbieter oder aus Backups.',
+    removed: 'Präferenz entfernt', restart: 'Neuen Chat ohne bisherigen Kontext öffnen',
+    used: (n: number) => `${n} ${n === 1 ? 'Präferenz' : 'Präferenzen'} verwendet`,
+    historical: 'Verwendete Präferenzen', continueWithout: 'Ohne Präferenzen fortfahren', close: 'Schließen',
+    chooseAccount: 'Konto wählen', safety: 'Präferenzen ändern den Schreibstil, keine Berechtigungen. Anrede und Signatur gelten nur für genau ein Konto.',
+  },
   taskChat: {
     account: (name: string) => `Aufgaben: ${name}`,
     thisAccount: 'Aufgaben dieses Kontos',
@@ -150,7 +171,8 @@ export const de = {
     aborted: 'Die Antwort ist abgebrochen.',
     internal: 'Die Antwort konnte nicht erstellt werden. Versuch es gleich noch mal.',
     conversation_not_found: 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.',
-    context_revoked: 'Die Vorlage oder die Auswahl von Konten, Kalendern oder Aufgaben ist nicht mehr gültig. Starte eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
+    preferences_unavailable: 'Die Präferenzen konnten nicht geladen werden. Versuch es noch einmal oder fahre ausdrücklich ohne Präferenzen fort.',
+    context_revoked: 'Die Vorlage, Präferenzen oder die Auswahl von Konten, Kalendern oder Aufgaben sind nicht mehr gültig. Starte eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
     conversation_scope_change_requires_new: 'Diese Unterhaltung gilt für andere Konten oder Kalender. Starte für die neue Auswahl eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
     context_unavailable: 'Die Unterhaltung oder ihre Vorlage ist nicht mehr verfügbar. Starte eine neue Unterhaltung.',
     context_invalid: 'Ein Konto oder Kalender aus deiner Auswahl ist nicht verfügbar. Prüfe deine Auswahl und versuch es noch mal.',

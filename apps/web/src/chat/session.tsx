@@ -9,7 +9,7 @@ import { calendarSourcesQuery, conversationsQuery, historyQuery } from '../api/q
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | ChatRefusal
 type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
 export type TaskScope = { source: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked'; account_id?: string }
-type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; calendarScopes: Record<string, string[]>; setCalendarScope: (id: string, ids: string[]) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void> }
+type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; calendarScopes: Record<string, string[]>; setCalendarScope: (id: string, ids: string[]) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void>; retryWithoutPreferences: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
 
@@ -109,7 +109,8 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [client, invalidate, calendarScopes, taskScopes])
   const retry = useCallback(async () => { if (last.current) await send({ ...last.current, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
-  return <Context.Provider value={{ state, scope, setScope, taskScopes, setTaskScope, calendarScopes, setCalendarScope, composerTexts, setComposerText, scopeOverrides, setConversationScope, send, stop, retry }}>{children}</Context.Provider>
+  const retryWithoutPreferences = useCallback(async () => { if (last.current) await send({ ...last.current, without_preferences: true, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
+  return <Context.Provider value={{ state, scope, setScope, taskScopes, setTaskScope, calendarScopes, setCalendarScope, composerTexts, setComposerText, scopeOverrides, setConversationScope, send, stop, retry, retryWithoutPreferences }}>{children}</Context.Provider>
 }
 // Shared restoration for every entry point; explicit edits are isolated by conversation.
 export function useConversationScope(id?: string) {

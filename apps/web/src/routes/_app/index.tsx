@@ -25,7 +25,7 @@ export const Route = createFileRoute('/_app/')({
   component: Greeting,
 })
 function Greeting() {
-  const { state, send, retry, scope } = useChatSession()
+  const { state, send, retry, retryWithoutPreferences, scope } = useChatSession()
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
   const calendarAbout = typeof search.calendarAbout === 'string' ? search.calendarAbout : undefined
@@ -53,7 +53,7 @@ function Greeting() {
   }, [started, state.conversationId, navigate])
   const data = summary.data
   return <div className="le-chat-view"><ChatHeader><ModelMenu model={model} onChange={setModel} /><TemplateMenu revision={revision} onChange={setRevision} /></ChatHeader><div className="le-chat-messages le-chat-thread le-chat-start-scroll"><div className="le-chat-start"><h1 className="display le-greeting">{de.chat.greetingFirst}<br /><span>{de.chat.greetingSecond}</span></h1>
-    {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={modelGone ? undefined : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
+    {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: de.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : modelGone ? undefined : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
     {summary.isPending && <p className="le-hint">{de.chat.loadingSummary}</p>}
     {summary.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void summary.refetch() } }}>{de.chat.summaryError}</Notice>}
     {data && (data.accounts.length === 0 ? <><Notice tone="info">{de.chat.noAccounts}</Notice><ActionButton variant="primary" onClick={() => { void navigate({ href: '/accounts' }) }}>{de.accounts.connect}</ActionButton></> : <><p className="le-hint">{de.chat.stand(data.unread_total, data.accounts.length, data.last_sync_at ? formatTime(new Date(data.last_sync_at)) : undefined)}</p><div className="le-chat-quick-actions">

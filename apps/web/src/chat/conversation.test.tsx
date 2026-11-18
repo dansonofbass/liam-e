@@ -451,7 +451,7 @@ test('revoked context during an answer offers a fresh conversation', async () =>
   const frames = ['event: start\ndata: {"event":"start","conversation_id":"c","user_message_id":"u"}\n\n', 'event: error\ndata: {"event":"error","code":"context_revoked"}\n\n']
   globalThis.fetch = (() => Promise.resolve(new Response(frames.join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))) as unknown as typeof fetch
   await send()
-  const notice = (await screen.findByText(/Die Vorlage oder die Auswahl von Konten, Kalendern oder Aufgaben ist nicht mehr gültig/)).closest('[role="alert"]') as HTMLElement
+  const notice = (await screen.findByText(/Die Vorlage, Präferenzen oder die Auswahl von Konten, Kalendern oder Aufgaben sind nicht mehr gültig/)).closest('[role="alert"]') as HTMLElement
   expect(within(notice).getByRole('button', { name: 'Neue Unterhaltung' })).toBeTruthy()
 })
 
