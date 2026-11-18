@@ -136,9 +136,9 @@ async def cancel_open_proposals(conversation_id: str) -> int:
         ))).scalars()
         cancelled_preferences = 0
         for candidate in candidates:
-            # Existing mail/task replacement semantics remain unchanged, but a
-            # displaced preference must not retain hidden rejected content.
-            cancelled_preferences += int(await preference_candidate.erase(session, candidate, 'rejected'))
+            # A newer card replaces an open preference card as before. The candidate
+            # stays pending and visible in the candidate list, so it can be reviewed later.
+            cancelled_preferences += int(await preference_candidate.detach(session, candidate))
         result = await session.execute(
             update(ChatMessage).where(ChatMessage.conversation_id == conversation_id, ChatMessage.proposal_status == "pending")
             .values(proposal_status="cancelled").returning(ChatMessage.id)

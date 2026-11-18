@@ -205,7 +205,7 @@ def test_quoted_or_hypothetical_source_cannot_create_candidate(pg_db, text):
     asyncio.run(run())
 
 
-def test_account_and_source_removal_and_mail_replacement_erase_candidates(pg_db):
+def test_account_and_source_removal_erase_and_mail_replacement_keeps_candidates(pg_db):
     async def run():
         from db.accessors import user_preference as p, preference_candidate as c, mail_account as a, chat_message as m
         from db.engine import get_session_maker
@@ -213,10 +213,20 @@ def test_account_and_source_removal_and_mail_replacement_erase_candidates(pg_db)
         from api.mail import proposals
         conversation, message = await setup_source()
         row, card = await candidate(conversation, message)
-        await proposals.create_proposal(conversation.id, proposals.Proposal(kind='archive', reason='', items=[]))
+        archive = await proposals.create_proposal(conversation.id, proposals.Proposal(kind='archive', reason='', items=[]))
+        assert (await m.get_message(card.id)).proposal_status == 'cancelled'
         async with get_session_maker()() as session:
-            rejected = await c.get(session, row.id)
-            assert rejected.value is None and rejected.status == 'rejected'
+            displaced = await c.get(session, row.id)
+            assert (displaced.value, displaced.status, displaced.proposal_id) == ('Kurz', 'pending', None)
+        from api.preferences.candidates import listing, propose
+        listed = next(item for item in await listing() if item.id == row.id)
+        assert (listed.value, listed.status, listed.proposal_id) == ('Kurz', 'pending', None)
+        # The open archive card keeps the slot; the candidate waits without a card.
+        assert (await propose(row.id)).proposal_id is None
+        await m.cancel_proposal(archive.id)
+        reopened = await propose(row.id)
+        assert reopened.proposal_id and reopened.proposal_id != card.id
+        assert (await m.get_message(reopened.proposal_id)).proposal_status == 'pending'
         account = await a.create_account(provider='imap', auth_type='imap_password', email_address='candidate@example.test')
         conversation, message = await setup_source()
         async with get_session_maker()() as session:
@@ -234,7 +244,6 @@ def test_account_and_source_removal_and_mail_replacement_erase_candidates(pg_db)
         async with get_session_maker()() as session:
             await session.delete(await session.get(ChatMessage, message.id))
             await session.commit()
-        from api.preferences.candidates import listing
         erased = next(item for item in await listing() if item.id == row.id)
         assert erased.value is None and erased.source_text is None and erased.status == 'expired'
     asyncio.run(run())
@@ -396,4 +405,36 @@ def test_candidate_quota_and_confirm_rechecks_preference_quota(pg_db):
         with pytest.raises(p.PreferenceConflict):
             await confirm(first, card)
         assert (await m.get_message(card.id)).proposal_status == 'pending'
+    asyncio.run(run())
+
+
+def test_revoked_turn_context_blocks_confirm_and_keeps_card_pending(pg_db):
+    async def run():
+        from db.engine import get_session_maker
+        from db.models.chat_context import ChatContext
+        from db.models.chat_conversation import ChatConversation
+        from db.models.chat_message import ChatMessage
+        from db.models.user_preference import UserPreference
+        from db.accessors import chat_message as m
+        from sqlalchemy import select
+        from api.mail import proposals
+        from api.preferences import candidates as service
+        async with get_session_maker()() as session:
+            conversation = ChatConversation()
+            context = ChatContext(conversation_id=conversation.id, app_prompt_version='1', account_scope_json='{}')
+            message = ChatMessage(conversation_id=conversation.id, role='user', content='Merke dir: Antworte kurz.',
+                                  context_id=context.id)
+            session.add_all([conversation, context, message])
+            await session.commit()
+        row, card = await candidate(conversation, message)
+        assert card.context_id == context.id
+        async with get_session_maker()() as session:
+            (await session.get(ChatContext, context.id)).revoked = True
+            await session.commit()
+        decision = service.PreferenceDecision(choice='replace', expected_version=0, expected_revision_id=None)
+        with pytest.raises(proposals.ProposalContextRevokedError):
+            await service.confirm(card.id, decision)
+        assert (await m.get_message(card.id)).proposal_status == 'pending'
+        async with get_session_maker()() as session:
+            assert (await session.execute(select(UserPreference).where(UserPreference.key == 'answer_length'))).first() is None
     asyncio.run(run())

@@ -84,6 +84,16 @@ async def erase(session, row, status='expired'):
     return False
 
 
+async def detach(session, row):
+    """A card displaced by another proposal is not a rejection: keep the candidate reviewable.
+
+    The caller cancels the card itself. Return whether the detached card was still open.
+    """
+    card = await session.get(ChatMessage, row.proposal_id) if row.proposal_id else None
+    row.proposal_id = None
+    return bool(card and card.proposal_status == 'pending')
+
+
 async def expire_conversations(session, conversation_ids):
     rows = (await session.execute(select(PreferenceCandidate).where(
         PreferenceCandidate.owner_scope == OWNER_SCOPE,

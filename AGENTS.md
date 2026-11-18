@@ -596,8 +596,9 @@ Wiederholen schreibt keinen neuen Text in einen abgelehnten Kandidaten. Karten e
 eine Kandidaten-ID. Auch gespeicherte Werkzeugargumente enthalten keine Wertkopie.
 Ein offener Mail-/Aufgabenvorschlag bleibt beim Präferenzvorschlag unverändert; der Kandidat
 bleibt ohne Karte unter Einstellungen → Präferenzen → Vorschläge prüfbar. Das bestehende
-Ersetzen einer offenen Karte durch Mail-/Aufgabenwerkzeuge bleibt erhalten, entfernt bei
-einer verdrängten Präferenzkarte aber deren Kandidatenwert.
+Ersetzen einer offenen Karte durch Mail-/Aufgabenwerkzeuge bleibt erhalten. Eine verdrängte
+Präferenzkarte gilt nicht als Ablehnung: Ihr Kandidat bleibt offen, verliert nur die Kartenreferenz
+und lässt sich über „Vorschlag prüfen“ erneut öffnen, sobald keine andere Karte offen ist.
 
 `GET /preferences/candidates` liest offene Kandidaten; mit `candidate_id` eine genaue Referenz,
 auch für historische Karten. Quelle und Bisher/Vorschlag werden aus aktuellen zugreifbaren
