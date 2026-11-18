@@ -29,6 +29,10 @@ def fixture(name):
     ({"organizer": {"self": False}}, (False, "organizer")),
     ({"eventType": "birthday"}, (False, "event_type")),
     ({"eventType": "default"}, (True, None)),
+    # The connector spells the enum in capitals (live check on the owner's test calendar).
+    ({"eventType": "DEFAULT"}, (True, None)),
+    ({"eventType": "BIRTHDAY"}, (False, "event_type")),
+    ({"eventType": 7}, (False, "event_type")),
     ({"eventType": None}, (True, None)),
     ({"status": "cancelled"}, (False, "cancelled")),
 ])
@@ -40,7 +44,7 @@ def test_editable_rules(raw, expected):
 def test_map_pages_marks_editable_and_reports_access_role():
     page = fixture("events_1")
     page["accessRole"] = "writer"
-    page["events"][0]["eventType"] = "default"
+    assert page["events"][0]["eventType"] == "DEFAULT"
     snapshot = probe.map_pages([page], START, END)
     assert snapshot.access_role == "writer"
     assert snapshot.occurrences[0].editable is True

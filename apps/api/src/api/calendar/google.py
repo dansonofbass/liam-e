@@ -115,7 +115,9 @@ def editable(raw: dict) -> tuple[bool, str | None]:
     organizer = raw.get("organizer")
     if organizer is not None and (not isinstance(organizer, dict) or organizer.get("self") is not True):
         return False, "organizer"
-    if raw.get("eventType") not in (None, "default"):
+    # The connector reports the enum in capitals ("DEFAULT"); the Google REST API in lowercase.
+    event_type = raw.get("eventType")
+    if event_type is not None and (not isinstance(event_type, str) or event_type.lower() != "default"):
         return False, "event_type"
     return True, None
 
