@@ -57,3 +57,27 @@ def test_write_record_removed_with_its_source_is_404(client, monkeypatch):
     response = client.post("/api/v1/calendar/events", json=dict(write_id=str(uuid4()), source_id="synthetic",
         title="Example", start_date="2026-12-05", end_date="2026-12-06"))
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+@pytest.mark.parametrize("change,http,code", [({"is_active": False}, 404, "calendar_unavailable"),
+                                              ({"capabilities_json": '["read"]'}, 403, "calendar_not_writable")])
+def test_change_on_paused_or_read_only_source_sends_nothing(client, monkeypatch, method, change, http, code):
+    from types import SimpleNamespace
+    from api.calendar import google_write
+    from db.accessors import calendar_occurrence, calendar_source
+    source = SimpleNamespace(id="synthetic", provider="google", is_active=True, capabilities_json='["read","write"]',
+                             connection_ref="synthetic-ref", revision=1, external_id="synthetic-calendar")
+    for key, value in change.items(): setattr(source, key, value)
+    calls = []
+    async def get(_): return source
+    async def visible(_): return SimpleNamespace(source_id="synthetic", external_id="synthetic-event")
+    async def call(name, arguments): calls.append(name)
+    monkeypatch.setattr(calendar_source, "get", get)
+    monkeypatch.setattr(calendar_occurrence, "get_visible", visible)
+    monkeypatch.setattr(google_write, "call", call)
+    body = dict(write_id=str(uuid4()), expected_revision="synthetic-revision")
+    if method == "PATCH": body["title"] = "Example"
+    response = client.request(method, "/api/v1/calendar/occurrences/synthetic-occurrence", json=body)
+    assert response.status_code == http and code in response.text
+    assert calls == []

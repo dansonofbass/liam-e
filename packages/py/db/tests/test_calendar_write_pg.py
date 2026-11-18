@@ -282,16 +282,23 @@ def test_mark_dispatch_only_while_running_and_refreshes_the_clock(pg_db):
     asyncio.run(run())
 
 
-def test_remove_source_deletes_write_rows(pg_db):
+def test_remove_source_keeps_open_outcomes_without_text(pg_db):
     async def run():
         from db.accessors import calendar_write, calendar_source
         from db.engine import get_session_maker
         from db.models.calendar_source import CalendarSource
-        row = write_row()
+        running, unknown, done = write_row(), write_row(target_external_id="synthetic-b"), write_row(target_external_id="synthetic-c")
         async with get_session_maker()() as session:
-            session.add(CalendarSource(id=row.source_id, provider="google", connection_ref="synthetic", external_id="synthetic", name="Example", timezone="UTC"))
+            session.add(CalendarSource(id=running.source_id, provider="google", connection_ref="synthetic", external_id="synthetic", name="Example", timezone="UTC"))
             await session.commit()
-        await calendar_write.claim(row)
-        await calendar_source.remove(row.source_id)
-        assert await calendar_write.get(row.id) is None
+        for row in (running, unknown, done):
+            await calendar_write.claim(row)
+        await calendar_write.finish(unknown.id, status="unknown", error_code="calendar_write_unknown")
+        await calendar_write.finish(done.id, status="done", result_external_id="synthetic-c")
+        await calendar_source.remove(running.source_id)
+        # The provider may have applied an open write: its record must keep saying so, without text.
+        for row in (running, unknown):
+            kept = await calendar_write.get(row.id)
+            assert kept.status == "unknown" and kept.request_json is None
+        assert await calendar_write.get(done.id) is None
     asyncio.run(run())

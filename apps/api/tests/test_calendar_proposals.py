@@ -176,3 +176,26 @@ async def test_unknown_card_without_write_record_settles_failed(card, monkeypatc
     async def record(_): return None
     monkeypatch.setattr(calendar_write, "get", record)
     assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "failed"
+
+
+@pytest.mark.parametrize("change", [{"is_active": False}, {"capabilities_json": '["read"]'}])
+async def test_confirm_after_source_paused_or_read_only_writes_nothing(card, monkeypatch, change):
+    from db.accessors import calendar_source
+    source = SimpleNamespace(id="synthetic-source", provider="google", is_active=True,
+                             capabilities_json='["read","write"]', connection_ref="synthetic-private-ref")
+    for key, value in change.items(): setattr(source, key, value)
+    async def get(_): return source
+    monkeypatch.setattr(calendar_source, "get", get)
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "failed" and not card.calls
+    assert proposals.proposal_view(result).result.failed[0].code == "calendar_not_writable"
+
+
+async def test_unknown_card_of_a_removed_source_stays_unknown(card, monkeypatch):
+    from db.accessors import calendar_write
+    card.message.proposal_status = "unknown"
+    async def record(_): return SimpleNamespace(id=card.message.id, status="unknown", request_json=None)
+    async def kept(identifier): return writes.WriteOutcome(write_id=identifier, status="unknown", error_code="calendar_write_unknown")
+    monkeypatch.setattr(calendar_write, "get", record)
+    monkeypatch.setattr(writes, "get", kept)
+    assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "unknown"

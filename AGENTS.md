@@ -377,6 +377,9 @@ The connector has no precondition and no idempotency key, so `api/calendar/write
   done. A create becomes `not_applied` only when no event was created in that window since dispatch
   and five minutes have passed; otherwise it stays unknown. Terminal states clear the stored
   request text.
+- **Source removal:** finished write records go with the source. Records whose outcome is open
+  (`running` or `unknown`) stay as `unknown` without their request text, so a later check still
+  reports the outcome as open instead of a failure that would invite a duplicate.
 
 Error codes are fixed: `calendar_event_changed`, `calendar_event_gone`,
 `calendar_event_not_editable`, `calendar_not_writable`, `calendar_out_of_scope`,
@@ -467,7 +470,8 @@ activated atomically with the fully validated snapshot. A 304 re-expands stored 
 for a new window. A valid empty snapshot clears the inventory; errors preserve generation and
 coverage. Source revisions block stale snapshot commits even after pause/resume or address change.
 A shared transactional advisory lock serializes queue, replacement, removal and snapshot activation;
-removal deletes jobs, index, status and private configuration. Historical chat text remains; active
+removal deletes jobs, index, status, private configuration and finished write records (open ones
+stay without text, see "Writing to Google calendars"). Historical chat text remains; active
 source-scope checks block removed sources.
 
 `CALENDAR_SYNC_INTERVAL_MINUTES` defaults to 30. The shared worker checks active ICS and Google
