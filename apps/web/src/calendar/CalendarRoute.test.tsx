@@ -40,7 +40,7 @@ test('desktop keeps the grid next to the detail route', async () => {
   const occurrence = { id: 'test-only', source_id: 's', event_id: 'e', title: 'Termin', start_date: '2026-11-18', end_date: '2026-11-19', start_at: null, end_at: null, timezone: null }
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [source] } as never)
   spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [], next_cursor: null } } as never)
-  spyOn(sdk, 'calendarOccurrenceGet').mockResolvedValue({ data: occurrence } as never)
+  spyOn(sdk, 'calendarOccurrenceLive').mockResolvedValue({ data: { ...occurrence, occurrence_id: occurrence.id, editable: false } } as never)
   spyOn(sdk, 'calendarSourceSync').mockResolvedValue({ data: { queued: false }, response: { ok: true } } as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })

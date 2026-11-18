@@ -1,9 +1,9 @@
 // i18n-exempt: route paths and CSS classes are technical identifiers.
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
-import { calendarAgendaQuery, calendarSourcesQuery, calendarDetailQuery } from '../api/queries'
-import { calendarSourceSync } from '../api/generated/sdk.gen'
+import { calendarAgendaQuery, calendarSourcesQuery } from '../api/queries'
+import { calendarOccurrenceLive, calendarSourceSync } from '../api/generated/sdk.gen'
 import type { SourceOut } from '../api/generated/types.gen'
 import { Button, Chip, IconButton, Notice, TextField } from '../ds'
 import { de } from '../i18n/de'
@@ -13,6 +13,11 @@ import { AskAboutCalendar } from '../chat/CalendarContext'
 import { CalendarSetup } from './FeedSetup'
 import { parseSearch } from './url'
 import { useBreakpoint } from '../shell/useBreakpoint'
+import { Dot } from '../ds/Chip'
+import { DeleteEventDialog } from './DeleteEventDialog'
+import { eventWhen } from './EventReading'
+import { safeCalendarLink, writeError } from './write-state'
+import { errorCode } from '../api/unwrap'
 
 export function SourceStatus({ source, from, to }: { source: SourceOut; from?: string; to?: string }) {
   const googleError = source.last_error === 'reconnect_required' ? de.calendar.googleReconnectError
@@ -32,16 +37,30 @@ export function SourceStatus({ source, from, to }: { source: SourceOut; from?: s
 export function CalendarDetail({ id }: { id: string }) {
   const breakpoint = useBreakpoint(), location = useLocation(), navigate = useNavigate()
   const search = parseSearch(location.search as Record<string, unknown>, breakpoint === 'mobile')
-  const detail = useQuery(calendarDetailQuery(id)), sources = useQuery(calendarSourcesQuery())
+  const client = useQueryClient()
+  const [deleting, setDeleting] = useState(false)
+  useEffect(() => { setDeleting(false) }, [id])
+  const detail = useQuery({ queryKey: ['calendar', 'live', id], retry: false, gcTime: 0, queryFn: async () => {
+    const result = await calendarOccurrenceLive({ path: { occurrence_id: id } })
+    if (!result.data || (result.response && result.response.status >= 400)) throw new Error(writeError(errorCode(result.error)))
+    return result.data
+  } }), sources = useQuery(calendarSourcesQuery())
   const row = detail.data, source = sources.data?.find(s => s.id === row?.source_id)
+  const writable = row?.editable && source?.capabilities.includes('write') && !!row.revision
+  const href = safeCalendarLink(row?.html_link)
+  const reason = de.calendar.reasons[(row?.reason ?? 'calendar_not_writable') as keyof typeof de.calendar.reasons] ?? de.calendar.reasons.calendar_not_writable
   return <article className="le-calendar-detail">
     <div className="le-calendar-detail-header"><Link className="le-link le-calendar-back" to="/calendar" search={search}>{de.calendar.back}</Link><IconButton className="le-calendar-close" label={de.calendar.close} icon="x" onClick={() => { void navigate({ to: '/calendar', search }) }} /></div>
-    {detail.isPending && <p role="status">{de.calendar.loading}</p>}
-    {(detail.isError || sources.isError || (sources.isSuccess && row && !source?.is_active)) && <Notice tone="danger">{de.calendar.missing}</Notice>}
-    {row && !detail.isError && !sources.isError && source?.is_active && <><h1 className="title">{row.title}</h1><p>{calendarDate(occurrenceDay(row))} · {row.start_date ? de.calendar.allDay : calendarTime(row.start_at!)}</p>
-      {row.end_date && <p>{de.calendar.to}: {calendarDate(row.end_date)}</p>}
-      {row.end_at && <p>{calendarDate(row.end_at)} · {calendarTime(row.end_at)}</p>}
-      {source && <><SourceStatus source={source} /><AskAboutCalendar occurrenceId={row.id} sourceId={source.id} /></>}
+    {(detail.isPending || sources.isPending) && <><p role="status">{de.calendar.loading}</p>{[0, 1, 2].map(n => <div key={n} className="le-calendar-placeholder" aria-hidden="true" />)}</>}
+    {(detail.isError || sources.isError) && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: () => { void detail.refetch(); void sources.refetch() } }}>{detail.isError ? detail.error.message : de.calendar.error}</Notice>}
+    {sources.isSuccess && row && !source?.is_active && <Notice tone="danger">{de.calendar.writeErrors.calendar_unavailable}</Notice>}
+    {row && !detail.isError && !sources.isError && source?.is_active && <><h1 className="title">{row.title}</h1><p>{eventWhen(row)}</p>
+      <p className="le-calendar-source-name"><Dot colorIndex={sources.data!.filter(s => s.is_active).findIndex(s => s.id === source.id)} />{source.name}</p>
+      {row.location && <p>{row.location}</p>}{row.description && <p className="le-event-description">{row.description}</p>}
+      {!writable && <><span className="le-tag">{de.calendar.readOnlyTag}</span><p>{reason}</p></>}
+      {href && <a className="le-link" href={href} target="_blank" rel="noopener noreferrer">{de.calendar.googleOpen}</a>}
+      <div className="le-calendar-controls">{writable && <Button variant="danger" onClick={() => setDeleting(true)}>{de.calendar.deleteEvent}</Button>}<AskAboutCalendar occurrenceId={id} sourceId={source.id} /></div>
+      {deleting && <DeleteEventDialog key={id} event={{ ...row, occurrence_id: id }} onClose={() => setDeleting(false)} onDone={() => { void client.invalidateQueries({ queryKey: ['calendar'] }); void navigate({ to: '/calendar', search }) }} />}
     </>}
   </article>
 }
