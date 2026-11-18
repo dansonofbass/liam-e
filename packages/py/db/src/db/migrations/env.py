@@ -16,10 +16,12 @@ from logging.config import fileConfig
 
 import db.models  # noqa: F401  (import populates SQLModel.metadata)
 from alembic import context
+from alembic.autogenerate import comparators
+from alembic.operations import ops
 from db import metadata as target_metadata
 from db.schema_filter import include_object
 from env.db import env
-from sqlalchemy import pool, text
+from sqlalchemy import CheckConstraint, inspect, pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -34,6 +36,19 @@ config.set_main_option("sqlalchemy.url", env.async_database_url)
 # the migration tests run this in a process whose own loggers would then go silent.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
+
+
+@comparators.dispatch_for("table")
+def compare_removed_checks(autogen_context, modify_ops, schema, name, reflected, model):
+    """Autogenerate misses removed CHECKs; this repo forbids hand-edited migrations."""
+    if (model is None or reflected is None
+            or not include_object(reflected, name, "table", True, model)
+            or any(isinstance(c, CheckConstraint) for c in model.constraints)):
+        return
+    for check in inspect(autogen_context.connection).get_check_constraints(name, schema=schema):
+        constraint = CheckConstraint(check["sqltext"], name=check["name"])
+        reflected.append_constraint(constraint)
+        modify_ops.ops.append(ops.DropConstraintOp.from_constraint(constraint))
 
 
 def run_migrations_offline() -> None:

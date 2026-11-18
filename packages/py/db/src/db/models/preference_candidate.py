@@ -24,6 +24,7 @@ class PreferenceCandidate(SQLModel, table=True):
     scope: str = '*'
     value: str | None = None
     status: str = 'pending'
+    origin: str = Field(default='explicit', sa_column_kwargs={'server_default': 'explicit'})
     target_id: str | None = None
     expected_version: int = 0
     expected_revision_id: str | None = None

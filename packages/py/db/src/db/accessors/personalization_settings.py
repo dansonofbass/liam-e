@@ -1,5 +1,6 @@
 """Sectioned personalization settings, serialized with preference resolution/mutations."""
 from db.engine import get_session_maker
+from db.models._common import new_id, utcnow
 from db.models.personalization_settings import PersonalizationSettings
 from db.models.prompt_template import OWNER_SCOPE
 from db.accessors.prompt_template import StaleVersion
@@ -25,7 +26,7 @@ async def settings():
 
 async def update_settings(expected_version, **changes):
     from db.accessors.user_preference import InvalidPreference, lock, revoke
-    if not changes or set(changes) - {'use_preferences', 'suggest_preferences'} or any(type(v) is not bool for v in changes.values()) or changes.get('suggest_preferences'):
+    if not changes or set(changes) - {'use_preferences', 'suggest_preferences'} or any(type(v) is not bool for v in changes.values()):
         raise InvalidPreference
     async with get_session_maker()() as session:
         await lock(session)
@@ -34,6 +35,9 @@ async def update_settings(expected_version, **changes):
             raise StaleVersion
         if changes.get('use_preferences') is False:
             await revoke(session)
+        if changes.get('suggest_preferences') is True and not row.suggest_preferences:
+            row.suggestion_activation = new_id()
+            row.suggestion_activated_at = utcnow()
         for key, value in changes.items():
             setattr(row, key, value)
         row.version += 1

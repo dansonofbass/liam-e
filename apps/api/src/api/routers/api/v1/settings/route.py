@@ -26,7 +26,7 @@ class PersonalizationUpdate(BaseModel):
     @model_validator(mode='after')
     def changes(self):
         fields = self.model_fields_set - {'expected_version'}
-        if not fields or any(getattr(self, key) is None for key in fields) or self.suggest_preferences:
+        if not fields or any(getattr(self, key) is None for key in fields):
             raise ValueError('preference_invalid')
         return self
 
