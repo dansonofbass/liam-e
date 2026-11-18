@@ -9,6 +9,7 @@ import { Route as MailRoute } from '../routes/_app/mail'
 import { inboxSearchSchema } from './filters'
 import { MailView } from './MailView'
 import { useEffect } from 'react'
+import { de } from '../i18n/de'
 
 const originalMatchMedia = window.matchMedia, originalFetch = globalThis.fetch
 const mail = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', to: ['ich@example.com'], cc: [], subject: 'Termin', snippet: '', body_text: '<b>fett</b>', internal_date: null, deadline: null, has_attachments: true, attachments: [{ name: 'Abrechnung_2025.pdf', size: 217088, content_type: 'application/pdf' }], is_flagged: false, is_read: true, needs_reply: false, can_unsubscribe: true, can_show_original: true, thread_id: null }
@@ -18,11 +19,14 @@ function StartPageTasks({ scope }: { scope?: TaskScope }) {
   useEffect(() => { if (scope) setTaskScope('new', scope) }, [])
   return null
 }
-function setup({ mobile = false, unread = false, missing = false, loading = false, failed = false, path = '/mail/m1', stream = false, insight, startTasks }: { mobile?: boolean; unread?: boolean; missing?: boolean; loading?: boolean; failed?: boolean; path?: string; stream?: boolean; insight?: () => Promise<{ data: InsightOut }>; startTasks?: TaskScope } = {}) {
+function setup({ mobile = false, unread = false, missing = false, loading = false, failed = false, path = '/mail/m1', stream = false, insight, startTasks, preferencesFail = false }: { mobile?: boolean; unread?: boolean; missing?: boolean; loading?: boolean; failed?: boolean; path?: string; stream?: boolean; insight?: () => Promise<{ data: InsightOut }>; startTasks?: TaskScope; preferencesFail?: boolean } = {}) {
   window.matchMedia = ((q: string) => ({ matches: !mobile && (q.includes('1024px') || q.includes('640px')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   let request: Record<string, unknown> | undefined
+  const requests: Record<string, unknown>[] = []
   globalThis.fetch = ((_url: unknown, init: RequestInit) => {
     request = JSON.parse(String(init.body)) as Record<string, unknown>
+    requests.push(request)
+    if (preferencesFail && requests.length === 1) return Promise.resolve(Response.json({ detail: { code: 'preferences_unavailable' } }, { status: 503 }))
     return Promise.resolve(new Response(new ReadableStream({ start(controller) { if (stream) controller.enqueue(new TextEncoder().encode('event: start\ndata: {"event":"start","conversation_id":"c1","user_message_id":"u1"}\n\n')) } })))
   }) as typeof fetch
   const rows = [{ ...mail, is_read: !unread }, { ...mail, id: 'm2', subject: 'Zweite', is_read: !unread }]
@@ -40,7 +44,7 @@ function setup({ mobile = false, unread = false, missing = false, loading = fals
   const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: () => <div>Chat</div> })
   const router = createRouter({ routeTree: root.addChildren([home, inbox.addChildren([index, detail]), chat]), history: createMemoryHistory({ initialEntries: [path] }) })
   const view = render(<RouterProvider router={router} />)
-  return { client, router, view, action, get, getInsight, request: () => request }
+  return { client, router, view, action, get, getInsight, request: () => request, requests }
 }
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia; globalThis.fetch = originalFetch })
 // Lets queries a view starts on mount settle inside act() before the test moves on or ends.
@@ -206,6 +210,16 @@ test('mail reader turns never inherit the task choice left on the start page', a
   await waitFor(() => expect(request()?.context_message_id).toBe('m1'))
   expect(request()?.task_source).toBe('none')
   expect(request()?.task_source_account_id).toBeUndefined()
+})
+
+test('a preference failure in the mail reader offers an explicit continuation without preferences', async () => {
+  const { requests, router } = setup({ stream: true, preferencesFail: true }); await screen.findByRole('heading', { name: 'Termin' })
+  fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
+  fireEvent.click(await screen.findByRole('button', { name: de.preferences.continueWithout }))
+  await waitFor(() => expect(requests).toHaveLength(2))
+  expect(requests[0]?.without_preferences).toBeUndefined()
+  expect(requests[1]).toMatchObject({ context_message_id: 'm1', without_preferences: true })
+  await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c1'))
 })
 
 test('ask in chat opens start page with mail reference', async () => {

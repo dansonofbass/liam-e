@@ -24,7 +24,7 @@ export function MailView({ id }: { id: string }) {
   const message = useQuery({ ...messageQuery(id), retry: (count, error) => !(error instanceof MessageNotFoundError) && count < 2 })
   const summary = useQuery(summaryQuery())
   const { run, checkCapacity } = useMailActionsContext()
-  const { state, send, retry } = useChatSession()
+  const { state, send, retry, retryWithoutPreferences } = useChatSession()
   const [started, setStarted] = useState(false)
   const [original, setOriginal] = useState<string | null>(null)
   // The dialog belongs to the mail it was opened for: moving to another mail (browser back) closes it.
@@ -85,7 +85,7 @@ export function MailView({ id }: { id: string }) {
   return <div className="le-mail-view">
     <div className="le-topbar le-mail-topbar">{!split && <IconButton label={de.mail.back} icon="arrow-left" size="lg" onClick={back} />}{!split && <span className="le-grow" />}{actions}{split && <><span className="le-grow" />{data && chatButtons}</>}</div>
     <div className="le-mail-scroll">
-      {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
+      {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: de.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
       {message.isPending && <><span className="le-sr" role="status">{de.mail.loading}</span><div className="le-mail-placeholder" aria-hidden="true"><div className="le-mail-placeholder-head"><span /><div><span /><span /></div></div><span /><span /><span /><span /></div></>}
       {message.isError && <div className="le-mail-error">{message.error instanceof MessageNotFoundError ? <Notice tone="danger" action={{ label: de.mail.toInbox, onClick: back }}>{de.proposalErrors.item_gone}</Notice> : <><Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void message.refetch() } }}>{de.mail.loadError}</Notice><Button variant="secondary" className="le-mail-to-inbox" onClick={back}>{de.mail.toInbox}</Button></>}</div>}
       {data && <article className="le-mail-article"><h1 className="title">{de.mail.subjectText(data.subject)}</h1><div className="le-mail-header"><Avatar name={data.sender_name || data.sender_address} address={data.sender_address} colorIndex={data.color_index} size="lg" /><div className="le-mail-sender"><div className="body-strong">{data.sender_name || data.sender_address}</div>{breakpoint !== 'mobile' && <div className="small le-muted le-mail-address">{data.to.length ? de.mail.addressTo(data.sender_address, data.to.join(', ')) : data.sender_address}</div>}</div>{account && <Tag tone="on-surface" dot={data.color_index}>{providerLabel(account)}</Tag>}{data.internal_date && <time className="small le-muted le-num" dateTime={data.internal_date}>{formatMailTime(new Date(data.internal_date), new Date())}</time>}</div>
