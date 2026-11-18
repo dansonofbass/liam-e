@@ -126,6 +126,52 @@ def test_other_roles_never_claimed(pg_db, role):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('status', ['active', 'paused'])
+def test_exact_stored_duplicates_are_skipped_but_contradictions_remain(pg_db, status):
+    async def run():
+        await toggle(suggest_preferences=True)
+        await preferences.create(key='answer_length', value='Kurz', status=status)
+        ids = await source()
+        activation, _ = await ex.claim(*ids, 1)
+        await ex.store(*ids, 1, activation, [ITEM])
+        assert await rows() == []
+        fresh = await source('Ich möchte künftig ausführliche Antworten.')
+        activation, _ = await ex.claim(*fresh, 1)
+        await ex.store(*fresh, 1, activation, [SimpleNamespace(key='answer_length', scope='global', value='Ausführlich')])
+        assert len(await rows()) == 1
+    asyncio.run(run())
+
+
+def test_account_scope_is_bound_to_source_selection_and_rechecked(pg_db):
+    async def run():
+        import json
+        from db.accessors import mail_account
+        from db.models.chat_context import ChatContext
+        account = await mail_account.create_account(provider='imap', auth_type='imap_password', email_address='person@example.test')
+        await toggle(suggest_preferences=True)
+        item = SimpleNamespace(key='signature', scope='account', value='Viele Grüße')
+        no_selection = await source()
+        activation, _ = await ex.claim(*no_selection, 1)
+        await ex.store(*no_selection, 1, activation, [item])
+        assert await rows() == []
+        ids = await source()
+        async with get_session_maker()() as session:
+            context = ChatContext(conversation_id=ids[0], app_prompt_version='test-only',
+                account_scope_json=json.dumps({'selection': account.id, 'account_ids': [account.id]}))
+            message = await session.get(ChatMessage, ids[1])
+            message.context_id = context.id
+            session.add(context)
+            await session.commit()
+        activation, _ = await ex.claim(*ids, 1)
+        await ex.store(*ids, 1, activation, [item])
+        assert (await rows())[0].scope == account.id
+        activation, _ = await ex.claim(*ids, 2)
+        await mail_account.delete_account(account.id)
+        with pytest.raises(preferences.InvalidPreference):
+            await ex.store(*ids, 2, activation, [item])
+    asyncio.run(run())
+
+
 def test_long_and_removed_sources_never_claimed(pg_db):
     async def run():
         await toggle(suggest_preferences=True)

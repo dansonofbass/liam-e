@@ -7,6 +7,8 @@ from db.models.preference_extraction import PreferenceExtraction
 from db.models.chat_context import ChatContext
 from db.models.preference_candidate import PreferenceCandidate
 from db.models.preference_revision import PreferenceRevision
+from db.models.user_preference import UserPreference
+from db.models.prompt_template import OWNER_SCOPE
 from sqlalchemy import select
 
 
@@ -53,17 +55,23 @@ async def store(conversation_id, message_id, version, activation, items):
             account = selection if item.scope == 'account' else '*'
             if not account or (account != '*' and account not in scope.get('account_ids', [])):
                 continue
-            # Exact duplicates of pending suggestions or the active value add no information.
+            # Pending suggestions and stored (including paused) values add no information.
             duplicate = (await session.execute(select(PreferenceCandidate.id).where(
+                PreferenceCandidate.owner_scope == OWNER_SCOPE,
                 PreferenceCandidate.key == item.key, PreferenceCandidate.scope == account,
                 PreferenceCandidate.value == item.value, PreferenceCandidate.status == 'pending',
             ))).first()
             if duplicate:
                 continue
-            probe = PreferenceCandidate(key=item.key, scope=account)
-            target = await candidates.current(session, probe)
-            revision = await session.get(PreferenceRevision, target.revision_id) if target else None
-            if revision and not revision.removed and revision.value == item.value:
+            stored = (await session.execute(select(UserPreference.id).join(
+                PreferenceRevision, UserPreference.revision_id == PreferenceRevision.id
+            ).where(
+                UserPreference.owner_scope == OWNER_SCOPE,
+                UserPreference.key == item.key, UserPreference.scope == account,
+                UserPreference.status.in_(['active', 'paused']),
+                PreferenceRevision.removed.is_(False), PreferenceRevision.value == item.value,
+            ))).first()
+            if stored:
                 continue
             await candidates.create(session, conversation_id=conversation_id,
                 source_message_id=message_id, key=item.key, scope=account, value=item.value,

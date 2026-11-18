@@ -4,7 +4,7 @@ import logging
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from db.accessors import preference_extraction as records
 from api.mail.chat_client import mistral_client
 
@@ -33,6 +33,13 @@ class ExtractedCandidate(BaseModel):
     value: str = Field(min_length=1, max_length=500)
     durable: Literal[True]
     evidence: str = Field(min_length=1, max_length=2000)
+
+    @field_validator('durable', mode='before')
+    @classmethod
+    def explicit_boolean(cls, value):
+        if value is not True:
+            raise ValueError('preference_extraction_invalid')
+        return value
 
 
 class ExtractionOutput(BaseModel):

@@ -43,6 +43,17 @@ def test_model_cannot_bypass_durability_and_quote_gate(case):
         ex.validate_output(json.dumps({'candidates': [item]}), case['text'])
 
 
+@pytest.mark.parametrize('patch', [
+    {'durable': False}, {'durable': 1}, {'durable': 'true'},
+    {'key': 'signature', 'scope': 'global'}, {'evidence': 'invented'},
+    {'origin': 'explicit'}, {'value': ' '},
+])
+def test_schema_requires_an_own_durable_wish(patch):
+    item = {**CASES[0]['candidates'][0], **patch}
+    with pytest.raises(ValueError):
+        ex.validate_output(json.dumps({'candidates': [item]}), CASES[0]['text'])
+
+
 def test_long_input_is_not_sent(monkeypatch):
     call = client(monkeypatch, '{}')
     assert asyncio.run(ex.extract('x' * 2001, 'test-model')) == []
