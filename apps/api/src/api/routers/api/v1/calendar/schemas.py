@@ -29,6 +29,7 @@ class SourcePatch(BaseModel):
 
 
 class OccurrenceOut(BaseModel):
+    editable: bool = False
     id: str
     source_id: str
     event_id: str

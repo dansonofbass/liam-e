@@ -103,8 +103,48 @@ def instant(value: Any) -> datetime:
     return parsed.astimezone(UTC)
 
 
+def editable(raw: dict) -> tuple[bool, str | None]:
+    """Conservatively allow only own, ordinary single appointments."""
+    if raw.get("status") == "cancelled":
+        return False, "cancelled"
+    if raw.get("recurringEventId") or raw.get("recurrence"):
+        return False, "series"
+    attendees = raw.get("attendees") or []
+    if not isinstance(attendees, list) or any(not isinstance(a, dict) or a.get("self") is not True for a in attendees):
+        return False, "guests"
+    organizer = raw.get("organizer")
+    if organizer is not None and (not isinstance(organizer, dict) or organizer.get("self") is not True):
+        return False, "organizer"
+    if raw.get("eventType") not in (None, "default"):
+        return False, "event_type"
+    return True, None
+
+
+def map_event(raw: dict, page_timezone: str | None, source_timezone: str) -> Occurrence:
+    """Map a single provider event, retaining its stable instance identity."""
+    try:
+        oid = raw.get("id")
+        eid = raw.get("recurringEventId") or oid
+        title = raw.get("summary") or ""
+        if not isinstance(oid, str) or not oid or not isinstance(eid, str) or not eid or not isinstance(title, str):
+            raise GoogleError()
+        begin, finish = raw["start"], raw["end"]
+        allowed = editable(raw)[0]
+        if begin.get("date") is not None:
+            first, last = date.fromisoformat(begin["date"]), date.fromisoformat(finish["date"])
+            if last <= first:
+                last = first + timedelta(days=1)
+            return Occurrence(oid, eid, title, start_date=first, end_date=last, editable=allowed)
+        return normalize(Occurrence(
+            oid, eid, title, start_at=instant(begin["dateTime"]), end_at=instant(finish["dateTime"]),
+            timezone=timezone(begin.get("timeZone") or page_timezone or source_timezone), editable=allowed,
+        ))
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise GoogleError() from None
+
+
 def map_pages(listing: list[dict], start: datetime, end: datetime,
-              source_timezone: str = "UTC") -> Snapshot:
+              source_timezone: str = "UTC") -> GoogleSnapshot:
     """Map already expanded provider instances to the existing snapshot contract."""
     events: dict[str, Event] = {}
     occurrences: list[Occurrence] = []
@@ -116,26 +156,14 @@ def map_pages(listing: list[dict], start: datetime, end: datetime,
             for raw in page["events"]:
                 if raw.get("status") == "cancelled":
                     continue
-                oid = raw.get("id")
-                eid = raw.get("recurringEventId") or oid
-                title = raw.get("summary") or ""
-                if (not isinstance(oid, str) or not oid or oid in ids
-                        or not isinstance(eid, str) or not eid or not isinstance(title, str)):
+                row = map_event(raw, page.get("timeZone"), source_timezone)
+                oid, eid, title = row.external_id, row.event_external_id, row.title
+                if oid in ids:
                     raise GoogleError()
                 ids.add(oid)
-                begin, finish = raw["start"], raw["end"]
-                if begin.get("date") is not None:
-                    first, last = date.fromisoformat(begin["date"]), date.fromisoformat(finish["date"])
-                    if last <= first:
-                        last = first + timedelta(days=1)
-                    row = Occurrence(oid, eid, title, start_date=first, end_date=last)
-                    overlaps = first < end.date() and last > start.date()
+                if row.start_date is not None:
+                    overlaps = row.start_date < end.date() and row.end_date > start.date()
                 else:
-                    row = normalize(Occurrence(
-                        oid, eid, title, start_at=instant(begin["dateTime"]),
-                        end_at=instant(finish["dateTime"]),
-                        timezone=timezone(begin.get("timeZone") or page.get("timeZone") or source_timezone),
-                    ))
                     overlaps = timed_overlaps(row.start_at, row.end_at, start, end)
                 if overlaps:
                     occurrences.append(row)
@@ -146,7 +174,9 @@ def map_pages(listing: list[dict], start: datetime, end: datetime,
             raise GoogleError()
     except (KeyError, TypeError, ValueError, AttributeError):
         raise GoogleError() from None
-    return Snapshot(list(events.values()), occurrences, complete=True)
+    roles = {page.get("accessRole") for page in listing}
+    role = next(iter(roles)) if len(roles) == 1 else None
+    return GoogleSnapshot(list(events.values()), occurrences, True, access_role=role)
 
 
 async def identity(*, call: Call | None = None, now: datetime | None = None) -> str:
@@ -193,7 +223,8 @@ async def calendars() -> tuple[str, list[dict]]:
 
 @dataclass(frozen=True)
 class GoogleSnapshot(Snapshot):
-    source_revision: int
+    source_revision: int = 0
+    access_role: str | None = None
 
 
 class GoogleConnectorAdapter:
@@ -227,7 +258,7 @@ class GoogleConnectorAdapter:
             if await identity(call=call, now=self.clock()) != source.connection_ref:
                 raise GoogleError("reconnect_required")
             snapshot = map_pages(listing, start, end, source.timezone)
-            return GoogleSnapshot(snapshot.events, snapshot.occurrences, True, source.revision)
+            return GoogleSnapshot(snapshot.events, snapshot.occurrences, True, source.revision, snapshot.access_role)
         except Exception as error:
             code = error.code if isinstance(error, GoogleError) else "provider_unavailable"
             failures = state.failure_count if state else 0

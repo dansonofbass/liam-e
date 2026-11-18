@@ -5391,6 +5391,11 @@
       },
       "api__routers__api__v1__calendar__schemas__OccurrenceOut": {
         "properties": {
+          "editable": {
+            "default": false,
+            "title": "Editable",
+            "type": "boolean"
+          },
           "end_at": {
             "anyOf": [
               {

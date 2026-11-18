@@ -3070,6 +3070,10 @@ export type VersionIn = {
  */
 export type ApiRoutersApiV1CalendarSchemasOccurrenceOut = {
     /**
+     * Editable
+     */
+    editable?: boolean;
+    /**
      * End At
      */
     end_at: string | null;

@@ -20,6 +20,33 @@ def fixture(name):
     return json.loads((probe.FIXTURES / f"{name}.json").read_text())
 
 
+@pytest.mark.parametrize("raw,expected", [
+    ({}, (True, None)),
+    ({"recurringEventId": "synthetic-series"}, (False, "series")),
+    ({"recurrence": ["RRULE:FREQ=DAILY"]}, (False, "series")),
+    ({"attendees": [{"email": "guest@example.org"}]}, (False, "guests")),
+    ({"attendees": [{"self": True}]}, (True, None)),
+    ({"organizer": {"self": False}}, (False, "organizer")),
+    ({"eventType": "birthday"}, (False, "event_type")),
+    ({"eventType": "default"}, (True, None)),
+    ({"eventType": None}, (True, None)),
+    ({"status": "cancelled"}, (False, "cancelled")),
+])
+def test_editable_rules(raw, expected):
+    from api.calendar.google import editable
+    assert editable(raw) == expected
+
+
+def test_map_pages_marks_editable_and_reports_access_role():
+    page = fixture("events_1")
+    page["accessRole"] = "writer"
+    page["events"][0]["eventType"] = "default"
+    snapshot = probe.map_pages([page], START, END)
+    assert snapshot.access_role == "writer"
+    assert snapshot.occurrences[0].editable is True
+    assert snapshot.occurrences[1].editable is False
+
+
 def test_mapping_all_day_dst_point_series_and_moved_identity():
     snapshot = probe.map_pages([fixture("events_1"), fixture("events_2")], START, END)
     assert snapshot.complete is True
