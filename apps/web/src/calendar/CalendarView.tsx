@@ -13,7 +13,7 @@ import { MonthView } from './MonthView'
 import { SourceBar } from './SourceBar'
 import { TimeGrid } from './TimeGrid'
 import { periodTitle, shift, visibleRange } from './grid'
-import { covers, localBoundary, todayLocal } from './state'
+import { addDays, calendarDate, covers, localBoundary, todayLocal } from './state'
 import { parseSearch, type CalendarView as View } from './url'
 import { useRangeOccurrences } from './useRangeOccurrences'
 
@@ -68,6 +68,10 @@ export function CalendarView() {
     {page.isError && <Notice tone="danger" action={{ label: de.calendar.retry, onClick: page.refetch }}>{de.calendar.error}</Notice>}
     {page.capped && <Notice tone="info">{de.calendar.capped}</Notice>}
     {selected.length > 0 && !page.isPending && !page.isError && rows.length === 0 && <p>{page.complete && !page.capped && selected.every(s => covers(s, range.from, range.to)) ? de.calendar.empty : de.calendar.unknown}</p>}
-    {view === 'month' ? <MonthView date={date} rows={rows} sources={selected} onDay={d => change('day', d)} onSlot={() => {}} onOpen={open} /> : <TimeGrid from={range.from} to={range.to} rows={rows} sources={selected} onSlot={() => {}} onOpen={open} />}
+    {mobile && view === 'day' && <div className="le-day-strip" role="group" aria-label={de.calendar.dayStrip}>{Array.from({ length: 7 }, (_, i) => {
+      const day = addDays(visibleRange('week', date).from, i)
+      return <Chip key={day} pressed={day === date} onClick={() => change('day', day)}>{calendarDate(day)}</Chip>
+    })}</div>}
+    {view === 'month' ? <MonthView date={date} rows={rows} sources={selected} mobile={mobile} onSelectDay={d => change('month', d)} onDay={d => change('day', d)} onSlot={() => {}} onOpen={open} /> : <TimeGrid from={range.from} to={range.to} rows={rows} sources={selected} onSlot={() => {}} onOpen={open} />}
   </section>
 }

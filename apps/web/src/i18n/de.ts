@@ -71,7 +71,7 @@ export const de = {
     days: ['Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.', 'So.'],
   },
   calendar: {
-    month: 'Monat', week: 'Woche', day: 'Tag', list: 'Liste', previous: 'Vorheriger Zeitraum', next: 'Nächster Zeitraum',
+    month: 'Monat', week: 'Woche', day: 'Tag', list: 'Liste', dayStrip: 'Tage dieser Woche', previous: 'Vorheriger Zeitraum', next: 'Nächster Zeitraum',
     capped: 'Nicht alle Termine wurden geladen. Wähle einen kürzeren Zeitraum.',
     further: (count: number) => `+${count} weitere`, sourceDetails: 'Kalenderstand anzeigen',
     subscribe: 'Kalender abonnieren', subscribeConfirm: 'Abonnieren', replaceAddress: 'Adresse ersetzen',

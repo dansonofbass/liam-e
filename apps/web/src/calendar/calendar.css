@@ -34,6 +34,13 @@
 .le-month-date { max-width: 100%; min-width: 0; z-index: 1; }
 .le-month-event, .le-time-all-day { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); background: var(--accent-soft); }
 .le-month-event, .le-month-more { z-index: 1; }
+.le-month-mobile-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.le-month-mobile .le-month-date { display: flex; flex-direction: column; justify-content: center; gap: 0; }
+.le-month-date--outside { color: var(--ink-muted); }
+.le-month-dot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--accent); }
+.le-month-mobile-list { margin-top: var(--space-3); }
+.le-day-strip { display: flex; gap: var(--space-1); overflow-x: auto; }
+.le-day-strip .le-chip { flex: 1 0 auto; }
 .le-time-days, .le-time-columns { display: grid; }
 .le-time-days > div { min-width: 0; border: 1px solid var(--line); }
 .le-time-scroll { overflow: auto; max-height: 65vh; }
@@ -53,6 +60,9 @@
 @media (max-width: 639px) { .le-calendar-agenda, .le-calendar-detail { padding: var(--space-4); } }
 /* DESIGN.md §7.2: links are not base controls, so the calendar gives them the touch size itself. */
 @media (pointer: coarse) {
+  .le-month-date, .le-day-strip .le-chip { min-height: var(--control-height-lg); min-width: var(--control-height-lg); }
+  .le-month-mobile-grid { grid-template-columns: repeat(7, minmax(var(--control-height-lg), 1fr)); }
+  .le-month-mobile { overflow-x: auto; }
   .le-google-choice .le-field { grid-template-columns: var(--control-height-lg) minmax(0, 1fr); }
   .le-google-choice .le-label { grid-column: 1 / -1; min-height: var(--control-height-lg); padding-inline-start: calc(var(--control-height-lg) + var(--space-2)); display: flex; align-items: center; }
   .le-google-choice .le-input { justify-self: center; }

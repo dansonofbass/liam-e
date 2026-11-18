@@ -9,17 +9,51 @@ import { MonthView } from './MonthView'
 import { de } from '../i18n/de'
 import { calendarTime } from './state'
 
-afterEach(() => { cleanup(); mock.restore() })
+const originalMatchMedia = window.matchMedia
+const mobile = () => { window.matchMedia = ((query: string) => ({ matches: query === '(pointer: coarse)', media: query, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia }
+afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia })
 const source = { id: 'test-only', name: 'Planung', provider: 'google', timezone: 'UTC', is_active: true, capabilities: ['read'], coverage_start: '2026-01-01T00:00:00Z', coverage_end: '2027-01-01T00:00:00Z', last_success_at: '2026-11-18T00:00:00Z', stale: false, incomplete: false }
 const event = (id: string) => ({ id, event_id: id, source_id: source.id, title: `Termin ${id}`, start_at: '2026-11-18T09:00:00Z', end_at: '2026-11-18T10:00:00Z', start_date: null, end_date: null, timezone: 'UTC' })
-function setup() {
+function setup(initial = '/calendar?view=week&date=2026-11-18') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><CalendarView /></QueryClientProvider> })
   const page = createRoute({ getParentRoute: () => root, path: '/calendar' })
-  const router = createRouter({ routeTree: root.addChildren([page]), history: createMemoryHistory({ initialEntries: ['/calendar?view=week&date=2026-11-18'] }) })
+  const router = createRouter({ routeTree: root.addChildren([page]), history: createMemoryHistory({ initialEntries: [initial] }) })
   render(<RouterProvider router={router} />)
   return router
 }
+test('mobile defaults to day and offers seven dates with the selected day pressed', async () => {
+  mobile()
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [source] } as never)
+  spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [], next_cursor: null } } as never)
+  spyOn(sdk, 'calendarSourceSync').mockResolvedValue({ data: { queued: false }, response: { ok: true } } as never)
+  setup('/calendar?date=2026-11-18')
+  expect((await screen.findByRole('button', { name: de.calendar.day })).getAttribute('aria-pressed')).toBe('true')
+  const strip = screen.getByRole('group', { name: de.calendar.dayStrip })
+  const buttons = strip.querySelectorAll('button')
+  expect(buttons).toHaveLength(7)
+  expect([...buttons].filter(button => button.getAttribute('aria-pressed') === 'true')).toHaveLength(1)
+})
+test('mobile month shows dots and the selected day appointments', async () => {
+  mobile()
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [source] } as never)
+  spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [event('a')], next_cursor: null } } as never)
+  spyOn(sdk, 'calendarSourceSync').mockResolvedValue({ data: { queued: false }, response: { ok: true } } as never)
+  setup('/calendar?view=month&date=2026-11-18')
+  const selected = await screen.findByRole('button', { name: /18\.11\.2026/ })
+  await waitFor(() => expect(selected.querySelector('.le-month-dot')).toBeTruthy())
+  expect(screen.getByRole('link', { name: /Termin a/ }).closest('.le-month-mobile-list')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /19\.11\.2026/ }))
+  expect(screen.queryByRole('link', { name: /Termin a/ })).toBeNull()
+})
+test('mobile calendar targets have coarse pointer token sizing', async () => {
+  const css = await Bun.file(new URL('./calendar.css', import.meta.url)).text()
+  const coarse = css.match(/@media \(pointer: coarse\) \{([\s\S]*?)\n\}/gu)?.join('\n') ?? ''
+  expect(coarse).toContain('.le-month-date')
+  expect(coarse).toContain('.le-day-strip .le-chip')
+  expect(coarse).toContain('min-height: var(--control-height-lg)')
+  expect(coarse).toContain('min-width: var(--control-height-lg)')
+})
 test('toolbar changes view and period in the URL', async () => {
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [source] } as never)
   spyOn(sdk, 'calendarOccurrencesList').mockResolvedValue({ data: { items: [event('a')], next_cursor: null } } as never)
