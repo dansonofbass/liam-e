@@ -188,6 +188,14 @@ async def test_timeout_unknown_then_check_not_applied(state):
     assert (await writes.check(result.write_id)).status == "not_applied"
 
 
+async def test_create_resolution_matches_identity_fields_not_optional_text(state):
+    state.mode = "timeout"
+    result = await writes.execute(request(description="Example description", location="Example room"))
+    state.event.pop("description", None)
+    state.event.pop("location", None)
+    assert (await writes.check(result.write_id)).status == "done"
+
+
 async def test_check_ambiguous_create_stays_unknown(state):
     state.mode = "timeout"
     result = await writes.execute(request())

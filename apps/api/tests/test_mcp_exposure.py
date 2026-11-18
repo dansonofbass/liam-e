@@ -42,6 +42,7 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "chat_conversation_update",
         "chat_proposal_cancel",
         "chat_proposal_confirm",
+        "chat_proposal_check",
         "chat_stream",
         "chat_turn",
         "mail_account_connect_connector",

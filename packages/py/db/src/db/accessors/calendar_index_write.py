@@ -44,12 +44,16 @@ async def apply(*, source_id: str, upsert: tuple[CalendarEvent, CalendarOccurren
             else:
                 delete_external_id = row.external_id
         if delete_external_id is not None:
-            await session.execute(delete(CalendarOccurrence).where(CalendarOccurrence.source_id == source_id,
-                CalendarOccurrence.external_id == delete_external_id))
+            event_ids = list((await session.execute(delete(CalendarOccurrence).where(CalendarOccurrence.source_id == source_id,
+                CalendarOccurrence.external_id == delete_external_id).returning(CalendarOccurrence.event_id))).scalars())
             referenced = select(CalendarOccurrence.id).where(CalendarOccurrence.event_id == CalendarEvent.id).exists()
-            await session.execute(delete(CalendarEvent).where(CalendarEvent.source_id == source_id, ~referenced))
-        if state is not None:
-            state.data_revision += 1
+            if event_ids:
+                await session.execute(delete(CalendarEvent).where(CalendarEvent.source_id == source_id,
+                    CalendarEvent.id.in_(event_ids), ~referenced))
+        if state is None:
+            state = CalendarSyncState(source_id=source_id)
+            session.add(state)
+        state.data_revision += 1
         await session.commit()
         return True
 

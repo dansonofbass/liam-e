@@ -50,8 +50,13 @@ async def finish(write_id: str, *, status: str, error_code: str | None = None,
     if status in {"done", "failed", "not_applied"}:
         values["request_json"] = None
     async with get_session_maker()() as session:
-        row = (await session.execute(update(CalendarWrite).where(CalendarWrite.id == write_id)
-               .values(**values).returning(CalendarWrite))).scalar_one()
+        row = (await session.execute(update(CalendarWrite).where(CalendarWrite.id == write_id,
+               CalendarWrite.status.in_(["running", "unknown"]))
+               .values(**values).returning(CalendarWrite))).scalar_one_or_none()
+        if row is None:
+            row = await session.get(CalendarWrite, write_id)
+            if row is None:
+                raise LookupError("calendar_unavailable")
         await session.commit()
         return row
 

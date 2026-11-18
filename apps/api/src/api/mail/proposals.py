@@ -21,9 +21,11 @@ from api.tasks import patch as task_patch
 from api.tasks import proposals as task_proposals
 from api.tasks import state as task_state
 from api.preferences import candidates as preference_candidates
+from api.calendar.proposals import CalendarCommand
+from api.calendar import writes as calendar_writes
 
 logger = logging.getLogger(__name__)
-ProposalKind = Literal["send", "archive", "trash", "mark_read", "unsubscribe", "task", "preference"]
+ProposalKind = Literal["send", "archive", "trash", "mark_read", "unsubscribe", "task", "preference", "calendar"]
 
 
 class ProposalItem(BaseModel):
@@ -68,6 +70,8 @@ class ProposalResult(BaseModel):
     task_series_id: str | None = None
     preference_outcome: Literal['saved', 'unchanged', 'kept'] | None = None
     preferences_enabled: bool | None = None
+    calendar_write_id: str | None = None
+    calendar_status: str | None = None
 
 
 class Proposal(BaseModel):
@@ -77,12 +81,17 @@ class Proposal(BaseModel):
     draft: SendDraft | None = None
     task: task_proposals.TaskProposal | None = None
     preference: preference_candidates.PreferenceReference | None = None
+    calendar: CalendarCommand | None = None
     irreversible: bool = False
     result: ProposalResult | None = None
 
     @model_validator(mode="after")
     def validate_kind(self):
-        self.irreversible = self.kind in {"send", "unsubscribe"}
+        self.irreversible = self.kind in {"send", "unsubscribe"} or (self.calendar is not None and self.calendar.action == "delete")
+        if (self.kind == "calendar") != (self.calendar is not None):
+            raise ValueError("calendar requires one typed command")
+        if self.kind == "calendar" and (self.items or self.draft or self.task or self.preference):
+            raise ValueError("calendar cannot contain other actions")
         if self.kind == "send" and self.draft is None:
             raise ValueError("send requires a draft")
         if (self.kind == 'task') != (self.task is not None):
@@ -135,7 +144,7 @@ async def create_proposal(conversation_id: str, proposal: Proposal, *, context_i
         try:
             return await message_access.add_message(
                 conversation_id=conversation_id, role="proposal", content=proposal.reason,
-                proposal_json=proposal.model_dump_json(), proposal_status="pending", context_id=context_id,
+                proposal_json=proposal.model_dump_json(context={"storage": True}), proposal_status="pending", context_id=context_id,
             )
         except IntegrityError:
             if attempt:
@@ -283,6 +292,56 @@ async def _confirm_task(message: ChatMessage, edit: task_proposals.TaskCreateCom
         return updated
 
 
+async def _store_calendar(message: ChatMessage, proposal: Proposal, outcome: calendar_writes.WriteOutcome) -> ChatMessage:
+    code = outcome.error_code or ("calendar_write_not_applied" if outcome.status == "not_applied" else None)
+    proposal.result = ProposalResult(done=int(outcome.status == "done"), calendar_write_id=outcome.write_id,
+        calendar_status=outcome.status, failed=[ItemProblem(id=message.id, code=code)] if code else [])
+    status = "done" if outcome.status == "done" else "unknown" if outcome.status in {"unknown", "running"} else "failed"
+    updated = await message_access.set_proposal(message.id, proposal_json=proposal.model_dump_json(context={"storage": True}), proposal_status=status)
+    assert updated is not None
+    return updated
+
+
+async def _confirm_calendar(message: ChatMessage) -> ChatMessage:
+    from db.accessors import calendar_source
+    claimed = await message_access.claim_proposal(message.id)
+    if claimed is None:
+        current = await message_access.get_message(message.id)
+        if current and current.proposal_status == "pending" and current.context_id and not await context_access.is_live(current.context_id):
+            raise ProposalContextRevokedError
+        raise ProposalStateError
+    proposal = proposal_view(claimed)
+    assert proposal is not None and proposal.calendar is not None
+    command = proposal.calendar
+    try:
+        context = await context_access.get_context(claimed.context_id) if claimed.context_id else None
+        if context is None or context.revoked or context.conversation_id != claimed.conversation_id:
+            raise calendar_writes.WriteError("proposal_context_revoked")
+        if command.source_id not in json.loads(context.calendar_scope_json):
+            raise calendar_writes.WriteError("calendar_out_of_scope", 403)
+        source = await calendar_source.get(command.source_id)
+        if source is None or not source.is_active or "write" not in json.loads(source.capabilities_json):
+            raise calendar_writes.WriteError("calendar_not_writable", 403)
+        if source.connection_ref != command.connection_ref:
+            raise calendar_writes.WriteError("reconnect_required")
+        outcome = await calendar_writes.execute(command.request(message.id), write_id=message.id)
+    except calendar_writes.WriteError as error:
+        outcome = calendar_writes.WriteOutcome(write_id=message.id, status="failed", error_code=error.code)
+    except Exception:
+        # The write may already have reached the provider. Never release the card for retry.
+        outcome = calendar_writes.WriteOutcome(write_id=message.id, status="unknown", error_code="calendar_write_unknown")
+    return await _store_calendar(message, proposal, outcome)
+
+
+async def recheck_calendar_card(proposal_id: str) -> ChatMessage:
+    message = await _get_proposal(proposal_id)
+    proposal = proposal_view(message)
+    if proposal is None or proposal.kind != "calendar" or message.proposal_status != "unknown":
+        raise ProposalStateError
+    outcome = await calendar_writes.check(proposal_id)
+    return await _store_calendar(message, proposal, outcome)
+
+
 async def confirm(proposal_id: str, *, selected_ids: list[str], body: str | None = None,
                   task_edit: task_proposals.TaskCreateCommand | None = None,
                   preference_decision: preference_candidates.PreferenceDecision | None = None) -> ChatMessage:
@@ -295,6 +354,10 @@ async def confirm(proposal_id: str, *, selected_ids: list[str], body: str | None
         return await preference_candidates.confirm(proposal_id, preference_decision)
     if preference_decision is not None:
         raise ProposalSelectionError('selection_invalid')
+    if proposal.kind == 'calendar':
+        if selected_ids or body is not None or task_edit is not None:
+            raise ProposalSelectionError('selection_invalid')
+        return await _confirm_calendar(message)
     if proposal.kind == 'task':
         if selected_ids or body is not None:
             raise ProposalSelectionError('selection_invalid')

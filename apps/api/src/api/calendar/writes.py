@@ -164,7 +164,10 @@ async def live(occurrence_id: str) -> LiveEvent:
         result = await google_write.call("get_event", {"calendarId": source.external_id, "eventId": row.external_id})
         if result.kind != "event":
             raise WriteError("calendar_event_gone" if result.status == 404 else "calendar_unavailable", 404 if result.status == 404 else 503)
-        return _live(result.event, source, row.id)
+        current_source = await _source(source.id, writable=False)
+        if current_source.revision != source.revision or current_source.connection_ref != source.connection_ref:
+            raise WriteError("calendar_unavailable", 409)
+        return _live(result.event, current_source, row.id)
     except google.GoogleError:
         raise WriteError("calendar_unavailable", 503) from None
 
@@ -181,6 +184,10 @@ def _arguments(request: WriteRequest) -> dict:
                     endTime=resolve_local(request.end_local, request.timezone).isoformat(), timeZone=request.timezone)
         if request.operation == "update": args["allDay"] = False
     return args
+
+
+def _create_match_args(args: dict) -> dict:
+    return {key: value for key, value in args.items() if key in {"summary", "startTime", "endTime", "allDay"}}
 
 
 def _matches(raw: dict, args: dict) -> bool:
@@ -258,7 +265,8 @@ async def execute(request: WriteRequest, *, write_id: str | None = None) -> Writ
         target = await calendar_occurrence.get_visible(request.occurrence_id)
         if target is None or target.source_id != source.id:
             raise WriteError("calendar_event_gone", 404)
-    bound = dict(request=request.model_dump(mode="json"), connection_ref=source.connection_ref, source_revision=source.revision)
+    bound = dict(request=request.model_dump(mode="json"), connection_ref=source.connection_ref,
+                 source_revision=source.revision, proposal=write_id is not None)
     record = CalendarWrite(id=identifier, source_id=source.id, operation=request.operation,
         target_external_id=target.external_id if target else None, request_json=json.dumps(bound), request_hash=digest,
         expected_revision=request.expected_revision)
@@ -288,9 +296,12 @@ async def execute(request: WriteRequest, *, write_id: str | None = None) -> Writ
                 current = _live(result.event, source, target.id)
                 record = await calendar_write.finish(identifier, status="not_applied", error_code="calendar_event_changed")
                 return _out(record, current=current)
+        current_source = await _source(source.id)
+        if current_source.revision != source.revision or current_source.connection_ref != source.connection_ref:
+            raise WriteError("calendar_unavailable")
         dispatched = True
         result = await google_write.call(f"{request.operation}_event", args)
-        if result.kind == "event" and (request.operation != "create" or _matches(result.event, args)):
+        if result.kind == "event" and (request.operation != "create" or _matches(result.event, _create_match_args(args))):
             if target and result.event["id"] != target.external_id:
                 result = google_write.ToolResult("unknown")
             else:
@@ -316,6 +327,19 @@ async def get(write_id: str) -> WriteOutcome:
         return await check(write_id)
     stored = await calendar_index_write.find(row.source_id, row.result_external_id) if row.result_external_id else None
     return _out(row, occurrence_id=stored.id if stored else None)
+
+
+async def _checked(record, bound, outcome):
+    if bound.get("proposal"):
+        from api.mail import proposals
+        try:
+            message = await proposals._get_proposal(record.id)
+            proposal = proposals.proposal_view(message)
+            if proposal and proposal.kind == "calendar" and message.proposal_status == "unknown":
+                await proposals._store_calendar(message, proposal, outcome)
+        except proposals.ProposalNotFoundError:
+            pass
+    return outcome
 
 
 async def check(write_id: str) -> WriteOutcome:
@@ -344,7 +368,7 @@ async def check(write_id: str) -> WriteOutcome:
             for page in pages:
                 for candidate in page["events"]:
                     if (isinstance(candidate.get("id"), str) and candidate["id"] and candidate.get("status") != "cancelled"
-                            and _matches(candidate, args)
+                            and _matches(candidate, _create_match_args(args))
                             and google.instant(candidate.get("created")) >= record.started_at - timedelta(minutes=5)):
                         matches.append(candidate)
             if len(matches) == 1: raw = matches[0]
@@ -357,13 +381,15 @@ async def check(write_id: str) -> WriteOutcome:
                 candidate = result.event
                 if record.operation == "delete":
                     if candidate.get("status") == "cancelled": raw = candidate
-                elif _matches(candidate, args): raw = candidate
+                elif candidate.get("status") != "cancelled" and _matches(candidate, args): raw = candidate
                 not_applied = raw is None and candidate.get("updated") == record.expected_revision
         # Reconciliation must not associate a result from a newly connected account.
         await _identity(source)
-        if raw is not None: return await _done(record, source, raw, bound["source_revision"])
+        if raw is not None:
+            return await _checked(record, bound, await _done(record, source, raw, bound["source_revision"]))
         if not_applied:
-            return _out(await calendar_write.finish(record.id, status="not_applied", error_code="calendar_write_not_applied"))
+            result = _out(await calendar_write.finish(record.id, status="not_applied", error_code="calendar_write_not_applied"))
+            return await _checked(record, bound, result)
     except Exception:
         pass
     return _out(record)

@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from db.accessors import calendar_occurrence, calendar_source
+from db.accessors import calendar_occurrence, calendar_source, calendar_write
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from api.routers.api.v1.calendar.schemas import OccurrenceOut, OccurrencePage, EventUpdateIn, EventDeleteIn
@@ -87,10 +87,11 @@ async def live(occurrence_id: str) -> writes.LiveEvent:
 
 async def _change(occurrence_id, body, response, operation):
     row = await calendar_occurrence.get_visible(occurrence_id)
-    if row is None:
+    previous = await calendar_write.get(str(body.write_id)) if row is None else None
+    if row is None and previous is None:
         raise _writes.error(writes.WriteError("calendar_event_gone", 404))
     return await _writes.execute({**body.model_dump(exclude_unset=True), "operation": operation,
-        "source_id": row.source_id, "occurrence_id": occurrence_id}, response)
+        "source_id": row.source_id if row else previous.source_id, "occurrence_id": occurrence_id}, response)
 
 
 @router.patch("/{occurrence_id}", operation_id="calendar_event_update")
