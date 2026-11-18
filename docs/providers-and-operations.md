@@ -1,0 +1,120 @@
+# Mail providers and operations
+
+## Connection methods
+
+The accounts view offers Gmail and Outlook as soon as the appropriate Studio connector is listed
+or own OAuth login is configured. A listed connector takes precedence in the form. The list
+indicates its existence. Login and tool scope depend on the connection in Studio. iCloud, Yahoo
+and other IMAP providers are available through “Anderer Anbieter” (UI text).
+[Accounts form](../apps/web/src/accounts/ConnectPanel.tsx),
+[Accounts API](../apps/api/src/api/routers/api/v1/mail/accounts.py).
+
+| Provider and access | Evidenced by code and isolated tests | Evidence in Studio or at the provider |
+| --- | --- | --- |
+| Gmail through Studio (`gmail`, `google_mail`) | Sync through search and full thread. Read and folder actions through labels. Sending through `send_email`, replies with `replyToMessageId`. Original view missing. Without Reply-To, the reply goes to the sender. `CATEGORY_PROMOTIONS` can identify a newsletter. | The read probe of 13.11.2026 demonstrates the response format, documented system labels and `replyToMessageId` parameter. Successful sending and changes such as trash or spam require separate live evidence. |
+| Gmail through own Google OAuth2 | Incremental sync via Gmail History, read and folder actions via labels or Gmail trash, sending via Gmail API and read-only original view. | Registered OAuth client with suitable callback URL and authorized scopes. Check login, token refresh and mail actions in the intended account. |
+| Outlook through own Microsoft OAuth2 | Microsoft Graph Delta for the inbox, read and folder actions via Graph, sending via Graph including reply or forwarding draft at the provider, read-only original view. | Registered OAuth client with suitable callback URL. Login, consent and mail actions depend on the account and its tenant rules. |
+| Outlook through Studio (`outlook`) | Listing and registration are implemented. Sync, sending and labels use the shared connector path with the tool format evidenced for Gmail. | The tool list responded with HTTP 401 on 13.11.2026. Authentication and compatible tool scope for this path remain open. |
+| iCloud and Yahoo through IMAP/SMTP | Host presets and shared IMAP/SMTP path. Sync via IMAP UIDs, read and folder actions via IMAP, sending via SMTP and read-only original view. | Check the account's app password and permissions. Tests use an IMAP fake and simulate TLS/SMTP transport. |
+| Other IMAP/SMTP providers | The same IMAP/SMTP path with own allowed hosts. Different ports and SMTP STARTTLS are configurable through the API. Folder actions depend on identifiable system folders and server capabilities. | Check host approval, public DNS resolution, TLS, login and folder behavior with the respective provider. |
+
+The [provider registry](../apps/api/src/api/mail/providers.py) defines OAuth scopes and host
+presets. The shared paths for [mail actions](../apps/api/src/api/mail/action_backends.py),
+[sending](../apps/api/src/api/mail/send.py) and
+[original view](../apps/api/src/api/mail/original.py) are covered by
+[sync tests](../apps/api/tests/test_mail_sync.py),
+[action tests](../apps/api/tests/test_mail_action_backends.py),
+[sending tests](../apps/api/tests/test_mail_send_replies.py) and
+[original-view tests](../apps/api/tests/test_mail_original.py).
+The [Studio probes of 13.11.2026](superpowers/probes/2026-11-13-studio-proben.md) document
+individual measurements in a test app. They apply to the state at that time.
+
+The sync adapters retrieve the inbox. The setting `MAIL_SYNC_FOLDERS` does not currently extend
+their retrieval scope. The web UI lists the inbox. The list API can additionally query archive
+and trash from the local index. Spam is a mail action and a stored state without its own list
+filter. Reconciliation of actions performed directly at the provider is limited depending on
+the adapter. The Gmail connector lacks unsubscribe headers.
+Automatic unsubscription requires the one-click headers or a supported `mailto:` link and a
+confirmed proposal card.
+[List API](../apps/api/src/api/routers/api/v1/mail/messages.py),
+[Connector sync](../apps/api/src/api/mail/sync_connector.py),
+[Newsletter](../apps/api/src/api/mail/newsletters.py).
+
+## Credentials and configuration
+
+- **Studio connector.** Sign in to the mail account under “Auth” (UI text) on the connector in Studio. The API module calls the tools with its own Mistral access, normally via `MISTRAL_API_KEY`. The account receives no local entry in `mail_credential`. Expired connector access is renewed in Studio. [Connector client](../apps/api/src/api/mail/connectors.py), [Mistral access](../packages/py/utils/src/utils/mistral.py).
+- **Own OAuth2.** Provide the client ID and client secret as `MAIL_OAUTH_GOOGLE_CLIENT_ID` and `MAIL_OAUTH_GOOGLE_CLIENT_SECRET`, or as the corresponding `MAIL_OAUTH_MICROSOFT_*` variables. Set `MAIL_OAUTH_REDIRECT_BASE_URL` to the app's base URL. Register the callback URL with the provider using the pattern `<App-Basis-URL>/api/v1/mail/accounts/oauth/<provider>/callback` with `google` or `microsoft`, respectively. liam-e encrypts OAuth tokens and also stores refreshed tokens encrypted. [OAuth routes](../apps/api/src/api/routers/api/v1/mail/accounts.py), [Credential service](../apps/api/src/api/mail/service.py).
+- **IMAP/SMTP.** Create one workspace secret per account with the app password, for example `yahoo-app-password`. The form contains the secret name. liam-e stores it encrypted together with the server configuration and reads the password when needed. A new value under the same name takes effect on next access. The API alternatively accepts `password` as an encrypted stored app password. Put own server names, comma-separated, in the runtime variable `MAIL_IMAP_ALLOWED_HOSTS`. The application checks the host against the allowlist and for public DNS addresses. The transport checks TLS certificates. [Secret resolution](../apps/api/src/api/mail/secrets.py), [Mail transport](../apps/api/src/api/mail/transport.py).
+- **Fernet key.** `MAIL_TOKEN_ENCRYPTION_KEY` protects credential payloads and is used to sign OAuth state. Keep the same key available across updates. Changing it makes data already encrypted with it unreadable. [Fernet use](../apps/api/src/api/mail/crypto.py), [OAuth state](../apps/api/src/api/mail/providers.py).
+
+For fields marked `WorkspaceSecret` in settings, the API can load workspace secrets at startup.
+To do so, set `MISTRAL_SECRETS_ENABLED=true` in the API module and `MISTRAL_API_KEY` from the
+same workspace with access to secret values. The workspace secrets there are named, for example,
+`mail_token_encryption_key` and `mail_oauth_google_client_secret`. Nonempty runtime values and
+the local `.env` take precedence. `MAIL_IMAP_ALLOWED_HOSTS` and `MAIL_OAUTH_REDIRECT_BASE_URL`
+are ordinary runtime variables. An IMAP account's password reference is resolved at runtime
+through a separate retrieval path.
+[Mail settings](../packages/py/env/src/env/mail.py),
+[Configuration order](../packages/py/env/src/env/_base.py),
+[Workspace secrets](../packages/py/env/src/env/_mistral_secrets.py).
+
+## Sync and data storage
+
+A manual sync queues a job in Postgres. A `202` response means the job was accepted. Pending
+jobs for the same account are deduplicated. The worker runs in the API process. By default, it
+waits two seconds when the queue is empty and queues due syncs for active accounts every five
+minutes. Periodic sync skips accounts whose last sync was less than half an interval ago, as
+well as accounts with `auth_expired`. A manual sync or renewed OAuth login can queue them again.
+`MAIL_SYNC_INTERVAL_MINUTES=0` disables periodic sync. `MAIL_WORKER_ENABLED=false` stops job
+execution.
+[Worker startup](../apps/api/src/api/lifespan/startup/mail_worker.py),
+[Job loop](../apps/api/src/api/mail/jobs.py),
+[Postgres queue](../packages/py/db/src/db/accessors/mail_job.py).
+
+Sync stores the provider cursor and last state per account. The index holds metadata, shortened
+text versions and attachment metadata. The original view retrieves supported originals on demand
+from the provider read-only and does not store them. A successful sync with new mails queues a
+job for missing AI summaries. The mail index and chat history are application data in Postgres.
+Fernet is limited to credential payloads. Removing an account deletes the local credentials,
+indexed mails, summaries, actions, jobs and sync state. The mails remain at the provider.
+[Sync](../apps/api/src/api/mail/sync.py),
+[Mail model](../packages/py/db/src/db/models/mail_message.py),
+[Remove account](../apps/api/src/api/routers/api/v1/mail/accounts.py).
+
+Jobs remain in the database even if the API process stops. Processing pauses during a stop.
+After `MAIL_SYNC_STALE_MINUTES` (default ten minutes), a worker can reclaim an orphaned job.
+In the Studio probe on 13.11.2026 the same process was still running at the end of the
+31-minute idle window. [Measurements](superpowers/probes/2026-11-13-studio-proben.md).
+
+## Deployment in Mistral Studio
+
+1. Check the approved commit and push it to the GitHub repository configured as `origin`.
+   The Mistral GitHub App needs access to the repository. The checkout must be clean. The
+   GitHub Actions in this repository check code, tests and secrets. [CI](../.github/workflows/ci.yml).
+2. Configure runtime values and secrets in Studio. For Git deployment, runtime configuration
+   comes from Studio. In particular, check access to the API module and the intended Studio
+   workspace. liam-e is designed for a single user. The versioned API relies on gateway login
+   and access restrictions. [API access rule](../apps/api/src/api/routers/api/v1/__init__.py),
+   [Security policy](../SECURITY.md).
+3. Run `mistral login` and `mistral deploy` at the repository root. The CLI builds the pushed
+   commit. The `deployment` block in `mistral.json` binds the checkout to
+   `<organization-id>`, `<workspace-id>` and `<app-id>`. Check the displayed target before
+   starting. On first setup without a binding, the CLI creates an app and writes the binding
+   to the manifest. The existing block belongs to the already bound app. Use a separate
+   binding for a separate installation.
+   [Manifest](../mistral.json), [Studio deployment](https://docs.mistral.ai/studio/apps/deploy),
+   [Publication rules](publishing.md).
+4. Through the manifest, Studio provides the API under `/api`, web under `/` and managed
+   Postgres. The API module uses injected `POSTGRES_*` values unless `DATABASE_URL` is set.
+   Its pre-start step waits for Postgres and runs Alembic to `heads`. Check module status in
+   Studio, API startup logs with `mistral apps logs api` and `/api/health` at the authenticated
+   gateway. Test web, sync and confirmed actions with synthetic data in a designated test
+   workspace. [DB settings](../packages/py/env/src/env/db.py),
+   [Pre-start](../packages/py/cli/src/cli/commands/pre_start.py),
+   [Migrations at startup](../packages/py/cli/src/cli/commands/migrations.py),
+   [Health](../apps/api/src/api/routers/api/internal/health.py).
+
+Studio provides the app and its API. Releasing operations as MCP tools is a separate step.
+The full OpenAPI also includes operations that perform actions. For HTTP connectors follow
+the read-only allowlist in the [agent rules](../AGENTS.md#sicherheit) and the
+[MCP inventory](../apps/api/tests/test_mcp_exposure.py).

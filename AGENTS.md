@@ -815,9 +815,10 @@ jetzt als öffentlich.
   geprüften Fehlalarm, gilt nur für die Regel, die Datei und den konkreten Wert und nennt die
   Begründung im Eintrag. CI-Actions sind auf Commit-SHAs gepinnt.
 - Was vor einer Veröffentlichung noch zu tun ist, steht in
-  [docs/veroeffentlichung.md](docs/veroeffentlichung.md).
+  [docs/publishing.md](docs/publishing.md).
 
 ## Arbeitsweise für Agents
+- Documentation, issues, pull requests and commit messages are English. UI wording follows the locale catalogues (see #65); until then the UI is German.
 - Vor jeder Arbeit an der Oberfläche (`apps/web`, Texte, auch Antworttexte des Assistenten) `DESIGN.md` lesen; sie regelt Tokens, Bausteine, Responsive-Verhalten und wie Texte klingen.
 - Minimale Diffs, bestehende Patterns kopieren (siehe Modul-Docstrings — sie dokumentieren die Konventionen jeweils lokal).
 - Nach API-Änderungen immer `gen-types` laufen lassen und `apps/api/openapi.json` + `apps/web/src/api/generated` mit committen.

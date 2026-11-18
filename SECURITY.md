@@ -1,39 +1,37 @@
-# Sicherheitsrichtlinie
+# Security policy
 
-## Unterstützte Versionen
+## Supported versions
 
-Korrekturen gibt es nur für den aktuellen Stand von `main`.
+Fixes are provided only for the current state of `main`.
 
-## Schwachstelle melden
+## Report a vulnerability
 
-Bitte vertraulich über die private Meldung von GitHub: Reiter **Security**, dann **Report a
-vulnerability**. Eine vermutete Schwachstelle gehört nicht in ein öffentliches Issue.
+Please report privately through GitHub's private reporting: the **Security** tab, then **Report a
+vulnerability**. A suspected vulnerability does not belong in a public issue.
 
-Hilfreich sind der geprüfte Stand (Commit oder Datum), die betroffene Route oder Funktion und die
-Schritte zur Reproduktion mit synthetischen Daten. Nie mitschicken: Zugangsdaten, Tokens,
-App-Passwörter, echte Mails oder Termine, Mistral-Organisations-, Workspace- oder App-IDs und
-absolute lokale Pfade.
+Useful information includes the tested version (commit or date), the affected route or function,
+and reproduction steps using synthetic data. Never include credentials, tokens, app passwords,
+real mail or appointments, Mistral organization, workspace or app IDs, or absolute local paths.
 
-## Was zählt
+## What counts
 
-liam-e verspricht eine enge Grenze (AGENTS.md, Abschnitte „Sicherheit“ und „Veröffentlichung und
-private Daten“). In Scope sind Meldungen über ein gebrochenes Versprechen, zum Beispiel:
+liam-e promises a narrow boundary (AGENTS.md, sections “Sicherheit” and “Veröffentlichung und
+private Daten”). Reports of a broken promise are in scope, for example:
 
-- Der Agent versendet, beantwortet, leitet weiter oder verändert eine Mail ohne bestätigte
-  Vorschlagskarte, auch ausgelöst durch eine präparierte Mail oder Vorlage.
-- Ein Credential, App-Passwort, Token oder Secret-Wert erscheint in einer Antwort, einem Log,
-  einer Fehlermeldung oder unverschlüsselt in der Datenbank.
-- Ein ausgehender Aufruf erreicht trotz `netguard.py` und `transport.py` ein privates Ziel
-  (SSRF, DNS-Rebinding) oder einen nicht freigegebenen Mail-Host.
-- Eine Abfrage liefert Daten eines Kontos oder einer Quelle außerhalb des angefragten Umfangs.
-- Eine verändernde Operation ist über eine lesende MCP-Oberfläche erreichbar.
+- The agent sends, replies to, forwards or changes a mail without a confirmed proposal card,
+  including when triggered by a crafted mail or template.
+- A credential, app password, token or secret value appears in a response, log, error message or
+  unencrypted in the database.
+- An outgoing call reaches a private destination (SSRF, DNS rebinding) or a disallowed mail host
+  despite `netguard.py` and `transport.py`.
+- A query returns data from an account or source outside the requested scope.
+- A mutating operation is accessible through a read-only MCP interface.
 
-## Was nicht zählt
+## What does not count
 
-- liam-e ist eine Einzel-Nutzer-App. Wer sie über das Gateway aufrufen darf, regelt das
-  Deployment in Mistral Studio, nicht die App. Fehlende Trennung mehrerer Nutzer ist eine
-  dokumentierte Grenze.
-- Schwachstellen in Mistral Studio, bei den Mail-Providern oder in Abhängigkeiten gehören zu
-  diesen Projekten. Ein Advisory, das liam-e in seiner eigenen Nutzung betrifft, zählt.
-- Eine falsche Kurzfassung oder Antwort des Modells ohne Folge für Versand, Daten oder Rechte ist
-  kein Sicherheitsfehler.
+- liam-e is a single-user app. The deployment in Mistral Studio, not the app, controls who may
+  access it through the gateway. Lack of multi-user separation is a documented limitation.
+- Vulnerabilities in Mistral Studio, mail providers or dependencies belong to those projects.
+  An advisory affecting liam-e in its own usage counts.
+- An incorrect model summary or answer without consequences for sending, data or permissions is
+  not a security bug.
