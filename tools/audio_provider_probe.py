@@ -1,8 +1,8 @@
 """Reproduce #26 against Mistral with the app's own credential and disposable synthetic fixtures.
 
-Offline by default. The live probe makes one stateless provider call. Its output includes only
-fixed status metadata and the outcome of comparing synthetic text in memory. See the dated
-audio-capabilities report for the separate browser and container checks.
+Offline by default. Container validation runs locally. The live probe makes one stateless
+provider call and reports fixed status metadata and the outcome of comparing synthetic text
+in memory. See the dated audio-capabilities report for the separate browser checks.
 """
 
 import argparse
@@ -101,10 +101,20 @@ def main() -> int:
     parser = _QuietParser(description="Probe Mistral speech APIs with synthetic data")
     parser.add_argument("task", choices=("tts", *FIXTURES))
     parser.add_argument("scratch", type=Path, help="private scratch directory holding synthetic fixtures")
-    parser.add_argument("--live", action="store_true", help="send one synthetic request to the official Mistral API")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--live", action="store_true", help="send one synthetic request to the official Mistral API")
+    mode.add_argument("--validate-container", action="store_true", help="check a synthetic WebM or MP4 fixture locally")
     args = parser.parse_args()
+    if args.validate_container:
+        from audio_container_probe import FORMATS, check_container
+
+        if args.task not in FORMATS:
+            parser.error("a WebM or MP4 fixture is required")
+        report = check_container(args.task, args.scratch / FIXTURES[args.task][0])
+        print(json.dumps(report))
+        return int(report["status"] != "accepted")
     if not args.live:
-        print("Offline. Supply --live to send one synthetic request.")
+        print("Offline. Use --validate-container for a local check or --live for one synthetic request.")
         return 0
 
     started = time.monotonic()

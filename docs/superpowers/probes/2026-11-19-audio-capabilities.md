@@ -56,6 +56,21 @@ stopped at 121 seconds. Each tool ran with a three-second subprocess timeout, on
   the actual browser files, malformed structures, timestamp gaps, codec padding and timeout.
   The current deployment image has no audio validator.
 
+The follow-up local check adds `--validate-container` to the probe. It checks the declared
+container and codec, packet timestamp span, container duration when present and independently
+decoded sample count. It uses FFmpeg and FFprobe with seekable descriptor input, a 10 MiB file
+limit, a 50,000-packet limit, a three-second timeout per tool and a 64 MiB limit per allocation.
+Results contain only measurements and fixed reason codes.
+[FFmpeg descriptor protocol](https://ffmpeg.org/ffmpeg-protocols.html#fd).
+
+| Local follow-up fixture with FFmpeg and FFprobe 9.0.2 | Result |
+| --- | --- |
+| Chromium 157.0.8103.38 on Linux, default recorder and explicit WebM/Opus, Playwright 1.62.0 with synthetic microphone input | Both accepted. Each decoded duration was 2.220 s. Both runs stopped all microphone tracks. |
+| 119.5 s and 121 s of synthetic audio in WebM/Opus and fragmented MP4/AAC | Both formats accepted the shorter sample and rejected the longer sample. |
+| WebM without aggregate duration metadata and a packet span of 122.258 s | Rejected based on packet timestamps. |
+| WebM with 121 s of samples and a packet span below 120 s | Rejected based on decoded sample count. |
+| Exact-duration WebM with 120.008 s in container metadata, wrong container or codec, truncation in the header or media stream, oversized fixture and subprocess timeout | Rejected with fixed reasons. |
+
 ## Release decision
 
 | Capability | State and remaining evidence |
@@ -142,16 +157,17 @@ ffprobe -v error -show_entries \
   -of json "$scratch/output.mp3"
 ```
 
-For the local duration check, prepare silence fixtures using
-`ffmpeg -f lavfi -i anullsrc=r=48000:cl=mono -t <seconds>` with `-c:a libopus -b:a 24k` for
-WebM, or `-c:a aac -b:a 24k -movflags frag_keyframe+empty_moov+default_base_moof` for MP4.
-Inspect container and stream with
-`ffprobe -show_entries format=format_name,duration:stream=codec_name,codec_type`. With the
-matching demuxer allowlist, run
-`ffmpeg -xerror -threads 1 -i <fixture> -map 0:a:0 -af asetpts=N/SR/TB -t 121 -ac 1 -ar 48000 -f s16le pipe:1`
-under the stated timeout and allocation bounds, then divide the PCM byte count by 96,000.
-Use `truncate -s 10485761` and `head -c 12` for the rejection fixtures. Close the local
-processes and delete the scratch directory after inspecting the redacted results.
+Check the two fixture files locally with either command. An accepted file exits with 0 and a
+rejected file exits with 1. The option runs without provider credentials.
+
+```bash
+bash tools/uv.sh run --no-sync python "$probe_script" webm "$scratch" --validate-container
+bash tools/uv.sh run --no-sync python "$probe_script" mp4 "$scratch" --validate-container
+bash tools/uv.sh run --no-sync pytest -q tests/test_audio_container_probe.py
+```
+
+The test suite generates the synthetic boundary fixtures. Close the local processes and delete
+the scratch directory after inspecting the results.
 
 ## Repository checks
 
@@ -159,3 +175,5 @@ processes and delete the scratch directory after inspecting the redacted results
 - `bun run check` passed build, type checks, and generated-client drift checks. `bun run test -- --output-style=static` passed the three project test targets. The database target skipped 205 PostgreSQL cases.
 - The API suite emitted a pre-existing `Connection._cancel` coroutine warning, which also appeared on the unchanged baseline.
 - The follow-up review added offline regression tests for provider-only evidence, exact STT limits, and redaction of invalid probe arguments.
+- The container follow-up ran `bash tools/uv.sh run --no-sync pytest tests apps/api/tests packages/py -q`
+  with 1,279 passed and 211 skipped. `bun run check` and `bunx nx run web:test` passed.
