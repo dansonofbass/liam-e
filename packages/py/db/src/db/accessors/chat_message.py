@@ -106,11 +106,15 @@ async def cancel_proposal(message_id: str) -> ChatMessage | None:
         return message
 
 
-async def set_proposal(message_id: str, *, proposal_json: str, proposal_status: str) -> ChatMessage | None:
+async def set_proposal(
+    message_id: str, *, proposal_json: str, proposal_status: str, expected_statuses: tuple[str, ...] | None = None,
+) -> ChatMessage | None:
+    statement = update(ChatMessage).where(ChatMessage.id == message_id)
+    if expected_statuses is not None:
+        statement = statement.where(ChatMessage.proposal_status.in_(expected_statuses))
     async with get_session_maker()() as session:
         result = await session.execute(
-            update(ChatMessage).where(ChatMessage.id == message_id)
-            .values(proposal_json=proposal_json, proposal_status=proposal_status).returning(ChatMessage)
+            statement.values(proposal_json=proposal_json, proposal_status=proposal_status).returning(ChatMessage)
         )
         message = result.scalar_one_or_none()
         await session.commit()

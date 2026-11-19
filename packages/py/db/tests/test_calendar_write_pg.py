@@ -129,6 +129,45 @@ def test_parallel_calendar_confirm_claims_once(pg_db, monkeypatch):
     asyncio.run(run())
 
 
+def test_late_recheck_keeps_a_completed_calendar_card(pg_db, monkeypatch):
+    async def run():
+        from api.calendar import writes
+        from api.calendar.proposals import CalendarCommand, CalendarValues
+        from api.mail import proposals
+        from db.accessors import calendar_write, chat_message
+
+        command = CalendarCommand(
+            action="create", source_id="synthetic-source", connection_ref="synthetic",
+            timezone="UTC", after=CalendarValues(title="Example", start_date="2026-12-05", end_date="2026-12-06"),
+        )
+        proposal = proposals.Proposal(kind="calendar", reason="Example", items=[], calendar=command)
+        card = await chat_message.add_message(
+            conversation_id="synthetic-conversation", role="proposal", proposal_status="running",
+            proposal_json=proposal.model_dump_json(context={"storage": True}),
+        )
+        await calendar_write.claim(write_row(id=card.id, operation="create", target_external_id=None))
+        observed, release = asyncio.Event(), asyncio.Event()
+
+        async def stale_outcome(write_id):
+            observed.set()
+            await release.wait()
+            return writes.WriteOutcome(write_id=write_id, status="running")
+
+        monkeypatch.setattr(writes, "get", stale_outcome)
+        check = asyncio.create_task(proposals.recheck_calendar_card(card.id))
+        try:
+            await asyncio.wait_for(observed.wait(), 5)
+            await calendar_write.finish(card.id, status="done", result_external_id="synthetic-event")
+            await proposals._store_calendar(card, proposal, writes.WriteOutcome(write_id=card.id, status="done"))
+        finally:
+            release.set()
+        assert (await asyncio.wait_for(check, 5)).proposal_status == "done"
+        stored = await chat_message.get_message(card.id)
+        assert stored.proposal_status == "done"
+        assert proposals.proposal_view(stored).result.done == 1
+    asyncio.run(run())
+
+
 def test_index_write_is_fenced_and_preserves_unrelated_masters(pg_db):
     async def run():
         from db.accessors import calendar_index_write, calendar_source
@@ -233,6 +272,58 @@ def test_claim_conflicts_on_other_hash(pg_db):
     asyncio.run(run())
 
 
+async def add_source(source_id):
+    from db.engine import get_session_maker
+    from db.models.calendar_source import CalendarSource
+    async with get_session_maker()() as session:
+        session.add(CalendarSource(id=source_id, provider="google", connection_ref="synthetic", external_id="synthetic", name="Example", timezone="UTC"))
+        await session.commit()
+
+
+def test_abandon_takes_a_free_write_id_once_and_blocks_a_late_claim(pg_db):
+    async def run():
+        from db.accessors.calendar_write import abandon, claim, get, WriteConflict
+        row = write_row(operation="create", target_external_id=None)
+        await add_source(row.source_id)
+        assert await abandon(row.id, source_id=row.source_id, operation="create") == "abandoned"
+        assert await abandon(row.id, source_id=row.source_id, operation="create") == "taken"
+        stored = await get(row.id)
+        assert (stored.status, stored.error_code, stored.request_json) == ("not_applied", "calendar_write_not_applied", None)
+        # A confirm that is still alive finds the ID taken and cannot dispatch.
+        with pytest.raises(WriteConflict):
+            await claim(row)
+    asyncio.run(run())
+
+
+def test_abandon_leaves_an_existing_write_untouched(pg_db):
+    async def run():
+        from db.accessors.calendar_write import abandon, claim, get
+        row = write_row()
+        await add_source(row.source_id)
+        await claim(row)
+        assert await abandon(row.id, source_id=row.source_id, operation="update") == "taken"
+        stored = await get(row.id)
+        assert (stored.status, stored.request_json) == ("running", '{"title":"Example"}')
+    asyncio.run(run())
+
+
+def test_abandon_never_settles_a_write_whose_calendar_was_removed(pg_db):
+    async def run():
+        # Removing a calendar deletes finished records: a missing record then no longer proves
+        # that nothing was sent, so the ID is not taken as "not applied".
+        from db.accessors import calendar_source
+        from db.accessors.calendar_write import abandon, claim, finish, get
+        row = write_row()
+        await add_source(row.source_id)
+        await claim(row)
+        await finish(row.id, status="done", result_external_id="synthetic-event")
+        await calendar_source.remove(row.source_id)
+        assert await get(row.id) is None
+        assert await abandon(row.id, source_id=row.source_id, operation="update") == "source_gone"
+        assert await get(row.id) is None
+    asyncio.run(run())
+
+
 def test_second_running_write_on_target_is_refused(pg_db):
     async def run():
         from db.accessors.calendar_write import claim, WriteInProgress
@@ -272,13 +363,18 @@ def test_mark_dispatch_only_while_running_and_refreshes_the_clock(pg_db):
         old = datetime.now(UTC) - timedelta(seconds=30)
         row = write_row(started_at=old)
         await claim(row)
-        assert await mark_dispatch(row.id) is True
-        assert (await get(row.id)).started_at > old
+        dispatch_request = '{"dispatched":true}'
+        assert await mark_dispatch(row.id, request_json=dispatch_request) is True
+        stored = await get(row.id)
+        assert stored.started_at > old
+        assert stored.request_json == dispatch_request
         expired = write_row(target_external_id="synthetic-other", started_at=old)
         await claim(expired)
         await expire_running(expired.id, before=datetime.now(UTC))
-        assert await mark_dispatch(expired.id) is False
-        assert (await get(expired.id)).status == "unknown"
+        assert await mark_dispatch(expired.id, request_json=dispatch_request) is False
+        stored = await get(expired.id)
+        assert stored.status == "unknown"
+        assert stored.request_json == expired.request_json
     asyncio.run(run())
 
 
