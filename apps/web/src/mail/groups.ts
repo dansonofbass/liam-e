@@ -1,7 +1,9 @@
 import type { MessageListItemOut } from '../api/generated/types.gen'
-import { de } from '../i18n/de'
+import { catalogue } from '../i18n/catalogue'
+import { REFERENCE_LOCALE, type Locale } from '../i18n/locales'
 
-export function groupByDay(items: MessageListItemOut[], now: Date, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+export function groupByDay(items: MessageListItemOut[], now: Date, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone, locale: Locale = REFERENCE_LOCALE) {
+  const labels = catalogue(locale).inbox.groups
   const formatter = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
   const day = (date: Date) => {
     const parts = formatter.formatToParts(date)
@@ -11,10 +13,10 @@ export function groupByDay(items: MessageListItemOut[], now: Date, timeZone = In
   const today = day(now)
   const monday = today - ((new Date(today * 86400000).getUTCDay() + 6) % 7)
   const groups = [
-    { label: de.inbox.groups.today, items: [] as MessageListItemOut[] },
-    { label: de.inbox.groups.yesterday, items: [] as MessageListItemOut[] },
-    { label: de.inbox.groups.week, items: [] as MessageListItemOut[] },
-    { label: de.inbox.groups.older, items: [] as MessageListItemOut[] },
+    { label: labels.today, items: [] as MessageListItemOut[] },
+    { label: labels.yesterday, items: [] as MessageListItemOut[] },
+    { label: labels.week, items: [] as MessageListItemOut[] },
+    { label: labels.older, items: [] as MessageListItemOut[] },
   ] as const
   for (const item of items) {
     const date = item.internal_date ? day(new Date(item.internal_date)) : null

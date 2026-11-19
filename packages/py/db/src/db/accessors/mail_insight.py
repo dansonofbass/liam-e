@@ -28,20 +28,23 @@ async def get_for_messages(ids: list[str]) -> dict[str, MailInsight]:
         return {row.message_id: row for row in rows}
 
 
-async def upsert(message_id: str, *, points: list[str], deadline: date | None, needs_reply: bool, followups: list[str], model: str,
+async def store_if_missing(message_id: str, *, points: list[str], deadline: date | None, needs_reply: bool, followups: list[str], model: str,
                  summarized: str | None = None) -> MailInsight | None:
-    """Store the insight. With `summarized` (the text the model read) only while the mail still has that
-    text, else None: a body re-read during the model call must not get the old text's summary back.
-    The mail row stays locked until the insight is stored, so a re-read either waits or wins."""
+    """Store the first insight and return it to concurrent callers, even in different locales.
+
+    With `summarized`, keep the mail row locked and store only if the body still matches.
+    A body change in flight returns None so the caller can summarize the new text.
+    """
     row = MailInsight(message_id=message_id, points_json=json.dumps(points), deadline=deadline, needs_reply=needs_reply, followups_json=json.dumps(followups), model=model)
-    values = dict(points_json=row.points_json, deadline=deadline, needs_reply=needs_reply, followups_json=row.followups_json, model=model)
-    stmt = insert(MailInsight).values(**row.model_dump()).on_conflict_do_update(index_elements=[MailInsight.message_id], set_=values).returning(MailInsight)
+    stmt = insert(MailInsight).values(**row.model_dump()).on_conflict_do_nothing(index_elements=[MailInsight.message_id]).returning(MailInsight)
     async with get_session_maker()() as session:
         if summarized is not None:
             current = (await session.execute(select(MailMessage.body_text).where(MailMessage.id == message_id).with_for_update(read=True))).scalar_one_or_none()
             if current != summarized:
                 return None
-        result = (await session.execute(stmt)).scalar_one()
+        result = (await session.execute(stmt)).scalar_one_or_none()
+        if result is None:
+            result = (await session.execute(select(MailInsight).where(MailInsight.message_id == message_id))).scalar_one_or_none()
         await session.commit()
         return result
 

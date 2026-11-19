@@ -1,4 +1,6 @@
-import { plural } from './format'
+import { plural as formatPlural } from './numbers'
+
+const plural = (n: number, forms: Parameters<typeof formatPlural>[1]) => formatPlural(n, forms, 'de')
 
 const subjectText = (subject: string) => String(subject).trim() ? String(subject) : de.mail.noSubject
 const noticeSubject = (subject: string) => {
@@ -191,6 +193,13 @@ export const de = {
     conflict: (left: string, right: string) => `Die Einstellungen wurden inzwischen geändert. Aktuell gilt „${left}“ nach links und „${right}“ nach rechts. Lade sie neu oder speichere deine Auswahl noch mal.`,
     reload: 'Neu laden',
   },
+  language: {
+    section: 'Sprache', title: 'Sprache der App',
+    description: 'Die hier gewählte Sprache gilt auf allen deinen Geräten.',
+    options: { browser: 'Sprache des Browsers verwenden', de: 'Deutsch', en: 'Englisch' },
+    save: 'Sprache speichern', success: 'Sprache gespeichert.',
+    conflict: (current: string) => `Die Einstellungen wurden inzwischen geändert. Gespeichert ist „${current}“. Prüfe deine Wahl, bevor du sie erneut speicherst.`,
+  },
   rootScreens: {
     lang: 'de', missingChunkTitle: 'liam-e wurde aktualisiert',
     missingChunk: 'Lade die Seite neu, um die neue Version zu öffnen.', reload: 'Neu laden',
@@ -210,6 +219,13 @@ export const de = {
     themes: { light: 'Hell', dark: 'Dunkel', system: 'Wie im System' },
   },
   chat: {
+    modelDescriptions: {
+      'mistral-large-latest': 'Für anspruchsvolle Aufgaben und ausführliche Antworten.',
+      'mistral-medium-latest': 'Für vielseitige Aufgaben im Alltag.',
+      'mistral-small-latest': 'Für schnelle Antworten auf einfache Fragen.',
+      'magistral-medium-latest': 'Für Aufgaben, die mehr Nachdenken brauchen.',
+      'magistral-small-latest': 'Für schnelles Nachdenken über einfache Aufgaben.',
+    },
     greeting: 'Hallo, was kann ich für dich tun?', greetingFirst: 'Hallo,', greetingSecond: 'was kann ich für dich tun?', placeholder: 'Frag etwas zu deinen Mails …',
     stopped: 'Angehalten – die Antwort ist unvollständig.', retry: 'Noch mal versuchen', askAgain: 'Noch mal fragen',
     loadingHistory: 'Unterhaltung wird geladen …', historyError: 'Die Unterhaltung konnte nicht geladen werden. Versuch es gleich noch mal.',
@@ -231,6 +247,46 @@ export const de = {
     preparing_proposal: 'Bereite einen Vorschlag vor …',
   },
   errors: {
+    source_not_found: 'Diesen Kalender gibt es nicht mehr.',
+    occurrence_not_found: 'Diesen Termin gibt es nicht mehr.',
+    window_invalid: 'Prüfe Anfang und Ende des Kalenderzeitraums.',
+    google_calendar_not_connected: 'Google Kalender ist in Mistral Studio nicht verbunden.',
+    provider_unavailable: 'Der Anbieter ist gerade nicht erreichbar. Versuch es später noch mal.',
+    calendar_unknown: 'Ein ausgewählter Kalender ist nicht verfügbar. Prüfe die Auswahl.',
+    calendar_feed_invalid: 'Prüfe die Kalenderadresse, den Namen und die Zeitzone.',
+    calendar_feed_unavailable: 'Der Kalender konnte nicht abgerufen werden. Prüfe die Adresse und versuch es noch mal.',
+    calendar_validation_expired_or_changed: 'Die Prüfung ist abgelaufen oder die Konfiguration wurde geändert. Prüfe den Kalender erneut.',
+    chat_invalid: 'Schreib 1–8.000 Zeichen für deinen Beitrag.',
+    cursor_invalid: 'Diese Seite konnte nicht geladen werden. Öffne den Posteingang noch einmal.',
+    insight_unavailable: 'Das Modell antwortet gerade nicht, deshalb fehlt die Zusammenfassung. Öffne die Mail gleich noch mal.',
+    message_not_found: 'Die Mail ist nicht mehr da.',
+    original_unavailable: 'Bei dieser Mail lässt sich das Original nicht abrufen.',
+    preference_candidate_gone: 'Dieser Vorschlag ist nicht mehr verfügbar.',
+    preference_conflict: 'Die Präferenzen wurden geändert oder die Grenze ist erreicht. Lade sie neu. Je Feld und Geltungsbereich ist nur ein aktiver Wert möglich.',
+    preference_invalid: 'Prüfe Feld, Konto und Wert (1–500 Zeichen).',
+    preference_quota: 'Die Grenze für Präferenzen ist erreicht. Entferne zuerst einen gespeicherten Wert.',
+    preference_unavailable: 'Diese Präferenz gibt es nicht mehr. Lade die Übersicht neu.',
+    prompt_invalid: 'Prüfe die Vorlage: Name 1–80 Zeichen, Text 1–8.000 Zeichen und eine gültige Version.',
+    prompt_unavailable: 'Diese Vorlage gibt es nicht mehr. Wähle eine andere.',
+    prompts_unavailable: 'Die Vorlagen sind gerade nicht erreichbar. Versuch es gleich noch einmal.',
+    proposal_invalid: 'Prüfe die Angaben des Vorschlags.',
+    proposal_not_found: 'Der Vorschlag ist nicht mehr da. Lade die Unterhaltung neu.',
+    settings_unavailable: 'Die Einstellungen sind gerade nicht erreichbar. Versuch es gleich noch einmal.',
+    task_creation_conflict: 'Diese Erstellungskennung gehört zu einer anderen Aufgabe.',
+    task_cursor_invalid: 'Die Aufgaben konnten nicht geladen werden. Öffne die Liste noch einmal.',
+    task_delete_confirmation_required: 'Bestätige, dass die Aufgabe mit ihrem gesamten Verlauf endgültig gelöscht werden soll.',
+    task_invalid: 'Prüfe die Angaben zur Aufgabe: erwartete Version, Zeitraum, Seitengröße und Fälligkeit.',
+    task_not_found: 'Diese Aufgabe gibt es nicht mehr.',
+    task_range_invalid: 'Der Zeitraum ist ungültig. Prüfe Anfang und Ende.',
+    task_reconcile_conflict: 'Der Abrufstand wurde geändert. Lade ihn noch einmal.',
+    task_revision_conflict: 'Die neue Wiederholung überschneidet sich mit einer erledigten Fälligkeit. Wähle einen anderen Zeitplan.',
+    task_scope_invalid: 'Die Aufgabe gehört nicht zur gewählten Auswahl.',
+    task_source_gone: 'Die verknüpfte Mail ist nicht mehr verfügbar.',
+    task_source_invalid: 'Wähle ein Konto oder einen anderen Quellenfilter.',
+    task_version_conflict: 'Die Aufgabe wurde geändert. Lade sie noch einmal.',
+    title_empty: 'Gib einen Titel für die Unterhaltung ein.',
+    ui_settings_conflict: 'Die Einstellungen wurden inzwischen geändert. Lade sie neu und nimm deine Auswahl dann bewusst auf.',
+    ui_settings_invalid: 'Prüfe die Sprache oder die Wischaktion. Gib mindestens eine Einstellung an.',
     request_failed: 'Die Anfrage hat nicht geklappt.',
     model_unavailable: 'Das Modell antwortet gerade nicht. Versuch es gleich noch mal.',
     model_unknown: 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.',
@@ -282,7 +338,6 @@ export const de = {
   accountCard: {
     sync: (address: string) => `${address} jetzt abrufen`, reconnect: 'Erneut anmelden', rename: 'Umbenennen', remove: 'Entfernen',
     messages: (n: number) => plural(n, { zero: 'keine Mails', one: '# Mail', other: '# Mails' }),
-    providers: { google: 'Gmail', microsoft: 'Outlook', icloud: 'iCloud', yahoo: 'Yahoo' },
   },
   proposal: {
     titles: {
@@ -421,5 +476,9 @@ export const de = {
     priority: { title: 'Priorisieren', subtitle: 'Was wartet auf dich?', prompt: 'Welche Mails sind wichtig?' },
     newsletters: { title: 'Newsletter aufräumen', subtitle: (n: number) => plural(n, { zero: 'keine Absender', one: '# Absender', other: '# Absender' }), prompt: 'Zeig mir meine Newsletter.' },
     dueToday: { title: 'Heute fällig', subtitle: 'Fristen und Termine', prompt: 'Was ist heute fällig?' },
+  },
+  date: {
+    today: 'Heute', yesterday: 'Gestern',
+    stand: (count: number, time: string) => `${plural(count, { one: '# Konto', other: '# Konten' })} · Stand ${time}`,
   },
 } as const

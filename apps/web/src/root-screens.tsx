@@ -1,6 +1,7 @@
 import { useRouteContext } from "@tanstack/react-router";
 import { createContext, useContext } from "react";
 import type { ComponentType, ReactElement } from "react";
+import { useActiveLocale } from "./i18n/I18n";
 
 /**
  * The words the root route's own screens show: the error pages, the router's fallback not-found
@@ -124,6 +125,7 @@ export const RootScreensContext = createContext<RootScreens>(plainRootScreens);
  */
 export const useRootScreens = () => {
   const screens = useContext(RootScreensContext);
+  const activeLocale = useActiveLocale();
 
   const locale = useRouteContext({
     from: "__root__",
@@ -131,7 +133,7 @@ export const useRootScreens = () => {
     select: (context): string | undefined => context.locale,
   });
 
-  return { screens, texts: screens.texts(locale ?? "en") };
+  return { screens, texts: screens.texts(activeLocale ?? locale ?? "en") };
 };
 
 export const useRootTexts = (): RootTexts => useRootScreens().texts;

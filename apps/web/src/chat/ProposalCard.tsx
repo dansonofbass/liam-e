@@ -5,7 +5,8 @@ import { chatProposalCancel, chatProposalConfirm, mailActionsUndo } from '../api
 import type { ChatMessageOut, Proposal } from '../api/generated/types.gen'
 import { errorCode, unwrap } from '../api/unwrap'
 import { ConfirmCard, Notice } from '../ds'
-import { de } from '../i18n/de'
+import type { Catalogue } from '../i18n/catalogue'
+import { useI18n } from '../i18n/I18n'
 import { useRestartConversation } from './session'
 import { TaskProposal } from './TaskProposal'
 import { PreferenceProposal } from './PreferenceProposal'
@@ -50,30 +51,31 @@ function safeLink(value: string | null): string | null {
   } catch { return null }
 }
 
-function failureText(code: string | undefined, kind: Proposal['kind']): string {
+function failureText(code: string | undefined, kind: Proposal['kind'], texts: Catalogue): string {
   switch (code) {
-    case 'task_version_conflict': return de.tasks.conflict
-    case 'task_revision_conflict': return de.taskChat.revisionConflict
-    case 'task_source_gone': return de.tasks.unavailableMail
-    case 'task_scope_invalid': return de.taskChat.scopeError
-    case 'task_not_found': return de.taskChat.unavailable
-    case 'task_invalid': return de.tasks.invalid
-    case 'item_gone': return kind === 'unsubscribe' ? de.proposalErrors.sender_gone : de.proposalErrors.item_gone
-    case 'item_changed': return de.proposalErrors.item_changed
-    case 'action_unsupported': return de.proposalErrors.action_unsupported
-    case 'credentials_invalid': return de.proposalErrors.credentials_invalid
-    case 'send_failed': return de.proposalErrors.send_failed
-    case 'account_gone': return de.proposalErrors.account_gone
-    case 'unsubscribe_rejected': case 'unsubscribe_blocked': case 'unsubscribe_unreachable': case 'unsubscribe_invalid': case 'unsubscribe_send_failed': return de.proposalErrors.unsubscribe_failed
-    case 'proposal_not_pending': return de.proposalErrors.proposal_not_pending
-    case 'proposal_context_revoked': return de.proposalErrors.proposal_context_revoked
-    case 'selection_empty': return de.proposalErrors.selection_empty
-    case 'host_not_allowed': return de.errors.host_not_allowed
-    default: return de.proposal.requestError
+    case 'task_version_conflict': return texts.tasks.conflict
+    case 'task_revision_conflict': return texts.taskChat.revisionConflict
+    case 'task_source_gone': return texts.tasks.unavailableMail
+    case 'task_scope_invalid': return texts.taskChat.scopeError
+    case 'task_not_found': return texts.taskChat.unavailable
+    case 'task_invalid': return texts.tasks.invalid
+    case 'item_gone': return kind === 'unsubscribe' ? texts.proposalErrors.sender_gone : texts.proposalErrors.item_gone
+    case 'item_changed': return texts.proposalErrors.item_changed
+    case 'action_unsupported': return texts.proposalErrors.action_unsupported
+    case 'credentials_invalid': return texts.proposalErrors.credentials_invalid
+    case 'send_failed': return texts.proposalErrors.send_failed
+    case 'account_gone': return texts.proposalErrors.account_gone
+    case 'unsubscribe_rejected': case 'unsubscribe_blocked': case 'unsubscribe_unreachable': case 'unsubscribe_invalid': case 'unsubscribe_send_failed': return texts.proposalErrors.unsubscribe_failed
+    case 'proposal_not_pending': return texts.proposalErrors.proposal_not_pending
+    case 'proposal_context_revoked': return texts.proposalErrors.proposal_context_revoked
+    case 'selection_empty': return texts.proposalErrors.selection_empty
+    case 'host_not_allowed': return texts.errors.host_not_allowed
+    default: return texts.proposal.requestError
   }
 }
 
 function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOut; proposal: Proposal; clock: Clock; onUndone: () => void }) {
+  const { texts } = useI18n()
   const client = useQueryClient()
   const { visible, beforeDeadline, expire } = useUndoWindow(client, message.id, clock)
   const [undone, setUndone] = useState(false)
@@ -97,24 +99,25 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
     }
   }
   if (proposal.kind === 'calendar') return <CalendarProposal message={message} />
-  if (proposal.kind === 'task') return <Notice tone="success"><span>{de.taskChat.done}</span>{result?.task_series_id && <> <Link className="le-link" to="/tasks/$taskId" params={{ taskId: result.task_series_id }}>{de.tasks.detail}</Link></>}</Notice>
-  if (proposal.kind === 'preference') return <Notice tone="success">{result?.preference_outcome === 'kept' ? de.preferenceCandidates.kept : result?.preference_outcome === 'unchanged' ? de.preferenceCandidates.unchanged : result?.preferences_enabled ? de.preferences.saved : de.preferences.savedOff}</Notice>
-  if (undone) return <Notice tone="info">{de.proposal.undone}</Notice>
-  const text = proposal.kind === 'unsubscribe' ? de.proposal.results.unsubscribe(result?.done ?? 0, ids.length) : de.proposal.results[proposal.kind](result?.done ?? 0)
+  if (proposal.kind === 'task') return <Notice tone="success"><span>{texts.taskChat.done}</span>{result?.task_series_id && <> <Link className="le-link" to="/tasks/$taskId" params={{ taskId: result.task_series_id }}>{texts.tasks.detail}</Link></>}</Notice>
+  if (proposal.kind === 'preference') return <Notice tone="success">{result?.preference_outcome === 'kept' ? texts.preferenceCandidates.kept : result?.preference_outcome === 'unchanged' ? texts.preferenceCandidates.unchanged : result?.preferences_enabled ? texts.preferences.saved : texts.preferences.savedOff}</Notice>
+  if (undone) return <Notice tone="info">{texts.proposal.undone}</Notice>
+  const text = proposal.kind === 'unsubscribe' ? texts.proposal.results.unsubscribe(result?.done ?? 0, ids.length) : texts.proposal.results[proposal.kind](result?.done ?? 0)
   const failed = result?.failed ?? []
   const gone = failed.filter(item => item.code === 'item_gone').length
   const changed = failed.filter(item => item.code === 'item_changed').length
   const other = failed.length - gone - changed
-  return <><Notice tone={message.proposal_status === 'done' ? 'success' : 'info'} action={ids.length && visible && !busy ? { label: de.proposal.undo, onClick: () => { void undo() } } : undefined}>
-    <span>{text}{message.proposal_status === 'partial' && <>{gone > 0 && de.proposal.partialGone[proposal.kind](gone)}{changed > 0 && de.proposal.partialChanged(changed)}{other > 0 && de.proposal.partial[proposal.kind](other)}</>}</span>
+  return <><Notice tone={message.proposal_status === 'done' ? 'success' : 'info'} action={ids.length && visible && !busy ? { label: texts.proposal.undo, onClick: () => { void undo() } } : undefined}>
+    <span>{text}{message.proposal_status === 'partial' && <>{gone > 0 && texts.proposal.partialGone[proposal.kind](gone)}{changed > 0 && texts.proposal.partialChanged(changed)}{other > 0 && texts.proposal.partial[proposal.kind](other)}</>}</span>
   </Notice>{result?.manual?.map(entry => {
     const href = safeLink(entry.link)
     const item = proposal.items.find(candidate => candidate.id === entry.id)
-    return <p key={entry.id} className="le-proposal-manual">{item?.title}{item && ': '}{href ? <a href={href} target="_blank" rel="noopener noreferrer">{de.proposal.manualLink}</a> : de.proposal.manualNoLink}</p>
-  })}{error && <Notice tone="danger">{de.proposal.requestError}</Notice>}</>
+    return <p key={entry.id} className="le-proposal-manual">{item?.title}{item && ': '}{href ? <a href={href} target="_blank" rel="noopener noreferrer">{texts.proposal.manualLink}</a> : texts.proposal.manualNoLink}</p>
+  })}{error && <Notice tone="danger">{texts.proposal.requestError}</Notice>}</>
 }
 
 export function ProposalCard({ message, clock = systemClock }: { message: ChatMessageOut; clock?: Clock }) {
+  const { texts } = useI18n()
   const client = useQueryClient()
   const [updated, setUpdated] = useState<ChatMessageOut | null>(null)
   const [busy, setBusy] = useState(false)
@@ -183,21 +186,21 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   if (!proposal) return null
   if (proposal.kind === 'calendar') return <CalendarProposal key={current.id} message={current} />
   const settled = (content: ReactNode) => <div ref={outcome} tabIndex={-1} className="le-proposal-outcome">{content}</div>
-  if (current.proposal_status === 'running') return settled(<p className="le-hint">{de.proposal.running}</p>)
-  if (current.proposal_status === 'cancelled') return settled(<p className="le-hint">{de.proposal.cancelled}</p>)
-  if (current.proposal_status === 'failed') return settled(<Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code, proposal.kind)}</Notice>)
+  if (current.proposal_status === 'running') return settled(<p className="le-hint">{texts.proposal.running}</p>)
+  if (current.proposal_status === 'cancelled') return settled(<p className="le-hint">{texts.proposal.cancelled}</p>)
+  if (current.proposal_status === 'failed') return settled(<Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code, proposal.kind, texts)}</Notice>)
   if (current.proposal_status === 'done' || current.proposal_status === 'partial') return settled(<Result key={current.id} message={current} proposal={proposal} clock={clock} onUndone={() => outcome.current?.focus()} />)
   if (current.proposal_status !== 'pending') return null
   if (proposal.kind === 'task') return <><TaskProposal key={current.id} proposal={proposal} busy={busy} draft={cardState(client, current.id).task ??= {}}
     confirm={task_edit => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids: [], task_edit }, throwOnError: true })), true) }}
     cancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }}
-  />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' || error === 'task_scope_invalid' ? { label: de.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind)}</Notice>}</>
+  />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' || error === 'task_scope_invalid' ? { label: texts.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind, texts)}</Notice>}</>
   if (proposal.kind === 'preference') return proposal.preference ? <PreferenceProposal key={current.id} id={proposal.preference.candidate_id} busy={busy} error={error} clearError={() => setError(undefined)}
     confirm={preference_decision => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids: [], preference_decision }, throwOnError: true })), true) }}
     cancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }}
   /> : null
   const saved = cardState(client, current.id)
-  const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${de.proposal.manualSubtitle}` } : item)
-  const irreversibleNote = proposal.irreversible ? proposal.kind === 'unsubscribe' ? de.proposal.irreversibleUnsubscribe : proposal.kind === 'send' ? de.proposal.irreversibleSend : undefined : undefined
-  return <><ConfirmCard key={current.id} title={de.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={de.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} deselected={saved.deselected ?? new Set<string>()} onDeselectedChange={value => { saved.deselected = value; refresh(n => n + 1) }} body={saved.body ?? proposal.draft?.body ?? ''} onBodyChange={value => { saved.body = value; refresh(n => n + 1) }} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true })), true) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' ? { label: de.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind)}</Notice>}</>
+  const items = proposal.items.map(item => item.kind === 'sender' && !['one_click', 'one-click', 'post', 'mailto'].includes(item.method ?? '') ? { ...item, subtitle: `${item.subtitle} · ${texts.proposal.manualSubtitle}` } : item)
+  const irreversibleNote = proposal.irreversible ? proposal.kind === 'unsubscribe' ? texts.proposal.irreversibleUnsubscribe : proposal.kind === 'send' ? texts.proposal.irreversibleSend : undefined : undefined
+  return <><ConfirmCard key={current.id} title={texts.proposal.titles[proposal.kind](items.length)} reason={proposal.reason} items={items} irreversibleNote={irreversibleNote} confirmLabel={texts.proposal.confirm[proposal.kind]} draft={proposal.kind === 'send' ? proposal.draft ?? undefined : undefined} deselected={saved.deselected ?? new Set<string>()} onDeselectedChange={value => { saved.deselected = value; refresh(n => n + 1) }} body={saved.body ?? proposal.draft?.body ?? ''} onBodyChange={value => { saved.body = value; refresh(n => n + 1) }} busy={busy} onConfirm={(selected_ids, body) => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids, body }, throwOnError: true })), true) }} onCancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }} />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' ? { label: texts.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind, texts)}</Notice>}</>
 }

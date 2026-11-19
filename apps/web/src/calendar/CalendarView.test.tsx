@@ -8,6 +8,7 @@ import { CalendarView } from './CalendarView'
 import { MonthView } from './MonthView'
 import { TimeGrid } from './TimeGrid'
 import { de } from '../i18n/de'
+import { I18nProvider } from '../i18n/I18n'
 import { calendarTime } from './state'
 import { resetUnresolvedWrites, trackWrite } from './write-state'
 
@@ -249,4 +250,19 @@ test('the list keeps its own range: no period navigation, but open writes stay v
   const rule = css.match(/^\.le-calendar-grid-page > \.le-calendar-agenda \{([^}]+)\}/mu)?.[1] ?? ''
   expect(rule).toContain('overflow-y: auto')
   expect(rule).toContain('min-height: 0')
+})
+
+
+test('an English afternoon slot keeps its wall-clock position on a spring-forward day', () => {
+  const browserOptions = Intl.DateTimeFormat().resolvedOptions()
+  spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({ ...browserOptions, timeZone: 'Europe/Berlin' })
+  const onSlot = mock(() => {})
+  render(<I18nProvider locale="en">
+    <TimeGrid from="2026-03-29" to="2026-03-30" rows={[]} sources={[]} onSlot={onSlot} onOpen={() => {}} />
+  </I18nProvider>)
+  expect(screen.queryByRole('button', { name: /02:00 AM/ })).toBeNull()
+  const slot = screen.getByRole('button', { name: /05:00 PM/ })
+  expect(slot.style.top).toBe(`${17 * 48}px`)
+  fireEvent.click(slot)
+  expect(onSlot).toHaveBeenCalledWith({ date: '2026-03-29', minute: 17 * 60 })
 })

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from typing import Literal
 from pydantic import BaseModel, Field
 from api.errors import quiet_validation_route, refuse
+from api.locales import DEFAULT_LOCALE, Locale
 from api.mail import agent
 from api.mail.models_catalog import list_chat_models
 from . import schemas
@@ -17,6 +18,7 @@ class ChatTurnRequest(BaseModel):
     account_id: str | None = None
     prompt_revision_id: str | None = None
     without_preferences: bool = False
+    locale: Locale = Field(default=DEFAULT_LOCALE, description="Browser language when the saved setting follows the browser")
     model: str | None = None
     context_message_id: str | None = None
     context_occurrence_id: str | None = None
@@ -34,7 +36,7 @@ async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
     conversation_id = ''
     user_id = ''
     try:
-        async for event in agent.run_turn_events(conversation_id=body.conversation_id or None, text=body.message, account_id=body.account_id, prompt_revision_id=body.prompt_revision_id, model=body.model, context_message_id=body.context_message_id, context_occurrence_id=body.context_occurrence_id, calendar_source_ids=body.calendar_source_ids, calendar_timezone=body.calendar_timezone, task_source=body.task_source, task_source_account_id=body.task_source_account_id, without_preferences=body.without_preferences):
+        async for event in agent.run_turn_events(conversation_id=body.conversation_id or None, text=body.message, account_id=body.account_id, prompt_revision_id=body.prompt_revision_id, model=body.model, context_message_id=body.context_message_id, context_occurrence_id=body.context_occurrence_id, calendar_source_ids=body.calendar_source_ids, calendar_timezone=body.calendar_timezone, task_source=body.task_source, task_source_account_id=body.task_source_account_id, without_preferences=body.without_preferences, locale=body.locale):
             if event.event == 'start':
                 conversation_id, user_id = event.conversation_id, event.user_message_id
             elif event.event == 'error':

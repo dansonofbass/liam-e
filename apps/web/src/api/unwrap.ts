@@ -1,9 +1,10 @@
 import { z } from "zod";
 
-import { de } from "../i18n/de";
+import { catalogue, type Catalogue } from "../i18n/catalogue";
+import { REFERENCE_LOCALE } from "../i18n/locales";
 
 export const errorCode = (error: unknown): string | undefined => {
-  const parsed = z.object({ detail: z.object({ code: z.string() }) }).safeParse(error);
+  const parsed = z.object({ detail: z.object({ code: z.string() }) }).safeParse(rawBody(error));
   return parsed.success ? parsed.data.detail.code : undefined;
 };
 
@@ -35,8 +36,35 @@ const rejection = z.union([
   z
     .object({ detail: z.object({ message: z.string() }) })
     .transform(({ detail }) => detail.message),
-  z.unknown().transform(() => de.errors.request_failed),
 ]);
+
+export function messageForCode(code: string | undefined, texts: Catalogue): string | undefined {
+  if (!code) return undefined;
+  for (const catalogue of [texts.errors, texts.calendar.writeErrors, texts.proposalErrors]) {
+    if (!Object.hasOwn(catalogue, code)) continue;
+    const value = (catalogue as Record<string, unknown>)[code];
+    if (typeof value === "string") return value;
+  }
+}
+
+const rawBody = (error: unknown) => error instanceof ApiError ? error.cause : error;
+
+export function apiErrorMessage(error: unknown, texts: Catalogue, fallback = texts.errors.request_failed): string {
+  const raw = rawBody(error);
+  const detail = z.object({ detail: z.union([z.string(), z.object({ error_code: z.string() })]) }).safeParse(raw);
+  const legacyCode = detail.success && (typeof detail.data.detail === "string" ? detail.data.detail : detail.data.detail.error_code);
+  const localized = messageForCode(errorCode(error) ?? (legacyCode || undefined), texts);
+  if (localized) return localized;
+  const parsed = rejection.safeParse(raw);
+  return parsed.success ? parsed.data : fallback;
+}
+
+/** Keep the response body for messages rendered after the language changes. */
+export class ApiError extends Error {
+  constructor(cause: unknown) {
+    super(apiErrorMessage(cause, catalogue(REFERENCE_LOCALE)), { cause });
+  }
+}
 
 /** Unwraps a hey-api SDK result: the typed data, or a real `Error` carrying the server's message. */
 export const unwrap = async <T>(promise: Promise<{ data: T }>): Promise<T> => {
@@ -49,7 +77,7 @@ export const unwrap = async <T>(promise: Promise<{ data: T }>): Promise<T> => {
       throw error;
     }
 
-    throw new Error(rejection.parse(error), { cause: error });
+    throw new ApiError(error);
   }
 };
 
@@ -66,7 +94,7 @@ export const dataOr404 = <T>(
   }
 
   if (result.error !== undefined || result.data === undefined) {
-    throw new Error(rejection.parse(result.error), { cause: result.error });
+    throw new ApiError(result.error);
   }
 
   return result.data;

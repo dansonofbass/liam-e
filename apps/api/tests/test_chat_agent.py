@@ -290,12 +290,12 @@ async def test_system_prompt_contains_tone_and_safety_rules():
         assert text in TERMS_AND_FORMATS
 
 
-@pytest.mark.parametrize('total,expected', [(1, '1 Mail'), (2314, '2.314 Mails')])
-async def test_unsubscribe_proposal_formats_mail_count(store, monkeypatch, total, expected):
+@pytest.mark.parametrize('locale,total,expected', [('de', 1, '1 Mail'), ('de', 2314, '2.314 Mails'), ('en', 1, '1 email'), ('en', 2314, '2,314 emails')])
+async def test_unsubscribe_proposal_formats_mail_count(store, monkeypatch, locale, total, expected):
     from api.mail.agent_tools import execute_tool, TurnContext
     sender = NS(address='news@example.org', total=total, display_name='News', unread=0, last_read_at=None, method='post', link=None)
     monkeypatch.setattr(newsletters, 'sender_by_id', AsyncMock(return_value=sender))
-    outcome = await execute_tool('propose_action', {'kind': 'unsubscribe', 'sender_ids': ['s'], 'reason': 'Alt'}, TurnContext('chat', None, date.today()))
+    outcome = await execute_tool('propose_action', {'kind': 'unsubscribe', 'sender_ids': ['s'], 'reason': 'Alt'}, TurnContext('chat', None, date.today(), locale=locale))
     from api.mail.proposals import proposal_view
     assert proposal_view(outcome.proposal_message).items[0].subtitle == f'{expected} · news@example.org'
 
@@ -310,18 +310,19 @@ async def test_unsubscribe_proposal_describes_method(store, monkeypatch, method,
     from api.mail.proposals import proposal_view
     sender = NS(address='news@example.org', total=1, display_name='News', unread=0, last_read_at=None, method=method, link=link)
     monkeypatch.setattr(newsletters, 'sender_by_id', AsyncMock(return_value=sender))
-    outcome = await execute_tool('propose_action', {'kind': 'unsubscribe', 'sender_ids': ['s'], 'reason': 'Alt'}, TurnContext('chat', None, date.today()))
+    outcome = await execute_tool('propose_action', {'kind': 'unsubscribe', 'sender_ids': ['s'], 'reason': 'Alt'}, TurnContext('chat', None, date.today(), locale='de'))
     assert proposal_view(outcome.proposal_message).items[0].subtitle == expected
     assert proposal_view(outcome.proposal_message).items[0].target == link
 
 
-async def test_mail_proposal_without_subject(store):
+@pytest.mark.parametrize('locale, expected', [('de', 'Ohne Betreff'), ('en', 'No subject')])
+async def test_mail_proposal_without_subject(store, locale, expected):
     from api.mail.agent_tools import execute_tool, TurnContext
     from api.mail.proposals import proposal_view
     m = MailMessage(account_id=store.account.id, provider_uid='1', subject='', folder='INBOX')
     store.mail.messages[m.id] = m
-    outcome = await execute_tool('propose_action', {'kind': 'archive', 'message_ids': [m.id], 'reason': 'Alt'}, TurnContext('chat', None, date.today()))
-    assert proposal_view(outcome.proposal_message).items[0].title == 'Ohne Betreff'
+    outcome = await execute_tool('propose_action', {'kind': 'archive', 'message_ids': [m.id], 'reason': 'Alt'}, TurnContext('chat', None, date.today(), locale=locale))
+    assert proposal_view(outcome.proposal_message).items[0].title == expected
 
 
 async def test_model_failure_persists_partial_answer(store, monkeypatch):
@@ -477,3 +478,39 @@ async def test_chat_turn_still_returns_messages(store, monkeypatch):
     fake = FakeMistral(streams=[['Antwort']]); monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     result = await chat_turn(ChatTurnRequest(message='Hallo'))
     assert [m.content for m in result.messages] == ['Antwort']
+
+
+@pytest.mark.parametrize('locale, fallback, message', [
+    ('en', 'Englisch', 'Was ist heute fällig?'),
+    ('de', 'Deutsch', 'What is due today?'),
+])
+async def test_current_user_language_instruction_takes_priority_over_ui_locale(store, monkeypatch, locale, fallback, message):
+    fake = FakeMistral(streams=[['Example answer']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    events = [event async for event in agent.run_turn_events(conversation_id=None, text=message, locale=locale)]
+    sent = fake.requests[0]['messages']
+    assert sent[-1]['content'] == message
+    assert 'Antworte in der Sprache des aktuellen eigenen Beitrags des Nutzers.' in sent[0]['content']
+    assert f'unklar ist, antworte auf {fallback}' in sent[0]['content']
+    assert 'Sprache und Anrede der ursprünglichen Mail' in sent[0]['content']
+    assert events[-1].event == 'done'
+
+
+@pytest.mark.parametrize("hint", [{}, {"locale": "en"}])
+async def test_saved_locale_is_used_as_chat_fallback_for_missing_or_stale_hints(store, monkeypatch, ui_locale_in_browser_mode, hint):
+    ui_locale_in_browser_mode.return_value.locale = "de"
+    _, fake = await run(store, monkeypatch, [["Example answer"]], **hint)
+    assert "unklar ist, antworte auf Deutsch" in fake.requests[0]["messages"][0]["content"]
+    ui_locale_in_browser_mode.assert_awaited_once()
+
+
+async def test_settings_lookup_failure_does_not_persist_an_unacknowledged_user_turn(store, monkeypatch, ui_locale_in_browser_mode):
+    from sqlalchemy.exc import SQLAlchemyError
+    ui_locale_in_browser_mode.side_effect = SQLAlchemyError("test settings unavailable")
+    model_client = Mock()
+    monkeypatch.setattr(agent, "mistral_client", model_client)
+
+    events = [event async for event in agent.run_turn_events(conversation_id=None, text="Hello")]
+    assert [(event.event, event.code) for event in events] == [("error", "internal")]
+    assert store.rows == []
+    model_client.assert_not_called()

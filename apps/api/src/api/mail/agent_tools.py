@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from db.accessors import mail_account, mail_message
 from db.models.chat_message import ChatMessage
+from api.locales import DEFAULT_LOCALE, Locale
 from api.mail import headers, insights, newsletters, proposals, send
 from api.mail.chat_events import StatusEvent
 
@@ -20,6 +21,8 @@ class TurnContext:
     calendar_source_ids: list[str] = field(default_factory=list)
     calendar_timezone: str = 'UTC'
     task_scope: dict = field(default_factory=lambda: {'source': 'none'})
+    locale: Locale = DEFAULT_LOCALE
+    browser_locale: Locale = DEFAULT_LOCALE
 
 
 @dataclass
@@ -102,10 +105,17 @@ def _valid_addresses(addresses):
     return all(isinstance(a, str) and '@' in a and not any(c.isspace() or c == ',' for c in a) for a in addresses)
 
 
-def unsubscribe_subtitle(total: int, address: str, method: str, link: str | None) -> str:
+def unsubscribe_subtitle(total: int, address: str, method: str, link: str | None, *, locale: Locale) -> str:
+    target = newsletters.parse_mailto(link) if method == 'mailto' else None
+    if locale == 'en':
+        subtitle = f'{total:,} {"email" if total == 1 else "emails"} · {address}'
+        if target:
+            subtitle += f' · Unsubscribe by email to {target.recipient}, subject “{target.subject}”'
+            if target.body and target.body != target.subject:
+                subtitle += f', body “{target.body}”'
+        return subtitle
     count = f'{total:,}'.replace(',', '.')
     subtitle = f'{count} {"Mail" if total == 1 else "Mails"} · {address}'
-    target = newsletters.parse_mailto(link) if method == 'mailto' else None
     if target:
         subtitle += f' · Abmeldung per Mail an {target.recipient}, Betreff „{target.subject}“'
         if target.body and target.body != target.subject:
@@ -178,7 +188,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         items = []
         for id in arguments.get('message_ids', [])[:20]:
             try:
-                insight = await insights.get_or_compute(id)
+                insight = await insights.get_or_compute(id, locale=ctx.browser_locale)
                 items.append({'message_id':id, 'points':json.loads(insight.points_json), 'deadline':insight.deadline, 'needs_reply':insight.needs_reply, 'followups':json.loads(insight.followups_json)})
             except insights.MessageNotFound:
                 items.append({'message_id':id, 'error':'not_found'})
@@ -199,13 +209,13 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
             if kind == 'unsubscribe':
                 s = await newsletters.sender_by_id(id)
                 if not s: continue
-                subtitle = unsubscribe_subtitle(s.total, s.address, s.method, s.link if s.method == 'mailto' else None)
+                subtitle = unsubscribe_subtitle(s.total, s.address, s.method, s.link if s.method == 'mailto' else None, locale=ctx.locale)
                 items.append(proposals.ProposalItem(id=id, kind='sender', title=s.display_name, subtitle=subtitle, count=s.total, unread=s.unread, last_read_at=s.last_read_at, method=s.method, target=s.link))
             else:
                 m = await mail_message.get_message(id)
                 if not m or m.folder != 'INBOX' or (kind == 'mark_read' and m.is_read): continue
                 account = await mail_account.get_account(m.account_id)
-                items.append(proposals.ProposalItem(id=id, kind='mail', title=m.subject or 'Ohne Betreff', subtitle=f'{headers.sender_name(m.sender)} · {account.email_address if account else ""}'))
+                items.append(proposals.ProposalItem(id=id, kind='mail', title=m.subject or ('No subject' if ctx.locale == 'en' else 'Ohne Betreff'), subtitle=f'{headers.sender_name(m.sender)} · {account.email_address if account else ""}'))
         if not items: return result({'error':'no_valid_items'})
         return await _proposal(ctx, proposals.Proposal(kind=kind, reason=arguments.get('reason',''), items=items))
     if name == 'create_draft':

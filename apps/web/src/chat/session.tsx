@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ChatMessageOut, ChatStreamRequest, ConversationOut, MailRefOut, StatusEvent, CalendarRefOut, SourceOut } from '../api/generated/types.gen'
 import { ChatStreamError, streamChatTurn, type ChatRefusal } from './transport'
+import { useI18n } from '../i18n/I18n'
 import { createTypewriter } from './typewriter'
 import { calendarSourcesQuery, conversationsQuery, historyQuery } from '../api/queries'
 
@@ -33,6 +34,7 @@ function resolveScope(session: Pick<Session, 'scope' | 'scopeOverrides' | 'state
 
 export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient()
+  const { browserLocale } = useI18n()
   const [state, setState] = useState<State>(initial)
   const [scope, setScope] = useState<string | null>(null)
   const [taskScopes, setTaskScopes] = useState<Record<string, TaskScope>>({})
@@ -64,7 +66,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     const calendarIds = request.calendar_source_ids ?? calendarScopes[request.conversation_id ?? 'new'] ?? savedCalendarScope(request.conversation_id ? client.getQueryData(historyQuery(request.conversation_id).queryKey) : undefined)
     const liveTasks = request.conversation_id && conversation.current === request.conversation_id ? last.current : undefined
     const tasks = taskScopes[request.conversation_id ?? 'new'] ?? (liveTasks ? { source: liveTasks.task_source ?? 'none', account_id: liveTasks.task_source_account_id ?? undefined } : savedTaskScope(request.conversation_id ? client.getQueryData(historyQuery(request.conversation_id).queryKey) : undefined))
-    request = { ...request, task_source: request.task_source ?? tasks.source, task_source_account_id: request.task_source !== undefined ? request.task_source_account_id : tasks.account_id, calendar_source_ids: calendarIds, calendar_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }
+    request = { ...request, locale: browserLocale, task_source: request.task_source ?? tasks.source, task_source_account_id: request.task_source !== undefined ? request.task_source_account_id : tasks.account_id, calendar_source_ids: calendarIds, calendar_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }
     last.current = request
     conversation.current = request.conversation_id ?? undefined
     setState({ ...initial(), phase: 'working', request, conversationId: request.conversation_id ?? undefined })
@@ -107,7 +109,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
       setState(s => ({ ...s, phase: 'error', status: undefined, errorCode: error instanceof ChatStreamError ? error.code : 'aborted' }))
       invalidate(turn.conversationId)
     }
-  }, [client, invalidate, calendarScopes, taskScopes])
+  }, [client, invalidate, calendarScopes, taskScopes, browserLocale])
   const retry = useCallback(async () => { if (last.current) await send({ ...last.current, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
   const retryWithoutPreferences = useCallback(async () => { if (last.current) await send({ ...last.current, without_preferences: true, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
   return <Context.Provider value={{ state, scope, setScope, taskScopes, setTaskScope, calendarScopes, setCalendarScope, composerTexts, setComposerText, scopeOverrides, setConversationScope, send, stop, retry, retryWithoutPreferences }}>{children}</Context.Provider>

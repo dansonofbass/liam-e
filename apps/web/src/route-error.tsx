@@ -2,6 +2,10 @@ import { useRouter } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect } from "react";
 
+import { ApiError, apiErrorMessage } from "./api/unwrap";
+import { catalogue } from "./i18n/catalogue";
+import { isLocale } from "./i18n/locales";
+
 import { useRootScreens } from "./root-screens";
 import type { ErrorScreenProps, MissingChunkScreenProps } from "./root-screens";
 
@@ -116,7 +120,8 @@ const OtherError = ({ error }: Pick<ErrorComponentProps, "error">) => {
   const Screen = screens.ErrorScreen ?? PlainError;
   // Typed as an `Error`, but a route can throw anything, a string or a `Response` among others.
   const thrown: unknown = error;
-  const message = thrown instanceof Error ? thrown.message : String(thrown);
+  const message = thrown instanceof ApiError && isLocale(texts.lang)
+    ? apiErrorMessage(thrown, catalogue(texts.lang)) : thrown instanceof Error ? thrown.message : String(thrown);
 
   return (
     <Screen

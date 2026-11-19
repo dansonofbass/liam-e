@@ -40,11 +40,12 @@ def test_stream_emits_sse_frames(monkeypatch):
     from api.mail.chat_events import StartEvent, DeltaEvent, DoneEvent
 
     async def fake(**kwargs):
+        assert kwargs['locale'] == 'de'
         yield StartEvent(conversation_id='c', user_message_id='u')
         yield DeltaEvent(text='Hallo')
         yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
     monkeypatch.setattr(stream, 'run_turn_events', fake)
-    with TestClient(build_app()).stream('POST', '/api/v1/chat/stream', json={'text': 'Hallo'}) as response:
+    with TestClient(build_app()).stream('POST', '/api/v1/chat/stream', json={'text': 'Hallo', 'locale': 'de'}) as response:
         assert response.status_code == 200
         assert response.headers['content-type'].startswith('text/event-stream')
         lines = list(response.iter_lines())

@@ -5,11 +5,12 @@ import type { LiveEvent, WriteOutcome } from '../api/generated/types.gen'
 import { calendarEventDelete, calendarWriteCheck } from '../api/generated/sdk.gen'
 import { Button, Notice } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import { EventReading } from './EventReading'
 import { trackWrite, writeError, writeOutcome } from './write-state'
 
 export function DeleteEventDialog({ event, onClose, onDone }: { event: LiveEvent; onClose(): void; onDone(): void }) {
+  const { texts, locale } = useI18n()
   const [writeId, setWriteId] = useState(() => crypto.randomUUID())
   const [outcome, setOutcome] = useState<WriteOutcome>()
   const [busy, setBusy] = useState(false), pending = useRef(false)
@@ -29,14 +30,14 @@ export function DeleteEventDialog({ event, onClose, onDone }: { event: LiveEvent
   }
   const checking = outcome?.status === 'unknown' || outcome?.status === 'running'
   return createPortal(<div className="le-scrim" onMouseDown={e => { if (e.target === e.currentTarget) close() }}><div ref={ref} className="le-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
-    <h2 id={titleId} className="heading">{de.calendar.deleteTitle}</h2><EventReading event={outcome?.current ?? event} />
-    <p>{de.calendar.deleteWarning}</p><p>{de.calendar.writeRisk}</p>
-    {outcome?.error_code && <Notice tone="danger">{writeError(outcome.error_code)}</Notice>}
-    {checking && <p role="status">{de.calendar.checking}</p>}
-    <div className="le-dialog-actions"><Button variant="secondary" disabled={busy} onClick={close}>{de.controls.cancel}</Button>
-      {!outcome && <Button variant="danger" disabled={busy} onClick={() => { void run() }}>{de.calendar.deleteEvent}</Button>}
-      {checking && <Button variant="secondary" disabled={busy} onClick={() => { void run(true) }}>{de.calendar.check}</Button>}
-      {((outcome?.status === 'not_applied' && !outcome.current) || outcome?.status === 'failed') && <Button variant="secondary" disabled={busy} onClick={() => { setWriteId(crypto.randomUUID()); setOutcome(undefined) }}>{de.calendar.retryWrite}</Button>}
+    <h2 id={titleId} className="heading">{texts.calendar.deleteTitle}</h2><EventReading event={outcome?.current ?? event} />
+    <p>{texts.calendar.deleteWarning}</p><p>{texts.calendar.writeRisk}</p>
+    {outcome?.error_code && <Notice tone="danger">{writeError(outcome.error_code, locale)}</Notice>}
+    {checking && <p role="status">{texts.calendar.checking}</p>}
+    <div className="le-dialog-actions"><Button variant="secondary" disabled={busy} onClick={close}>{texts.controls.cancel}</Button>
+      {!outcome && <Button variant="danger" disabled={busy} onClick={() => { void run() }}>{texts.calendar.deleteEvent}</Button>}
+      {checking && <Button variant="secondary" disabled={busy} onClick={() => { void run(true) }}>{texts.calendar.check}</Button>}
+      {((outcome?.status === 'not_applied' && !outcome.current) || outcome?.status === 'failed') && <Button variant="secondary" disabled={busy} onClick={() => { setWriteId(crypto.randomUUID()); setOutcome(undefined) }}>{texts.calendar.retryWrite}</Button>}
     </div>
   </div></div>, document.body)
 }

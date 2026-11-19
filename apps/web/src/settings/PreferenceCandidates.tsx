@@ -6,23 +6,26 @@ import type { CandidateOut } from '../api/generated/types.gen'
 import { preferenceCandidatePropose } from '../api/generated/sdk.gen'
 import { errorCode, unwrap } from '../api/unwrap'
 import { Button, Notice } from '../ds'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import { preferenceCandidatesQuery } from './preferenceQueries'
 
-const t = de.preferenceCandidates
 export function PreferenceCandidates() {
+  const { texts } = useI18n()
+  const t = texts.preferenceCandidates
   const query = useQuery(preferenceCandidatesQuery())
   const rows = query.data?.filter(row => row.status === 'pending')
   return <section className="le-prompts" aria-label={t.title}>
     <h2 className="heading">{t.title}</h2><p>{t.description}</p>
     {query.isPending && <><p role="status">{t.loading}</p>{[0, 1, 2].map(i => <div className="le-prompt-placeholder" key={i} aria-hidden="true" />)}</>}
-    {query.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{t.error}</Notice>}
+    {query.isError && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void query.refetch() } }}>{t.error}</Notice>}
     {rows?.length === 0 && <p>{t.empty}</p>}
     {rows?.map(row => <Candidate key={row.id} row={row} />)}
   </section>
 }
 
 function Candidate({ row }: { row: CandidateOut }) {
+  const { texts } = useI18n()
+  const t = texts.preferenceCandidates
   const client = useQueryClient(), navigate = useNavigate()
   const [busy, setBusy] = useState(false), [blocked, setBlocked] = useState(false), [error, setError] = useState<string>()
   const lock = useRef(false)
@@ -41,8 +44,8 @@ function Candidate({ row }: { row: CandidateOut }) {
     } finally { lock.current = false; setBusy(false) }
   }
   return <div className="le-prompt-row">
-    <strong>{de.preferences.keys[row.key]}</strong><span className="le-prompt-preview">{row.value}</span>
-    <small>{row.scope === '*' ? de.preferences.global : row.account_name ?? de.prompts.scopeUnavailable} · {row.origin === 'extractor' ? t.extractorSource : t.explicitSource}</small>
+    <strong>{texts.preferences.keys[row.key]}</strong><span className="le-prompt-preview">{row.value}</span>
+    <small>{row.scope === '*' ? texts.preferences.global : row.account_name ?? texts.prompts.scopeUnavailable} · {row.origin === 'extractor' ? t.extractorSource : t.explicitSource}</small>
     {row.proposal_id ? <Link className="le-btn le-btn--secondary" to="/chat/$conversationId" params={{ conversationId: row.conversation_id }} hash={`message-${row.proposal_id}`}>{t.open}</Link>
       : <Button variant="secondary" disabled={busy} onClick={() => { void propose() }}>{t.review}</Button>}
     {blocked && <><Notice tone="info">{t.busySlot}</Notice><Link className="le-link" to="/chat/$conversationId" params={{ conversationId: row.conversation_id }}>{t.openConversation}</Link></>}

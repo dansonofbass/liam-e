@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 
+import { AppLocale } from "./i18n/AppLocale";
+import { resolveInitialLocales } from "./i18n/initial-locale";
 import { resolveAppName } from "./app-name";
 import { landingPath } from "./landing";
 import { landingFallbacks } from "./landing-fallbacks";
@@ -18,6 +20,7 @@ export const getRouter = () => {
     defaultOptions: { queries: { staleTime: 60_000 } },
   });
 
+  let initialLocales = resolveInitialLocales();
   const context: RouterContext = {
     queryClient,
     landingPath: (): string | undefined =>
@@ -31,9 +34,10 @@ export const getRouter = () => {
     context,
     // The server resolves the app's name at request time; the browser adopts it before it matches
     // a route, so the first client render shows the name the server rendered.
-    dehydrate: () => ({ appName: context.appName }),
+    dehydrate: () => ({ appName: context.appName, initialLocales }),
     hydrate: (dehydrated) => {
       context.appName = dehydrated.appName;
+      initialLocales = dehydrated.initialLocales;
     },
     ...scrollRestorationOptions,
     defaultErrorComponent: RouteError,
@@ -41,7 +45,7 @@ export const getRouter = () => {
     Wrap: ({ children }) => (
       <QueryClientProvider client={queryClient}>
         <RootScreensContext value={contributedRootScreens}>
-          {children}
+          <AppLocale initial={initialLocales}>{children}</AppLocale>
         </RootScreensContext>
       </QueryClientProvider>
     ),

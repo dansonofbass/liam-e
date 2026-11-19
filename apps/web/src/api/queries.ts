@@ -1,6 +1,7 @@
-import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions, type QueryClient } from '@tanstack/react-query'
 import { promptsList, promptGet, mailSummary, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
-import type { MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData } from './generated/types.gen'
+import { REFERENCE_LOCALE, type Locale } from '../i18n/locales'
+import type { MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData, UiSettingsOut } from './generated/types.gen'
 import { dataOr404, unwrap } from './unwrap'
 
 export class MessageNotFoundError extends Error {}
@@ -20,12 +21,19 @@ export const accountOptionsQuery = () => queryOptions({ queryKey: ['account-opti
 export const connectorsQuery = () => queryOptions({ queryKey: ['connectors'], queryFn: () => unwrap(mailConnectorsList({ throwOnError: true })) })
 export const messagesInfiniteQuery = (filters: Omit<NonNullable<MailMessagesListData['query']>, 'cursor'>) => infiniteQueryOptions({ queryKey: ['messages', filters], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(mailMessagesList({ query: { ...filters, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.next_cursor ?? undefined })
 export const messageQuery = (id: string) => queryOptions({ queryKey: ['message', id], queryFn: async () => dataOr404(await mailMessageGet({ path: { message_id: id } }), () => new MessageNotFoundError()) })
-export const insightQuery = (id: string) => queryOptions({ queryKey: ['insight', id], queryFn: () => unwrap(mailMessageInsight({ path: { message_id: id }, throwOnError: true })) })
+export const insightQuery = (id: string, locale: Locale = REFERENCE_LOCALE) => queryOptions({ queryKey: ['insight', id], queryFn: () => unwrap(mailMessageInsight({ path: { message_id: id }, query: { locale }, throwOnError: true })) })
 export const historyQuery = (conversationId: string) => queryOptions({ queryKey: ['history', conversationId], queryFn: () => unwrap(chatHistory({ query: { conversation_id: conversationId }, throwOnError: true })) })
 export const modelsQuery = () => queryOptions({ queryKey: ['models'], queryFn: () => unwrap(chatModelsList({ throwOnError: true })) })
 
-// The confirmed device-independent swipe assignment; a second device reads the same row.
-export const uiSettingsQuery = () => queryOptions({ queryKey: ['ui-settings'], refetchOnWindowFocus: 'always', queryFn: () => unwrap(settingsUiGet({ throwOnError: true })) })
+// The confirmed device-independent UI settings; a second device reads the same row.
+export const uiSettingsQuery = () => queryOptions({ queryKey: ['ui-settings'], refetchOnWindowFocus: 'always', queryFn: ({ signal }) => unwrap(settingsUiGet({ signal, throwOnError: true })) })
+
+/** Apply a confirmed PATCH without allowing its delayed reply to roll back a newer language or swipe setting. */
+export async function cacheUiSettings(client: QueryClient, saved: UiSettingsOut): Promise<UiSettingsOut> {
+  const { queryKey } = uiSettingsQuery()
+  await client.cancelQueries({ queryKey, exact: true })
+  return client.setQueryData<UiSettingsOut>(queryKey, cached => cached && cached.revision > saved.revision ? cached : saved) ?? saved
+}
 
 // Task queries use their own scope; inbox filters never affect this data.
 export const taskListQuery = (query: Omit<TasksListData['query'], 'cursor'>) => infiniteQueryOptions({ queryKey: ['tasks', 'list', query], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(tasksList({ query: { ...query, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.next_cursor ?? undefined })

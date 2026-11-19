@@ -1,5 +1,6 @@
+import { REFERENCE_LOCALE, intlLocale, type Locale } from '../i18n/locales'
 import type { ApiRoutersApiV1CalendarSchemasOccurrenceOut as OccurrenceOut } from '../api/generated/types.gen'
-import { addDays, browserZone, calendarTime, localBoundary } from './state'
+import { addDays, browserZone, localBoundary } from './state'
 import type { CalendarView } from './url'
 export type { CalendarView } from './url'
 
@@ -17,28 +18,29 @@ export function shift(view: CalendarView, date: string, step: -1 | 1): string {
   d.setUTCDate(Math.min(Number(date.slice(8, 10)), end))
   return d.toISOString().slice(0, 10)
 }
-export function periodTitle(view: CalendarView, date: string): string {
-  const format = (day: string, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('de-DE', { ...options, timeZone: 'UTC' }).format(new Date(day))
+export function periodTitle(view: CalendarView, date: string, locale: Locale = REFERENCE_LOCALE): string {
+  const format = (day: string, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(intlLocale[locale], { ...options, timeZone: 'UTC' }).format(new Date(day))
   if (view === 'month') return format(date, { month: 'long', year: 'numeric' })
   if (view === 'day') return format(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const { from, to } = visibleRange(view, date)
   const end = addDays(to, -1)
-  return new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).formatRange(new Date(from), new Date(end)).replace(/\s*–\s*/, '–')
+  return new Intl.DateTimeFormat(intlLocale[locale], { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).formatRange(new Date(from), new Date(end)).replace(/\s*–\s*/, '–')
 }
 export function monthCells(date: string): { day: string; inMonth: boolean }[] {
   const { from } = visibleRange('month', date)
   return Array.from({ length: 42 }, (_, i) => { const day = addDays(from, i); return { day, inMonth: day.slice(0, 7) === date.slice(0, 7) } })
 }
 export type Placed = { row: OccurrenceOut; day: string; startMinute: number; endMinute: number; column: number; columns: number }
+const wallClock = (timeZone: string) => new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone })
 /** Minutes since local midnight on the wall clock, the scale of the hour gutter on every day. */
 export function wallMinute(instant: number, timeZone = browserZone()) {
-  const [hours, minutes] = calendarTime(new Date(instant).toISOString(), timeZone).split(':').map(Number)
+  const [hours, minutes] = wallClock(timeZone).format(instant).split(':').map(Number)
   return hours! * 60 + minutes!
 }
 /** Wall-clock hours that exist on a local day: a spring-forward day skips one. */
 export function dayHours(day: string, timeZone = browserZone()): number[] {
   const start = localBoundary(day, timeZone), end = localBoundary(addDays(day, 1), timeZone)
-  const clock = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit', timeZone })
+  const clock = wallClock(timeZone)
   const hours = new Set<number>()
   for (let t = start; t < end; t += 15 * 60_000) {
     const time = clock.format(t)

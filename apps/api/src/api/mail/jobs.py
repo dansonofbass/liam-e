@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable
 from db.accessors import mail_account, mail_job, mail_sync_state
 from env.mail import env as mail_env
 
+from api.locales import resolve_locale
 from api.mail import insights, sync
 
 _handlers: dict[str, Callable[[dict[str, Any]], Awaitable[None]]] = {}
@@ -39,7 +40,9 @@ async def _sync(payload: dict[str, Any]) -> None:
 
 
 async def _insights(payload: dict[str, Any]) -> None:
-    await insights.fill_missing(limit=mail_env.mail_insight_batch_limit, days=mail_env.mail_insight_days)
+    # Background triage still needs unread deadlines and reply flags in browser mode.
+    locale = await resolve_locale()
+    await insights.fill_missing(limit=mail_env.mail_insight_batch_limit, days=mail_env.mail_insight_days, locale=locale)
 
 
 register_handler("sync", _sync)

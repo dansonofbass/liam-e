@@ -5,15 +5,16 @@ import type { PreferenceDecision } from '../api/generated/types.gen'
 import { preferenceCandidatePropose } from '../api/generated/sdk.gen'
 import { unwrap } from '../api/unwrap'
 import { Button, Notice } from '../ds'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import { preferenceCandidatesQuery } from '../settings/preferenceQueries'
 import './preference-proposal.css'
 
-const t = de.preferenceCandidates
 export function PreferenceProposal({ id, busy, error, clearError, confirm, cancel }: {
   id: string; busy: boolean; error?: string; clearError: () => void;
   confirm: (decision: PreferenceDecision) => void; cancel: () => void;
 }) {
+  const { texts } = useI18n()
+  const t = texts.preferenceCandidates
   const query = useQuery(preferenceCandidatesQuery(id)), client = useQueryClient()
   const [refreshing, setRefreshing] = useState(false), [refreshError, setRefreshError] = useState(false)
   const lock = useRef(false), heading = useRef<HTMLHeadingElement>(null)
@@ -33,12 +34,12 @@ export function PreferenceProposal({ id, busy, error, clearError, confirm, cance
     if (row) confirm({ choice, expected_version: row.expected_version, expected_revision_id: row.expected_revision_id })
   }
   if (query.isPending) return <section className="le-confirm"><div className="le-confirm-head"><p role="status">{t.loading}</p><div className="le-prompt-placeholder" aria-hidden="true" /></div></section>
-  if (query.isError) return <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void query.refetch() } }}>{t.error}</Notice>
+  if (query.isError) return <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void query.refetch() } }}>{t.error}</Notice>
   if (!row || row.status !== 'pending' || !row.value || error === 'preference_candidate_gone') return <Notice tone="info">{t.gone}</Notice>
   const identical = row.previous_value === row.value
   return <section className="le-confirm le-preference-proposal">
     <div className="le-confirm-head"><h3 ref={heading} tabIndex={-1} className="le-confirm-title">{t.cardTitle}</h3>
-      <p>{de.preferences.keys[row.key]} · {row.scope === '*' ? de.preferences.global : row.account_name ?? de.prompts.scopeUnavailable}</p>
+      <p>{texts.preferences.keys[row.key]} · {row.scope === '*' ? texts.preferences.global : row.account_name ?? texts.prompts.scopeUnavailable}</p>
     </div>
     <div className="le-preference-values">
       <div><h4>{t.before}</h4><p>{row.previous_value ?? t.none}</p></div>
@@ -49,11 +50,11 @@ export function PreferenceProposal({ id, busy, error, clearError, confirm, cance
     <p className="le-preference-hint le-hint">{t.notSaved}</p>
     {conflict && <div className="le-preference-conflict"><Notice tone="info">{t.conflict}</Notice><h4>{t.current}</h4><p>{row.current_value ?? t.none}</p><Button variant="secondary" disabled={busy || refreshing} onClick={() => { void review() }}>{t.reviewCurrent}</Button></div>}
     {refreshError && <Notice tone="danger">{t.error}</Notice>}
-    {error && !conflict && <Notice tone="danger">{error === 'preference_quota' ? t.quota : error === 'proposal_context_revoked' ? de.proposalErrors.proposal_context_revoked : error === 'proposal_not_pending' ? de.proposalErrors.proposal_not_pending : t.saveError}</Notice>}
+    {error && !conflict && <Notice tone="danger">{error === 'preference_quota' ? t.quota : error === 'proposal_context_revoked' ? texts.proposalErrors.proposal_context_revoked : error === 'proposal_not_pending' ? texts.proposalErrors.proposal_not_pending : t.saveError}</Notice>}
     <div className="le-confirm-foot">
-      <Button variant="primary" disabled={busy || refreshing || conflict} onClick={() => decide('replace')}>{row.previous_value !== null && !identical ? t.replace : de.preferences.save}</Button>
+      <Button variant="primary" disabled={busy || refreshing || conflict} onClick={() => decide('replace')}>{row.previous_value !== null && !identical ? t.replace : texts.preferences.save}</Button>
       {row.previous_value !== null && <Button variant="secondary" disabled={busy || refreshing || conflict} onClick={() => decide('keep')}>{t.keep}</Button>}
-      <Button variant="ghost" disabled={busy || refreshing} onClick={cancel}>{de.controls.cancel}</Button>
+      <Button variant="ghost" disabled={busy || refreshing} onClick={cancel}>{texts.controls.cancel}</Button>
     </div>
   </section>
 }

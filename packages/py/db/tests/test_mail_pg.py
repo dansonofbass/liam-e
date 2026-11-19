@@ -91,7 +91,7 @@ def test_stale_bodies_are_found_rewritten_and_searchable(pg_db):
         assert {row.id for row in await m.stale_bodies("a", "INBOX", 1, limit=10, exclude=[old.id, "unknown"])} == {undated.id, "legacy"}
 
         for message_id in (old.id, new.id):
-            await i.upsert(message_id, points=["x"], deadline=None, needs_reply=False, followups=[], model="m")
+            await i.store_if_missing(message_id, points=["x"], deadline=None, needs_reply=False, followups=[], model="m")
         await m.set_body(old.id, body_version=1, body_text="Kuchenbasar am Freitag", snippet="Kuchenbasar", drop_insight=True)
         await m.set_body(undated.id, body_version=1)
         await m.set_body("missing", body_version=1)
@@ -108,10 +108,10 @@ def test_stale_bodies_are_found_rewritten_and_searchable(pg_db):
         assert await i.get(new.id) is None
 
         # A summary is stored only while the mail still has the text the model read.
-        assert await i.upsert(old.id, points=["alt"], deadline=None, needs_reply=False, followups=[], model="m", summarized="96 p{ margin:10px }") is None
+        assert await i.store_if_missing(old.id, points=["alt"], deadline=None, needs_reply=False, followups=[], model="m", summarized="96 p{ margin:10px }") is None
         assert await i.get(old.id) is None
-        assert await i.upsert("missing", points=["x"], deadline=None, needs_reply=False, followups=[], model="m", summarized="") is None
-        stored = await i.upsert(old.id, points=["neu"], deadline=None, needs_reply=False, followups=[], model="m", summarized="Kuchenbasar am Freitag")
+        assert await i.store_if_missing("missing", points=["x"], deadline=None, needs_reply=False, followups=[], model="m", summarized="") is None
+        stored = await i.store_if_missing(old.id, points=["neu"], deadline=None, needs_reply=False, followups=[], model="m", summarized="Kuchenbasar am Freitag")
         assert stored is not None and (await i.get(old.id)).points_json == '["neu"]'
     asyncio.run(run())
 
@@ -203,7 +203,7 @@ def test_list_page_filters(pg_db):
         from db.accessors import mail_message as m, mail_insight as ins
         rows = [await m.upsert_message(account_id="b" if i == 4 else "a", folder="INBOX", provider_uid=str(i), is_read=i == 4, has_attachments=i == 3, is_flagged=i == 0) for i in range(5)]
         for i in (1, 2):
-            await ins.upsert(rows[i].id, points=[], deadline=date.today() if i == 1 else None, needs_reply=i == 2, followups=[], model="m")
+            await ins.store_if_missing(rows[i].id, points=[], deadline=date.today() if i == 1 else None, needs_reply=i == 2, followups=[], model="m")
         assert {x.id for x in await m.list_page(important_only=True)} == {x.id for x in rows[:3]}
         assert {x.id for x in await m.list_page(unread_only=True)} == {x.id for x in rows[:4]}
         assert [x.id for x in await m.list_page(with_attachments=True)] == [rows[3].id]
@@ -323,4 +323,24 @@ def test_newsletter_senders_aggregates_counts(pg_db):
         rows = await m.newsletter_senders()
         assert len(rows) == 1
         assert (rows[0].total, rows[0].unread, rows[0].last_read_at, rows[0].list_unsubscribe) == (3, 1, now - timedelta(days=1), "latest")
+    asyncio.run(run())
+
+
+def test_existing_insight_wins_across_concurrent_insight_requests(pg_db):
+    async def run():
+        from db.accessors import mail_insight, mail_message
+
+        message = await mail_message.upsert_message(account_id="account", folder="INBOX", provider_uid="message", body_text="Synthetic test email")
+        languages = ["Existing summary", "Andere Zusammenfassung"]
+        results = await asyncio.gather(*(
+            mail_insight.store_if_missing(
+                message.id, points=[point], deadline=None, needs_reply=False, followups=[],
+                model="test-model", summarized=message.body_text,
+            )
+            for point in languages
+        ))
+        assert results[0] is not None and results[1] is not None
+        assert results[0].id == results[1].id
+        assert results[0].points_json == results[1].points_json == (await mail_insight.get(message.id)).points_json
+
     asyncio.run(run())

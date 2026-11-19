@@ -10,7 +10,7 @@ import { ChatHeader } from '../../chat/ChatHeader'
 import { useChatSession } from '../../chat/session'
 import { Button as ActionButton, IconButton, MailReference, Notice, QuickAction } from '../../ds'
 import { providerLabel } from '../../ds/providerLabel'
-import { de } from '../../i18n/de'
+import { useI18n } from '../../i18n/I18n'
 import { formatTime } from '../../i18n/format'
 export const Route = createFileRoute('/_app/')({
   staticData: { landing: true },
@@ -25,6 +25,7 @@ export const Route = createFileRoute('/_app/')({
   component: Greeting,
 })
 function Greeting() {
+  const { texts, locale } = useI18n()
   const { state, send, retry, retryWithoutPreferences, scope } = useChatSession()
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
@@ -52,15 +53,15 @@ function Greeting() {
     }
   }, [started, state.conversationId, navigate])
   const data = summary.data
-  return <div className="le-chat-view"><ChatHeader><ModelMenu model={model} onChange={setModel} /><TemplateMenu revision={revision} onChange={setRevision} /></ChatHeader><div className="le-chat-messages le-chat-thread le-chat-start-scroll"><div className="le-chat-start"><h1 className="display le-greeting">{de.chat.greetingFirst}<br /><span>{de.chat.greetingSecond}</span></h1>
-    {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: de.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : modelGone ? undefined : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
-    {summary.isPending && <p className="le-hint">{de.chat.loadingSummary}</p>}
-    {summary.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void summary.refetch() } }}>{de.chat.summaryError}</Notice>}
-    {data && (data.accounts.length === 0 ? <><Notice tone="info">{de.chat.noAccounts}</Notice><ActionButton variant="primary" onClick={() => { void navigate({ href: '/accounts' }) }}>{de.accounts.connect}</ActionButton></> : <><p className="le-hint">{de.chat.stand(data.unread_total, data.accounts.length, data.last_sync_at ? formatTime(new Date(data.last_sync_at)) : undefined)}</p><div className="le-chat-quick-actions">
-      <QuickAction icon="mail-open" title={de.quickActions.unread.title} sub={de.quickActions.unread.subtitle(data.unread_total)} onClick={() => quickSend(de.quickActions.unread.prompt)} />
-      <QuickAction icon="flag" title={de.quickActions.priority.title} sub={de.quickActions.priority.subtitle} onClick={() => quickSend(de.quickActions.priority.prompt)} />
-      <QuickAction icon="newspaper" title={de.quickActions.newsletters.title} sub={de.quickActions.newsletters.subtitle(data.newsletter_senders)} onClick={() => quickSend(de.quickActions.newsletters.prompt)} />
-      <QuickAction icon="clock" title={de.quickActions.dueToday.title} sub={de.quickActions.dueToday.subtitle} onClick={() => quickSend(de.quickActions.dueToday.prompt)} />
+  return <div className="le-chat-view"><ChatHeader><ModelMenu model={model} onChange={setModel} /><TemplateMenu revision={revision} onChange={setRevision} /></ChatHeader><div className="le-chat-messages le-chat-thread le-chat-start-scroll"><div className="le-chat-start"><h1 className="display le-greeting">{texts.chat.greetingFirst}<br /><span>{texts.chat.greetingSecond}</span></h1>
+    {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : modelGone ? undefined : { label: texts.chat.retry, onClick: () => { void retry() } }}>{texts.errors[state.errorCode ?? 'internal']}</Notice>}
+    {summary.isPending && <p className="le-hint">{texts.chat.loadingSummary}</p>}
+    {summary.isError && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void summary.refetch() } }}>{texts.chat.summaryError}</Notice>}
+    {data && (data.accounts.length === 0 ? <><Notice tone="info">{texts.chat.noAccounts}</Notice><ActionButton variant="primary" onClick={() => { void navigate({ href: '/accounts' }) }}>{texts.accounts.connect}</ActionButton></> : <><p className="le-hint">{texts.chat.stand(data.unread_total, data.accounts.length, data.last_sync_at ? formatTime(new Date(data.last_sync_at), undefined, locale) : undefined)}</p><div className="le-chat-quick-actions">
+      <QuickAction icon="mail-open" title={texts.quickActions.unread.title} sub={texts.quickActions.unread.subtitle(data.unread_total)} onClick={() => quickSend(texts.quickActions.unread.prompt)} />
+      <QuickAction icon="flag" title={texts.quickActions.priority.title} sub={texts.quickActions.priority.subtitle} onClick={() => quickSend(texts.quickActions.priority.prompt)} />
+      <QuickAction icon="newspaper" title={texts.quickActions.newsletters.title} sub={texts.quickActions.newsletters.subtitle(data.newsletter_senders)} onClick={() => quickSend(texts.quickActions.newsletters.prompt)} />
+      <QuickAction icon="clock" title={texts.quickActions.dueToday.title} sub={texts.quickActions.dueToday.subtitle} onClick={() => quickSend(texts.quickActions.dueToday.prompt)} />
     </div></>)}
-  </div></div>{(!!data?.accounts.length || calendars.data?.some(source => source.is_active) || calendarAbout) && <div className="le-chat-composer">{calendarAbout && <div className="le-chat-reference"><CalendarReference occurrenceId={calendarAbout} /><IconButton icon="x" label={de.calendar.removeReference} onClick={() => { void navigate({ to: '/', search: { about } }) }} /></div>}{about && <div className="le-chat-reference">{reference.isPending && <span className="le-hint">{de.chat.loadingReference}</span>}{reference.isError && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void reference.refetch() } }}>{de.chat.referenceError}</Notice>}{reference.data && <MailReference mail={reference.data} accountLabel={data?.accounts.filter(account => account.id === reference.data?.account_id).map(providerLabel)[0]} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: reference.data.id } }) }} />}<IconButton icon="x" label={de.chat.removeReference} onClick={() => { void navigate({ to: '/', search: { about: undefined } }) }} /></div>}<ChatComposer contextMessageId={about} contextOccurrenceId={calendarAbout} model={model} promptRevisionId={revision} onSend={() => setStarted(true)} /></div>}</div>
+  </div></div>{(!!data?.accounts.length || calendars.data?.some(source => source.is_active) || calendarAbout) && <div className="le-chat-composer">{calendarAbout && <div className="le-chat-reference"><CalendarReference occurrenceId={calendarAbout} /><IconButton icon="x" label={texts.calendar.removeReference} onClick={() => { void navigate({ to: '/', search: { about } }) }} /></div>}{about && <div className="le-chat-reference">{reference.isPending && <span className="le-hint">{texts.chat.loadingReference}</span>}{reference.isError && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void reference.refetch() } }}>{texts.chat.referenceError}</Notice>}{reference.data && <MailReference mail={reference.data} accountLabel={data?.accounts.filter(account => account.id === reference.data?.account_id).map(providerLabel)[0]} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: reference.data.id } }) }} />}<IconButton icon="x" label={texts.chat.removeReference} onClick={() => { void navigate({ to: '/', search: { about: undefined } }) }} /></div>}<ChatComposer contextMessageId={about} contextOccurrenceId={calendarAbout} model={model} promptRevisionId={revision} onSend={() => setStarted(true)} /></div>}</div>
 }

@@ -8,10 +8,11 @@ import { conversationsQuery, promptQuery, promptsQuery } from '../api/queries'
 import { errorCode, unwrap } from '../api/unwrap'
 import { useChatSession, useConversationScope, useRestartConversation } from '../chat/session'
 import { Chip, Icon, Menu, Notice } from '../ds'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import './prompts.css'
 
 export function TemplateMenu({ conversationId, revision = null, onChange }: { conversationId?: string; revision?: string | null; onChange?: (id: string | null) => void }) {
+  const { texts } = useI18n()
   const { saved } = useConversationScope(conversationId)
   const { state } = useChatSession()
   const restart = useRestartConversation(conversationId)
@@ -35,20 +36,20 @@ export function TemplateMenu({ conversationId, revision = null, onChange }: { co
       void client.invalidateQueries({ queryKey: ['conversations'] })
     } catch (cause) {
       const code = errorCode(cause instanceof Error ? cause.cause : cause)
-      setError(code === 'version_conflict' ? de.prompts.selectionConflict : de.prompts.selectionError)
+      setError(code === 'version_conflict' ? texts.prompts.selectionConflict : texts.prompts.selectionError)
     } finally { lock.current = false; setPending(false) }
   }
-  return <div className="le-template-control"><Menu placement="down-end" trigger={props => <Chip {...props} quiet disabled={busy || (!!conversationId && !saved)}>{de.prompts.chip(current?.name ?? (selected ? resolved ? de.prompts.removed : de.prompts.loading : de.prompts.standard))}<Icon name="chevron-down" size="sm" /></Chip>} items={[
-    { label: de.prompts.standard, checked: selected === null, onSelect: () => { void choose(null) } },
-    ...(list.data?.length === 0 ? [{ label: de.prompts.empty, disabled: true, onSelect: () => {} }] : []),
+  return <div className="le-template-control"><Menu placement="down-end" trigger={props => <Chip {...props} quiet disabled={busy || (!!conversationId && !saved)}>{texts.prompts.chip(current?.name ?? (selected ? resolved ? texts.prompts.removed : texts.prompts.loading : texts.prompts.standard))}<Icon name="chevron-down" size="sm" /></Chip>} items={[
+    { label: texts.prompts.standard, checked: selected === null, onSelect: () => { void choose(null) } },
+    ...(list.data?.length === 0 ? [{ label: texts.prompts.empty, disabled: true, onSelect: () => {} }] : []),
     ...(list.data ?? []).map(item => ({ label: item.name, hint: item.text, checked: item.revision_id === selected, onSelect: () => { void choose(item.revision_id) } })),
-    ...details.flatMap(result => result.data ? result.data.revisions.filter(item => item.id !== result.data!.revision_id).map(item => ({ label: `${result.data!.name} · ${de.prompts.version(item.number)}`, hint: item.content, checked: item.id === selected, onSelect: () => { void choose(item.id) } })) : []),
-    { label: de.prompts.manage, onSelect: () => { void navigate({ to: '/settings/prompts' }) } },
-  ]} /><small className="le-hint">{de.prompts.next}</small>
-    {list.isPending && <span role="status">{de.prompts.loading}</span>}
-    {(list.isError || details.some(item => item.isError)) && <Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void client.invalidateQueries({ queryKey: ['prompts'] }) } }}>{de.prompts.error}</Notice>}
-    {owner && owner.revision_id !== selected && <Notice tone="info" action={busy ? undefined : { label: de.prompts.adopt, onClick: () => { void choose(owner.revision_id) } }}>{de.prompts.newer}</Notice>}
-    {error && <Notice tone="danger" action={{ label: de.prompts.loadCurrent, onClick: () => { void reload().catch(() => setError(de.prompts.selectionError)) } }}>{error}</Notice>}
-    {selected && !current && resolved && <Notice tone="info" action={{ label: conversationId ? de.prompts.restart : de.prompts.useStandard, onClick: () => { if (conversationId) restart(); else onChange?.(null) } }}>{de.prompts.removed}</Notice>}
+    ...details.flatMap(result => result.data ? result.data.revisions.filter(item => item.id !== result.data!.revision_id).map(item => ({ label: `${result.data!.name} · ${texts.prompts.version(item.number)}`, hint: item.content, checked: item.id === selected, onSelect: () => { void choose(item.id) } })) : []),
+    { label: texts.prompts.manage, onSelect: () => { void navigate({ to: '/settings/prompts' }) } },
+  ]} /><small className="le-hint">{texts.prompts.next}</small>
+    {list.isPending && <span role="status">{texts.prompts.loading}</span>}
+    {(list.isError || details.some(item => item.isError)) && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void client.invalidateQueries({ queryKey: ['prompts'] }) } }}>{texts.prompts.error}</Notice>}
+    {owner && owner.revision_id !== selected && <Notice tone="info" action={busy ? undefined : { label: texts.prompts.adopt, onClick: () => { void choose(owner.revision_id) } }}>{texts.prompts.newer}</Notice>}
+    {error && <Notice tone="danger" action={{ label: texts.prompts.loadCurrent, onClick: () => { void reload().catch(() => setError(texts.prompts.selectionError)) } }}>{error}</Notice>}
+    {selected && !current && resolved && <Notice tone="info" action={{ label: conversationId ? texts.prompts.restart : texts.prompts.useStandard, onClick: () => { if (conversationId) restart(); else onChange?.(null) } }}>{texts.prompts.removed}</Notice>}
   </div>
 }

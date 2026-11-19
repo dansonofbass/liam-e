@@ -89,3 +89,24 @@ def test_sequential_updates_validate_and_refuse_stale_revisions(pg_db):
         assert row.revision == 4 and row.swipe_left == 'none' and row.swipe_right == 'toggle_read'
 
     asyncio.run(run())
+
+
+def test_language_updates_share_revision_without_overwriting_swipes(pg_db):
+    async def run():
+        from db.accessors import ui_settings as settings
+
+        initial = await settings.get_or_create()
+        assert initial.locale == 'browser'
+        revised = await settings.update(initial.revision, locale='en')
+        assert (revised.swipe_left, revised.swipe_right) == (initial.swipe_left, initial.swipe_right)
+        with pytest.raises(settings.StaleRevision):
+            await settings.update(initial.revision, locale='de')
+        with pytest.raises(ValueError):
+            await settings.update(revised.revision, locale='fr')
+        updated = await settings.update(revised.revision, swipe_right='trash')
+        assert updated.locale == 'en'
+        restored = await settings.update(updated.revision, locale='browser')
+        assert restored.swipe_right == 'trash'
+        assert (await settings.get_or_create()).locale == 'browser'
+
+    asyncio.run(run())

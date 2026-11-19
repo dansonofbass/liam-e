@@ -63,6 +63,19 @@ def no_extraction_database(monkeypatch):
     monkeypatch.setattr(extraction.records, "claim", AsyncMock(return_value=None))
 
 
+@pytest.fixture(autouse=True)
+def ui_locale_in_browser_mode(monkeypatch):
+    """API unit tests default to browser mode without creating a configuration row."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from db.accessors import ui_settings
+
+    preference = AsyncMock(return_value=SimpleNamespace(locale="browser"))
+    monkeypatch.setattr(ui_settings, "get_or_create", preference)
+    return preference
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     """Run `@pytest.mark.anyio` tests on asyncio only (the app's event loop)."""

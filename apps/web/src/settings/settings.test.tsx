@@ -252,3 +252,25 @@ test('a failed refetch after a confirmed assignment turns gestures off until a r
   fireEvent.click(screen.getByRole('button', { name: 'Wiederholen' }))
   expect(await screen.findByText('ready|archive|toggle_read|1')).toBeTruthy()
 })
+
+
+test('a delayed swipe save cannot replace a newer language already read from the server', async () => {
+  const defaults = { ...confirmed, locale: 'browser' }
+  let stored = defaults
+  let acceptSwipe!: (value: Response) => void
+  const { query } = setup('/settings/controls', async request => {
+    if (request.method === 'PATCH') return new Promise(resolve => { acceptSwipe = resolve })
+    return request.url.endsWith('/settings/ui') ? Response.json(stored) : undefined
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Nach links wischen' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'In den Papierkorb' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Auswahl speichern' }))
+  await waitFor(() => expect(acceptSwipe).toBeDefined())
+  stored = { ...defaults, swipe_left: 'trash', revision: 3, locale: 'en' }
+  await act(async () => { await query.refetchQueries({ queryKey: ['ui-settings'] }) })
+  await act(async () => { acceptSwipe(Response.json({ ...defaults, swipe_left: 'trash', revision: 2 })) })
+
+  expect(await screen.findByText('Gespeichert.')).toBeTruthy()
+  expect(query.getQueryData(['ui-settings'])).toEqual(stored)
+})

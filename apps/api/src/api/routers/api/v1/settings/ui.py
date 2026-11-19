@@ -1,9 +1,9 @@
-"""UI settings contract: a server-owned scope, validated actions, revision-guarded updates.
+"""UI settings contract: a server-owned scope, validated values, revision-guarded updates.
 
 The owner is the fixed installation scope of the single-user deployment, never a request
 identity: the body cannot name or override it (unknown fields are refused, not ignored). GET
 initializes the canonical configuration exactly once, so a second device reads the same
-confirmed assignment. PATCH validates the action allowlist and swaps on ``expected_revision``;
+confirmed assignment. PATCH validates the action and locale allowlists and swaps on ``expected_revision``;
 a concurrent change answers 409 with the way to reload instead of winning silently.
 """
 
@@ -32,7 +32,7 @@ class PrivateSettingsRoute(APIRoute):
             except SQLAlchemyError:
                 raise refuse(503, 'settings_unavailable', 'Die Einstellungen sind gerade nicht erreichbar. Versuch es gleich noch einmal.') from None
             except RequestValidationError:
-                raise refuse(422, 'ui_settings_invalid', 'Prüfe die Angaben: Jede Richtung erlaubt „Keine Aktion“, „Archivieren“, „Gelesen/Ungelesen“ und „In den Papierkorb“, und eine Änderung braucht mindestens eine davon. Eigentümer lassen sich nicht mitgeben.') from None
+                raise refuse(422, 'ui_settings_invalid', 'Prüfe die Sprache oder die Wischaktion. Gib mindestens eine Einstellung an.') from None
         return private_handler
 
 
@@ -42,36 +42,39 @@ router = APIRouter(route_class=PrivateSettingsRoute, responses={
 })
 
 SwipeAction = Literal['none', 'archive', 'toggle_read', 'trash']
+UiLocale = Literal['browser', 'de', 'en']
 
 
 class UiSettingsOut(BaseModel):
     swipe_left: SwipeAction
     swipe_right: SwipeAction
+    locale: UiLocale
     revision: int
     updated_at: datetime
 
 
 class UiSettingsUpdate(BaseModel):
-    """A change to the swipe assignment; the owner scope is not part of the contract."""
+    """A change to the UI settings; the owner scope is not part of the contract."""
 
     model_config = ConfigDict(extra='forbid')
 
     expected_revision: int = Field(ge=1)
     swipe_left: SwipeAction | None = None
     swipe_right: SwipeAction | None = None
+    locale: UiLocale | None = None
 
     @model_validator(mode='after')
     def require_explicit_change(self):
-        if any(getattr(self, key) is None for key in ('swipe_left', 'swipe_right') if key in self.model_fields_set):
-            raise ValueError('ui_settings_invalid')
-        if self.swipe_left is None and self.swipe_right is None:
+        fields = ('swipe_left', 'swipe_right', 'locale')
+        changed = self.model_fields_set.intersection(fields)
+        if not changed or any(getattr(self, key) is None for key in changed):
             raise ValueError('ui_settings_invalid')
         return self
 
 
 @router.get('', operation_id='settings_ui_get')
 async def get_ui_settings() -> UiSettingsOut:
-    """The one confirmed assignment, initializing the canonical defaults on first read."""
+    """The confirmed settings, initializing the canonical defaults on first read."""
     row = await ui_settings.get_or_create()
     return UiSettingsOut.model_validate(row, from_attributes=True)
 
@@ -80,7 +83,7 @@ async def get_ui_settings() -> UiSettingsOut:
 async def update_ui_settings(body: UiSettingsUpdate) -> UiSettingsOut:
     """Apply a validated change while the caller holds the current revision."""
     try:
-        row = await ui_settings.update(body.expected_revision, swipe_left=body.swipe_left, swipe_right=body.swipe_right)
+        row = await ui_settings.update(body.expected_revision, **body.model_dump(exclude={'expected_revision'}, exclude_unset=True))
     except ui_settings.StaleRevision:
         raise refuse(409, 'ui_settings_conflict', 'Die Einstellungen wurden inzwischen geändert. Lade sie neu und nimm deine Auswahl dann bewusst auf.') from None
     return UiSettingsOut.model_validate(row, from_attributes=True)

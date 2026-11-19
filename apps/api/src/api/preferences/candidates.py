@@ -118,7 +118,11 @@ async def prepare(arguments, ctx):
         # A conservative explicit-request gate, not a classifier. Quoted/forwarded text
         # alone cannot open this flow. Ambiguous wording requires a new direct request.
         import re
-        if not re.match(r'(?is)^\s*(?:bitte\s+)?(?:merke?\s+dir|speichere?\s+(?:dir\s+)?(?:als\s+präferenz|dauerhaft))\b', source.content):
+        direct_request = (
+            r'(?is)^\s*(?:(?:bitte\s+)?(?:merke?\s+dir|speichere?\s+(?:dir\s+)?(?:als\s+präferenz|dauerhaft))'
+            r'|(?:please\s+)?(?:remember\s+(?:that|this)|save\s+(?:this\s+)?as\s+a\s+preference))\b'
+        )
+        if not re.match(direct_request, source.content):
             raise preferences.InvalidPreference
         row = await candidates.create(session, conversation_id=ctx.conversation_id, **data.model_dump())
         card = await candidates.open_card(session, row) if row.status == 'pending' else None

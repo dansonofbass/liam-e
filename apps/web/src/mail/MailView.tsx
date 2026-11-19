@@ -6,7 +6,7 @@ import { MessageNotFoundError, messageQuery, messagesInfiniteQuery, summaryQuery
 import { useChatSession } from '../chat/session'
 import { Avatar, Button, Icon, IconButton, Menu, Notice, Tag, Tooltip } from '../ds'
 import { providerLabel } from '../ds/providerLabel'
-import { de } from '../i18n/de'
+import { useI18n } from '../i18n/I18n'
 import { formatBytes, formatMailTime } from '../i18n/format'
 import { useBreakpoint, useCoarsePointer } from '../shell/useBreakpoint'
 import { toMessageFilters, type InboxSearch } from './filters'
@@ -17,6 +17,7 @@ import { paragraphs } from './paragraphs'
 import { useMailActionsContext } from './useMailActions'
 
 export function MailView({ id }: { id: string }) {
+  const { texts, locale } = useI18n()
   const client = useQueryClient(), router = useRouter(), navigate = useNavigate()
   const search = useSearch({ strict: false }) as InboxSearch
   const breakpoint = useBreakpoint(), coarse = useCoarsePointer()
@@ -67,31 +68,31 @@ export function MailView({ id }: { id: string }) {
   const proposeTask = () => {
     if (busy || !data) return
     setStarted(true)
-    void send({ text: de.taskChat.prompt, context_message_id: id, account_id: data.account_id,
+    void send({ text: texts.taskChat.prompt, context_message_id: id, account_id: data.account_id,
       task_source: 'account', task_source_account_id: data.account_id, calendar_source_ids: [] })
   }
   const iconSize = !split || coarse ? 'lg' : 'md'
   const actions = data && <>
-    <IconButton label={de.controls.archive} icon="archive" size={iconSize} shortcut={split ? 'E' : undefined} onClick={() => remove('archive')} />
-    <IconButton label={data.is_read ? de.controls.markUnread : de.controls.markRead} icon="mail-open" size={iconSize} shortcut={split ? 'U' : undefined} onClick={() => { void run(id, data.is_read ? 'mark_unread' : 'mark_read') }} />
-    <IconButton label={de.controls.trash} icon="trash-2" size={iconSize} tone="danger" shortcut={split ? 'Entf' : undefined} onClick={() => remove('trash')} />
-    <Menu placement={split ? 'down-start' : 'down-end'} trigger={props => <IconButton {...props} label={de.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: de.taskChat.ask, icon: 'check', onSelect: proposeTask }, { label: de.mail.forward, icon: 'forward', onSelect: () => start(de.mail.forwardPrompt) }, { label: de.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : de.mail.unsubscribeUnavailable, onSelect: () => start(de.mail.unsubscribePrompt) }, { label: de.mail.spam, icon: 'ban', onSelect: () => remove('spam') }, { label: de.mail.original, icon: 'file-code', disabled: !data.can_show_original, hint: data.can_show_original ? undefined : de.mail.originalUnavailable, onSelect: () => setOriginal(id) }]} />
+    <IconButton label={texts.controls.archive} icon="archive" size={iconSize} shortcut={split ? 'E' : undefined} onClick={() => remove('archive')} />
+    <IconButton label={data.is_read ? texts.controls.markUnread : texts.controls.markRead} icon="mail-open" size={iconSize} shortcut={split ? 'U' : undefined} onClick={() => { void run(id, data.is_read ? 'mark_unread' : 'mark_read') }} />
+    <IconButton label={texts.controls.trash} icon="trash-2" size={iconSize} tone="danger" shortcut={split ? 'Entf' : undefined} onClick={() => remove('trash')} />
+    <Menu placement={split ? 'down-start' : 'down-end'} trigger={props => <IconButton {...props} label={texts.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: texts.taskChat.ask, icon: 'check', onSelect: proposeTask }, { label: texts.mail.forward, icon: 'forward', onSelect: () => start(texts.mail.forwardPrompt) }, { label: texts.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : texts.mail.unsubscribeUnavailable, onSelect: () => start(texts.mail.unsubscribePrompt) }, { label: texts.mail.spam, icon: 'ban', onSelect: () => remove('spam') }, { label: texts.mail.original, icon: 'file-code', disabled: !data.can_show_original, hint: data.can_show_original ? undefined : texts.mail.originalUnavailable, onSelect: () => setOriginal(id) }]} />
   </>
   const chatButtons = <>
-    <Tooltip content={de.mail.askTip}><Button variant="secondary" icon="message-circle" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{de.mail.askInChat}</Button></Tooltip>
-    <Tooltip content={de.mail.draftTip}><Button variant="primary" icon="pencil" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={() => start(de.mail.draftPrompt)}>{de.mail.draftReply}</Button></Tooltip>
+    <Tooltip content={texts.mail.askTip}><Button variant="secondary" icon="message-circle" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{texts.mail.askInChat}</Button></Tooltip>
+    <Tooltip content={texts.mail.draftTip}><Button variant="primary" icon="pencil" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={() => start(texts.mail.draftPrompt)}>{texts.mail.draftReply}</Button></Tooltip>
   </>
   const account = summary.data?.accounts.find(item => item.id === data?.account_id)
   return <div className="le-mail-view">
-    <div className="le-topbar le-mail-topbar">{!split && <IconButton label={de.mail.back} icon="arrow-left" size="lg" onClick={back} />}{!split && <span className="le-grow" />}{actions}{split && <><span className="le-grow" />{data && chatButtons}</>}</div>
+    <div className="le-topbar le-mail-topbar">{!split && <IconButton label={texts.mail.back} icon="arrow-left" size="lg" onClick={back} />}{!split && <span className="le-grow" />}{actions}{split && <><span className="le-grow" />{data && chatButtons}</>}</div>
     <div className="le-mail-scroll">
-      {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: de.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : { label: de.chat.retry, onClick: () => { void retry() } }}>{de.errors[state.errorCode ?? 'internal']}</Notice>}
-      {message.isPending && <><span className="le-sr" role="status">{de.mail.loading}</span><div className="le-mail-placeholder" aria-hidden="true"><div className="le-mail-placeholder-head"><span /><div><span /><span /></div></div><span /><span /><span /><span /></div></>}
-      {message.isError && <div className="le-mail-error">{message.error instanceof MessageNotFoundError ? <Notice tone="danger" action={{ label: de.mail.toInbox, onClick: back }}>{de.proposalErrors.item_gone}</Notice> : <><Notice tone="danger" action={{ label: de.chat.retry, onClick: () => { void message.refetch() } }}>{de.mail.loadError}</Notice><Button variant="secondary" className="le-mail-to-inbox" onClick={back}>{de.mail.toInbox}</Button></>}</div>}
-      {data && <article className="le-mail-article"><h1 className="title">{de.mail.subjectText(data.subject)}</h1><div className="le-mail-header"><Avatar name={data.sender_name || data.sender_address} address={data.sender_address} colorIndex={data.color_index} size="lg" /><div className="le-mail-sender"><div className="body-strong">{data.sender_name || data.sender_address}</div>{breakpoint !== 'mobile' && <div className="small le-muted le-mail-address">{data.to.length ? de.mail.addressTo(data.sender_address, data.to.join(', ')) : data.sender_address}</div>}</div>{account && <Tag tone="on-surface" dot={data.color_index}>{providerLabel(account)}</Tag>}{data.internal_date && <time className="small le-muted le-num" dateTime={data.internal_date}>{formatMailTime(new Date(data.internal_date), new Date())}</time>}</div>
+      {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : { label: texts.chat.retry, onClick: () => { void retry() } }}>{texts.errors[state.errorCode ?? 'internal']}</Notice>}
+      {message.isPending && <><span className="le-sr" role="status">{texts.mail.loading}</span><div className="le-mail-placeholder" aria-hidden="true"><div className="le-mail-placeholder-head"><span /><div><span /><span /></div></div><span /><span /><span /><span /></div></>}
+      {message.isError && <div className="le-mail-error">{message.error instanceof MessageNotFoundError ? <Notice tone="danger" action={{ label: texts.mail.toInbox, onClick: back }}>{texts.proposalErrors.item_gone}</Notice> : <><Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void message.refetch() } }}>{texts.mail.loadError}</Notice><Button variant="secondary" className="le-mail-to-inbox" onClick={back}>{texts.mail.toInbox}</Button></>}</div>}
+      {data && <article className="le-mail-article"><h1 className="title">{texts.mail.subjectText(data.subject)}</h1><div className="le-mail-header"><Avatar name={data.sender_name || data.sender_address} address={data.sender_address} colorIndex={data.color_index} size="lg" /><div className="le-mail-sender"><div className="body-strong">{data.sender_name || data.sender_address}</div>{breakpoint !== 'mobile' && <div className="small le-muted le-mail-address">{data.to.length ? texts.mail.addressTo(data.sender_address, data.to.join(', ')) : data.sender_address}</div>}</div>{account && <Tag tone="on-surface" dot={data.color_index}>{providerLabel(account)}</Tag>}{data.internal_date && <time className="small le-muted le-num" dateTime={data.internal_date}>{formatMailTime(new Date(data.internal_date), new Date(), undefined, locale)}</time>}</div>
         <InsightBox id={id} onFollowup={start} />
         {data.body_text && <div className="le-mail-text body">{paragraphs(data.body_text).map((text, index) => <p key={index}>{text}</p>)}</div>}
-        {data.attachments.length > 0 && <div className="le-mail-attachments">{data.attachments.map((attachment, index) => <span key={index} className="le-mail-attachment"><Icon name="paperclip" size="sm" /><span className="le-mail-attachment-name">{attachment.name}</span><span className="le-mail-attachment-size">{formatBytes(attachment.size)}</span></span>)}</div>}
+        {data.attachments.length > 0 && <div className="le-mail-attachments">{data.attachments.map((attachment, index) => <span key={index} className="le-mail-attachment"><Icon name="paperclip" size="sm" /><span className="le-mail-attachment-name">{attachment.name}</span><span className="le-mail-attachment-size">{formatBytes(attachment.size, locale)}</span></span>)}</div>}
       </article>}
     </div>
     {original === id && <OriginalDialog id={id} onClose={() => setOriginal(null)} />}
