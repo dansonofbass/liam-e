@@ -39,13 +39,14 @@ export function TemplateMenu({ conversationId, revision = null, onChange }: { co
       setError(code === 'version_conflict' ? texts.prompts.selectionConflict : texts.prompts.selectionError)
     } finally { lock.current = false; setPending(false) }
   }
-  return <div className="le-template-control"><Menu placement="down-end" trigger={props => <Chip {...props} quiet disabled={busy || (!!conversationId && !saved)}>{texts.prompts.chip(current?.name ?? (selected ? resolved ? texts.prompts.removed : texts.prompts.loading : texts.prompts.standard))}<Icon name="chevron-down" size="sm" /></Chip>} items={[
+  const label = texts.prompts.chip(current?.name ?? (selected ? resolved ? texts.prompts.removed : texts.prompts.loading : texts.prompts.standard))
+  return <div className="le-template-control"><Menu placement="down-end" trigger={props => <Chip {...props} quiet aria-label={label} aria-description={texts.prompts.next} disabled={busy || (!!conversationId && !saved)}>{selected ? label : texts.prompts.chooser}<Icon name="chevron-down" size="sm" /></Chip>} items={[
     { label: texts.prompts.standard, checked: selected === null, onSelect: () => { void choose(null) } },
     ...(list.data?.length === 0 ? [{ label: texts.prompts.empty, disabled: true, onSelect: () => {} }] : []),
     ...(list.data ?? []).map(item => ({ label: item.name, hint: item.text, checked: item.revision_id === selected, onSelect: () => { void choose(item.revision_id) } })),
     ...details.flatMap(result => result.data ? result.data.revisions.filter(item => item.id !== result.data!.revision_id).map(item => ({ label: `${result.data!.name} · ${texts.prompts.version(item.number)}`, hint: item.content, checked: item.id === selected, onSelect: () => { void choose(item.id) } })) : []),
     { label: texts.prompts.manage, onSelect: () => { void navigate({ to: '/settings/prompts' }) } },
-  ]} /><small className="le-hint">{texts.prompts.next}</small>
+  ]} />
     {list.isPending && <span role="status">{texts.prompts.loading}</span>}
     {(list.isError || details.some(item => item.isError)) && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void client.invalidateQueries({ queryKey: ['prompts'] }) } }}>{texts.prompts.error}</Notice>}
     {owner && owner.revision_id !== selected && <Notice tone="info" action={busy ? undefined : { label: texts.prompts.adopt, onClick: () => { void choose(owner.revision_id) } }}>{texts.prompts.newer}</Notice>}

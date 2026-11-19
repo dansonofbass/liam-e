@@ -162,6 +162,7 @@ test('account scope and composer focus survive navigation to the conversation', 
 test('a live follow-up keeps the selected account and calendars after navigation', async () => {
   setup()
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
   fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
@@ -192,6 +193,7 @@ test('reload restores the saved account for the composer', async () => {
 test('the pencil on a mail card keeps the live calendar scope after navigation', async () => {
   setup()
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
   fireEvent.click(screen.getByRole('button', { name: 'Alle Konten' }))
   fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
@@ -431,6 +433,7 @@ test('calendar selection is separate from mail and survives a scope-conflict res
   const sources = [{ id: 'work', name: 'Arbeitskalender', provider: 'google', is_active: true }]
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
   act(() => client.setQueryData(['calendar', 'sources'], sources))
+  fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Arbeitskalender' }))
   globalThis.fetch = ((_url: unknown, init: RequestInit) => {
     requestBody = JSON.parse(String(init.body))
@@ -442,7 +445,10 @@ test('calendar selection is separate from mail and survives a scope-conflict res
   expect(requestBody.account_id).toBe('a')
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-  expect((await screen.findByRole('button', { name: 'Arbeitskalender' })).getAttribute('aria-pressed')).toBe('true')
+  const scope = await screen.findByRole('button', { name: '1 Kalender ausgewählt' })
+  expect(scope.getAttribute('aria-expanded')).toBe('false')
+  fireEvent.click(scope)
+  expect(screen.getByRole('button', { name: 'Arbeitskalender' }).getAttribute('aria-pressed')).toBe('true')
   expect(screen.getByRole('button', { name: 'Privat' })).toBeTruthy()
 })
 
@@ -549,7 +555,7 @@ test('the saved model survives switching conversations and a fresh page with an 
     return { data: saved } as never
   })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
-  fireEvent.click(screen.getByRole('menuitemradio', { name: /Modell Zwei.*Genau/s }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Modell Zwei' }))
   await waitFor(() => expect(update).toHaveBeenCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2', expected_version: 5 }, throwOnError: true }))
   expect(await screen.findByRole('button', { name: 'Modell Zwei' })).toBeTruthy()
   cleanup()

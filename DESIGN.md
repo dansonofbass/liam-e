@@ -589,9 +589,11 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   wählen“. The menu offers available general-purpose mail models and lists each verified version
   once. A previously selected specialist stays identifiable as the current selection. At most one verified
   general-purpose Mistral model is recommended for everyday mail. A checked row identifies the
-  current choice. The menu identifies the version behind a moving alias when known. It shows
-  separate public input and output rates per million text tokens, a dated source and the
-  workspace-rate caveat. An unresolved price reads „Preis unbekannt“. A saved ID missing
+  current choice. Choices appear as one row per name, with the recommendation first.
+  Versions with identical display names also show their identifiers.
+  „Preise und Details“ opens a dialog with model descriptions, the version behind each moving
+  alias when known, separate input and output rates per million text tokens, dated sources and
+  the workspace-rate caveat. An unresolved price reads „Preis unbekannt“. A saved ID missing
   from the catalogue stays visible. When a refresh fails, the menu offers a retry.
   In a conversation the selection is saved and applies
   to its next answers, on the home page to the first request. The chip is disabled while that
@@ -606,7 +608,9 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   the composer: on small phones such a group pushes the composer off screen.
 - **Mail context:** „Im Chat fragen“ opens the home page with the mail as context. Above the composer
   its mail card appears with the icon button „Bezug entfernen“ (`x`). The composer starts in the
-  referenced account with focus in the question field. Each mail keeps its own unsent question.
+  referenced account with focus in the question field. The reference shows its subject, sender
+  and account and opens the full mail on tap. Each mail keeps its own unsent question.
+  The calendar control shows the number selected and expands to edit the selection.
 
 ### 9.7 Templates and settings
 

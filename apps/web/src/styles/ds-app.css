@@ -16,6 +16,9 @@
 .le-model-control, .le-mobile-model { display: inline-flex; min-width: 0; max-width: min(48vw, 18rem); }
 .le-model-control .le-menu-anchor, .le-model-control .le-tooltip-anchor, .le-model-control .le-chip { min-width: 0; max-width: 100%; }
 .le-model-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.le-model-detail { margin-block: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.le-model-detail h3, .le-model-detail p { margin: 0 0 var(--space-1); }
+.le-model-detail small { display: block; margin-bottom: var(--space-2); }
 .le-topbar:has(.le-mobile-model) { flex-wrap: nowrap; gap: var(--space-2); padding-inline: var(--space-3); }
 .le-menu-item[aria-disabled="true"], .le-menu-item[aria-disabled="true"] .le-ico { color: var(--ink-muted); cursor: not-allowed; }
 .le-menu-item[aria-disabled="true"]:hover { background: transparent; }
@@ -115,6 +118,9 @@
 .le-chat-quick-actions > * { min-width: 0; }
 .le-chat-reference { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
 .le-chat-reference .le-mailref { flex: 1; min-width: 0; }
+.le-mailref--compact { align-items: center; text-align: start; border: 0; color: var(--ink); font: inherit; cursor: pointer; min-height: var(--control-height-lg); }
+.le-mailref--compact strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.le-mailref--compact small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .le-mailref-dot { margin-top: 8px; }
 .le-mailref-dot--none { visibility: hidden; }
 .le-chat-end { align-self: center; padding: var(--space-2); }
