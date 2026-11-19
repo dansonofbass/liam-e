@@ -1050,8 +1050,29 @@
       },
       "ChatModelOut": {
         "properties": {
+          "availability": {
+            "default": "available",
+            "enum": [
+              "available",
+              "unlisted",
+              "unverified"
+            ],
+            "title": "Availability",
+            "type": "string"
+          },
           "description": {
             "title": "Description",
+            "type": "string"
+          },
+          "group": {
+            "default": "other",
+            "enum": [
+              "general",
+              "specialist",
+              "third_party",
+              "other"
+            ],
+            "title": "Group",
             "type": "string"
           },
           "id": {
@@ -1065,6 +1086,32 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatModelPrice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommended": {
+            "default": false,
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "resolved_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Id"
           }
         },
         "required": [
@@ -1074,6 +1121,41 @@
           "is_default"
         ],
         "title": "ChatModelOut",
+        "type": "object"
+      },
+      "ChatModelPrice": {
+        "properties": {
+          "checked_on": {
+            "format": "date",
+            "title": "Checked On",
+            "type": "string"
+          },
+          "currency": {
+            "const": "USD",
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "input_per_million": {
+            "title": "Input Per Million",
+            "type": "number"
+          },
+          "output_per_million": {
+            "title": "Output Per Million",
+            "type": "number"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_per_million",
+          "output_per_million",
+          "source",
+          "checked_on"
+        ],
+        "title": "ChatModelPrice",
         "type": "object"
       },
       "ChatStreamRequest": {

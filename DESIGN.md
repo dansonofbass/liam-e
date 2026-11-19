@@ -579,10 +579,17 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
 
 - **Header:** on `desktop` and `tablet` a bar above history shows „Chat“ and, in a conversation,
   „/ Titel“. A long title ends in an ellipsis, the full title is in the tooltip. On the right are
-  the model menu and „Neue Unterhaltung“ (`plus`). On `mobile` the header (§7.3) carries title and
-  plus; below are model menu and template chip.
+  the template chip followed by the model menu immediately beside „Neue Unterhaltung“ (`plus`).
+  On `mobile` the chat uses that same model control beside the plus in the global header (§7.3).
+  The template chip sits below. Long model names shorten in the header and wrap inside the menu.
 - **Model menu:** a chip with model name and `chevron-down`, tooltip „Modell für diese Unterhaltung
-  wählen“. Entries show „Name · Beschreibung“. In a conversation the selection is saved and applies
+  wählen“. The menu groups available models by purpose and provider. At most one verified
+  general-purpose Mistral model is recommended for everyday mail. A checked row identifies the
+  current choice. The menu identifies the version behind a moving alias when known. It shows
+  separate public input and output rates per million text tokens, a dated source and the
+  workspace-rate caveat. An unresolved price reads „Preis unbekannt“. A saved ID missing
+  from the catalogue stays visible. When a refresh fails, the menu offers a retry.
+  In a conversation the selection is saved and applies
   to its next answers, on the home page to the first request. The chip is disabled while that
   conversation is waiting for an answer or streaming one. Each answer shows the model reported by
   its own turn. Older streams or messages without this information omit the model label.
@@ -608,7 +615,7 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   is explicit; errors preserve inputs. A version conflict offers the current version without itself
   overwriting. Deletion requires a dialog with focus management and names consequences including
   stored versions.
-- In chat the template chip is by the model, separate from the account in the composer. The control
+- In chat the template chip is in the header area, separate from the account in the composer. The control
   row wraps. The menu shows full instruction text; selection in existing conversations becomes active
   only after the server response. Older pinned versions offer „Version übernehmen“. Selection is
   disabled during an answer.
