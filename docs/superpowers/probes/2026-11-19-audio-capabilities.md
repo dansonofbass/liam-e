@@ -66,6 +66,7 @@ Results contain only measurements and fixed reason codes.
 | Local follow-up fixture with FFmpeg and FFprobe 9.0.2 | Result |
 | --- | --- |
 | Chromium 157.0.8103.38 on Linux, default recorder and explicit WebM/Opus, Playwright 1.62.0 with synthetic microphone input | Both accepted. Each decoded duration was 2.220 s. Both runs stopped all microphone tracks. |
+| Chromium 157.0.8103.38 on Linux, Playwright 1.61.0, automated probe with Chromium's synthetic microphone | Default and explicit WebM/Opus each produced 16,516 bytes and 1.500 s of decoded audio. Both passed the validator and stopped the microphone track. Explicit MP4/AAC was reported as unsupported. |
 | 119.5 s and 121 s of synthetic audio in WebM/Opus and fragmented MP4/AAC | Both formats accepted the shorter sample and rejected the longer sample. |
 | WebM without aggregate duration metadata and a packet span of 122.258 s | Rejected based on packet timestamps. |
 | WebM with 121 s of samples and a packet span below 120 s | Rejected based on decoded sample count. |
@@ -116,6 +117,29 @@ proof that the deployed path enforces size, container and duration. TTS requires
 `max_input_characters`, `max_response_bytes` and `timeout_seconds` that the deployed path enforces.
 Both attestations remain unset. When a deployment, credential, model, format, limit or
 data-handling term changes, clear the affected attestation until its release checks have run again.
+
+## Repeat the Chromium recording offline
+
+[The browser probe](../../../tools/audio_browser_probe.cjs) exercises Chromium's default recorder
+and the supported explicit formats from the audio capability contract. Playwright grants microphone
+access in a disposable context using Chromium's synthetic microphone. The container probe checks
+the bytes from the real browser muxer. The output is one JSON line per recorder option with versions,
+MIME type, track state and validation results. The script deletes the temporary clips after the run.
+
+Install Playwright in a scratch directory or provide an existing installation on `NODE_PATH`.
+Use FFmpeg and FFprobe with the descriptor protocol, as in the container check.
+
+```bash
+playwright_dir=$(mktemp -d)
+npm install --prefix "$playwright_dir" --no-save --no-package-lock playwright@1.61.0
+"$playwright_dir/node_modules/.bin/playwright" install chromium
+NODE_PATH="$playwright_dir/node_modules" node tools/audio_browser_probe.cjs
+```
+
+You can pass an installed Chromium executable as the only argument. An unsupported explicit format
+is reported separately. The script exits with status 1 if recording or validation fails or if a
+microphone track remains active. This loopback run uses a synthetic input and a programmatic permission
+grant. The Studio embedding and real-device checks remain required.
 
 ## Reproduce with synthetic data
 
