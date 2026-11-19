@@ -94,12 +94,18 @@ organization administrator before using personal or mail-derived content.
 
 ## Runtime contract
 
-`GET /api/v1/audio/capabilities` is browser-only and `Cache-Control: no-store`. It reads release
-attestations locally and makes no provider requests. Production owner verification remains
-unconfigured. The audio subtree returns 401 until a trusted server adapter installs
-`get_audio_owner_verifier`. The Studio SDK's caller-token binding alone does not establish
-that the caller is the app owner. Verified test callers receive independent `stt` and `tts`
-objects. Both are `unknown` until their own current model and evidence match.
+`GET /api/v1/audio/capabilities` is browser-only and `Cache-Control: no-store`. It verifies the
+caller and then reads release attestations locally. Inference runs only on the audio POSTs.
+Verified callers receive independent `stt` and `tts` objects. Both are `unknown` until their
+own current model and evidence match.
+
+Set `AUDIO_STUDIO_OWNER` on the API module for the intended deployment. The JSON object contains
+`user_id`, `organization_id`, `workspace_id` and the exact HTTPS browser `origin` without a
+trailing slash. The server uses the request-scoped Mistral Apps gateway token for the identity
+lookup at `GET /v1/users/me`. It matches all three IDs and requires an explicit null `api_key`
+field in the authenticated identity response. Workspace API keys, missing or ambiguous identity,
+and audio POSTs from another origin return 401. Values belong in the deployment configuration.
+[Mistral Users API](https://docs.mistral.ai/api/endpoint/beta/users).
 
 `AUDIO_STT_MODEL` and `AUDIO_TTS_MODEL` default to the candidates above. The corresponding
 `AUDIO_STT_VERIFICATION` and `AUDIO_TTS_VERIFICATION` are optional JSON objects with a matching
@@ -117,6 +123,23 @@ proof that the deployed path enforces size, container and duration. TTS requires
 `max_input_characters`, `max_response_bytes` and `timeout_seconds` that the deployed path enforces.
 Both attestations remain unset. When a deployment, credential, model, format, limit or
 data-handling term changes, clear the affected attestation until its release checks have run again.
+
+## Production runtime follow-up
+
+- The existing signed-in Chromium session reached the production gateway on the same origin.
+  The probe initiated no new connector consent. A fresh session and the corresponding
+  embedded-flow permissions still need separate evidence.
+- The documented Users API resolved the deployment workspace key to the same owner and tenant
+  and reported an API-key context. That credential is excluded by the app's verifier.
+- The production-target API image installs Debian FFmpeg and FFprobe 7.1.5, both with the
+  seekable descriptor protocol. As the image's non-root runtime user, the validator accepted
+  synthetic WebM/Opus at 1.5 and 119.5 seconds and rejected 121 seconds. FFprobe 7.1.5 omitted
+  the first AAC packet's duration on the local fragmented MP4 fixture, so the validator
+  rejected it conservatively. Keep fragmented MP4 out of the Studio formats pending a
+  compatible, validated runtime.
+- The organization's API training opt-in and Labs toggle appeared off in Admin. Effective
+  zero data retention for this organization remains unverified. Keep live probes synthetic.
+  [Mistral zero data retention](https://docs.mistral.ai/admin/monitor-comply/zero-data-retention).
 
 ## Repeat the Chromium recording offline
 

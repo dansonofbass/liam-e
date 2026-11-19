@@ -1,0 +1,120 @@
+"""The Studio gateway's caller token is verified before it can authorize audio."""
+
+from collections.abc import Iterator
+import json
+
+from env.audio import env
+from fastapi.testclient import TestClient
+import httpx
+from mistralai_capabilities.apps import credentials as gateway_credentials
+import pytest
+import respx
+from utils.mistral import install_caller_credentials
+
+CAPABILITIES = "/api/v1/audio/capabilities"
+TRANSCRIPTIONS = "/api/v1/audio/transcriptions"
+ORIGIN = "https://audio.example.test"
+PROXY = "https://gateway.example.test/mistral"
+OWNER = "3562d901-b614-42e7-9669-14fb24986d78"
+ORGANIZATION = "3a2e1035-7019-4729-9cfc-18d762d2a4cc"
+WORKSPACE = "4a2e1035-7019-4729-9cfc-18d762d2a4cc"
+OTHER = "039083ef-44a2-404e-9557-91e5c5a86ad0"
+HEADERS = {"x-apps-token": "forwarded-user-session-test-only"}
+IDENTITY = {
+    "id": OWNER,
+    "organization": {"id": ORGANIZATION},
+    "workspace": {"id": WORKSPACE},
+    "api_key": None,
+}
+
+
+@pytest.fixture
+def studio_client(monkeypatch) -> Iterator[TestClient]:
+    from api.main import create_app
+
+    binding = {"user_id": OWNER, "organization_id": ORGANIZATION, "workspace_id": WORKSPACE, "origin": ORIGIN}
+    monkeypatch.setattr(env, "audio_studio_owner", json.dumps(binding))
+    monkeypatch.setattr(env, "audio_stt_verification", None)
+    monkeypatch.setattr(env, "audio_tts_verification", None)
+    monkeypatch.setattr(gateway_credentials.env, "apps_proxy_url", PROXY)
+    app = create_app()
+    try:
+        yield TestClient(app)
+    finally:
+        install_caller_credentials(None)
+
+
+def test_verified_gateway_owner_can_read_the_independent_capabilities(studio_client: TestClient) -> None:
+    with respx.mock(assert_all_called=False) as outbound:
+        who = outbound.get(PROXY + "/v1/users/me").mock(return_value=httpx.Response(200, json=IDENTITY))
+        response = studio_client.get(CAPABILITIES, headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json()["stt"]["status"] == response.json()["tts"]["status"] == "unknown"
+    assert response.headers["cache-control"] == "no-store"
+    assert who.call_count == 1
+    assert who.calls.last.request.headers["authorization"] == "Bearer " + HEADERS["x-apps-token"]
+    assert "x-api-key" not in who.calls.last.request.headers
+
+
+@pytest.mark.parametrize("change", [
+    {"id": OTHER},
+    {"organization": {"id": OTHER}},
+    {"workspace": {"id": OTHER}},
+    {"api_key": {"id": OWNER}},
+    {"api_key": False},
+    {"organization": None},
+])
+def test_wrong_principal_context_or_api_key_is_denied(studio_client: TestClient, change: dict) -> None:
+    with respx.mock(assert_all_called=False) as outbound:
+        who = outbound.get(PROXY + "/v1/users/me").mock(
+            return_value=httpx.Response(200, json={**IDENTITY, **change})
+        )
+        response = studio_client.get(CAPABILITIES, headers=HEADERS)
+    assert response.status_code == 401
+    assert who.call_count == 1
+
+
+def test_missing_credential_type_is_not_proof_of_a_session(studio_client: TestClient) -> None:
+    body = {k: v for k, v in IDENTITY.items() if k != "api_key"}
+    with respx.mock(assert_all_called=False) as outbound:
+        outbound.get(PROXY + "/v1/users/me").mock(return_value=httpx.Response(200, json=body))
+        response = studio_client.get(CAPABILITIES, headers=HEADERS)
+    assert response.status_code == 401
+
+
+def test_identity_redirect_does_not_send_the_gateway_token_elsewhere(studio_client: TestClient) -> None:
+    with respx.mock(assert_all_called=False) as outbound:
+        who = outbound.get(PROXY + "/v1/users/me").mock(
+            return_value=httpx.Response(302, headers={"location": "https://other.example.test/"})
+        )
+        response = studio_client.get(CAPABILITIES, headers=HEADERS)
+    assert response.status_code == 401
+    assert who.call_count == 1
+
+
+@pytest.mark.parametrize("headers", [
+    {"Authorization": "Bearer request-token-test-only"},
+    {**HEADERS, "x-api-key": "workspace-key-test-only"},
+])
+def test_studio_owner_never_falls_back_to_other_credentials(studio_client: TestClient, headers: dict) -> None:
+    with respx.mock() as outbound:
+        response = studio_client.get(CAPABILITIES, headers=headers)
+    assert response.status_code == 401
+    assert not outbound.calls
+
+
+@pytest.mark.parametrize("origin", [None, "null", "https://other.example.test"])
+def test_audio_posts_require_the_configured_browser_origin(studio_client: TestClient, origin: str | None) -> None:
+    headers = {**HEADERS, **({"origin": origin} if origin else {})}
+    with respx.mock() as outbound:
+        response = studio_client.post(TRANSCRIPTIONS, headers=headers)
+    assert response.status_code == 401
+    assert not outbound.calls
+
+
+def test_same_origin_owner_reaches_the_transcription_release_check(studio_client: TestClient) -> None:
+    with respx.mock(assert_all_called=False) as outbound:
+        outbound.get(PROXY + "/v1/users/me").mock(return_value=httpx.Response(200, json=IDENTITY))
+        response = studio_client.post(TRANSCRIPTIONS, headers={**HEADERS, "origin": ORIGIN})
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "audio_unavailable"

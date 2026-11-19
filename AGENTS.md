@@ -845,8 +845,10 @@ label, `send_email` takes `replyToMessageId`; the Outlook connector returned HTT
   `mail_message_original` fetches the mail from the provider read-only, without marking it read, and stores nothing.
   `settings_ui_get` creates the default assignment in `ui_settings` once on the very first read; it never changes an existing assignment.
   The calendar write routes (`calendar_event_create`, `calendar_event_update`, `calendar_event_delete`, `calendar_write_check`), `chat_proposal_check`, `calendar_occurrence_live` and `calendar_write_get` are deliberately not in this list: they write to Google, resolve a write or read private live event data.
-  `audio_capabilities_get` and the paid `audio_transcribe` and `audio_speech` operations stay browser-only. The audio subtree requires a server-verified owner,
-  with a default of 401 until an owner verifier is installed. STT and TTS are gated independently
+  `audio_capabilities_get` and the paid `audio_transcribe` and `audio_speech` operations stay browser-only. The audio subtree verifies the Studio gateway's
+  caller with the Mistral Users API against the API module's `AUDIO_STUDIO_OWNER` binding.
+  Workspace keys and missing identity are denied. Audio POSTs also require the configured
+  browser origin. STT and TTS are gated independently
   by matching release attestations. STT validates the container, codec and duration before
   contacting Mistral. A transient PostgreSQL lock limits transcription to one active request
   per app database. The browser appends a successful transcript to the current draft.
