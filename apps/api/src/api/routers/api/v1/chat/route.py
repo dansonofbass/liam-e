@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from api.errors import quiet_validation_route, refuse
 from api.locales import DEFAULT_LOCALE, Locale
 from api.mail import agent
-from api.mail.models_catalog import list_chat_models
+from api.mail.models_catalog import list_chat_models, require_available_model
 from . import schemas
 
 router = APIRouter(route_class=quiet_validation_route('chat_invalid', 'Prüfe die Nachricht: 1–8.000 Zeichen.'))
@@ -31,8 +31,8 @@ class ChatTurnRequest(BaseModel):
 @router.post('', operation_id='chat_turn', summary='Send a message to the mail agent')
 async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
     """Run a complete chat turn and return its visible messages."""
-    if not body.conversation_id and body.model is not None and body.model not in {m.id for m in await list_chat_models()}:
-        raise refuse(422, 'model_unknown', 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.')
+    if not body.conversation_id and body.model is not None:
+        require_available_model(body.model, await list_chat_models())
     conversation_id = ''
     user_id = ''
     try:
