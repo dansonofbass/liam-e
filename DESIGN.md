@@ -414,12 +414,14 @@ Quoted German labels in this section are UI text.
 - List layout: on `desktop` and `tablet` a top bar contains „Posteingang“, status, select
   (`list-checks`), search (`search`) and fetch (`refresh-cw`). Below are filter chips: account
   (menu with „Alle Konten“), „Ungelesen“, „Wichtig“ and „Mit Anhang“. On `mobile` the header
-  carries the title, and below the filters are „47 ungelesen · Stand 08:57“ and the three buttons.
+  carries the title, and below the filters are „47 ungelesen · Stand 08:57“, a labeled „Auswählen“ button,
+  search and fetch.
   Search opens a field „In allen Konten suchen …“. The list groups by day: „Heute“, „Gestern“,
   „Diese Woche“ (from Monday) and „Älter“.
 - Selection mode replaces the top bar on `desktop` and `tablet`, the status-and-buttons row on
   `mobile`. It shows „Auswahl beenden“, the count, „Alle auswählen“ and archive, read/unread,
-  trash and spam. The bar may scroll horizontally on its own, but not the page; on `mobile` and
+  trash and spam. On phones the four actions occupy a second row so they are all visible. The bar
+  may scroll independently on larger displays. On `mobile` and
   with a coarse pointer targets are at least 44 px. Tapping a row selects it; the avatar directly
   selects even outside the mode. With a mouse it shows a checkbox on hover, shift-click selects the
   range. „Alle auswählen“ selects at most 100 loaded mails. Escape ends selection. Swiping and row
@@ -431,7 +433,8 @@ Quoted German labels in this section are UI text.
   trash and „Weitere Aktionen“ are in the top bar; „Im Chat fragen“ and „Antwort entwerfen“ are in
   a bar at the bottom.
 - On `mobile` and with `pointer: coarse`, every mail row has a visible „Weitere Aktionen“ button;
-  with a mouse the action bar appears on hover on `tablet` and `desktop` (§7.2). It sits over the
+  a chat button beside it opens the composer for that mail in one tap. With a mouse the action
+  bar appears on hover on `tablet` and `desktop` (§7.2). It sits over the
   end of the text column so the time, urgency dot and attachment icon remain visible and their
   tooltip reachable.
 - At all breakpoints a deadline appears as a badge in `warm-soft` below the snippet, on `mobile`
@@ -583,7 +586,8 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   On `mobile` the chat uses that same model control beside the plus in the global header (§7.3).
   The template chip sits below. Long model names shorten in the header and wrap inside the menu.
 - **Model menu:** a chip with model name and `chevron-down`, tooltip „Modell für diese Unterhaltung
-  wählen“. The menu groups available models by purpose and provider. At most one verified
+  wählen“. The menu offers available general-purpose mail models and lists each verified version
+  once. A previously selected specialist stays identifiable as the current selection. At most one verified
   general-purpose Mistral model is recommended for everyday mail. A checked row identifies the
   current choice. The menu identifies the version behind a moving alias when known. It shows
   separate public input and output rates per million text tokens, a dated source and the
@@ -601,7 +605,8 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   the send button stays at the end. Selections belong as chips in this bar, not a chip group above
   the composer: on small phones such a group pushes the composer off screen.
 - **Mail context:** „Im Chat fragen“ opens the home page with the mail as context. Above the composer
-  its mail card then appears with the icon button „Bezug entfernen“ (`x`).
+  its mail card appears with the icon button „Bezug entfernen“ (`x`). The composer starts in the
+  referenced account with focus in the question field. Each mail keeps its own unsent question.
 
 ### 9.7 Templates and settings
 

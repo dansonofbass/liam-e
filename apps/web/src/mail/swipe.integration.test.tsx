@@ -10,17 +10,18 @@ import { useMailActions } from './useMailActions'
 const row = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.org', subject: 'Termin', snippet: '', internal_date: null, deadline: null, has_attachments: false, is_flagged: false, is_read: false, needs_reply: false }
 const key = ['messages', {}]
 const assignment = { swipe_left: 'archive', swipe_right: 'toggle_read', revision: 1 }
-function setup() {
+function setup(settings = assignment) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData<InfiniteData<MessagePageOut>>(key, { pages: [{ items: [row], next_cursor: null }], pageParams: [undefined] })
-  client.setQueryData(['ui-settings'], assignment)
+  client.setQueryData(['ui-settings'], settings)
   const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'a1', message: row }, response: { status: 200 } })) as never)
   const open = mock(() => {})
   function Harness() {
     const { data } = useQuery<InfiniteData<MessagePageOut>>({ queryKey: key, queryFn: async () => client.getQueryData<InfiniteData<MessagePageOut>>(key)!, enabled: false })
     const settings = useSwipeSettings()
     const actions = useMailActions()
-    const mail = data!.pages[0]!.items[0]!
+    const mail = data!.pages[0]!.items[0]
+    if (!mail) return null
     return <MailRow mail={mail} selected={false} coarse onOpen={open} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} swipe={{ basis: settings.assignment && settings.revision !== undefined ? { id: mail.id, isRead: mail.is_read, revision: settings.revision, ...settings.assignment } : undefined, enabled: settings.status === 'ready' && actions.capacityAvailable && !actions.isBusy(mail.id), navigation: '/mail', valid: basis => { const settings = client.getQueryData<typeof assignment>(['ui-settings']); const current = client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items[0]; return settings?.revision === basis.revision && settings.swipe_left === basis.left && settings.swipe_right === basis.right && current?.id === basis.id && current.is_read === basis.isRead && !actions.isBusy(basis.id) }, run: kind => { if (!actions.isBusy(mail.id) && actions.checkCapacity()) void actions.run(mail.id, kind) } }} />
   }
   const view = render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
@@ -166,4 +167,22 @@ test('click suppression after a drag expires for a later keyboard activation', (
   now.mockReturnValue(1000 + 5_000)
   fireEvent.click(element)
   expect(open).toHaveBeenCalledTimes(1)
+})
+
+test('a native horizontal move before pointermove shows the configured trash action and commits it once', async () => {
+  const { element, action } = setup({ ...assignment, swipe_left: 'trash' })
+  const subject = element.querySelector('.le-mailrow-subject')!
+  pointer(subject, 'pointerdown', 220)
+  expect(touchMove(subject, 190, 105)).toBe(true)
+  expect(touchMove(subject, 115, 115)).toBe(true)
+  expect(screen.getByRole('status').textContent).toBe('Loslassen für den Papierkorb')
+  up(element, 115)
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  expect(action.mock.calls[0]?.[0]).toEqual({ path: { message_id: 'm1' }, body: { kind: 'trash' } })
+})
+
+test('lifting inside the threshold after the last armed preview cancels the swipe', () => {
+  const { element, action } = setup({ ...assignment, swipe_left: 'trash' })
+  down(element); move(element, 100); up(element, 180)
+  expect(action).not.toHaveBeenCalled()
 })

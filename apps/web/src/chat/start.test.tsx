@@ -12,7 +12,7 @@ import { ChatSessionProvider } from './session'
 
 const originalFetch = globalThis.fetch, originalMatchMedia = window.matchMedia
 let request: Record<string, unknown>
-const oneModel = [{ id: 'm', label: 'Standardmodell', description: '', is_default: true }]
+const oneModel: ChatModelOut[] = [{ id: 'm', label: 'Standardmodell', group: 'general', description: '', is_default: true }]
 function setup(accounts = true, path = '/', unread = 3, lastSync: string | null = null, displayName = 'Privat', models: ChatModelOut[] = oneModel, locale: 'de' | 'en' = 'de') {
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { request = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start() {} }))) }) as typeof fetch
@@ -113,15 +113,23 @@ test('a failed start shows a retry that sends the same text', async () => {
   expect(requests.map(item => item.text)).toEqual(['Was steht drin?', 'Was steht drin?'])
 })
 
-const twoModels = [{ id: 'm', label: 'Standardmodell', description: 'Alltag', is_default: true }, { id: 'big', label: 'Großmodell', description: 'Gründlich', is_default: false }]
+const twoModels: ChatModelOut[] = [{ id: 'm', label: 'Standardmodell', group: 'general', description: 'Alltag', is_default: true }, { id: 'big', label: 'Großmodell', group: 'general', description: 'Gründlich', is_default: false }]
 
 test.each(['de', 'en'] as const)('grouped catalogue shows localized prices, provenance and the selected radio in %s', async locale => {
   const source = 'https://docs.mistral.ai/inference/pricing'
   const small: ChatModelOut = { id: 'mistral-small-latest', label: 'Mistral Small', is_default: true, description: '', recommended: true, group: 'general', resolved_id: 'mistral-small-2603',
     price: { currency: 'USD', input_per_million: 0.15, output_per_million: 0.6, checked_on: '2026-11-19', source } }
-  setup(true, '/', 3, null, 'Privat', [small, { id: 'special', label: 'Special', description: '', is_default: false, group: 'specialist' }], locale)
+  setup(true, '/', 3, null, 'Privat', [
+    small, { ...small, id: small.resolved_id!, label: 'Small 4', recommended: false, is_default: false },
+    { id: 'mistral-large-latest', label: 'Large', description: '', is_default: false, group: 'general' },
+    { id: 'codestral-latest', label: 'Codestral', description: '', is_default: false, group: 'specialist' },
+    { id: 'vendor-coder', label: 'Coder', description: '', is_default: false, group: 'third_party' },
+    { id: 'custom', label: 'Custom', description: '', is_default: false, group: 'other' },
+  ], locale)
   fireEvent.click(await screen.findByRole('button', { name: 'Mistral Small' }))
   expect(screen.getAllByRole('group').some(el => el.getAttribute('aria-label') === (locale === 'de' ? 'Für Mail empfohlen' : 'Recommended for email'))).toBe(true)
+  expect(screen.getAllByRole('menuitemradio')).toHaveLength(2)
+  expect(screen.queryByRole('menuitemradio', { name: /Codestral|Coder|Custom/ })).toBeNull()
   const current = screen.getByRole('menuitemradio', { checked: true })
   expect(current.textContent).toContain('mistral-small-2603')
   expect(current.textContent).toContain(locale === 'de' ? '0,15' : '0.15')
@@ -236,9 +244,13 @@ test('about displays a mail and sends its context, which can be removed', async 
   expect(await screen.findByText('Termin')).toBeTruthy()
   expect(screen.getByText('Anna')).toBeTruthy()
   expect(screen.getByText('Gmail')).toBeTruthy()
-  fireEvent.change(screen.getByPlaceholderText(de.chat.placeholder), { target: { value: 'Was steht drin?' } })
+  const field = await screen.findByPlaceholderText(de.inbox.mailQuestionPlaceholder)
+  expect(document.activeElement).toBe(field)
+  expect(screen.queryByText(de.chat.greetingFirst)).toBeNull()
+  fireEvent.change(field, { target: { value: 'Was steht drin?' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
   expect(request.context_message_id).toBe('mail1')
+  expect(request.account_id).toBe('a')
   fireEvent.click(screen.getByRole('button', { name: 'Bezug entfernen' }))
   await waitFor(() => expect(router.state.location.searchStr).toBe(''))
 })
@@ -255,4 +267,25 @@ test('mail reference opens its detail route', async () => {
   await screen.findByText('Termin')
   fireEvent.click(screen.getByRole('button', { name: 'Mail öffnen' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/mail/mail1'))
+})
+
+test('opening a mail keeps its question separate from an unsent general question', async () => {
+  const router = setup()
+  fireEvent.change(await screen.findByPlaceholderText(de.chat.placeholder), { target: { value: 'Offene Frage' } })
+  await act(() => router.navigate({ to: '/', search: { about: 'mail1' } }))
+  const question = await screen.findByPlaceholderText(de.inbox.mailQuestionPlaceholder) as HTMLTextAreaElement
+  expect(question.value).toBe('')
+  fireEvent.change(question, { target: { value: 'Wann ist der Termin?' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Bezug entfernen' }))
+  const general = await screen.findByPlaceholderText(de.chat.placeholder) as HTMLTextAreaElement
+  expect(general.value).toBe('Offene Frage')
+  expect(screen.getByRole('button', { name: de.controls.allAccounts })).toBeTruthy()
+})
+
+test('a filtered default is identified without offering a specialist as a new choice', async () => {
+  setup(true, '/', 3, null, 'Privat', [{ id: 'devstral-latest', label: 'Devstral', group: 'specialist', description: '', is_default: true }])
+  fireEvent.click(await screen.findByRole('button', { name: 'Devstral' }))
+  expect(screen.getByRole('menuitemradio', { checked: true }).getAttribute('aria-disabled')).toBe('true')
+  expect(screen.getByText(de.chat.noMailModels)).toBeTruthy()
+  expect(screen.queryByRole('menuitemradio', { checked: false })).toBeNull()
 })

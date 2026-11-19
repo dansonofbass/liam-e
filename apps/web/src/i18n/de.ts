@@ -1,3 +1,4 @@
+import { offline } from './offline'
 import { plural as formatPlural } from './numbers'
 
 const plural = (n: number, forms: Parameters<typeof formatPlural>[1]) => formatPlural(n, forms, 'de')
@@ -9,6 +10,7 @@ const noticeSubject = (subject: string) => {
 }
 
 export const de = {
+  offline: offline.de,
   preferences: {
     title: 'Präferenzen', empty: 'Noch keine Präferenzen gespeichert. Lege fest, wie liam-e für dich schreiben soll.',
     add: 'Präferenz hinzufügen', edit: 'Bearbeiten', pause: 'Pausieren', activate: 'Aktivieren', remove: 'Löschen',
@@ -234,16 +236,18 @@ export const de = {
     loadingReference: 'Mail wird geladen …', referenceError: 'Die Mail konnte nicht geladen werden. Versuch es gleich noch mal.',
     modelTip: 'Modell für diese Unterhaltung wählen',
     modelChoice: 'Modell wählen',
-    modelGroups: { recommended: 'Für Mail empfohlen', general: 'Allzweckmodelle', specialist: 'Spezialmodelle', third_party: 'Modelle anderer Anbieter', other: 'Weitere Modelle', current: 'Aktuelle Auswahl' },
-    modelMailReason: 'Für Mailsuchen und Zusammenfassungen empfohlen. Das Modell unterstützt die Mail-Werkzeuge zu einem belegten Listenpreis.',
+    modelGroups: { recommended: 'Für Mail empfohlen', general: 'Allzweckmodelle', current: 'Aktuelle Auswahl' },
+    modelMailReason: 'Unterstützt Mailsuche und Zusammenfassungen.',
     modelPrices: (input: string, output: string) => `Eingabe ${input} · Ausgabe ${output} je 1 Mio. Texttokens`,
     modelPriceUnknown: 'Preis unbekannt',
-    modelAliasUnresolved: 'Preis unbekannt. Der Alias lässt sich keiner eindeutigen Modellversion zuordnen.',
+    modelAliasUnresolved: 'Preis unbekannt · Modellversion offen',
     modelPriceSource: (date: string) => `Mistral-Preisliste · Stand ${date}`,
     modelCardSource: (id: string, date: string) => `Mistral-Modellkarte für ${id} · Stand ${date}`,
     modelPriceTerms: 'Öffentliche Listenpreise. Für deinen Workspace kann ein anderer Tarif gelten.',
     modelUnlisted: 'In der aktuellen Modellliste nicht verfügbar.',
     modelUnverified: 'Verfügbarkeit zurzeit unbekannt.',
+    modelOutsideMail: 'Dieses Modell ist für den Chat eingestellt.',
+    noMailModels: 'Zurzeit ist kein Allzweckmodell für Mail verfügbar.',
     modelRefresh: 'Modellliste neu laden',
     modelConflict: 'Die Unterhaltung wurde inzwischen geändert. Der aktuelle Stand ist geladen. Prüfe das Modell und wähle bei Bedarf erneut.',
     modelConflictReloadError: 'Die Unterhaltung wurde inzwischen geändert, aber der aktuelle Stand konnte nicht geladen werden. Versuch es gleich noch mal.',
@@ -422,6 +426,9 @@ export const de = {
     done: { archive: (subject: string) => `„${noticeSubject(subject)}“ archiviert.`, trash: (subject: string) => `„${noticeSubject(subject)}“ in den Papierkorb gelegt.`, spam: (subject: string) => `„${noticeSubject(subject)}“ als Spam markiert.`, mark_read: (subject: string) => `„${noticeSubject(subject)}“ als gelesen markiert.`, mark_unread: (subject: string) => `„${noticeSubject(subject)}“ als ungelesen markiert.` },
     doneShort: { archive: 'Mail archiviert.', trash: 'Mail in den Papierkorb gelegt.', spam: 'Mail als Spam markiert.', mark_read: 'Mail als gelesen markiert.', mark_unread: 'Mail als ungelesen markiert.' },
     recentActions: (n: number) => `Letzte Aktionen (${n})`, undoAction: (text: string) => `Rückgängig: ${String(text).replace(/\.$/, '')}`, undoRunning: 'Wird zurückgenommen …',
+    mailQuestionPlaceholder: 'Frag etwas zu dieser Mail …',
+    swipeUnavailable: 'Die Wischaktionen konnten nicht geladen werden.',
+    askAboutMail: (subject: string) => `Im Chat zu „${subjectText(subject)}“ fragen`,
     swipeRelease: { archive: 'Loslassen zum Archivieren', trash: 'Loslassen für den Papierkorb', mark_read: 'Loslassen: Als gelesen markieren', mark_unread: 'Loslassen: Als ungelesen markieren' },
     undoCapacity: 'Warte kurz, bis eine Rücknahme abgelaufen ist, oder mach eine Aktion rückgängig.',
     undoSkipped: 'Diese Aktion lässt sich nicht mehr rückgängig machen. Die Mail wurde inzwischen geändert.',

@@ -4,7 +4,7 @@ import type { Catalogue } from '../i18n/catalogue'
 
 export function modelMenuItems(models: ChatModelOut[], selected: string | undefined, unavailable: boolean,
   texts: Catalogue['chat'], locale: string, select: (id: string) => void, refresh: () => void) {
-  const order = ['current', 'recommended', 'general', 'specialist', 'third_party', 'other'] as const
+  const order = ['current', 'recommended', 'general'] as const
   const buckets = new Map<string, MenuItem[]>()
   const actions: MenuItem[] = []
   const descriptions: Partial<Record<string, string>> = texts.modelDescriptions
@@ -14,12 +14,27 @@ export function modelMenuItems(models: ChatModelOut[], selected: string | undefi
     const alias = models.find(model => model.resolved_id === selected)
     if (alias) models = [...models, { ...alias, id: selected, label: selected, is_default: false, recommended: false }]
   }
+  const priority = (model: ChatModelOut) => {
+    if (model.id === selected) return 3
+    if (model.recommended) return 2
+    return model.is_default ? 1 : 0
+  }
+  const choices = new Map<string, ChatModelOut>()
   for (const model of models) {
-    if (unavailable || model.availability === 'unlisted' || model.availability === 'unverified') continue
-    const group = model.recommended ? 'recommended' : model.group ?? 'other'
+    if (unavailable) break
+    if (model.group !== 'general' || model.availability === 'unlisted' || model.availability === 'unverified') continue
+    const key = model.resolved_id ?? model.id
+    const previous = choices.get(key)
+    // One row per verified version. Keep the actual selected ID, then the
+    // recommendation or configured default, when equivalent aliases exist.
+    const choice = !previous || priority(model) > priority(previous) ? model : previous
+    choices.set(key, previous?.recommended || model.recommended ? { ...choice, recommended: true } : choice)
+  }
+  for (const model of choices.values()) {
+    const group = model.recommended ? 'recommended' : 'general'
     const items = buckets.get(group) ?? []
     const description = model.recommended ? texts.modelMailReason : descriptions[model.id] ?? model.description
-    const version = model.resolved_id && model.resolved_id !== model.id ? `${model.id} → ${model.resolved_id}` : model.label !== model.id ? model.id : ''
+    const version = model.resolved_id && model.resolved_id !== model.label ? model.resolved_id : ''
     let cost = !model.resolved_id && model.id.endsWith('-latest') ? texts.modelAliasUnresolved : texts.modelPriceUnknown
     if (model.price) {
       const { currency = 'USD', input_per_million, output_per_million, source, checked_on } = model.price
@@ -35,11 +50,13 @@ export function modelMenuItems(models: ChatModelOut[], selected: string | undefi
     buckets.set(group, items)
   }
   const current = models.find(model => model.id === selected)
-  if (selected && (unavailable || !current || current.availability === 'unlisted' || current.availability === 'unverified')) {
-    buckets.set('current', [{ label: selected, checked: true, disabled: true, hint: unavailable ? texts.modelUnverified : texts.modelUnlisted, onSelect: () => {} }])
+  if (selected && (unavailable || !current || current.availability === 'unlisted' || current.availability === 'unverified' || current.group !== 'general')) {
+    const hint = unavailable || current?.availability === 'unverified' ? texts.modelUnverified
+      : !current || current.availability === 'unlisted' ? texts.modelUnlisted : texts.modelOutsideMail
+    buckets.set('current', [{ label: selected, checked: true, disabled: true, hint, onSelect: () => {} }])
   }
-  if (unavailable || !buckets.size || (buckets.size === 1 && buckets.has('current'))) {
-    actions.unshift({ label: texts.modelRefresh, hint: unavailable ? texts.modelUnverified : texts.modelUnlisted, onSelect: refresh })
+  if (unavailable || !choices.size) {
+    actions.unshift({ label: texts.modelRefresh, hint: unavailable ? texts.modelUnverified : texts.noMailModels, onSelect: refresh })
   }
   const groups = order.flatMap(key => {
     const items = buckets.get(key)

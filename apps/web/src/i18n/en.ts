@@ -1,3 +1,4 @@
+import { offline } from './offline'
 import type { Catalogue } from './catalogue'
 import { intlLocale } from './locales'
 import { plural as formatPlural } from './numbers'
@@ -16,6 +17,7 @@ const noticeSubject = (subject: string) => {
 const ordinal = (day: number) => day + ({ one: 'st', two: 'nd', few: 'rd', other: 'th', zero: 'th', many: 'th' }[new Intl.PluralRules(intlLocale.en, { type: 'ordinal' }).select(day)])
 
 export const en = {
+  offline: offline.en,
   preferences: {
     title: 'Preferences', empty: 'You haven’t saved any preferences yet. Choose how liam-e should write for you.',
     add: 'Add a preference', edit: 'Edit', pause: 'Pause', activate: 'Activate', remove: 'Delete',
@@ -244,16 +246,18 @@ export const en = {
     loadingReference: 'Loading email …', referenceError: 'The email couldn’t be loaded. Try again in a moment.',
     modelTip: 'Choose a model for this conversation',
     modelChoice: 'Choose a model',
-    modelGroups: { recommended: 'Recommended for email', general: 'General purpose', specialist: 'Specialist models', third_party: 'Third-party models', other: 'Other models', current: 'Current selection' },
-    modelMailReason: 'Supports the tools for mail search and summaries, with verified public token prices.',
+    modelGroups: { recommended: 'Recommended for email', general: 'General purpose', current: 'Current selection' },
+    modelMailReason: 'Supports email search and summaries.',
     modelPrices: (input: string, output: string) => `Input ${input} · Output ${output} per 1M tokens`,
     modelPriceUnknown: 'Price unknown',
-    modelAliasUnresolved: 'Price unknown. The alias does not identify a single model version.',
+    modelAliasUnresolved: 'Price unknown · model version unconfirmed',
     modelPriceSource: (date: string) => `Mistral price list · checked ${date}`,
     modelCardSource: (id: string, date: string) => `Mistral model card for ${id} · checked ${date}`,
     modelPriceTerms: 'Public list prices. Your workspace rate may differ.',
     modelUnlisted: 'Unavailable in the current model list.',
     modelUnverified: 'Availability is currently unknown.',
+    modelOutsideMail: 'This model is configured for this chat.',
+    noMailModels: 'No general-purpose email model is currently available.',
     modelRefresh: 'Reload model list',
     modelConflict: 'The conversation has changed. The current version is loaded. Review the model and choose again if needed.',
     modelConflictReloadError: 'The conversation has changed and the current version couldn’t be loaded. Try again in a moment.',
@@ -444,6 +448,9 @@ export const en = {
     },
     doneShort: { archive: 'Email archived.', trash: 'Email moved to trash.', spam: 'Email marked as spam.', mark_read: 'Email marked as read.', mark_unread: 'Email marked as unread.' },
     recentActions: n => 'Recent actions (' + numberFormat.format(n) + ')', undoAction: text => 'Undo: ' + String(text).replace(/\.$/, ''), undoRunning: 'Undoing …',
+    mailQuestionPlaceholder: 'Ask a question about this email…',
+    swipeUnavailable: 'Swipe actions could not be loaded.',
+    askAboutMail: (subject: string) => `Ask in chat about “${subjectText(subject)}”`,
     swipeRelease: { archive: 'Release to archive', trash: 'Release to move to trash', mark_read: 'Release to mark as read', mark_unread: 'Release to mark as unread' },
     undoCapacity: 'Wait for a previous undo option to expire, or undo an action.',
     undoSkipped: 'The email has changed, so this action can no longer be undone.',

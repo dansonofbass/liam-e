@@ -4,7 +4,8 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import serviceWorkerUrl from "../pwa/service-worker.ts?worker&url";
 
 import { DEFAULT_APP_NAME } from "../app-name";
 import { useRootTexts } from "../root-screens";
@@ -32,6 +33,12 @@ export interface RouterContext {
 const RootDocument = ({ children }: { children: ReactNode }) => {
   const { lang, dir } = useRootTexts();
   useThemeSync();
+  useEffect(() => {
+    if (import.meta.env.PROD && "serviceWorker" in navigator) {
+      // Browsers that disable service workers can still use the online app.
+      void navigator.serviceWorker.register(serviceWorkerUrl, { updateViaCache: "none" }).catch(() => {});
+    }
+  }, []);
 
   return (
     <html lang={lang} dir={dir} suppressHydrationWarning>
@@ -55,12 +62,15 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   head: ({ match }) => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      { name: "theme-color", content: "#0e6b5e" },
       { title: match.context.appName ?? DEFAULT_APP_NAME },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "manifest", href: "/manifest.webmanifest", crossOrigin: "use-credentials" },
+      { rel: "apple-touch-icon", sizes: "180x180", href: "/app-180.png" },
     ],
   }),
   shellComponent: RootDocument,

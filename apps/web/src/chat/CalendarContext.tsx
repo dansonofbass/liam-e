@@ -8,9 +8,9 @@ import { calendarDate, calendarTime, occurrenceDay } from '../calendar/state'
 import { SourceStatus } from '../calendar/CalendarPage'
 import { useCalendarScope, useChatSession } from './session'
 
-export function CalendarScope({ conversationId, disabled }: { conversationId?: string; disabled: boolean }) {
+export function CalendarScope({ conversationId, messageId, disabled }: { conversationId?: string; messageId?: string; disabled: boolean }) {
   const { texts } = useI18n()
-  const selection = useCalendarScope(conversationId)
+  const selection = useCalendarScope(conversationId, messageId)
   const sources = useQuery(calendarSourcesQuery())
   const active = sources.data?.filter(source => source.is_active) ?? []
   return <section className="le-chat-scope" aria-label={texts.calendar.chatScope}>

@@ -467,7 +467,7 @@ test('model selection errors do not follow a conversation switch', async () => {
   spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'model_unknown' } } }) as never)
   const { client, router } = setup('/chat/c')
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
-  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei', is_default: false }]) })
+  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', group: 'general', is_default: true }, { id: 'm2', label: 'Modell Zwei', group: 'general', is_default: false }]) })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
   fireEvent.click(screen.getByRole('menuitemradio', { name: /Modell Zwei/ }))
   expect(await screen.findByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeTruthy()
@@ -517,9 +517,9 @@ test('restart from a revoked answer preserves account and unsent text', async ()
 test('unknown model refusal renders its explanation', async () => {
   spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'model_unknown' } } }) as never)
   const { client } = setup('/chat/c')
-  spyOn(sdk, 'chatModelsList').mockResolvedValue({ data: [{ id: 'm1', label: 'Modell Eins', is_default: true }] } as never)
+  spyOn(sdk, 'chatModelsList').mockResolvedValue({ data: [{ id: 'm1', label: 'Modell Eins', group: 'general', is_default: true }] } as never)
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
-  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei', is_default: false }]) })
+  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', group: 'general', is_default: true }, { id: 'm2', label: 'Modell Zwei', group: 'general', is_default: false }]) })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
   fireEvent.click(screen.getByRole('menuitemradio', { name: /Modell Zwei/ }))
   expect(await screen.findByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeTruthy()
@@ -529,8 +529,8 @@ test('unknown model refusal renders its explanation', async () => {
 })
 
 const modelChoices = [
-  { id: 'm1', label: 'Modell Eins', description: 'Schnell', is_default: true },
-  { id: 'm2', label: 'Modell Zwei', description: 'Genau', is_default: false },
+  { id: 'm1', label: 'Modell Eins', group: 'general', description: 'Schnell', is_default: true },
+  { id: 'm2', label: 'Modell Zwei', group: 'general', description: 'Genau', is_default: false },
 ]
 
 test('the saved model survives switching conversations and a fresh page with an older answer', async () => {
@@ -605,7 +605,7 @@ test('a model conflict reloads the conversation and only an explicit retry uses 
   const update = spyOn(sdk, 'chatConversationUpdate').mockImplementationOnce(async () => { saved = refreshed; throw { detail: { code: 'version_conflict' }, status: 409 } })
     .mockImplementation(async () => { saved = { ...refreshed, model: 'm2', version: 7 }; return { data: saved } as never })
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
-  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei' }, { id: 'm3', label: 'Modell Drei' }]) })
+  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', group: 'general', is_default: true }, { id: 'm2', label: 'Modell Zwei', group: 'general' }, { id: 'm3', label: 'Modell Drei', group: 'general' }]) })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
   fireEvent.click(screen.getByRole('menuitemradio', { name: /Modell Zwei/ }))
   expect(await screen.findByText('Die Unterhaltung wurde inzwischen geändert. Der aktuelle Stand ist geladen. Prüfe das Modell und wähle bei Bedarf erneut.')).toBeTruthy()
@@ -638,7 +638,7 @@ test('history renders safe text, model, mail account and only the latest suggest
   await waitFor(() => expect(screen.queryByText('Unterhaltung wird geladen …')).toBeNull())
   act(() => {
     client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail' }] })
-    client.setQueryData(['models'], [{ id: 'model', label: 'Modellname', description: '', is_default: true }])
+    client.setQueryData(['models'], [{ id: 'model', label: 'Modellname', group: 'general', description: '', is_default: true }])
     client.setQueryData(['history', 'c'], [row('old', 'Alt', { suggestions: ['Alte Frage'] }), row('new', 'Neu', { model: 'model', mails: ['mail'], suggestions: ['Weiter fragen'] })])
   })
   expect(await screen.findByText('<b>Betreff</b>')).toBeTruthy()
