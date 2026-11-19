@@ -910,6 +910,39 @@ export type DependencyStatus = {
 };
 
 /**
+ * DeviceRecordingOut
+ */
+export type DeviceRecordingOut = {
+    /**
+     * Request Id
+     */
+    request_id: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * DeviceTestOut
+ */
+export type DeviceTestOut = {
+    app_limits: TranscriptionLimitsOut;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Format
+     */
+    format: 'audio/webm;codecs=opus';
+    /**
+     * Sample Text
+     */
+    sample_text: string;
+};
+
+/**
  * DiscardInput
  */
 export type DiscardInput = {
@@ -3808,6 +3841,58 @@ export type AudioCapabilitiesGetResponses = {
 };
 
 export type AudioCapabilitiesGetResponse = AudioCapabilitiesGetResponses[keyof AudioCapabilitiesGetResponses];
+
+export type AudioDeviceTestGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/device-test';
+};
+
+export type AudioDeviceTestGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeviceTestOut;
+};
+
+export type AudioDeviceTestGetResponse = AudioDeviceTestGetResponses[keyof AudioDeviceTestGetResponses];
+
+export type AudioDeviceTestRecordData = {
+    body: {
+        file: Blob | File;
+        language?: 'de' | 'en';
+        request_id: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/device-test/recording';
+};
+
+export type AudioDeviceTestRecordResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeviceRecordingOut;
+};
+
+export type AudioDeviceTestRecordResponse = AudioDeviceTestRecordResponses[keyof AudioDeviceTestRecordResponses];
+
+export type AudioDeviceTestSampleData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/device-test/sample';
+};
+
+export type AudioDeviceTestSampleResponses = {
+    /**
+     * Successful Response
+     */
+    200: Blob | File;
+};
+
+export type AudioDeviceTestSampleResponse = AudioDeviceTestSampleResponses[keyof AudioDeviceTestSampleResponses];
 
 export type AudioSpeechData = {
     /**

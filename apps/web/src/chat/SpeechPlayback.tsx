@@ -7,8 +7,9 @@ import { useI18n } from '../i18n/I18n'
 type Phase = 'loading' | 'ready' | 'playing' | 'finished' | 'error'
 type State = { messageId: string; phase: Phase; error?: string }
 type Job = { messageId: string; controller: AbortController; audio?: HTMLAudioElement; url?: string }
+type LoadSpeech = (messageId: string, signal: AbortSignal) => Promise<Blob>
 
-export function useSpeechPlayback(conversationId: string, enabled: boolean, recording: boolean) {
+export function useSpeechPlayback(conversationId: string, enabled: boolean, recording: boolean, load?: LoadSpeech) {
   const { texts } = useI18n()
   const [state, setState] = useState<State | null>(null)
   const active = useRef<Job | null>(null)
@@ -66,11 +67,10 @@ export function useSpeechPlayback(conversationId: string, enabled: boolean, reco
     active.current = job
     setState({ messageId, phase: 'loading' })
     try {
-      const blob = await unwrap(audioSpeech({
+      const signal = job.controller.signal
+      const blob = load ? await load(messageId, signal) : await unwrap(audioSpeech({
         body: { conversation_id: conversationId, message_id: messageId },
-        signal: job.controller.signal,
-        parseAs: 'blob',
-        throwOnError: true,
+        signal, parseAs: 'blob', throwOnError: true,
       }))
       if (active.current !== job) return
       if (!blob.size || blob.type !== 'audio/mpeg') {
@@ -93,22 +93,24 @@ export function useSpeechPlayback(conversationId: string, enabled: boolean, reco
   }
 }
 
-export function SpeechControls({ messageId, player, disabled }: {
+export function SpeechControls({ messageId, player, disabled, copy }: {
   messageId: string
   player: ReturnType<typeof useSpeechPlayback>
   disabled: boolean
+  copy?: { speech: string; speechLoading: string; speechPlaying: string }
 }) {
   const { texts } = useI18n()
+  const notices = copy ?? texts.audio
   const state = player.state?.messageId === messageId ? player.state : null
   const playing = state?.phase === 'loading' || state?.phase === 'playing'
   const ready = state?.phase === 'ready'
   const status = !state ? '' : state.phase === 'error' ? state.error :
-    state.phase === 'loading' ? texts.audio.speechLoading :
-      state.phase === 'playing' ? texts.audio.speechPlaying :
+    state.phase === 'loading' ? notices.speechLoading :
+      state.phase === 'playing' ? notices.speechPlaying :
         ready ? texts.audio.speechReady : texts.audio.speechFinished
   return <div className="le-audio-controls">
     <IconButton size="lg" icon={playing ? 'square' : ready ? 'play' : 'volume-2'}
-      label={playing ? texts.audio.speechStop : ready ? texts.audio.speechPlay : texts.audio.speech}
+      label={playing ? texts.audio.speechStop : ready ? texts.audio.speechPlay : notices.speech}
       disabled={disabled}
       onClick={playing ? player.stop : ready ? player.resume : () => { void player.start(messageId) }} />
     {ready && <IconButton size="lg" icon="square" label={texts.audio.speechStop} onClick={player.stop} />}

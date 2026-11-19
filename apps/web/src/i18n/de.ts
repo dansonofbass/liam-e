@@ -231,6 +231,23 @@ export const de = {
     uploading: 'Sprache wird in Text umgewandelt …',
     transcribed: 'Text eingefügt. Du kannst ihn bearbeiten und senden.',
     microphoneError: 'Das Mikrofon konnte nicht verwendet werden. Du kannst weiter tippen.',
+    deviceTest: {
+      title: 'Audio-Geräteprobe',
+      intro: 'Sprich einen kurzen Testsatz. Beim Übertragen prüft liam-e die Aufnahme im App-Container und verwirft sie anschließend. Der Entwurf und der vorgelesene Satz sind Beispiele. Es werden keine Audio-Modelle aufgerufen.',
+      loading: 'Geräteprobe wird geladen …',
+      closed: 'Die Geräteprobe ist abgelaufen oder für diese Sitzung nicht verfügbar.',
+      until: (time: string) => `Verfügbar bis ${time}.`,
+      webmUnsupported: 'Dein Browser bietet WebM/Opus für diese Aufnahme nicht an.',
+      capture: 'Mikrofon und Upload',
+      draft: 'Editierbarer Beispielentwurf',
+      playback: 'Wiedergabe',
+      recording: 'Aufnahme läuft. Beim Übertragen prüft liam-e die Datei.',
+      uploading: 'Aufnahme wird geprüft …',
+      transcribed: 'Aufnahme geprüft. Du kannst den Beispielentwurf bearbeiten.',
+      speech: 'Beispielsatz vorlesen',
+      speechLoading: 'Beispielsatz wird geladen …',
+      speechPlaying: 'Der Beispielsatz wird vorgelesen.',
+    },
   },
   chat: {
     modelDescriptions: {

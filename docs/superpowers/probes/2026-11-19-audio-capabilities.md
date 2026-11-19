@@ -141,6 +141,20 @@ data-handling term changes, clear the affected attestation until its release che
   zero data retention for this organization remains unverified. Keep live probes synthetic.
   [Mistral zero data retention](https://docs.mistral.ai/admin/monitor-comply/zero-data-retention).
 
+## Temporary owner device check
+
+Open `/audio-device-test` in an existing Studio session. The API module setting
+`AUDIO_DEVICE_TEST_UNTIL` takes an ISO 8601 timestamp with a timezone and enables the check
+through that time for at most three days ahead. Each request requires the Studio owner binding.
+The sample, upload and availability endpoints return 404 to the owner after expiry. Clear the
+setting to close the check earlier.
+
+The page uses the chat recorder's actual WebM/Opus output and the same multipart upload limits
+and FFmpeg checks as transcription. The API releases the temporary file and returns a fixed
+editable test draft. Playback uses a bundled German MP3 generated offline with eSpeak NG
+and FFmpeg. The check uses no audio model, chat turn or connector. It leaves the independent
+STT and TTS release attestations in effect.
+
 ## Repeat the Chromium recording offline
 
 [The browser probe](../../../tools/audio_browser_probe.cjs) exercises Chromium's default recorder

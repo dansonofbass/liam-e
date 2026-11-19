@@ -251,6 +251,40 @@ async function testSpeechOutput(page, calls, conversation) {
   console.log("TTS e2e passed: saved assistant reply, MP3 playback, stop, late-response cancellation, microphone interruption and conversation change.");
 }
 
+async function testOwnerDeviceCheck(page, webOrigin, calls) {
+  const before = { upload: calls.upload, chat: calls.chat.length, speech: calls.speech.length };
+  let probeUploads = 0;
+  const countProbeUpload = request => {
+    if (new URL(request.url()).pathname === "/api/v1/audio/device-test/recording") probeUploads++;
+  };
+  page.on("request", countProbeUpload);
+  try {
+    await page.goto(webOrigin + "/audio-device-test");
+    const button = name => page.getByRole("button", { name, exact: true });
+    const draft = page.getByRole("textbox", { name: "Editierbarer Beispielentwurf" });
+    await page.getByRole("heading", { name: "Audio-Geräteprobe" }).waitFor();
+    await draft.fill("Mein vorheriger Testtext.");
+
+    await button("Sprache aufnehmen").click();
+    await page.waitForFunction(() => window.audioFixture.recordings[0]?.packets > 0);
+    assert.equal(probeUploads, 0);
+    await button("Beenden und übertragen").click();
+    await page.getByText("Aufnahme geprüft. Du kannst den Beispielentwurf bearbeiten.").waitFor();
+    assert.equal(await draft.inputValue(), "Mein vorheriger Testtext.\n\nEine gelbe Ente schwimmt im Teich.");
+    await draft.fill("Editiert nach der Geräteprobe.");
+    assert.equal(await draft.inputValue(), "Editiert nach der Geräteprobe.");
+    await page.waitForFunction(() => window.audioFixture.tracks.every(track => track.readyState === "ended"));
+
+    await button("Beispielsatz vorlesen").click();
+    await page.waitForFunction(() => window.audioFixture.playback[0]?.played && window.audioFixture.playback[0]?.ended);
+    assert.equal(probeUploads, 1);
+    assert.deepEqual({ upload: calls.upload, chat: calls.chat.length, speech: calls.speech.length }, before);
+    console.log("Device check e2e passed: real WebM upload, editable test draft, real bundled speech playback and no chat or inference request.");
+  } finally {
+    page.off("request", countProbeUpload);
+  }
+}
+
 async function main() {
   if (!engine) throw new Error("Install the local pgvector image before running this test");
   let db;
@@ -262,7 +296,7 @@ async function main() {
       "-p", "127.0.0.1::5432", "-e", "POSTGRES_PASSWORD=test-only", "-e", "POSTGRES_DB=liam_e_audio_e2e", image]).trim();
     const port = run(engine, ["port", db, "5432/tcp"]).trim().match(/^127\.0\.0\.1:(\d+)$/)?.[1];
     if (!port) throw new Error("Expected an isolated loopback database");
-    await waitFor(() => spawnSync(engine, ["exec", db, "pg_isready", "-U", "postgres", "-d", "liam_e_audio_e2e"],
+    await waitFor(() => spawnSync(engine, ["exec", db, "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "liam_e_audio_e2e"],
       { stdio: "ignore" }).status === 0, "Database");
     const [apiPort, webPort] = await Promise.all([localPort(), localPort()]);
     const apiOrigin = "http://127.0.0.1:" + apiPort;
@@ -303,6 +337,7 @@ async function main() {
     page.setDefaultTimeout(timeout);
     const calls = await testSpeechInput(page, webOrigin, conversation);
     await testSpeechOutput(page, calls, conversation);
+    await testOwnerDeviceCheck(page, webOrigin, calls);
   } catch (error) {
     if (api) console.error(api.logs());
     if (web) console.error(web.logs());

@@ -109,6 +109,9 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Audio | GET | `/api/v1/audio/capabilities` | `audio_capabilities_get` |
 | Audio | POST | `/api/v1/audio/transcriptions` | `audio_transcribe` |
 | Audio | POST | `/api/v1/audio/speech` | `audio_speech` |
+| Audio device check | GET | `/api/v1/audio/device-test` | `audio_device_test_get` |
+| Audio device check | POST | `/api/v1/audio/device-test/recording` | `audio_device_test_record` |
+| Audio device check | GET | `/api/v1/audio/device-test/sample` | `audio_device_test_sample` |
 | Calendar | GET | `/api/v1/calendar/connections/google/calendars` | `calendar_google_calendars_list` |
 | Calendar | POST | `/api/v1/calendar/connections/google` | `calendar_google_connect` |
 | Calendar | POST | `/api/v1/calendar/feeds/validate` | `calendar_feed_validate` |
@@ -856,6 +859,9 @@ label, `send_email` takes `replyToMessageId`; the Outlook connector returned HTT
   reply from local history, and sends its normalized text to the fixed preset `voice_481`.
   Speech attestations can set lower limits within 500 characters, 1,000,000 MP3 bytes and
   20 seconds. All audio responses use `Cache-Control: no-store`.
+  The owner-only `audio_device_test_get`, `audio_device_test_record` and
+  `audio_device_test_sample` operations expire independently and remain browser-only.
+  They validate WebM and return a fixed test draft or bundled sample without calling an inference service.
   See the [audio probe](docs/superpowers/probes/2026-11-19-audio-capabilities.md).
   Every OpenAPI import turns every operation into an MCP tool; otherwise a Studio agent could confirm proposals, perform actions or connect accounts without the owner seeing it — individual tools can be disabled in Studio after import.
   New mutating operations must deliberately be added to `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, otherwise the inventory test fails.

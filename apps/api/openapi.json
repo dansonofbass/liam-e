@@ -1624,6 +1624,54 @@
         "title": "DependencyStatus",
         "type": "object"
       },
+      "DeviceRecordingOut": {
+        "properties": {
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "text"
+        ],
+        "title": "DeviceRecordingOut",
+        "type": "object"
+      },
+      "DeviceTestOut": {
+        "properties": {
+          "app_limits": {
+            "$ref": "#/components/schemas/TranscriptionLimitsOut"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "format": {
+            "const": "audio/webm;codecs=opus",
+            "title": "Format",
+            "type": "string"
+          },
+          "sample_text": {
+            "title": "Sample Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at",
+          "sample_text",
+          "format",
+          "app_limits"
+        ],
+        "title": "DeviceTestOut",
+        "type": "object"
+      },
       "DiscardInput": {
         "additionalProperties": false,
         "properties": {
@@ -6953,6 +7001,92 @@
           }
         },
         "summary": "Get audio capabilities"
+      }
+    },
+    "/api/v1/audio/device-test": {
+      "get": {
+        "operationId": "audio_device_test_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status"
+      }
+    },
+    "/api/v1/audio/device-test/recording": {
+      "post": {
+        "operationId": "audio_device_test_record",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "language": {
+                    "enum": [
+                      "de",
+                      "en"
+                    ],
+                    "type": "string"
+                  },
+                  "request_id": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "request_id"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRecordingOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Validate"
+      }
+    },
+    "/api/v1/audio/device-test/sample": {
+      "get": {
+        "operationId": "audio_device_test_sample",
+        "responses": {
+          "200": {
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sample"
       }
     },
     "/api/v1/audio/speech": {

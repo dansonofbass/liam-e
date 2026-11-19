@@ -241,6 +241,23 @@ export const en = {
     uploading: 'Transcribing the recording …',
     transcribed: 'Text added. You can edit it before sending.',
     microphoneError: 'The microphone was unavailable. You can keep typing.',
+    deviceTest: {
+      title: 'Audio device check',
+      intro: 'Say a short test sentence. When you upload, liam-e validates the recording in the app container and discards it. The draft and spoken sentence are examples. No audio models are called.',
+      loading: 'Loading the device check …',
+      closed: 'The device check has expired or is unavailable in this session.',
+      until: time => `Available until ${time}.`,
+      webmUnsupported: 'Your browser does not offer WebM/Opus for this recording.',
+      capture: 'Microphone and upload',
+      draft: 'Editable sample draft',
+      playback: 'Playback',
+      recording: 'Recording. Uploading lets liam-e validate the file.',
+      uploading: 'Validating the recording …',
+      transcribed: 'Recording validated. You can edit the sample draft.',
+      speech: 'Read the sample aloud',
+      speechLoading: 'Loading the sample …',
+      speechPlaying: 'Reading the sample aloud.',
+    },
   },
   chat: {
     modelDescriptions: {

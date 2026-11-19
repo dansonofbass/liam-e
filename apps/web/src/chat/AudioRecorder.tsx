@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { audioTranscribe } from '../api/generated/sdk.gen'
-import type { TranscriptionCapabilityOut } from '../api/generated/types.gen'
+import type { AudioTranscribeData, TranscriptionCapabilityOut } from '../api/generated/types.gen'
 import { messageForCode, errorCode, unwrap } from '../api/unwrap'
 import { IconButton } from '../ds'
 import type { IconName } from '../ds/Icon'
@@ -28,11 +28,17 @@ function stopMedia(capture: Capture) {
   }
 }
 
-export function supportedAudioFormat(capability?: TranscriptionCapabilityOut): string | undefined {
+export function supportedAudioFormat(capability?: Pick<TranscriptionCapabilityOut, 'status' | 'formats'>): string | undefined {
   if (capability?.status !== 'available' || !globalThis.isSecureContext ||
     typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) return
   return capability.formats.find(format => MediaRecorder.isTypeSupported(format))
 }
+
+type SubmitRecording = (
+  body: AudioTranscribeData['body'], signal: AbortSignal,
+) => Promise<{ request_id: string; text: string }>
+
+const transcribe: SubmitRecording = (body, signal) => unwrap(audioTranscribe({ body, signal, throwOnError: true }))
 
 type Props = {
   format: string
@@ -40,10 +46,13 @@ type Props = {
   disabled: boolean
   onLock: (locked: boolean) => void
   onTranscript: (text: string) => void
+  submit?: SubmitRecording
+  copy?: { recording: string; uploading: string; transcribed: string }
 }
 
-export function AudioRecorder({ format, limits, disabled, onLock, onTranscript }: Props) {
+export function AudioRecorder({ format, limits, disabled, onLock, onTranscript, submit = transcribe, copy }: Props) {
   const { texts, locale } = useI18n()
+  const notices = copy ?? texts.audio
   const [phase, setPhase] = useState<Phase>('idle')
   const [notice, setNotice] = useState('')
   const active = useRef<Capture | null>(null)
@@ -95,11 +104,7 @@ export function AudioRecorder({ format, limits, disabled, onLock, onTranscript }
       const requestId = crypto.randomUUID()
       const extension = format.startsWith('audio/mp4') ? 'mp4' : 'webm'
       const file = new File([capture.file], 'recording.' + extension, { type: capture.file.type })
-      const result = await unwrap(audioTranscribe({
-        body: { file, request_id: requestId, language: locale },
-        signal: controller.signal,
-        throwOnError: true,
-      }))
+      const result = await submit({ file, request_id: requestId, language: locale }, controller.signal)
       if (active.current !== capture) return
       if (result.request_id !== requestId || !result.text.trim()) {
         fail(texts.errors.audio_empty)
@@ -107,7 +112,7 @@ export function AudioRecorder({ format, limits, disabled, onLock, onTranscript }
       }
       onTranscript(result.text)
       reset()
-      setNotice(texts.audio.transcribed)
+      setNotice(notices.transcribed)
     } catch (error) {
       if (active.current === capture) fail(messageForCode(errorCode(error), texts) ?? texts.errors.audio_unavailable)
     }
@@ -188,7 +193,8 @@ export function AudioRecorder({ format, limits, disabled, onLock, onTranscript }
       run: sendRecording,
     }
   }
-  const status = phase === 'idle' ? notice : texts.audio[phase]
+  const status = phase === 'idle' ? notice :
+    phase === 'recording' || phase === 'uploading' ? notices[phase] : texts.audio[phase]
   return <div className="le-audio-controls">
     <span className="le-audio-status" role="status">{status}</span>
     <IconButton size="lg" icon={action.icon} label={action.label} onClick={action.run}

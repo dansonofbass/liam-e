@@ -40,7 +40,7 @@ class TranscriptionLimitsOut(BaseModel):
     max_concurrent_requests: int
 
 
-_TRANSCRIPTION_APP_LIMITS = TranscriptionLimitsOut(
+TRANSCRIPTION_APP_LIMITS = TranscriptionLimitsOut(
     max_upload_bytes=MAX_BYTES, max_duration_seconds=MAX_SECONDS, max_concurrent_requests=1,
 )
 
@@ -90,7 +90,7 @@ class _TranscriptionVerification(_Verification):
 
     @model_validator(mode="after")
     def require_format_and_limits(self):
-        if self.outcome == "verified" and (not self.formats or self.app_limits != _TRANSCRIPTION_APP_LIMITS):
+        if self.outcome == "verified" and (not self.formats or self.app_limits != TRANSCRIPTION_APP_LIMITS):
             raise ValueError("verified transcription requires checked formats and the current application limits")
         return self
 
@@ -145,7 +145,7 @@ def audio_capabilities() -> AudioCapabilitiesOut:
         stt=TranscriptionCapabilityOut(
             **stt.model_dump(),
             formats=stt_evidence.formats if stt_evidence else (),
-            app_limits=_TRANSCRIPTION_APP_LIMITS,
+            app_limits=TRANSCRIPTION_APP_LIMITS,
         ),
         tts=SpeechCapabilityOut(
             **tts.model_dump(),

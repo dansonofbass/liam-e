@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 # The browser runner provisions a fresh local database with this exact name.
@@ -75,6 +76,7 @@ async def serve(port: int) -> None:
         assert again
 
     audio.audio_stt_model = "voxtral-mini-transcribe-3"
+    audio.audio_device_test_until = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
     audio.audio_stt_verification = json.dumps({
         "model": audio.audio_stt_model, "checked_at": "2026-01-01T10:00:00Z",
         "outcome": "verified", "scope": "studio_release", "formats": ["audio/webm;codecs=opus"],
