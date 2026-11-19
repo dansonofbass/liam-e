@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { historyQuery, messageQuery, MessageNotFoundError, modelsQuery, summaryQuery } from '../api/queries'
 import { errorCode } from '../api/unwrap'
 import type { AccountSummaryOut, ChatMessageOut, MailRefOut } from '../api/generated/types.gen'
@@ -80,7 +80,6 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const { scope, ready } = useConversationScope(conversationId)
   const calendar = useCalendarScope(conversationId)
   const restart = useRestartConversation(conversationId)
-  const [selectedModel, setSelectedModel] = useState<{ conversationId: string; id: string }>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const { showEnd, scrollToEnd } = useFollowScroll(scrollRef, [history.data, state, conversationId])
   const accounts = summary?.accounts ?? []
@@ -106,14 +105,13 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     return <>{message.context && <PreferenceContext context={message.context} />}{message.context?.revoked && <Notice tone="info" action={{ label: texts.prompts.restart, onClick: restart }}>{message.context.preferences_enabled ? texts.errors.context_revoked : texts.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>{message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}{message.extras.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}</>
   }
   const status = state.status?.code === 'searching' ? texts.status.searching(state.status.count ?? 0) : state.status ? texts.status[state.status.code] : null
-  const liveModel = modelLabel(selectedModel?.conversationId === conversationId ? selectedModel.id : lastAssistant?.extras.model) ?? models.find(model => model.is_default)?.label
   const historyGone = errorCode(history.error instanceof Error ? history.error.cause : history.error) === 'conversation_not_found'
   const newConversation = { label: texts.shell.newConversation, onClick: restart }
-  return <div className="le-chat-view"><ChatHeader conversationId={conversationId}><ModelMenu key={`${conversationId}:model`} conversationId={conversationId} model={lastAssistant?.extras.model} onChange={id => setSelectedModel({ conversationId, id })} /><TemplateMenu key={`${conversationId}:template`} conversationId={conversationId} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
+  return <div className="le-chat-view"><ChatHeader conversationId={conversationId} modelMenu={<ModelMenu key={`${conversationId}:model`} conversationId={conversationId} />}><TemplateMenu key={`${conversationId}:template`} conversationId={conversationId} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
     {history.isPending && <p className="le-hint">{texts.chat.loadingHistory}</p>}
     {history.isError && <Notice tone="danger" action={historyGone ? newConversation : { label: texts.chat.retry, onClick: () => { void history.refetch() } }}>{historyGone ? texts.errors.conversation_not_found : texts.chat.historyError}</Notice>}
     {ordered.map((message, index) => <div className="le-chat-entry" id={`message-${message.id}`} key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={submitSuggestion} />}</div>)}
-    {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={liveModel} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
+    {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={modelLabel(state.model)} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{texts.chat.askAgain}</Button></div>}
       {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : state.errorCode && NEEDS_NEW_CONVERSATION.has(state.errorCode) ? newConversation : { label: texts.chat.retry, onClick: () => { void retry() } }}>{state.errorCode === 'conversation_scope_change_requires_new' ? texts.taskChat.scopeConflict : texts.errors[state.errorCode ?? 'internal']}</Notice>}
       {state.phase === 'done' && <>{state.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}

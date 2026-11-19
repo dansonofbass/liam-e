@@ -66,3 +66,122 @@ async def test_models_list_falls_back_to_default_on_api_error(monkeypatch):
     catalog.reset_cache()
     models = await catalog.list_chat_models()
     assert len(models) == 1 and models[0].is_default
+    assert models[0].availability == 'unverified' and not models[0].recommended
+    assert models[0].price is None
+
+
+def card(model_id, *aliases):
+    return NS(id=model_id, aliases=list(aliases), capabilities=NS(completion_chat=True, function_calling=True))
+
+
+async def test_prices_and_recommendation_follow_workspace_bindings(monkeypatch):
+    from api.mail import models_catalog as catalog
+    fake = FakeMistral(models=[NS(data=[
+        card('mistral-small-2603', 'mistral-small-latest'), card('mistral-small-latest'),
+        card('codestral-2508'), card('zai-glm-5-3'), card('private-model'),
+    ])])
+    monkeypatch.setattr(catalog, 'mistral_client', lambda: fake)
+    monkeypatch.setattr(catalog.mail_env, 'mail_chat_model', 'mistral-medium-latest')
+    catalog.reset_cache()
+    models = {model.id: model for model in await catalog.list_chat_models()}
+    small = models['mistral-small-latest']
+    assert small.resolved_id == 'mistral-small-2603' and small.group == 'general'
+    assert [m.id for m in models.values() if m.recommended] == [small.id]
+    assert (small.price.input_per_million, small.price.output_per_million, small.price.currency) == (0.15, 0.60, 'USD')
+    assert small.price.source == 'https://docs.mistral.ai/inference/pricing'
+    assert small.price.checked_on.isoformat() == '2026-11-19'
+    assert models['codestral-2508'].group == 'specialist'
+    assert models['zai-glm-5-3'].group == 'third_party'
+    assert models['private-model'].group == 'other' and models['private-model'].price is None
+    assert models['mistral-medium-latest'].availability == 'unlisted'
+    catalog.require_available_model('mistral-small-2603', list(models.values()))
+
+
+@pytest.mark.parametrize('bindings', [
+    [card('mistral-small-latest')],
+    [card('mistral-small-future', 'mistral-small-latest')],
+    [card('mistral-small-2603', 'mistral-small-latest'), card('mistral-small-future', 'mistral-small-latest')],
+])
+async def test_unresolved_new_or_conflicting_alias_has_no_price_or_recommendation(monkeypatch, bindings):
+    from api.mail import models_catalog as catalog
+    fake = FakeMistral(models=[NS(data=[*bindings, card('codestral-2508'), card('zai-glm-5-3')])])
+    monkeypatch.setattr(catalog, 'mistral_client', lambda: fake)
+    catalog.reset_cache()
+    models = await catalog.list_chat_models()
+    alias = next(model for model in models if model.id == 'mistral-small-latest')
+    assert alias.availability == 'available' and alias.price is None
+    assert not alias.recommended
+    assert not any(model.recommended for model in models if model.group != 'general')
+
+
+async def test_catalogue_refresh_replaces_old_price_and_distinguishes_outage_from_removal(monkeypatch):
+    from fastapi import HTTPException
+    from api.mail import models_catalog as catalog
+    alias = 'mistral-small-latest'
+    fake = FakeMistral(models=[NS(data=[card(alias, 'mistral-small-2603')]), RuntimeError('offline'),
+                               NS(data=[card('mistral-small-future', alias)])])
+    monkeypatch.setattr(catalog, 'mistral_client', lambda: fake)
+    monkeypatch.setattr(catalog.mail_env, 'mail_chat_model', 'missing-default')
+    catalog.reset_cache()
+    available = await catalog.list_chat_models()
+    assert next(model for model in available if model.id == alias).price is not None
+    with pytest.raises(HTTPException) as missing:
+        catalog.require_available_model('missing-default', available)
+    assert missing.value.status_code == 422 and missing.value.detail['code'] == 'model_unknown'
+    monkeypatch.setattr(catalog, '_cached_at', float('-inf'))
+    offline = await catalog.list_chat_models()
+    assert all(model.availability == 'unverified' and model.price is None for model in offline)
+    with pytest.raises(HTTPException) as unavailable:
+        catalog.require_available_model(alias, offline)
+    assert unavailable.value.status_code == 503
+    refreshed = await catalog.list_chat_models()
+    model = next(model for model in refreshed if model.id == alias)
+    assert model.availability == 'available' and model.price is None and not model.recommended
+
+
+async def test_available_generalist_fallback_and_versioned_model_card_price(monkeypatch):
+    from api.mail import models_catalog as catalog
+    fake = FakeMistral(models=[NS(data=[card('mistral-medium-3-5', 'mistral-medium-latest'),
+                                        card('ministral-8b-2512'), card('codestral-2508')])])
+    monkeypatch.setattr(catalog, 'mistral_client', lambda: fake)
+    catalog.reset_cache()
+    models = {model.id: model for model in await catalog.list_chat_models()}
+    assert [model.id for model in models.values() if model.recommended] == ['ministral-8b-2512']
+    price = models['mistral-medium-latest'].price
+    assert price.source == 'https://docs.mistral.ai/models/mistral-medium-3-5-26-04'
+    assert (price.input_per_million, price.output_per_million) == (1.50, 7.50)
+
+
+async def test_workspace_ownership_and_conflicting_capabilities_override_familiar_names(monkeypatch):
+    from api.mail import models_catalog as catalog
+    incompatible = card('incompatible', 'shared-latest')
+    incompatible.capabilities.function_calling = False
+    foreign = card('mistral-large-4')
+    foreign.owned_by = 'synthetic-vendor'
+    custom = card('mistral-medium-3-5')
+    custom.type = 'fine-tuned'
+    fake = FakeMistral(models=[NS(data=[card('mistral-small-2603', 'shared-latest'), incompatible, foreign, custom])])
+    monkeypatch.setattr(catalog, 'mistral_client', lambda: fake)
+    catalog.reset_cache()
+    models = {model.id: model for model in await catalog.list_chat_models()}
+    assert 'shared-latest' not in models
+    assert models['mistral-small-2603'].recommended
+    assert models[foreign.id].group == 'third_party' and models[foreign.id].price is None
+    assert models[custom.id].group == 'other' and not models[custom.id].recommended and models[custom.id].price is None
+
+
+async def test_simultaneous_reads_share_one_workspace_snapshot(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock
+    from api.mail import models_catalog as catalog
+
+    async def read():
+        await asyncio.sleep(0)
+        return NS(data=[card('mistral-small-2603', 'mistral-small-latest')])
+
+    listing = AsyncMock(side_effect=read)
+    monkeypatch.setattr(catalog, 'mistral_client', lambda: NS(models=NS(list_async=listing)))
+    catalog.reset_cache()
+    first, second = await asyncio.gather(catalog.list_chat_models(), catalog.list_chat_models())
+    listing.assert_awaited_once()
+    assert first == second

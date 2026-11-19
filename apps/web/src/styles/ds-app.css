@@ -7,6 +7,16 @@
 /* Menus for triggers at the bottom of the screen open upwards and size to their items. */
 .le-menu--up-start, .le-menu--up-end { width: max-content; min-width: calc(3 * var(--space-8)); }
 .le-menu-item--danger, .le-menu-item--danger .le-ico { color: var(--danger); }
+.le-menu--grouped { width: 24rem; }
+.le-menu-group-label { padding: var(--space-2) var(--space-3); font-size: var(--font-size-small); font-weight: 600; color: var(--ink-muted); }
+.le-menu--grouped > * + * { margin-top: var(--space-2); border-top: 1px solid var(--line); }
+.le-menu--grouped a.le-menu-item { color: var(--accent); text-decoration: none; }
+.le-chat-model-actions { display: grid; grid-template-columns: minmax(0, auto) auto; gap: var(--space-2); align-items: center; max-width: 100%; }
+.le-chat-model-actions .le-notice { grid-column: 1 / -1; }
+.le-model-control, .le-mobile-model { display: inline-flex; min-width: 0; max-width: min(48vw, 18rem); }
+.le-model-control .le-menu-anchor, .le-model-control .le-tooltip-anchor, .le-model-control .le-chip { min-width: 0; max-width: 100%; }
+.le-model-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.le-topbar:has(.le-mobile-model) { flex-wrap: nowrap; gap: var(--space-2); padding-inline: var(--space-3); }
 .le-menu-item[aria-disabled="true"], .le-menu-item[aria-disabled="true"] .le-ico { color: var(--ink-muted); cursor: not-allowed; }
 .le-menu-item[aria-disabled="true"]:hover { background: transparent; }
 .le-tag--warm { background: var(--warm-soft); color: var(--warm); }
@@ -29,7 +39,7 @@
 .le-mailrow-more { display: none; position: relative; z-index: 3; align-self: flex-end; }
 .le-mailrow-more--coarse { display: block; }
 @media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } }
-@media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor .le-chip, .le-chat-topbar .le-menu-anchor .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
+@media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor .le-chip, .le-chat-topbar .le-menu-anchor .le-chip, .le-model-control .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-drawer-brand .le-icon-btn, .le-shell-status .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-topbar .le-icon-btn, .le-side .le-icon-btn, .le-side .le-nav-item, .le-side .le-conv, .le-drawer .le-nav-item, .le-drawer .le-conv { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } .le-composer textarea { min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-mailref-actions .le-icon-btn, .le-confirm-item label { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }

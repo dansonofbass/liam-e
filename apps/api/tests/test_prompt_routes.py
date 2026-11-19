@@ -76,7 +76,7 @@ def test_both_entries_forward_selection(path, body, monkeypatch):
     seen = []
     async def run(**kwargs):
         seen.append(kwargs)
-        yield StartEvent(conversation_id='c', user_message_id='u')
+        yield StartEvent(conversation_id='c', user_message_id='u', model='test-model')
         yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
     monkeypatch.setattr(agent, 'run_turn_events', run)
     monkeypatch.setattr(stream, 'run_turn_events', run)

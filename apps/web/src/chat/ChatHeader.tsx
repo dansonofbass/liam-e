@@ -6,7 +6,7 @@ import { useI18n } from '../i18n/I18n'
 import { useBreakpoint } from '../shell/useBreakpoint'
 import { useRestartConversation } from './session'
 
-export function ChatHeader({ conversationId, children }: { conversationId?: string; children: ReactNode }) {
+export function ChatHeader({ conversationId, modelMenu, children }: { conversationId?: string; modelMenu?: ReactNode; children: ReactNode }) {
   const { texts } = useI18n()
   const mobile = useBreakpoint() === 'mobile'
   const restart = useRestartConversation(conversationId)
@@ -15,6 +15,6 @@ export function ChatHeader({ conversationId, children }: { conversationId?: stri
   return <div className={mobile ? 'le-chat-header' : 'le-topbar le-chat-topbar'}>
     {!mobile && <div className="le-crumb le-grow"><span>{texts.shell.chat}</span>{title && <><span className="le-crumb-sep">/</span><span className="le-chat-crumb-title" title={title}>{title}</span></>}</div>}
     {children}
-    {!mobile && <IconButton icon="plus" label={texts.shell.newConversation} tip={texts.shell.newConversationTip} onClick={restart} />}
+    {mobile ? modelMenu : <div className="le-chat-model-actions">{modelMenu}<IconButton icon="plus" label={texts.shell.newConversation} tip={texts.shell.newConversationTip} onClick={restart} /></div>}
   </div>
 }

@@ -3,18 +3,20 @@ import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
+import { ModelMenu } from '../chat/ModelMenu'
 import { Shell, resetShellSyncForTest } from '../routes/_app'
 
 let width = 1200
 window.matchMedia = ((query: string) => ({ matches: query.includes('640') ? width >= 640 : query.includes('1024') ? width >= 1024 : query.includes('1440') ? width >= 1440 : false, media: query, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
 const summary = { accounts: Array.from({ length: 4 }, () => ({ state: 'ok' })), unread_total: 47, last_sync_at: '2026-01-01T08:57:00' }
 const conversations = [{ id: 'one', title: 'Erste Unterhaltung', updated_at: new Date().toISOString() }, { id: 'two', title: 'Zweite Unterhaltung', updated_at: new Date().toISOString() }]
-function setup(path = '/', client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })) {
+function setup(path = '/', client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } }), showModel = false) {
   client.setQueryData(['summary'], summary)
   client.setQueryData(['conversations'], conversations)
   const root = createRootRoute({ component: Shell })
-  const index = createRoute({ getParentRoute: () => root, path: '/', component: () => null })
-  const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: () => null })
+  const model = () => showModel ? <ModelMenu model="small" /> : null
+  const index = createRoute({ getParentRoute: () => root, path: '/', component: model })
+  const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: model })
   const mail = createRoute({ getParentRoute: () => root, path: '/mail', component: () => null })
   const router = createRouter({ routeTree: root.addChildren([index, chat, mail]), history: createMemoryHistory({ initialEntries: [path] }) })
   return render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
@@ -202,17 +204,20 @@ test('the theme switch sits in the sidebar footer, the tablet bar and the phone 
   expect(screen.getByRole('dialog').contains(screen.getByRole('button', { name: 'Darstellung' }))).toBe(true)
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 })
-test('the mobile header centres its title between the menu and the new-conversation button', async () => {
+test.each(['/', '/chat/one'])('the mobile header on %s puts the model immediately before the new-conversation button', async path => {
   width = 375
   spyOn(sdk, 'mailSyncAll').mockImplementation((async () => ({ data: {} })) as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: summary })) as never)
-  setup()
+  spyOn(sdk, 'chatModelsList').mockResolvedValue({ data: [{ id: 'small', label: 'Small', description: '', is_default: true }] } as never)
+  setup(path, undefined, true)
   const menu = await screen.findByRole('button', { name: 'Menü öffnen' })
   const title = menu.closest('header')?.querySelector('.le-crumb')
   expect(title?.textContent).toBe('Chat')
   expect(title?.classList.contains('le-crumb--center')).toBe(true)
   expect(title?.previousElementSibling?.contains(menu)).toBe(true)
-  expect(title?.nextElementSibling?.querySelector('button')?.getAttribute('aria-label')).toBe('Neue Unterhaltung')
+  const model = await screen.findByRole('button', { name: 'Small' })
+  expect(title?.nextElementSibling?.contains(model)).toBe(true)
+  expect(model.closest('.le-mobile-model')?.nextElementSibling?.contains(screen.getByRole('button', { name: 'Neue Unterhaltung' }))).toBe(true)
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   expect(css).toMatch(/\.le-crumb--center \{[^}]*justify-content: center/u)
 })

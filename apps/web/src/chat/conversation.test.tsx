@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
-import type { ChatMessageOut, MailSummaryOut } from '../api/generated/types.gen'
+import type { ChatMessageOut, ConversationOut, MailSummaryOut } from '../api/generated/types.gen'
 import { Route as StartRoute } from '../routes/_app/index'
 import { Conversation, turnOrder } from './Conversation'
 import { ChatSessionProvider } from './session'
@@ -469,7 +469,7 @@ test('model selection errors do not follow a conversation switch', async () => {
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
   act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei', is_default: false }]) })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
-  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei/ }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: /Modell Zwei/ }))
   expect(await screen.findByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeTruthy()
   await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'b' } }) })
   expect(screen.queryByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeNull()
@@ -517,44 +517,104 @@ test('restart from a revoked answer preserves account and unsent text', async ()
 test('unknown model refusal renders its explanation', async () => {
   spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => { throw { detail: { code: 'model_unknown' } } }) as never)
   const { client } = setup('/chat/c')
+  spyOn(sdk, 'chatModelsList').mockResolvedValue({ data: [{ id: 'm1', label: 'Modell Eins', is_default: true }] } as never)
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
   act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei', is_default: false }]) })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
-  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei/ }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: /Modell Zwei/ }))
   expect(await screen.findByText('Dieses Modell gibt es nicht mehr. Wähle ein anderes.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Modell Eins' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Modell Eins' }))
+  expect(screen.queryByRole('menuitemradio', { name: /Modell Zwei/ })).toBeNull()
 })
 
-test('model menu updates the conversation', async () => {
-  const update = spyOn(sdk, 'chatConversationUpdate').mockImplementation((async () => ({ data: {} })) as never)
-  const { client } = setup('/chat/c')
-  const invalidate = spyOn(client, 'invalidateQueries')
-  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
-  act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', description: 'Schnell', is_default: true }, { id: 'm2', label: 'Modell Zwei', description: 'Genau', is_default: false }]) })
+const modelChoices = [
+  { id: 'm1', label: 'Modell Eins', description: 'Schnell', is_default: true },
+  { id: 'm2', label: 'Modell Zwei', description: 'Genau', is_default: false },
+]
+
+test('the saved model survives switching conversations and a fresh page with an older answer', async () => {
+  let saved: ConversationOut = { id: 'c', title: 'Test', model: 'm1', version: 5, prompt_revision_id: null, account_scope_json: null, created_at: '', updated_at: '' }
+  function openPage() {
+    const { router } = setup('/chat/c')
+    history = [historyRow('old', 'assistant', { model: 'm1' })]
+    spyOn(sdk, 'chatHistory').mockImplementation(async options => ({ data: options.query.conversation_id === 'c' ? history : [] }) as never)
+    spyOn(sdk, 'chatModelsList').mockResolvedValue({ data: modelChoices } as never)
+    spyOn(sdk, 'chatConversationsList').mockImplementation(async () => ({ data: [saved, { ...saved, id: 'other', model: 'retired-model' }] }) as never)
+    return router
+  }
+  openPage()
+  const update = spyOn(sdk, 'chatConversationUpdate').mockImplementation(async () => {
+    saved = { ...saved, model: 'm2', version: 6 }
+    return { data: saved } as never
+  })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
-  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei · Genau/ }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: /Modell Zwei.*Genau/s }))
   await waitFor(() => expect(update).toHaveBeenCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2', expected_version: 5 }, throwOnError: true }))
-  await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['history', 'c'] }))
+  expect(await screen.findByRole('button', { name: 'Modell Zwei' })).toBeTruthy()
+  cleanup()
+  const router = openPage()
+  expect(await screen.findByRole('button', { name: 'Modell Zwei' })).toBeTruthy()
+  await screen.findByText('Antwort old')
+  expect(document.querySelector('.le-msg-ai small')?.textContent).toBe('Modell Eins')
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'other' } }) })
+  expect(await screen.findByRole('button', { name: 'retired-model' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'retired-model' }))
+  const missing = screen.getByRole('menuitemradio', { name: /retired-model/, checked: true })
+  expect(missing.getAttribute('aria-disabled')).toBe('true')
+  expect(missing.textContent).toContain('In der aktuellen Modellliste nicht verfügbar.')
+  fireEvent.keyDown(missing, { key: 'Escape' })
+  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'c' } }) })
+  expect(await screen.findByRole('button', { name: 'Modell Zwei' })).toBeTruthy()
+})
+
+test('a live answer keeps the model announced by the server when the saved choice changes', async () => {
+  const { client } = setup('/chat/c')
+  spyOn(sdk, 'chatModelsList').mockResolvedValue({ data: modelChoices } as never)
+  await send()
+  await act(async () => {
+    frame({ event: 'start', conversation_id: 'c', user_message_id: 'u', model: 'm2' })
+    frame({ event: 'delta', text: 'Laufende Antwort' })
+  })
+  await screen.findByText('Laufende Antwort')
+  expect(document.querySelector('.le-msg-ai small')?.textContent).toBe('Modell Zwei')
+  act(() => { client.setQueryData<ConversationOut[]>(['conversations'], rows => rows?.map(row => ({ ...row, model: 'next-model', version: row.version + 1 }))) })
+  const chip = await screen.findByRole('button', { name: 'next-model' })
+  expect((chip as HTMLButtonElement).disabled).toBe(true)
+  expect(document.querySelector('.le-msg-ai small')?.textContent).toBe('Modell Zwei')
+})
+
+test('a stream without model metadata shows the answer without guessing a model', async () => {
+  setup('/chat/c')
+  spyOn(sdk, 'chatModelsList').mockResolvedValue({ data: modelChoices } as never)
+  await send()
+  await act(async () => {
+    frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' })
+    frame({ event: 'delta', text: 'Text aus einem älteren Stream' })
+  })
+  await screen.findByText('Text aus einem älteren Stream')
+  expect(document.querySelector('.le-msg-ai small')?.textContent).toBeUndefined()
 })
 
 test('a model conflict reloads the conversation and only an explicit retry uses its new version', async () => {
   const { client } = setup('/chat/c')
   let reads = 0
-  let conflicted = false
   const refreshed = { id: 'c', title: 'Test', model: 'm3', version: 6, prompt_revision_id: null, account_scope_json: null, created_at: '', updated_at: '' }
-  spyOn(sdk, 'chatConversationsList').mockImplementation((async () => { reads++; return { data: [conflicted ? refreshed : { ...refreshed, model: 'm1', version: 5 }] } }) as never)
-  const update = spyOn(sdk, 'chatConversationUpdate').mockImplementationOnce((async () => { conflicted = true; throw { detail: { code: 'version_conflict' }, status: 409 } }) as never)
-    .mockImplementation((async () => ({ data: { ...refreshed, model: 'm2', version: 7 } })) as never)
+  let saved = { ...refreshed, model: 'm1', version: 5 }
+  spyOn(sdk, 'chatConversationsList').mockImplementation(async () => { reads++; return { data: [saved] } as never })
+  const update = spyOn(sdk, 'chatConversationUpdate').mockImplementationOnce(async () => { saved = refreshed; throw { detail: { code: 'version_conflict' }, status: 409 } })
+    .mockImplementation(async () => { saved = { ...refreshed, model: 'm2', version: 7 }; return { data: saved } as never })
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
   act(() => { client.setQueryData(['models'], [{ id: 'm1', label: 'Modell Eins', is_default: true }, { id: 'm2', label: 'Modell Zwei' }, { id: 'm3', label: 'Modell Drei' }]) })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Eins/ }))
-  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei/ }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: /Modell Zwei/ }))
   expect(await screen.findByText('Die Unterhaltung wurde inzwischen geändert. Der aktuelle Stand ist geladen. Prüfe das Modell und wähle bei Bedarf erneut.')).toBeTruthy()
   expect(client.getQueryData(['conversations'])).toEqual([refreshed])
   expect(update).toHaveBeenCalledTimes(1)
   expect(reads).toBeGreaterThanOrEqual(2)
   expect(update).toHaveBeenCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2', expected_version: 5 }, throwOnError: true })
   fireEvent.click(await screen.findByRole('button', { name: /Modell Drei/ }))
-  fireEvent.click(screen.getByRole('menuitem', { name: /Modell Zwei/ }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: /Modell Zwei/ }))
   await waitFor(() => expect(update).toHaveBeenLastCalledWith({ path: { conversation_id: 'c' }, body: { model: 'm2', expected_version: 6 }, throwOnError: true }))
   expect(await screen.findByRole('button', { name: /Modell Zwei/ })).toBeTruthy()
 })
@@ -585,7 +645,8 @@ test('history renders safe text, model, mail account and only the latest suggest
   expect(screen.getByText('Gmail')).toBeTruthy()
   expect(screen.getByRole('img', { name: 'Dringend' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Antwort entwerfen' })).toBeTruthy()
-  expect(screen.getAllByText('Modellname')).toHaveLength(2)
+  expect(document.querySelector('.le-msg-ai small')?.textContent).toBe('Modellname')
+  expect(screen.getByRole('button', { name: 'm1' })).toBeTruthy()
   expect(screen.queryByText('Alte Frage')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Weiter fragen' }))
   expect(requestBody.text).toBe('Weiter fragen')
