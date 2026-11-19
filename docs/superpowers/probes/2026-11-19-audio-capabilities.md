@@ -52,9 +52,9 @@ stopped at 121 seconds. Each tool ran with a three-second subprocess timeout, on
 - Both 121-second fixtures failed. Both 119.5-second fixtures passed. The exact 120-second
   WebM fixture was rejected conservatively when its metadata reported 120.008 seconds although
   the decoded sample count measured 120.000 seconds.
-- Before offering either container, #27 still needs a bounded production validator with tests for
-  the actual browser files, malformed structures, timestamp gaps, codec padding and timeout.
-  The current deployment image has no audio validator.
+- At this stage #27 still needed a bounded production validator with coverage for actual browser
+  files, malformed structures, timestamp gaps, codec padding and timeout. The image used for this
+  initial check had no audio validator.
 
 The follow-up local check adds `--validate-container` to the probe. It checks the declared
 container and codec, packet timestamp span, container duration when present and independently
@@ -74,23 +74,27 @@ Results contain only measurements and fixed reason codes.
 
 ## Release decision
 
-| Capability | State and remaining evidence |
+Both chat audio capabilities remain disabled on the Studio deployment at `017a89f`.
+Record the owner's acceptance of the effective Mistral data handling for the selected models
+before using personal or mail-derived content.
+
+| Capability | Remaining Studio evidence |
 | --- | --- |
-| STT | **Keep disabled.** Provider access and the Chromium muxer passed. **BLOCKED** on real iOS Safari and Chromium microphone evidence, bounded production validation, verified owner identity, approved workspace data handling, and the Studio gateway size and upload path. The production upload acceptance belongs to #27. |
-| TTS | **Keep disabled.** The German preset generated playable MP3 in Chromium. **BLOCKED** on real Safari playback, approved workspace data handling, owner verification, and demonstrated production request and response limits. The secure message lookup and playback lifecycle belong to #28. |
+| STT (#27) | Record and upload WebM/Opus on the owner's target device. Check that the deployed gateway carries the intended upload limit and that a synthetic transcribe request succeeds with the deployed API module's credential. List MP4/AAC only after validation in the deployed runtime and a real Safari recording test. |
+| TTS (#28) | Check synthesis from the deployed API module, the request and response limits, and playback on the owner's target device. |
 
-The existing workspace key passed the public inference endpoints. There was no authorized
-multipart receiver in the deployed app to show what body the Studio gateway would forward or
-how it would enforce size. The runtime caller token and worker credential were outside this
-probe. The local limits of 10 MiB, 120 seconds, and one active STT request are app limits.
-The [previous gateway probe](2026-11-18-gateway-zugang.md) concerns authenticated GET access.
+The existing Studio owner session opened the device check without a new connector consent.
+A fresh session may encounter Studio's app consent. Independently, the audio routes call
+only `GET /v1/users/me` to verify the Studio caller and the two audio endpoints at
+`https://api.mistral.ai` using the app's inference credential. Inference authorization is
+independent of connector grants. STT returns text to the composer for editing. Sending it
+explicitly starts a regular chat turn with its existing scopes. TTS reads an eligible reply from
+app history, strips Markdown and sends its speech text to Mistral.
 
-**Workspace retention is unverified.** Mistral documents support for organization-level zero
-data retention on both stateless audio endpoints, depending on plan and activation, separately
-from training opt-out. The workspace credential and the successful inference responses provide
-no evidence about the active organization settings. Verify the effective policy with the
-organization administrator before using personal or mail-derived content.
-[Mistral zero data retention](https://docs.mistral.ai/admin/monitor-comply/zero-data-retention).
+To verify inference from production while the release gates are closed, use an expiring,
+owner-only smoke with a fixed bundled recording and a fixed sample text. Exercise the real
+production validator, app credential and provider adapter with those fixtures. Keep the
+regular chat routes gated until the applicable checks and data-handling decision are recorded.
 
 ## Runtime contract
 
@@ -137,9 +141,60 @@ data-handling term changes, clear the affected attestation until its release che
   the first AAC packet's duration on the local fragmented MP4 fixture, so the validator
   rejected it conservatively. Keep fragmented MP4 out of the Studio formats pending a
   compatible, validated runtime.
-- The organization's API training opt-in and Labs toggle appeared off in Admin. Effective
-  zero data retention for this organization remains unverified. Keep live probes synthetic.
-  [Mistral zero data retention](https://docs.mistral.ai/admin/monitor-comply/zero-data-retention).
+
+## Mistral data retention
+
+On 19 November 2026, the Admin organization ID matched the ID in the production deployment
+manifest. **Admin → Vibe → Datenschutz** showed no active Zero Data Retention (ZDR) entry.
+The API training opt-in and Labs toggle were off in the separate API privacy settings.
+The Vibe chat expiry control applies to Vibe chats. Mistral's standard API terms describe
+processing followed by 30 rolling days of retention of inputs and outputs for abuse
+monitoring, subject to exceptions and any applicable organization agreement. Use that standard
+as the release assumption until Mistral confirms a different effective policy for the app's
+inference credential. Keep verification calls synthetic.
+[Mistral Privacy Policy](https://legal.mistral.ai/terms/privacy-policy/),
+[Admin privacy settings](https://admin.mistral.ai/vibe/privacy).
+
+Mistral covers `/v1/audio/transcriptions` and `/v1/audio/speech` under approved organization
+ZDR for eligible stateless requests. It excludes Public Preview and Labs models, even under an
+approved organization setting. `voxtral-mini-transcribe-3` aliases `voxtral-mini-transcribe-3-0`
+and the configured `voxtral-mini-tts-3-0` uses the same Voxtral 3 generation. Both are Public
+Preview. If the release requires ZDR, obtain organization activation and confirm coverage for
+the two selected model IDs before attesting. The Audio API's policy is separate from the app's
+Postgres chat history and from any Studio Observability traces.
+[Mistral zero data retention](https://docs.mistral.ai/admin/monitor-comply/zero-data-retention),
+[Voxtral model mapping](https://docs.mistral.ai/studio/audio/migrate-from-voxtral-2),
+[Transcribe 3 model card](https://docs.mistral.ai/models/voxtral-mini-transcribe-3-0),
+[TTS 3 model card](https://docs.mistral.ai/models/voxtral-mini-tts-3-0).
+
+## App routes with live inference
+
+On 19 November 2026, the production-target API image ran the real audio routes, PostgreSQL
+lock and reply lookup against a disposable loopback database. The app used the workspace
+inference credential and sent only the bundled synthetic utterance and the same fixed text.
+The test supplied a loopback owner fixture and in-process release attestations. Studio gateway
+behavior and the deployed module's credential still require the production smoke.
+
+| App route and model | Result |
+| --- | --- |
+| WebM/Opus STT with `voxtral-mini-transcribe-3` | HTTP 200. The normalized draft matched the synthetic source. |
+| TTS with `voxtral-mini-tts-3-0` and `voice_481` | HTTP 200. FFmpeg decoded 19,121 bytes of MP3 to 2.717 seconds. |
+| WebM/Opus STT with `voxtral-mini-2602` | HTTP 200. The normalized draft matched the synthetic source. |
+| TTS with `voxtral-mini-tts-2603` and `voice_481` | App HTTP 503. Mistral lists this German voice as a Voxtral 3 addition. |
+| TTS with `voxtral-mini-tts-2603` and `gb_jane_neutral` in the local process | HTTP 200. FFmpeg decoded 15,947 bytes of MP3 to 2.220 seconds. Acceptability of this preset for German playback remains untested. |
+
+The routes denied a missing owner, missing verification and a stopped assistant reply.
+Successful responses had `Cache-Control: no-store`, and the chat message count stayed at two
+throughout. A release with the legacy models would require checking model support, retention
+coverage and the selected voice.
+[Mistral preset voice compatibility](https://docs.mistral.ai/studio/audio/voice-agents/configuration#voxtral-tts-2-voices).
+
+A follow-up Playwright run used Chromium 158.0.8127.18 and the same API image with the configured
+Voxtral 3 models. The browser's recorder received the bundled synthetic utterance through a
+fake microphone. After the explicit upload, the provider transcript appeared in the editable
+composer alongside existing text. A separate manual send reached the synthetic chat fixture.
+Reading that fixture's saved assistant reply used Mistral's live MP3, which Chromium played
+through the `ended` event. Playwright restricted the browser to the loopback app and API.
 
 ## Temporary owner device check
 
