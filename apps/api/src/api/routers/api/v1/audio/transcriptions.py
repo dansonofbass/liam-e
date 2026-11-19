@@ -1,7 +1,7 @@
 """Transcribe a verified owner's bounded recording after their explicit upload."""
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Annotated, Literal
 from uuid import UUID
@@ -19,6 +19,7 @@ from api.audio.capabilities import audio_capabilities
 from api.audio.containers import MAX_BYTES, check_recording
 from api.audio.errors import NO_STORE, audio_error
 from api.audio.provider import MistralAudio, get_audio_provider
+from api.audio.requests import bounded_body
 
 router = APIRouter()
 _UPLOAD_OVERHEAD = 16 * 1024
@@ -58,15 +59,6 @@ def get_transcription_slot() -> Slot:
     return transcription_slot
 
 
-async def _bounded_upload(request: Request) -> AsyncIterator[bytes]:
-    received = 0
-    async for chunk in request.stream():
-        received += len(chunk)
-        if received > MAX_BYTES + _UPLOAD_OVERHEAD:
-            raise audio_error("audio_too_large")
-        yield chunk
-
-
 async def _get_recording(
     request: Request, formats: tuple[str, ...],
 ) -> tuple[bytes, str, UUID, Literal["de", "en"] | None]:
@@ -75,7 +67,8 @@ async def _get_recording(
     try:
         async with asyncio.timeout(_UPLOAD_TIMEOUT):
             form = await MultiPartParser(
-                request.headers, _bounded_upload(request), max_files=1, max_fields=2, max_part_size=256,
+                request.headers, bounded_body(request, MAX_BYTES + _UPLOAD_OVERHEAD),
+                max_files=1, max_fields=2, max_part_size=256,
             ).parse()
     except TimeoutError:
         raise audio_error("audio_timeout") from None

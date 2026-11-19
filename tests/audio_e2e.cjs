@@ -58,15 +58,16 @@ async function stop(child) {
 }
 
 async function testSpeechInput(page, webOrigin, conversation) {
-  const calls = { upload: 0, chat: [] };
+  const calls = { upload: 0, chat: [], speech: [] };
   page.on("request", request => {
     const url = new URL(request.url());
     if (request.method() !== "POST") return;
     if (url.pathname === "/api/v1/audio/transcriptions") calls.upload++;
     if (url.pathname === "/api/v1/chat/stream") calls.chat.push(request.postDataJSON());
+    if (url.pathname === "/api/v1/audio/speech") calls.speech.push(request.postDataJSON());
   });
   await page.addInitScript(() => {
-    window.audioFixture = { tracks: [], recordings: [], deferPermission: false };
+    window.audioFixture = { tracks: [], recordings: [], playback: [], revoked: [], deferPermission: false };
     const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = async options => {
       const stream = await getUserMedia(options);
@@ -85,6 +86,21 @@ async function testSpeechInput(page, webOrigin, conversation) {
       });
       return start.apply(this, args);
     };
+    const nativeRevoke = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = url => {
+      window.audioFixture.revoked.push(url);
+      nativeRevoke(url);
+    };
+    window.Audio = new Proxy(window.Audio, {
+      construct(target, args) {
+        const media = Reflect.construct(target, args);
+        const playback = { media, url: args[0], played: false, ended: false };
+        window.audioFixture.playback.push(playback);
+        media.addEventListener("playing", () => { playback.played = true; });
+        media.addEventListener("ended", () => { playback.ended = true; });
+        return media;
+      },
+    });
   });
 
   await page.goto(webOrigin + "/chat/" + conversation);
@@ -159,6 +175,80 @@ async function testSpeechInput(page, webOrigin, conversation) {
   assert.equal(calls.chat[0].text, "Bearbeiteter Testentwurf.");
   assert.equal(calls.chat[0].conversation_id, conversation);
   console.log("STT e2e passed: Chromium recording, permission cancellation, discard, background track cleanup, explicit upload, draft editing and manual send.");
+  return calls;
+}
+
+async function testSpeechOutput(page, calls, conversation) {
+  const reply = page.locator(".le-chat-entry").filter({ hasText: "Hier ist die synthetische Antwort." });
+  const read = reply.getByRole("button", { name: "Antwort vorlesen", exact: true });
+  await read.waitFor();
+  assert.equal(calls.speech.length, 0);
+  const response = page.waitForResponse(item => new URL(item.url()).pathname === "/api/v1/audio/speech");
+  await read.click();
+  const audio = await response;
+  assert.equal(audio.status(), 200);
+  assert.equal(audio.headers()["content-type"], "audio/mpeg");
+  assert.equal(audio.headers()["cache-control"], "no-store");
+  await page.waitForFunction(() => window.audioFixture.playback[0]?.played);
+  await reply.getByText("Vorlesen beendet.", { exact: true }).waitFor();
+  assert(await page.evaluate(() => {
+    const playback = window.audioFixture.playback[0];
+    return playback.ended && window.audioFixture.revoked.includes(playback.url);
+  }));
+  assert.equal(calls.speech.length, 1);
+  assert.equal(calls.speech[0].conversation_id, conversation);
+  assert.equal(calls.speech[0].message_id, (await reply.getAttribute("id")).replace(/^message-/, ""));
+  assert.deepEqual(Object.keys(calls.speech[0]).sort(), ["conversation_id", "message_id"]);
+
+  await read.click();
+  await page.waitForFunction(() => window.audioFixture.playback[1]?.played);
+  await page.getByRole("button", { name: "Sprache aufnehmen", exact: true }).click();
+  await page.waitForFunction(() => {
+    const playback = window.audioFixture.playback[1];
+    return playback.media.paused && window.audioFixture.revoked.includes(playback.url);
+  });
+  await page.getByRole("button", { name: "Aufnahme verwerfen", exact: true }).click();
+  assert.equal(calls.speech.length, 2);
+
+  await read.click();
+  await page.waitForFunction(() => window.audioFixture.playback[2]?.played);
+  await reply.getByRole("button", { name: "Vorlesen beenden", exact: true }).click();
+  await page.waitForFunction(() => {
+    const playback = window.audioFixture.playback[2];
+    return playback.media.paused && window.audioFixture.revoked.includes(playback.url);
+  });
+  assert.equal(calls.speech.length, 3);
+
+  // Hold a successful server response until the user cancels the download.
+  let intercepted;
+  const routePattern = "**/api/v1/audio/speech";
+  const hold = route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    intercepted = route;
+  };
+  await page.route(routePattern, hold);
+  await read.click();
+  await waitFor(() => intercepted, "Intercepted speech request");
+  const late = await intercepted.fetch({ timeout });
+  assert.equal(late.status(), 200);
+  await reply.getByRole("button", { name: "Vorlesen beenden", exact: true }).click();
+  // Chromium may already have cancelled this request when the fixture tries to deliver it.
+  await intercepted.fulfill({ response: late }).catch(() => undefined);
+  await page.unroute(routePattern, hold);
+  await read.waitFor();
+  assert.equal(await page.evaluate(() => window.audioFixture.playback.length), 3);
+
+  await read.click();
+  await page.waitForFunction(() => window.audioFixture.playback[3]?.played);
+  await page.locator(".le-side .le-conv").filter({ hasText: "Newsletter aufräumen" }).click();
+  await page.waitForFunction(id => !location.pathname.endsWith("/" + id), conversation);
+  await page.waitForFunction(() => {
+    const playback = window.audioFixture.playback[3];
+    return playback.media.paused && window.audioFixture.revoked.includes(playback.url);
+  });
+  assert.equal(calls.speech.length, 5);
+  assert.equal(calls.chat.length, 1);
+  console.log("TTS e2e passed: saved assistant reply, MP3 playback, stop, late-response cancellation, microphone interruption and conversation change.");
 }
 
 async function main() {
@@ -211,7 +301,8 @@ async function main() {
       ? route.continue() : route.abort());
     const page = await context.newPage();
     page.setDefaultTimeout(timeout);
-    await testSpeechInput(page, webOrigin, conversation);
+    const calls = await testSpeechInput(page, webOrigin, conversation);
+    await testSpeechOutput(page, calls, conversation);
   } catch (error) {
     if (api) console.error(api.logs());
     if (web) console.error(web.logs());

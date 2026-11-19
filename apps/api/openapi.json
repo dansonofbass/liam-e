@@ -6955,6 +6955,76 @@
         "summary": "Get audio capabilities"
       }
     },
+    "/api/v1/audio/speech": {
+      "post": {
+        "operationId": "audio_speech",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "conversation_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Conversation Id",
+                    "type": "string"
+                  },
+                  "message_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Message Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "conversation_id",
+                  "message_id"
+                ],
+                "title": "SpeechReference",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Owner access could not be verified"
+          },
+          "404": {
+            "description": "The reply is not available for speech"
+          },
+          "413": {
+            "description": "Speech reference too large"
+          },
+          "422": {
+            "description": "Invalid speech reference or reply text too long"
+          },
+          "429": {
+            "description": "Provider rate limit"
+          },
+          "503": {
+            "description": "Speech unavailable"
+          },
+          "504": {
+            "description": "Speech timed out"
+          }
+        },
+        "summary": "Read aloud a saved, complete assistant reply"
+      }
+    },
     "/api/v1/audio/transcriptions": {
       "post": {
         "operationId": "audio_transcribe",

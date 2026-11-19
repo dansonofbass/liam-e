@@ -219,6 +219,10 @@ export const de = {
     themes: { light: 'Hell', dark: 'Dunkel', system: 'Wie im System' },
   },
   audio: {
+    speech: 'Antwort vorlesen', speechStop: 'Vorlesen beenden', speechPlay: 'Wiedergabe starten',
+    speechLoading: 'Audio wird erzeugt …', speechPlaying: 'Die Antwort wird vorgelesen.',
+    speechReady: 'Audio ist bereit. Starte die Wiedergabe.', speechFinished: 'Vorlesen beendet.',
+    speechPlaybackError: 'Das Audio konnte nicht abgespielt werden.',
     record: 'Sprache aufnehmen', cancel: 'Aufnahme abbrechen',
     stopAndUpload: 'Beenden und übertragen', upload: 'Aufnahme übertragen', discard: 'Aufnahme verwerfen',
     permission: 'Mikrofon freigeben …',
@@ -257,6 +261,8 @@ export const de = {
     preparing_proposal: 'Bereite einen Vorschlag vor …',
   },
   errors: {
+    audio_message_unavailable: 'Diese Antwort ist zum Vorlesen nicht verfügbar.',
+    audio_text_too_long: 'Diese Antwort ist zu lang zum Vorlesen.',
     audio_unavailable: 'Die Audiofunktion ist gerade nicht verfügbar.',
     audio_too_large: 'Die Aufnahme ist größer als 10 MiB.',
     audio_format_unsupported: 'Dieses Aufnahmeformat wird nicht unterstützt.',

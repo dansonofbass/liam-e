@@ -21,6 +21,7 @@ from conftest import build_app
 MUTATING_OPERATIONS: frozenset[str] = frozenset(
     {
         "audio_transcribe",
+        "audio_speech",
         "calendar_google_connect",
         "calendar_event_create",
         "calendar_event_update",

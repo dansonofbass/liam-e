@@ -101,8 +101,14 @@ class _SpeechVerification(_Verification):
 
     @model_validator(mode="after")
     def require_format_and_limits(self):
-        if self.outcome == "verified" and (not self.formats or self.app_limits is None):
-            raise ValueError("a verified speech capability requires a checked format and application limits")
+        if self.outcome != "verified":
+            return self
+        limits = self.app_limits
+        if (
+            not self.formats or limits is None or limits.max_input_characters > 500
+            or limits.max_response_bytes > 1_000_000 or limits.timeout_seconds > 20
+        ):
+            raise ValueError("verified speech limits must fit the application's bounded speech path")
         return self
 
 

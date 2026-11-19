@@ -3809,6 +3809,65 @@ export type AudioCapabilitiesGetResponses = {
 
 export type AudioCapabilitiesGetResponse = AudioCapabilitiesGetResponses[keyof AudioCapabilitiesGetResponses];
 
+export type AudioSpeechData = {
+    /**
+     * SpeechReference
+     */
+    body: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/speech';
+};
+
+export type AudioSpeechErrors = {
+    /**
+     * Owner access could not be verified
+     */
+    401: unknown;
+    /**
+     * The reply is not available for speech
+     */
+    404: unknown;
+    /**
+     * Speech reference too large
+     */
+    413: unknown;
+    /**
+     * Invalid speech reference or reply text too long
+     */
+    422: unknown;
+    /**
+     * Provider rate limit
+     */
+    429: unknown;
+    /**
+     * Speech unavailable
+     */
+    503: unknown;
+    /**
+     * Speech timed out
+     */
+    504: unknown;
+};
+
+export type AudioSpeechResponses = {
+    /**
+     * Successful Response
+     */
+    200: Blob | File;
+};
+
+export type AudioSpeechResponse = AudioSpeechResponses[keyof AudioSpeechResponses];
+
 export type AudioTranscribeData = {
     body: {
         file: Blob | File;

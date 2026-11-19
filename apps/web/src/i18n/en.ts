@@ -229,6 +229,10 @@ export const en = {
     themes: { light: 'Light', dark: 'Dark', system: 'Use system setting' },
   },
   audio: {
+    speech: 'Read reply aloud', speechStop: 'Stop reading', speechPlay: 'Start playback',
+    speechLoading: 'Generating audio …', speechPlaying: 'Reading the reply aloud.',
+    speechReady: 'Audio is ready. Start playback.', speechFinished: 'Playback finished.',
+    speechPlaybackError: 'The audio could not be played.',
     record: 'Record speech', cancel: 'Cancel recording',
     stopAndUpload: 'Stop and upload', upload: 'Upload recording', discard: 'Discard recording',
     permission: 'Waiting for microphone permission …',
@@ -267,6 +271,8 @@ export const en = {
     preparing_proposal: 'Preparing a proposal …',
   },
   errors: {
+    audio_message_unavailable: 'This reply is unavailable for speech.',
+    audio_text_too_long: 'This reply is too long to read aloud.',
     audio_unavailable: 'Audio is currently unavailable.',
     audio_too_large: 'The recording exceeds 10 MiB.',
     audio_format_unsupported: 'This recording format is unavailable.',

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import subprocess
 import sys
 from urllib.parse import urlsplit
 
@@ -37,6 +38,16 @@ class AudioFixture:
         assert kind == "webm" and data and language == "de"
         return TRANSCRIPT, model
 
+    async def synthesize(self, text, *, model, limits):
+        assert text == "Hier ist die synthetische Antwort."
+        assert model == "voxtral-mini-tts-3-0"
+        result = await asyncio.to_thread(subprocess.run, [
+            "ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1.8",
+            "-f", "mp3", "pipe:1",
+        ], capture_output=True, check=True, timeout=5)
+        assert 0 < len(result.stdout) <= limits.max_response_bytes
+        return result.stdout
+
 
 async def loopback_owner(request):
     return request.client is not None and request.client.host == "127.0.0.1"
@@ -69,7 +80,12 @@ async def serve(port: int) -> None:
         "outcome": "verified", "scope": "studio_release", "formats": ["audio/webm;codecs=opus"],
         "app_limits": {"max_upload_bytes": 10_485_760, "max_duration_seconds": 120, "max_concurrent_requests": 1},
     })
-    audio.audio_tts_verification = None
+    audio.audio_tts_model = "voxtral-mini-tts-3-0"
+    audio.audio_tts_verification = json.dumps({
+        "model": audio.audio_tts_model, "checked_at": "2026-01-01T10:00:00Z",
+        "outcome": "verified", "scope": "studio_release", "formats": ["audio/mpeg"],
+        "app_limits": {"max_input_characters": 500, "max_response_bytes": 1_000_000, "timeout_seconds": 20},
+    })
     models.list_chat_models = fixture_models
     stream.run_turn_events = fixture_chat_turn
     app = create_app(hooks=FastAPIHooks.empty())

@@ -75,6 +75,8 @@ The audio test starts the web app and API on loopback and migrates a disposable 
 container. A local test identity, a synthetic chat history and provider fixtures exercise the
 application without connector credentials. Chromium records from a synthetic microphone. The
 API validates the browser's actual WebM/Opus recording before giving it to the fixture provider.
+The test edits the transcribed draft, sends it explicitly, and plays a synthetic MP3 for the
+saved assistant reply. It also checks microphone release, playback cancellation and navigation.
 
 Use the repository's locked dependencies, FFmpeg and FFprobe with the descriptor protocol, and
 a local copy of the `pgvector/pgvector:0.8.0-pg16` image. Install Playwright in a scratch directory
