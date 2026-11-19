@@ -3319,6 +3319,24 @@ export type TranscriptionLimitsOut = {
 };
 
 /**
+ * TranscriptionOut
+ */
+export type TranscriptionOut = {
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Request Id
+     */
+    request_id: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
  * UiSettingsOut
  */
 export type UiSettingsOut = {
@@ -3790,6 +3808,57 @@ export type AudioCapabilitiesGetResponses = {
 };
 
 export type AudioCapabilitiesGetResponse = AudioCapabilitiesGetResponses[keyof AudioCapabilitiesGetResponses];
+
+export type AudioTranscribeData = {
+    body: {
+        file: Blob | File;
+        language?: 'de' | 'en';
+        request_id: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/transcriptions';
+};
+
+export type AudioTranscribeErrors = {
+    /**
+     * Owner access could not be verified
+     */
+    401: unknown;
+    /**
+     * Recording too large
+     */
+    413: unknown;
+    /**
+     * Unsupported recording format
+     */
+    415: unknown;
+    /**
+     * Invalid or empty recording
+     */
+    422: unknown;
+    /**
+     * Transcription already in progress or provider rate limit
+     */
+    429: unknown;
+    /**
+     * Transcription unavailable
+     */
+    503: unknown;
+    /**
+     * Transcription timed out
+     */
+    504: unknown;
+};
+
+export type AudioTranscribeResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptionOut;
+};
+
+export type AudioTranscribeResponse = AudioTranscribeResponses[keyof AudioTranscribeResponses];
 
 export type CalendarGoogleConnectData = {
     body: GoogleConnectInput;

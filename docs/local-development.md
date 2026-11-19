@@ -69,6 +69,28 @@ Open `http://localhost:3001/mail` for the inbox or `http://localhost:3001/` for 
 
 To stop, stop API and web with `Ctrl+C`, then run `podman stop liam-e-dev-db`. The container started with `--rm` is removed along with its unbound data storage.
 
+## Local audio browser test
+
+The audio test starts the web app and API on loopback and migrates a disposable PostgreSQL
+container. A local test identity, a synthetic chat history and provider fixtures exercise the
+application without connector credentials. Chromium records from a synthetic microphone. The
+API validates the browser's actual WebM/Opus recording before giving it to the fixture provider.
+
+Use the repository's locked dependencies, FFmpeg and FFprobe with the descriptor protocol, and
+a local copy of the `pgvector/pgvector:0.8.0-pg16` image. Install Playwright in a scratch directory
+or provide an existing installation on `NODE_PATH`.
+
+```bash
+playwright_dir=$(mktemp -d)
+npm install --prefix "$playwright_dir" --no-save --no-package-lock playwright@1.61.0
+"$playwright_dir/node_modules/.bin/playwright" install chromium
+NODE_PATH="$playwright_dir/node_modules" node tests/audio_e2e.cjs
+```
+
+Set `AUDIO_E2E_CHROMIUM` to run against an installed Chromium executable. The runner removes the
+container and stops both processes on exit. The test-only identity and attestation live in the
+test server. The Studio audio probe tracks the remaining release evidence.
+
 ## Checks
 
 Commands and requirements for changes are under [Contributing](../CONTRIBUTING.md). PostgreSQL contract tests run only with `RUN_PG_CONTRACT=1` and a test database connection whose role may create and delete additional temporary databases. [CI](../.github/workflows/ci.yml) uses a separate PostgreSQL service for this. [Providers and operations](providers-and-operations.md) covers provider and Studio setup.

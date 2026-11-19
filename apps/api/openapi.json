@@ -6045,6 +6045,30 @@
         "title": "TranscriptionLimitsOut",
         "type": "object"
       },
+      "TranscriptionOut": {
+        "properties": {
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "text",
+          "model"
+        ],
+        "title": "TranscriptionOut",
+        "type": "object"
+      },
       "UiSettingsOut": {
         "properties": {
           "locale": {
@@ -6929,6 +6953,76 @@
           }
         },
         "summary": "Get audio capabilities"
+      }
+    },
+    "/api/v1/audio/transcriptions": {
+      "post": {
+        "operationId": "audio_transcribe",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "language": {
+                    "enum": [
+                      "de",
+                      "en"
+                    ],
+                    "type": "string"
+                  },
+                  "request_id": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "request_id"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Owner access could not be verified"
+          },
+          "413": {
+            "description": "Recording too large"
+          },
+          "415": {
+            "description": "Unsupported recording format"
+          },
+          "422": {
+            "description": "Invalid or empty recording"
+          },
+          "429": {
+            "description": "Transcription already in progress or provider rate limit"
+          },
+          "503": {
+            "description": "Transcription unavailable"
+          },
+          "504": {
+            "description": "Transcription timed out"
+          }
+        },
+        "summary": "Transcribe a recording without submitting a chat turn"
       }
     },
     "/api/v1/calendar/connections/google": {

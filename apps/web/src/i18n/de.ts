@@ -218,6 +218,16 @@ export const de = {
     theme: 'Darstellung', themeTip: 'Zeigt liam-e hell, dunkel oder wie im System eingestellt',
     themes: { light: 'Hell', dark: 'Dunkel', system: 'Wie im System' },
   },
+  audio: {
+    record: 'Sprache aufnehmen', cancel: 'Aufnahme abbrechen',
+    stopAndUpload: 'Beenden und übertragen', upload: 'Aufnahme übertragen', discard: 'Aufnahme verwerfen',
+    permission: 'Mikrofon freigeben …',
+    recording: 'Aufnahme läuft. Beim Übertragen wird sie an Mistral gesendet.',
+    ready: 'Aufnahme beendet. Du kannst sie übertragen oder verwerfen.',
+    uploading: 'Sprache wird in Text umgewandelt …',
+    transcribed: 'Text eingefügt. Du kannst ihn bearbeiten und senden.',
+    microphoneError: 'Das Mikrofon konnte nicht verwendet werden. Du kannst weiter tippen.',
+  },
   chat: {
     modelDescriptions: {
       'mistral-large-latest': 'Für anspruchsvolle Aufgaben und ausführliche Antworten.',
@@ -247,6 +257,15 @@ export const de = {
     preparing_proposal: 'Bereite einen Vorschlag vor …',
   },
   errors: {
+    audio_unavailable: 'Die Audiofunktion ist gerade nicht verfügbar.',
+    audio_too_large: 'Die Aufnahme ist größer als 10 MiB.',
+    audio_format_unsupported: 'Dieses Aufnahmeformat wird nicht unterstützt.',
+    audio_empty: 'Die Aufnahme enthält keinen verwendbaren Ton.',
+    audio_too_long: 'Die Aufnahme ist länger als 120 Sekunden.',
+    audio_invalid: 'Die Aufnahme konnte nicht gelesen werden.',
+    audio_rate_limited: 'Ein Audioauftrag läuft bereits oder ist gerade nicht möglich. Versuch es später erneut.',
+    audio_timeout: 'Der Audioauftrag hat zu lange gedauert.',
+
     source_not_found: 'Diesen Kalender gibt es nicht mehr.',
     occurrence_not_found: 'Diesen Termin gibt es nicht mehr.',
     window_invalid: 'Prüfe Anfang und Ende des Kalenderzeitraums.',

@@ -228,6 +228,16 @@ export const en = {
     theme: 'Appearance', themeTip: 'Shows liam-e in light, dark, or your system’s appearance',
     themes: { light: 'Light', dark: 'Dark', system: 'Use system setting' },
   },
+  audio: {
+    record: 'Record speech', cancel: 'Cancel recording',
+    stopAndUpload: 'Stop and upload', upload: 'Upload recording', discard: 'Discard recording',
+    permission: 'Waiting for microphone permission …',
+    recording: 'Recording. Uploading sends the recording to Mistral.',
+    ready: 'Recording ended. You can upload or discard it.',
+    uploading: 'Transcribing the recording …',
+    transcribed: 'Text added. You can edit it before sending.',
+    microphoneError: 'The microphone was unavailable. You can keep typing.',
+  },
   chat: {
     modelDescriptions: {
       'mistral-large-latest': 'For challenging tasks and detailed answers.',
@@ -257,6 +267,15 @@ export const en = {
     preparing_proposal: 'Preparing a proposal …',
   },
   errors: {
+    audio_unavailable: 'Audio is currently unavailable.',
+    audio_too_large: 'The recording exceeds 10 MiB.',
+    audio_format_unsupported: 'This recording format is unavailable.',
+    audio_empty: 'The recording contains no usable audio.',
+    audio_too_long: 'The recording exceeds 120 seconds.',
+    audio_invalid: 'The recording could not be read.',
+    audio_rate_limited: 'An audio request is in progress or temporarily unavailable. Try again later.',
+    audio_timeout: 'The audio request took too long.',
+
     source_not_found: 'This calendar is gone.',
     occurrence_not_found: 'This event is gone.',
     window_invalid: 'Check the start and end of this period.',

@@ -20,6 +20,7 @@ from conftest import build_app
 # deciding that it must not be reachable from a Studio agent.
 MUTATING_OPERATIONS: frozenset[str] = frozenset(
     {
+        "audio_transcribe",
         "calendar_google_connect",
         "calendar_event_create",
         "calendar_event_update",

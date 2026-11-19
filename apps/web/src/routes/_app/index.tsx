@@ -26,7 +26,7 @@ export const Route = createFileRoute('/_app/')({
 })
 function Greeting() {
   const { texts, locale } = useI18n()
-  const { state, send, retry, retryWithoutPreferences, scope } = useChatSession()
+  const { state, send, retry, retryWithoutPreferences, scope, audioDraftLocked } = useChatSession()
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
   const calendarAbout = typeof search.calendarAbout === 'string' ? search.calendarAbout : undefined
@@ -40,7 +40,7 @@ function Greeting() {
   const [revision, setRevision] = useState<string | null>(null)
   const busy = state.phase === 'working' || state.phase === 'streaming'
   const quickSend = (text: string) => {
-    if (busy) return
+    if (busy || audioDraftLocked) return
     setStarted(true)
     void send({ text, account_id: scope, context_message_id: about, context_occurrence_id: calendarAbout, model, prompt_revision_id: revision })
   }
@@ -53,7 +53,7 @@ function Greeting() {
     }
   }, [started, state.conversationId, navigate])
   const data = summary.data
-  return <div className="le-chat-view"><ChatHeader><ModelMenu model={model} onChange={setModel} /><TemplateMenu revision={revision} onChange={setRevision} /></ChatHeader><div className="le-chat-messages le-chat-thread le-chat-start-scroll"><div className="le-chat-start"><h1 className="display le-greeting">{texts.chat.greetingFirst}<br /><span>{texts.chat.greetingSecond}</span></h1>
+  return <div className="le-chat-view"><ChatHeader><ModelMenu disabled={audioDraftLocked} model={model} onChange={setModel} /><TemplateMenu revision={revision} onChange={setRevision} /></ChatHeader><div className="le-chat-messages le-chat-thread le-chat-start-scroll"><div className="le-chat-start"><h1 className="display le-greeting">{texts.chat.greetingFirst}<br /><span>{texts.chat.greetingSecond}</span></h1>
     {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : modelGone ? undefined : { label: texts.chat.retry, onClick: () => { void retry() } }}>{texts.errors[state.errorCode ?? 'internal']}</Notice>}
     {summary.isPending && <p className="le-hint">{texts.chat.loadingSummary}</p>}
     {summary.isError && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void summary.refetch() } }}>{texts.chat.summaryError}</Notice>}

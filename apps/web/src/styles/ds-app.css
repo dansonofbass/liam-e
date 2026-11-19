@@ -17,6 +17,9 @@
 .le-drawer .le-shell-sidebar { flex: 1 0 auto; }
 @keyframes le-drawer-in { from { opacity: 0; transform: translateX(-100%); } to { opacity: 1; transform: translateX(0); } }
 .le-composer-spacer { flex: 1; }
+.le-audio-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.le-audio-status { font-size: var(--font-size-small); color: var(--ink-muted); }
+.le-audio-status:empty { display: none; }
 /* The calendar choice above the composer keeps apart from it. */
 .le-chat-scope { margin-block-end: var(--space-4); }
 .le-confirm-draft { padding: var(--space-3); }
