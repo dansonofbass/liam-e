@@ -86,13 +86,14 @@ def state(monkeypatch):
     monkeypatch.setattr(calendar_write, "get", get)
     monkeypatch.setattr(calendar_write, "finish", finish)
     monkeypatch.setattr(calendar_write, "expire_running", expire)
-    async def mark_dispatch(identifier):
+    async def mark_dispatch(identifier, *, request_json):
         row = s.records[identifier]
         if not s.dispatch_ok:
             row.status = "unknown"  # Expired by a concurrent read before dispatch.
         if row.status != "running":
             return False
         row.started_at = datetime.now(UTC)
+        row.request_json = request_json
         return True
     monkeypatch.setattr(calendar_write, "mark_dispatch", mark_dispatch)
     async def find(source_id, external_id): return s.occurrence
@@ -230,11 +231,66 @@ async def test_check_create_lists_the_window_without_free_text(state):
     assert listing and all("fullText" not in args for args in listing)
 
 
+@pytest.mark.parametrize("created", [timedelta(minutes=-2), timedelta(seconds=-1), timedelta(0), None])
+async def test_check_create_never_adopts_an_event_not_created_after_dispatch(state, created):
+    # An identical appointment made shortly before the write, or one without a creation
+    # time, keeps the outcome open but never proves that this write created it.
+    state.mode = "timeout"
+    result = await writes.execute(request())
+    dispatched = next(iter(state.records.values())).started_at
+    if created is None: state.event.pop("created")
+    else: state.event["created"] = (dispatched + created).isoformat()
+    outcome = await writes.check(result.write_id)
+    assert outcome.status == "unknown" and outcome.occurrence_id is None
+    assert not state.applied
+
+
+async def test_legacy_claim_without_dispatch_evidence_cannot_adopt_a_match(state):
+    state.mode = "timeout"
+    result = await writes.execute(request())
+    record = state.records[result.write_id]
+    bound = json.loads(record.request_json)
+    bound.pop("dispatched", None)
+    record.request_json = json.dumps(bound)
+    outcome = await writes.check(result.write_id)
+    assert outcome.status == "unknown" and outcome.occurrence_id is None
+    assert not state.applied
+
+
+async def test_check_reconciles_after_the_calendar_became_read_only(state):
+    # Reading back needs read access only; a lost permission must not strand the outcome.
+    state.mode = "timeout"
+    result = await writes.execute(request())
+    state.source.capabilities_json = '["read"]'
+    assert (await writes.check(result.write_id)).status == "done"
+
+
+async def test_retry_returns_existing_outcome_when_calendar_became_read_only(state):
+    command = request()
+    first = await writes.execute(command)
+    state.source.capabilities_json = '["read"]'
+
+    assert first.status == "done"
+    assert (await writes.execute(command)) == first
+    assert sum(tool == "create_event" for tool, _ in state.calls) == 1
+
+
+@pytest.mark.parametrize("created", [None, "invalid"])
+async def test_check_create_stays_unknown_with_an_indeterminate_competing_match(state, created):
+    state.mode = "timeout"
+    result = await writes.execute(request())
+    state.matches = [state.event, {**state.event, "id": "synthetic-other", "created": created}]
+
+    assert (await writes.check(result.write_id)).status == "unknown"
+    assert not state.applied
+
+
 async def test_expired_claim_before_dispatch_sends_nothing(state):
     state.dispatch_ok = False
-    state.matches = []
+    state.event["created"] = (datetime.now(UTC) + timedelta(seconds=1)).isoformat()
     result = await writes.execute(request())
-    assert result.status == "unknown"
+    assert result.status == "not_applied" and result.occurrence_id is None
+    assert not state.applied
     assert not any(tool == "create_event" for tool, _ in state.calls)
 
 

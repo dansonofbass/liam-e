@@ -355,6 +355,22 @@
         "title": "AttachmentOut",
         "type": "object"
       },
+      "AudioCapabilitiesOut": {
+        "properties": {
+          "stt": {
+            "$ref": "#/components/schemas/TranscriptionCapabilityOut"
+          },
+          "tts": {
+            "$ref": "#/components/schemas/SpeechCapabilityOut"
+          }
+        },
+        "required": [
+          "stt",
+          "tts"
+        ],
+        "title": "AudioCapabilitiesOut",
+        "type": "object"
+      },
       "BulkMessageActionIn": {
         "additionalProperties": false,
         "properties": {
@@ -4825,6 +4841,123 @@
         "title": "SourcePatch",
         "type": "object"
       },
+      "SpeechCapabilityOut": {
+        "properties": {
+          "app_limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeechLimitsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "formats": {
+            "items": {
+              "const": "audio/mpeg",
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "invalid_model_configuration",
+                  "verification_missing_or_invalid",
+                  "verification_failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "resolved_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Model"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "unavailable",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "model",
+          "formats",
+          "app_limits"
+        ],
+        "title": "SpeechCapabilityOut",
+        "type": "object"
+      },
+      "SpeechLimitsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "max_input_characters": {
+            "exclusiveMinimum": 0.0,
+            "title": "Max Input Characters",
+            "type": "integer"
+          },
+          "max_response_bytes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Max Response Bytes",
+            "type": "integer"
+          },
+          "timeout_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_input_characters",
+          "max_response_bytes",
+          "timeout_seconds"
+        ],
+        "title": "SpeechLimitsOut",
+        "type": "object"
+      },
       "StartEvent": {
         "properties": {
           "conversation_id": {
@@ -5802,6 +5935,116 @@
         "title": "TaskWindow",
         "type": "object"
       },
+      "TranscriptionCapabilityOut": {
+        "properties": {
+          "app_limits": {
+            "$ref": "#/components/schemas/TranscriptionLimitsOut"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "formats": {
+            "items": {
+              "enum": [
+                "audio/webm;codecs=opus",
+                "audio/mp4;codecs=mp4a.40.2"
+              ],
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "invalid_model_configuration",
+                  "verification_missing_or_invalid",
+                  "verification_failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "resolved_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Model"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "unavailable",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "model",
+          "formats",
+          "app_limits"
+        ],
+        "title": "TranscriptionCapabilityOut",
+        "type": "object"
+      },
+      "TranscriptionLimitsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "max_concurrent_requests": {
+            "title": "Max Concurrent Requests",
+            "type": "integer"
+          },
+          "max_duration_seconds": {
+            "title": "Max Duration Seconds",
+            "type": "integer"
+          },
+          "max_upload_bytes": {
+            "title": "Max Upload Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_upload_bytes",
+          "max_duration_seconds",
+          "max_concurrent_requests"
+        ],
+        "title": "TranscriptionLimitsOut",
+        "type": "object"
+      },
       "UiSettingsOut": {
         "properties": {
           "locale": {
@@ -6664,6 +6907,28 @@
           }
         },
         "summary": "Report dependency status; always answers 200"
+      }
+    },
+    "/api/v1/audio/capabilities": {
+      "get": {
+        "description": "Return the audio settings and verified capabilities without contacting the provider.",
+        "operationId": "audio_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioCapabilitiesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Owner access could not be verified"
+          }
+        },
+        "summary": "Get audio capabilities"
       }
     },
     "/api/v1/calendar/connections/google": {

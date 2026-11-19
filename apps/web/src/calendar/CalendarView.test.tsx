@@ -172,6 +172,15 @@ test('time grid shows gutter, empty slots, spanning all-day and timed events', a
   expect((screen.getByRole('link', { name: /Termin all/ }) as HTMLElement).style.gridColumn).toContain('span 2')
   expect(screen.getByRole('link', { name: /Termin a,/ }).textContent).toContain(calendarTime(event('a').start_at!))
 })
+test('with a touch pointer back-to-back short appointments share the width instead of overlapping', async () => {
+  mobile()
+  const rows = [{ ...event('a'), start_at: '2026-11-18T09:00:00Z', end_at: '2026-11-18T09:30:00Z' }, { ...event('b'), start_at: '2026-11-18T09:30:00Z', end_at: '2026-11-18T10:00:00Z' }]
+  const root = createRootRoute({ component: () => <TimeGrid from="2026-11-18" to="2026-11-19" rows={rows} sources={[source]} onSlot={() => {}} onOpen={() => {}} /> })
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  render(<RouterProvider router={router} />)
+  const first = await screen.findByRole('link', { name: /Termin a,/ })
+  expect([(first as HTMLElement).style.width, (screen.getByRole('link', { name: /Termin b,/ }) as HTMLElement).style.width]).toEqual(['50%', '50%'])
+})
 test('month day button and empty cell have distinct actions', async () => {
   const onDay = mock(() => {}), onSlot = mock(() => {})
   const root = createRootRoute({ component: () => <MonthView date="2026-11-18" rows={[]} sources={[source]} onDay={onDay} onSlot={onSlot} onOpen={() => {}} /> })
@@ -244,11 +253,16 @@ test('the list keeps its own range: no period navigation, but open writes stay v
 })
 
 
-test('an English afternoon slot keeps its local start time', () => {
+test('an English afternoon slot keeps its wall-clock position on a spring-forward day', () => {
+  const browserOptions = Intl.DateTimeFormat().resolvedOptions()
+  spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({ ...browserOptions, timeZone: 'Europe/Berlin' })
   const onSlot = mock(() => {})
   render(<I18nProvider locale="en">
-    <TimeGrid from="2026-11-19" to="2026-11-20" rows={[]} sources={[]} onSlot={onSlot} onOpen={() => {}} />
+    <TimeGrid from="2026-03-29" to="2026-03-30" rows={[]} sources={[]} onSlot={onSlot} onOpen={() => {}} />
   </I18nProvider>)
-  fireEvent.click(screen.getByRole('button', { name: /05:00 PM/ }))
-  expect(onSlot).toHaveBeenCalledWith({ date: '2026-11-19', minute: 17 * 60 })
+  expect(screen.queryByRole('button', { name: /02:00 AM/ })).toBeNull()
+  const slot = screen.getByRole('button', { name: /05:00 PM/ })
+  expect(slot.style.top).toBe(`${17 * 48}px`)
+  fireEvent.click(slot)
+  expect(onSlot).toHaveBeenCalledWith({ date: '2026-03-29', minute: 17 * 60 })
 })

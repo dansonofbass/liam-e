@@ -65,14 +65,18 @@ def test_write_record_removed_with_its_source_is_404(client, monkeypatch):
 def test_change_on_paused_or_read_only_source_sends_nothing(client, monkeypatch, method, change, http, code):
     from types import SimpleNamespace
     from api.calendar import google_write
-    from db.accessors import calendar_occurrence, calendar_source
+    from db.accessors import calendar_occurrence, calendar_source, calendar_write
     source = SimpleNamespace(id="synthetic", provider="google", is_active=True, capabilities_json='["read","write"]',
                              connection_ref="synthetic-ref", revision=1, external_id="synthetic-calendar")
     for key, value in change.items(): setattr(source, key, value)
     calls = []
     async def get(_): return source
     async def visible(_): return SimpleNamespace(source_id="synthetic", external_id="synthetic-event")
+    async def get_write(_):
+        assert source.is_active, "Reject a paused source before looking up the write claim"
+        return None
     async def call(name, arguments): calls.append(name)
+    monkeypatch.setattr(calendar_write, "get", get_write)
     monkeypatch.setattr(calendar_source, "get", get)
     monkeypatch.setattr(calendar_occurrence, "get_visible", visible)
     monkeypatch.setattr(google_write, "call", call)

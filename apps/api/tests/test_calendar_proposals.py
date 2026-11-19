@@ -57,7 +57,9 @@ def card(context, monkeypatch):
         if message.proposal_status != "pending" or state.revoked: return None
         message.proposal_status = "running"
         return message
-    async def set_proposal(_, **values):
+    async def set_proposal(_, *, expected_statuses=None, **values):
+        if expected_statuses is not None and message.proposal_status not in expected_statuses:
+            return None
         for key, value in values.items(): setattr(message, key, value)
         return message
     async def execute(request, *, write_id):
@@ -148,6 +150,74 @@ async def test_running_card_with_write_record_resolves_on_check(card, monkeypatc
     monkeypatch.setattr(calendar_write, "get", record)
     monkeypatch.setattr(writes, "get", get)
     assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "done"
+
+
+async def test_running_card_without_write_record_settles_on_check(card, monkeypatch):
+    # The confirm died between claiming the card and claiming the write: nothing was sent.
+    # Settling takes the card's write ID, so a confirm that is still alive cannot send later.
+    from db.accessors import calendar_write
+    card.message.proposal_status = "running"
+    taken = {}
+    async def record(identifier): return None
+    async def abandon(identifier, *, source_id, operation):
+        taken[identifier] = (source_id, operation)
+        return "abandoned"
+    monkeypatch.setattr(calendar_write, "get", record)
+    monkeypatch.setattr(calendar_write, "abandon", abandon)
+    result = await proposals.recheck_calendar_card(card.message.id)
+    assert result.proposal_status == "failed"
+    assert proposals.proposal_view(result).result.failed[0].code == "calendar_write_not_applied"
+    assert taken == {card.message.id: ("synthetic-source", "create")}
+
+
+async def test_running_card_check_loses_to_a_live_confirm(card, monkeypatch):
+    # The confirm claimed the write first: the check reads that write instead of settling.
+    from db.accessors import calendar_write
+    card.message.proposal_status = "running"
+    async def record(identifier): return None
+    async def abandon(identifier, **_): return "taken"
+    async def get(identifier): return writes.WriteOutcome(write_id=identifier, status="unknown", error_code="calendar_write_unknown")
+    monkeypatch.setattr(calendar_write, "get", record)
+    monkeypatch.setattr(calendar_write, "abandon", abandon)
+    monkeypatch.setattr(writes, "get", get)
+    assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "unknown"
+
+
+async def test_running_card_of_a_removed_calendar_is_never_called_not_applied(card, monkeypatch):
+    # Removal deleted the finished record, so the write may have been applied: the card says
+    # the calendar is unavailable, not that nothing happened.
+    from db.accessors import calendar_write
+    card.message.proposal_status = "running"
+    async def record(identifier): return None
+    async def abandon(identifier, **_): return "source_gone"
+    monkeypatch.setattr(calendar_write, "get", record)
+    monkeypatch.setattr(calendar_write, "abandon", abandon)
+    result = await proposals.recheck_calendar_card(card.message.id)
+    assert result.proposal_status == "failed"
+    assert proposals.proposal_view(result).result.failed[0].code == "calendar_unavailable"
+
+
+@pytest.mark.parametrize(
+    ("source_id", "expected"),
+    [("synthetic-source", "calendar_write_not_applied"), ("unrelated-source", "calendar_write_conflict")],
+)
+async def test_late_confirm_recognizes_only_its_own_settled_record(card, monkeypatch, source_id, expected):
+    from db.accessors import calendar_write
+
+    async def taken(request, *, write_id):
+        raise writes.WriteError("calendar_write_conflict")
+
+    async def stored(identifier):
+        return SimpleNamespace(
+            request_hash=calendar_write.ABANDONED_REQUEST_HASH, source_id=source_id,
+            operation="create", status="not_applied", error_code="calendar_write_not_applied",
+        )
+
+    monkeypatch.setattr(writes, "execute", taken)
+    monkeypatch.setattr(calendar_write, "get", stored)
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "failed"
+    assert proposals.proposal_view(result).result.failed[0].code == expected
 
 
 async def test_error_before_the_write_claim_fails_the_card(card, monkeypatch):
