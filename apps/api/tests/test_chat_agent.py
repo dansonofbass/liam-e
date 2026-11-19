@@ -193,8 +193,10 @@ async def test_a_new_conversation_takes_the_requested_model_and_an_existing_one_
     events = [e async for e in agent.run_turn_events(conversation_id=conversation_id, text='Weiter', model='mistral-small-latest')]
     assert events[-1].event == 'done'
     assert store.conversations[conversation_id].model == 'mistral-large-latest'
-    default_events, _ = await run(store, monkeypatch, [['Hallo']])
-    assert store.conversations[next(e for e in default_events if e.event == 'start').conversation_id].model == ''
+    default_events, default_client = await run(store, monkeypatch, [['Hallo']])
+    start = next(e for e in default_events if e.event == 'start')
+    assert store.conversations[start.conversation_id].model == ''
+    assert start.model == default_client.requests[0]['model'] == agent.mail_env.mail_chat_model
 
 
 async def test_mail_cards_carry_the_priority_flag(store, monkeypatch):
@@ -256,11 +258,21 @@ async def test_history_keeps_only_answered_tool_calls(store):
     assert [m.get('tool_call_id') for m in messages[2:]] == ['answered']
 
 
-async def test_conversation_model_is_used(store, monkeypatch):
+async def test_turn_keeps_the_announced_model_for_inference_and_history(store, monkeypatch):
     c = await store.create(model='mistral-small-latest')
-    fake = FakeMistral(streams=[['Antwort']]); monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
-    _ = [e async for e in agent.run_turn_events(conversation_id=c.id, text='Hallo')]
-    assert fake.requests[0]['model'] == c.model
+    fake = FakeMistral(streams=[['Antwort'], ['Weitere Antwort']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    turn = agent.run_turn_events(conversation_id=c.id, text='Hallo')
+    start = await anext(turn)
+    assert start.event == 'start' and start.model == 'mistral-small-latest'
+    c.model = 'mistral-large-latest'
+    events = [event async for event in turn]
+    assert events[-1].event == 'done'
+    assert fake.requests[0]['model'] == 'mistral-small-latest'
+    assert json.loads(store.rows[-1].extras_json)['model'] == 'mistral-small-latest'
+    next_turn = [e async for e in agent.run_turn_events(conversation_id=c.id, text='Weiter')]
+    assert next_turn[0].model == 'mistral-large-latest'
+    assert fake.requests[1]['model'] == 'mistral-large-latest'
 
 
 async def test_turn_prompt_uses_berlin_date(store, monkeypatch):

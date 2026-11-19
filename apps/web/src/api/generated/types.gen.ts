@@ -2766,6 +2766,10 @@ export type StartEvent = {
      */
     event: 'start';
     /**
+     * Model
+     */
+    model: string;
+    /**
      * User Message Id
      */
     user_message_id: string;

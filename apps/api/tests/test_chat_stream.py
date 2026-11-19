@@ -41,7 +41,7 @@ def test_stream_emits_sse_frames(monkeypatch):
 
     async def fake(**kwargs):
         assert kwargs['locale'] == 'de'
-        yield StartEvent(conversation_id='c', user_message_id='u')
+        yield StartEvent(conversation_id='c', user_message_id='u', model='test-model')
         yield DeltaEvent(text='Hallo')
         yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
     monkeypatch.setattr(stream, 'run_turn_events', fake)
@@ -50,7 +50,9 @@ def test_stream_emits_sse_frames(monkeypatch):
         assert response.headers['content-type'].startswith('text/event-stream')
         lines = list(response.iter_lines())
     assert [line for line in lines if line.startswith('event:')] == ['event: start', 'event: delta', 'event: done']
-    assert [json.loads(line[5:])['event'] for line in lines if line.startswith('data:')] == ['start', 'delta', 'done']
+    events = [json.loads(line[5:]) for line in lines if line.startswith('data:')]
+    assert [event['event'] for event in events] == ['start', 'delta', 'done']
+    assert events[0]['model'] == 'test-model'
 
 
 def _model_stream_app(monkeypatch, *, known=('valid',)):

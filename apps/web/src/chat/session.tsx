@@ -8,7 +8,7 @@ import { createTypewriter } from './typewriter'
 import { calendarSourcesQuery, conversationsQuery, historyQuery } from '../api/queries'
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | ChatRefusal
-type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
+type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; model?: string; request?: ChatStreamRequest }
 export type TaskScope = { source: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked'; account_id?: string }
 type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; calendarScopes: Record<string, string[]>; setCalendarScope: (id: string, ids: string[]) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void>; retryWithoutPreferences: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
@@ -83,7 +83,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
           case 'start':
             setComposerTexts(previous => ({ ...previous, [request.conversation_id ?? 'new']: '' }))
             turn.conversationId = conversation.current = event.conversation_id
-            setState(s => ({ ...s, conversationId: event.conversation_id, userMessageId: event.user_message_id }))
+            setState(s => ({ ...s, conversationId: event.conversation_id, userMessageId: event.user_message_id, model: event.model }))
             void client.invalidateQueries({ queryKey: ['conversations'] }); break
           case 'status': setState(s => ({ ...s, status: event })); break
           case 'delta': writer.push(event.text); break

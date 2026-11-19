@@ -583,7 +583,9 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   plus; below are model menu and template chip.
 - **Model menu:** a chip with model name and `chevron-down`, tooltip „Modell für diese Unterhaltung
   wählen“. Entries show „Name · Beschreibung“. In a conversation the selection is saved and applies
-  to its next answers, on the home page to the first request.
+  to its next answers, on the home page to the first request. The chip is disabled while that
+  conversation is waiting for an answer or streaming one. Each answer shows the model reported by
+  its own turn. Older streams or messages without this information omit the model label.
 - **Composer:** the text field grows to 200 px high. Enter sends, Shift+Enter starts a new line.
   The account chip bottom left („Alle Konten“ or an account name) determines which accounts the
   assistant searches. Beside it the task chip determines which tasks the assistant may read

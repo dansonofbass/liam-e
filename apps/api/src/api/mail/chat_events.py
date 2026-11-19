@@ -14,6 +14,7 @@ class StartEvent(EventModel):
     event: Literal['start'] = 'start'
     conversation_id: str
     user_message_id: str
+    model: str
 
 
 class StatusEvent(EventModel):

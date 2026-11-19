@@ -4970,6 +4970,10 @@
             "title": "Event",
             "type": "string"
           },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
           "user_message_id": {
             "title": "User Message Id",
             "type": "string"
@@ -4978,7 +4982,8 @@
         "required": [
           "event",
           "conversation_id",
-          "user_message_id"
+          "user_message_id",
+          "model"
         ],
         "title": "StartEvent",
         "type": "object"
