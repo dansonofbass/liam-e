@@ -506,7 +506,8 @@ export const en = {
         mark_unread: ['Marked', ' as unread'],
       }[kind]
       if (done === total) return action[0] + ' ' + emails(total) + action[1] + '.'
-      return action[0] + ' ' + numberFormat.format(done) + ' of ' + emails(total) + action[1] + '.'
+      const result = action[0] + ' ' + numberFormat.format(done) + ' of ' + emails(total) + action[1] + '.'
+      return kind === 'trash' ? result + ' The move is unconfirmed for ' + emails(total - done) + '.' : result
     },
     bulkUndoFailed: n => plural(n, { one: 'Couldn’t undo # action.', other: 'Couldn’t undo # actions.' }),
     title: 'Inbox', groups: { today: 'Today', yesterday: 'Yesterday', week: 'This week', older: 'Older' },

@@ -6,6 +6,7 @@ import type { MessageListItemOut, MessagePageOut } from '../api/generated/types.
 import { MailActionsProvider, useMailActions, useMailActionsContext, type Clock } from './useMailActions'
 import { ActionToast } from './ActionToast'
 import { de } from '../i18n/de'
+import { en } from '../i18n/en'
 
 const originalMatchMedia = window.matchMedia
 const rows = ['Erste', 'Zweite'].map((subject, i) => ({ id: String(i + 1), subject, is_read: false }) as MessageListItemOut)
@@ -48,6 +49,9 @@ test('bulk notices use the proper plural and action wording', () => {
   expect(de.inbox.bulkResult('mark_read', 2, 2)).toBe('2 Mails als gelesen markiert.')
   expect(de.inbox.bulkResult('mark_unread', 2, 2)).toBe('2 Mails als ungelesen markiert.')
   expect(de.inbox.bulkResult('trash', 2, 2)).toBe('2 Mails in den Papierkorb gelegt.')
+  expect(de.inbox.bulkResult('trash', 2, 3)).toBe('2 von 3 Mails in den Papierkorb gelegt. Für 1 Mail fehlt die Bestätigung.')
+  expect(de.inbox.bulkResult('trash', 0, 2)).toBe('0 von 2 Mails in den Papierkorb gelegt. Für 2 Mails fehlt die Bestätigung.')
+  expect(en.inbox.bulkResult('trash', 2, 3)).toBe('Moved 2 of 3 emails to trash. The move is unconfirmed for 1 email.')
   expect(de.inbox.bulkResult('spam', 2, 2)).toBe('2 Mails als Spam markiert.')
 })
 
@@ -56,6 +60,7 @@ test('bulk partial failure rolls back only failed rows and keeps one group undo'
   const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['a1'], skipped: [], expired: [], failed: [] } })) as never)
   setup(); fireEvent.click(screen.getByText('bulk archive'))
   expect(await screen.findByText('1 von 2 Mails archiviert. 1 ließ sich nicht archivieren.')).toBeTruthy()
+  expect(screen.getByRole('status').getAttribute('data-tone')).toBe('danger')
   expect(screen.queryByText('Erste:false')).toBeNull()
   expect(screen.getByText('Zweite:false')).toBeTruthy()
   fireEvent.click(screen.getByText('Rückgängig'))

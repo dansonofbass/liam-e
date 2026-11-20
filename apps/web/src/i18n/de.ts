@@ -488,9 +488,12 @@ export const de = {
     bulkTips: { archive: 'Archiviert die ausgewählten Mails (E)', mark_read: 'Markiert die ausgewählten Mails als gelesen (U)', mark_unread: 'Markiert die ausgewählten Mails als ungelesen (U)', trash: 'Legt die ausgewählten Mails in den Papierkorb (Entf)', spam: 'Markiert die ausgewählten Mails als Spam' },
     bulkResult: (kind: 'archive' | 'trash' | 'spam' | 'mark_read' | 'mark_unread', done: number, total: number) => {
       const ending = { archive: 'archiviert', trash: 'in den Papierkorb gelegt', spam: 'als Spam markiert', mark_read: 'als gelesen markiert', mark_unread: 'als ungelesen markiert' }[kind]
-      const failure = { archive: 'archivieren', trash: 'in den Papierkorb legen', spam: 'als Spam markieren', mark_read: 'als gelesen markieren', mark_unread: 'als ungelesen markieren' }[kind]
       const mails = plural(total, { one: '# Mail', other: '# Mails' })
-      return done === total ? `${mails} ${ending}.` : `${done} von ${mails} ${ending}. ${plural(total - done, { one: '# ließ sich nicht', other: '# ließen sich nicht' })} ${failure}.`
+      if (done === total) return `${mails} ${ending}.`
+      const result = `${done} von ${mails} ${ending}.`
+      if (kind === 'trash') return `${result} Für ${plural(total - done, { one: '# Mail', other: '# Mails' })} fehlt die Bestätigung.`
+      const failure = { archive: 'archivieren', spam: 'als Spam markieren', mark_read: 'als gelesen markieren', mark_unread: 'als ungelesen markieren' }[kind]
+      return `${result} ${plural(total - done, { one: '# ließ sich nicht', other: '# ließen sich nicht' })} ${failure}.`
     },
     bulkUndoFailed: (n: number) => plural(n, { one: '# Aktion ließ sich nicht rückgängig machen.', other: '# Aktionen ließen sich nicht rückgängig machen.' }),
     title: 'Posteingang', groups: { today: 'Heute', yesterday: 'Gestern', week: 'Diese Woche', older: 'Älter' },
