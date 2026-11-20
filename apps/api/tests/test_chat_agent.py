@@ -799,33 +799,41 @@ async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(s
         assert cards == ['home']
 
 
-@pytest.mark.parametrize('options', ['Research or Home', 'Home or Research', 'the Work calendar, Research or Home'])
-async def test_calendar_offer_with_a_paused_source_waits_for_owner_choice(store, monkeypatch, options):
+@pytest.mark.parametrize('selection, paused, chosen', [
+    ('For the calendar, use Research or Home', {'research'}, 'home'),
+    ('For the calendar, use Home or Research', {'research'}, 'home'),
+    ('For the calendar, use the Work calendar, Research or Home', {'research'}, 'home'),
+    ('For the calendar, use the Work calendar, Research or Home', {'research', 'home'}, 'work'),
+    ('Use the Work calendar, Research or Home', {'research', 'home'}, 'work'),
+])
+async def test_calendar_offer_with_a_paused_source_waits_for_owner_choice(store, monkeypatch, selection, paused, chosen):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
 
     sources = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='test', external_id=key,
-        capabilities_json='["read","write"]', timezone='UTC', is_active=key != 'research')
+        capabilities_json='["read","write"]', timezone='UTC', is_active=key not in paused)
         for key in ('research', 'home', 'personal', 'work')]
     async def catalog(*, ids):
         return [(source, None) for source in sources if source.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
     monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
     conversation = await store.create()
-    snapshot = store.snapshot('unavailable-option', calendar_scope_json='["home","personal","work"]')
+    snapshot = store.snapshot('unavailable-option', calendar_scope_json=json.dumps([source.id for source in sources if source.is_active]))
     values = {'action': 'create', 'title': 'Lunch', 'start_local': '2026-11-21T12:00', 'end_local': '2026-11-21T13:00'}
-    fake = FakeMistral(streams=[[chunk('propose_calendar_change', values)], ['Which calendar?'],
-                                [chunk('propose_calendar_change', {**values, 'calendar_name': 'Research'})], ['Which available calendar?'],
+    unavailable_reply = [[chunk('propose_calendar_change', {**values, 'calendar_name': 'Research'})],
+                         ['Which available calendar?']] if len(paused) == 1 else []
+    fake = FakeMistral(streams=[[chunk('propose_calendar_change', values)], ['Which calendar?'], *unavailable_reply,
                                 [chunk('propose_calendar_change', values)], ['Ready.']])
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     async def cards(text):
         return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(conversation_id=conversation.id,
                 text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
-    assert await cards(f'Schedule lunch tomorrow at noon. For the calendar, use {options}.') == []
+    assert await cards(f'Schedule lunch tomorrow at noon. {selection}.') == []
     assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_name_ambiguous'
-    assert await cards('Research, please.') == []
-    assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_name_unknown'
-    assert await cards('Home, please.') == ['home']
+    if unavailable_reply:
+        assert await cards('Research, please.') == []
+        assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_name_unknown'
+    assert await cards(chosen.title() + ', please.') == [chosen]
 
 
 @pytest.mark.parametrize('listing', ['Work, Home or Travel', 'Work, Home, or Travel', 'Work or Home or Travel',

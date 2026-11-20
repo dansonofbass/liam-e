@@ -370,10 +370,16 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
 
     complete = True
     for members in groups:
-        end = _calendar_list_end(text, members, names)
+        first = members[0]
+        before = text[:first.start()]
+        calendar_field = re.search(rf"\b(?:for|für)\s+{_DETERMINER}{_CALENDAR}\s*[:,]?\s*$", before, re.I)
+        selection_verb = re.match(_SELECT + r"\b", first[0], re.I)
+        # An explicit selection governs its whole list. Scope determines which
+        # choices can be used, never which alternatives the owner offered.
+        end = len(members) if calendar_field or selection_verb else _calendar_list_end(text, members, names)
         group = members[:end]
-        first, last = group[0], group[-1]
-        before, after = text[:first.start()], text[last.end():]
+        last = group[-1]
+        after = text[last.end():]
         left = re.search(rf"{_LIST_SEPARATOR}\s*$", before, re.I)
         right = re.match(rf"\s*{_LIST_SEPARATOR}", after, re.I) if end == len(members) else None
         joiners = " ".join(text[a.end():b.start()] for a, b in zip(group, group[1:]))
@@ -385,9 +391,8 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
         recognized = offered & names
         entire_reply = not before.strip() and not after.strip(" .?!")
         calendar_noun = _CALENDAR_NOUN.search(phrase)
-        calendar_field = re.search(rf"\b(?:for|für)\s+{_DETERMINER}{_CALENDAR}\s*[:,]?\s*$", before, re.I)
         if not (calendar_noun or calendar_field or (recognized and (qualified or entire_reply))
-                or (entire_reply and re.match(_SELECT + r"\b", first[0], re.I))):
+                or (entire_reply and selection_verb)):
             continue
         alternatives.update(recognized)
         if not offered <= names or right or (left and not (qualified and left[0].strip() == ",")):
