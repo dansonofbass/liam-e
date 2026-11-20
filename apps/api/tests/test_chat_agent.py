@@ -600,7 +600,8 @@ async def test_insight_batch_stops_and_discards_prior_results_after_revocation(s
 
 
 @pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'independent_title', 'independent_location',
-                                   'repeated_title', 'repeated_title_after_duration', 'start_field', 'switch', 'reschedule', 'default', 'default_de', 'weekday'])
+                                   'repeated_title', 'repeated_title_after_duration', 'start_field', 'switch', 'reschedule', 'default', 'default_de',
+                                   'weekday', 'weekday_with_period'])
 async def test_calendar_create_keeps_owner_target_through_scheduling_question(store, monkeypatch, case):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
@@ -626,8 +627,9 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
     sprint = case.startswith('repeated_title') or case == 'start_field'
     if sprint:
         choose['title'] = 'Sprint Planning'
-    if case == 'weekday':
-        choose.update(title='Lunch', start_local='2026-11-24T12:00', end_local='2026-11-24T13:00')
+    if case.startswith('weekday'):
+        hours = ('14:00', '15:00') if case == 'weekday_with_period' else ('12:00', '13:00')
+        choose.update(title='Lunch', start_local=f'2026-11-24T{hours[0]}', end_local=f'2026-11-24T{hours[1]}')
     if case.startswith('independent_'):
         choose['title'] = 'Lunch'
     if case == 'independent_location':
@@ -645,6 +647,8 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
     opening = 'Schedule Sprint Planning in the Work calendar' if sprint else 'Create a review in the Work calendar'
     if case == 'weekday':
         opening = 'Schedule lunch in the Work calendar, Monday or Tuesday'
+    elif case == 'weekday_with_period':
+        opening = 'Schedule lunch in the Work calendar, on Monday morning or on Tuesday afternoon'
     opened = await turn(opening)
     assert opened[-1].event == 'done' and all(event.event != 'proposal' for event in opened)
     if case == 'write_revoked':
@@ -663,6 +667,7 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         'default': 'Tomorrow at ten, use my default calendar instead',
         'default_de': 'Morgen um zehn, nimm doch meinen Standardkalender',
         'weekday': 'Tuesday at noon for one hour',
+        'weekday_with_period': 'Tuesday at 2 pm for one hour',
     }.get(case, 'Tomorrow at ten')
     finished = await turn(second)
     assert finished[-1].event == 'done'
@@ -703,7 +708,16 @@ async def test_default_calendar_remains_bound_during_clarification(store, monkey
     if 'checkup' in reply:
         complete['title'] = 'Checkup'
     first = [[chunk('propose_calendar_change', incomplete)]] if attempt == 'tool' else []
+    if first and 'my default calendar' in opening:
+        first.append([chunk('propose_calendar_change', incomplete, id='second-attempt')])
     fake = FakeMistral(streams=[*first, ['What time?'], [chunk('propose_calendar_change', complete)], ['Response']])
+    stream = fake.stream_async
+    async def stream_with_settings_change(**kwargs):
+        if attempt == 'tool' and len(fake.requests) == 1:
+            assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_time_invalid'
+            settings.default_source_id = 'home'
+        return await stream(**kwargs)
+    monkeypatch.setattr(fake, 'stream_async', stream_with_settings_change)
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     async def cards(text):
         return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(

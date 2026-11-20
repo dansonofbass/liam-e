@@ -29,7 +29,7 @@ END;""",
 }
 
 # A legacy scheduler may already have cleared the error when queuing a retry.
-# Initialize the new column from the last validation before installing the trigger.
+# Reconcile from the last validation on installation and when repairing the trigger.
 _INITIAL_ACCESS = """UPDATE calendar_sync_state AS s SET access_blocked = true
 FROM calendar_source AS c
 WHERE s.source_id = c.id AND c.provider IN ('google', 'ics') AND (
@@ -53,7 +53,7 @@ class CalendarSyncState(SQLModel, table=True):
     last_error: str | None = None
     # Maintained with provider proof in PostgreSQL, including updates from older workers.
     access_blocked: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default=text("false"),
-        info={"initialize_existing": _INITIAL_ACCESS}))
+        info={"reconcile_existing": _INITIAL_ACCESS}))
     failure_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
     data_revision: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
     encrypted_validators: str | None = Field(default=None, repr=False, sa_column=Column(Text, nullable=True))

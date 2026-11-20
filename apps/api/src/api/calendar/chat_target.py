@@ -53,6 +53,7 @@ _MONTH = r"(?:january|januar|february|februar|march|märz|april|may|mai|june|jun
 _TIME_VALUE = rf"(?:{_DAY_OR_PERIOD}|{_MONTH}|today|tomorrow|heute|morgen|noon|midnight|mittag|mitternacht|\d+[./:-]\d+|\d+\s*(?:am|pm|uhr))"
 _DATE_TAIL = (rf"(?:(?:(?:{_RELATIVE_DAY}|{_TIME_PREPOSITION})\s+)*{_TIME_VALUE}\b|"
               rf"{_TIME_PREPOSITION}\s+(?:\d+|the|a|an|my|dem|der|den|einem|meinem)\b)")
+_SCHEDULING_OPTION = re.compile(rf"{_DATE_TAIL}(?:\s+{_DATE_TAIL})*", re.I)
 _GENERIC_CALENDAR_DATE = re.compile(rf"{_CALENDAR_LEAD}(?=\s+{_DATE_TAIL})", re.I)
 _NAME_CONTINUATION = rf"\s+(?!{_DATE_TAIL})(?:&\s+)?{_NAME_WORD}"
 _CALENDAR_FIRST = re.compile(rf"{_CALENDAR_LEAD}\s+(?P<name>(?:{_TIME_PREPOSITION}\s+)?{_NAME_WORD}(?:{_NAME_CONTINUATION})*)", re.I)
@@ -346,7 +347,7 @@ def _calendar_list_end(text: str, members, names) -> int:
             if index + 1 < len(members) and text[member.end():members[index + 1].start()].strip() == ",":
                 tail = members[index + 1:]
                 condition = text[tail[0].start():tail[-1].end()].strip()
-                if (all(re.fullmatch(_DATE_TAIL, item[0], re.I) for item in tail)
+                if (all(_SCHEDULING_OPTION.fullmatch(item[0]) for item in tail)
                         or re.fullmatch(r"rain\s+or\s+shine|bei\s+wind\s+und\s+wetter", condition, re.I)):
                     return index + 1
                 # Unrecognized alternatives may be removed calendar names. A
@@ -521,7 +522,7 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
             default = next((source for source, state in entries if source.id == default_id
                             and calendar_source.chat_access(source, state) == "writable"), None)
             if default:
-                choice = (choice or CalendarChoice(use_default=True)).bind_default(default)
+                choice = (choice or CalendarChoice()).bind_default(default)
         choices.append(choice)
     # A follow-up containing only a time cannot choose between unfinished
     # appointments with different targets. Ask the owner to specify the target.

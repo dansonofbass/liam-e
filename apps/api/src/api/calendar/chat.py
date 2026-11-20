@@ -27,6 +27,11 @@ async def _create_source(arguments, ctx):
     if previous is None and part == parts[0]:
         previous = pending_for_request(ctx.calendar_choice, part, arguments.get("title"))
     target = await stated_destination(selection, entries, previous)
+    current = ctx.requested_calendar
+    if target and current and current.source_id and (
+            target.source_id == current.source_id or (target.use_default and current.use_default)):
+        # Another tool attempt on the same owner message retains the original binding.
+        target = current
     if target:
         ctx.calendar_targets[part] = target
         if target.error:
@@ -99,6 +104,8 @@ async def prepare(arguments: dict, ctx) -> CalendarCommand:
     choice = ctx.requested_calendar
     if action == "create" and choice and source.id == choice.source_id and source.connection_ref != choice.connection_ref:
         raise writes.WriteError("calendar_not_writable", 403)
+    if action == "create" and (choice is None or not choice.source_id):
+        ctx.calendar_targets[ctx.calendar_request_part] = (choice or CalendarChoice()).bind_default(source)
     before = await writes.live(occurrence_id) if action in {"update", "delete"} else None
     if before and (before.source_id != source_id or not before.editable):
         raise writes.WriteError("calendar_event_not_editable")
@@ -121,10 +128,10 @@ async def prepare(arguments: dict, ctx) -> CalendarCommand:
             occurrence_id=occurrence_id, expected_revision=before.revision if before else None,
             timezone=zone, before=before, after=after)
         command.request(str(uuid4()))
+        if action == "create" and choice is None:
+            # The validated command owns this binding. There is no outstanding
+            # clarification to carry into a separate create.
+            del ctx.calendar_targets[ctx.calendar_request_part]
         return command
     except (ValidationError, ValueError, TypeError, ZoneInfoNotFoundError):
-        if action == "create" and (choice is None or not choice.source_id):
-            # The assistant may ask for missing fields after this tool call.
-            # Keep the source observed here even if settings change before the reply.
-            ctx.calendar_targets[ctx.calendar_request_part] = (choice or CalendarChoice(use_default=True)).bind_default(source)
         raise writes.WriteError("calendar_time_invalid", 422) from None

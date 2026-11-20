@@ -51,9 +51,6 @@ def compare_row_trigger(context, changes, schema, name, existing, model):
         FROM pg_trigger WHERE tgrelid = to_regclass(:table) AND tgname = :name AND NOT tgisinternal
     """), params).mappings().one_or_none()
     forward, backward = [], []
-    if existing is not None:
-        forward.extend(col.info["initialize_existing"] for col in model.c
-                       if col.name not in existing.c and "initialize_existing" in col.info)
     body = spec["body"]
     if proc is None or (dedent(proc["prosrc"]).strip(), proc["lanname"], proc["prosecdef"]) != (body, "plpgsql", False):
         forward.append(f"CREATE OR REPLACE FUNCTION {function}() RETURNS trigger LANGUAGE plpgsql AS $$\n{body}\n$$")
@@ -63,8 +60,23 @@ def compare_row_trigger(context, changes, schema, name, existing, model):
         forward.append(definition.replace("CREATE TRIGGER", "CREATE OR REPLACE TRIGGER", 1))
         backward.insert(0, current["definition"].replace("CREATE TRIGGER", "CREATE OR REPLACE TRIGGER", 1)
                         if current else f"DROP TRIGGER {trigger} ON {table}")
-    if current and current["enabled"] != "O":
+    disabled = current is not None and current["enabled"] != "O"
+    suspended = False
+    if existing is not None:
+        columns = [col for col in model.c if "reconcile_existing" in col.info
+                   and (forward or disabled or col.name not in existing.c)]
+        reconcile = [col.info["reconcile_existing"] for col in columns]
+        if columns and all(col.name in existing.c for col in columns):
+            # A live repair has no preceding ADD COLUMN lock. Fence writes
+            # through reconciliation and installation, including legacy retries.
+            suspended = current is not None and current["enabled"] != "D"
+            fence = (f"ALTER TABLE {table} DISABLE TRIGGER {trigger}" if suspended
+                     else f"LOCK TABLE {table} IN SHARE ROW EXCLUSIVE MODE")
+            reconcile.insert(0, fence)
+        forward[:0] = reconcile
+    if disabled or suspended:
         forward.append(f"ALTER TABLE {table} ENABLE TRIGGER {trigger}")
+    if disabled:
         mode = {"D": "DISABLE", "R": "ENABLE REPLICA", "A": "ENABLE ALWAYS"}[current["enabled"]]
         backward.append(f"ALTER TABLE {table} {mode} TRIGGER {trigger}")
     if forward:
