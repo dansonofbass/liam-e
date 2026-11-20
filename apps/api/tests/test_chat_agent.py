@@ -34,6 +34,11 @@ async def store(fake_store, monkeypatch):
     async def cancel(id):
         for r in rows:
             if r.conversation_id == id and r.proposal_status == 'pending': r.proposal_status = 'cancelled'
+    async def replace_card(card, source_id, connection_ref):
+        await cancel(card.conversation_id)
+        rows.append(card)
+        return card
+    monkeypatch.setattr(chat_message, 'replace_with_calendar_proposal', replace_card)
     for obj, name, fn in [(chat_conversation, 'create_conversation', create), (chat_conversation, 'get_conversation', get), (chat_conversation, 'touch_conversation', touch), (chat_message, 'add_message', add), (chat_message, 'get_message', get_message), (chat_message, 'list_messages', list_messages), (chat_message, 'cancel_open_proposals', cancel)]: monkeypatch.setattr(obj, name, fn)
     monkeypatch.setattr(mail_message, 'list_page', AsyncMock(return_value=[]))
     monkeypatch.setattr(mail_insight, 'get_for_messages', AsyncMock(return_value={}))
@@ -459,13 +464,17 @@ async def test_invalid_message_ids_create_no_partial_proposal(store):
 
 
 @pytest.mark.parametrize('message', ['', 'x' * 8001])
-async def test_chat_turn_rejects_message_outside_length_bounds(message):
+@pytest.mark.parametrize('path,field', [('/api/v1/chat', 'message'), ('/api/v1/chat/stream', 'text')])
+async def test_chat_turn_rejects_message_outside_length_bounds(message, path, field):
     from api.routers.api.v1.chat.route import router
+    from api.routers.api.v1.chat.stream import router as stream_router
     app = FastAPI()
     app.include_router(router, prefix='/api/v1/chat')
+    app.include_router(stream_router, prefix='/api/v1/chat/stream')
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-        response = await client.post('/api/v1/chat', json={'message': message})
+        response = await client.post(path, json={field: message})
     assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'chat_invalid'
 
 
 async def test_calendar_history_guard_blocks_foreign_assistant_and_user_text_before_model(store, monkeypatch):

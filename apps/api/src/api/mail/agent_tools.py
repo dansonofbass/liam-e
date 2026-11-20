@@ -159,7 +159,7 @@ def unsubscribe_subtitle(total: int, address: str, method: str, link: str | None
 async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutcome:
     if name == 'propose_calendar_change':
         from api.calendar import chat as calendar_chat, writes
-        from db.accessors.calendar_proposal_queue import SequenceReplaced
+        from db.accessors.calendar_proposal_queue import SequenceReplaced, TargetUnavailable
         try:
             command = await calendar_chat.prepare(arguments, ctx)
             outcome = await _proposal(ctx, proposals.Proposal(kind='calendar', reason=str(arguments.get('reason', ''))[:500], items=[], calendar=command))
@@ -167,6 +167,8 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
             return result({'error': error.code})
         except SequenceReplaced:
             return result({'error': 'proposal_not_pending'})
+        except TargetUnavailable:
+            return result({'error': 'calendar_not_writable'})
         if command.action == 'create':
             part = ctx.calendar_request_part
         else:

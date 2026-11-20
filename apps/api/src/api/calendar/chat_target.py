@@ -570,6 +570,7 @@ async def _affirmative_destination(selection: OwnerSelection, entries, previous:
 
 
 async def stated_destination(selection: OwnerSelection, entries, previous: CalendarChoice | None) -> CalendarChoice | None:
+    """No selection permits a fallback. An error preserves an explicit choice for clarification."""
     target = await _affirmative_destination(selection, entries, previous)
     excluded = selection.excluded_targets
     if not excluded:

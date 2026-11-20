@@ -148,27 +148,36 @@ async def open_proposal(conversation_id: str) -> ChatMessage | None:
         return result.scalar_one_or_none()
 
 
+async def _cancel_open_proposals(session: AsyncSession, conversation_id: str) -> int:
+    from db.accessors import preference_candidate
+    from db.models.preference_candidate import PreferenceCandidate
+    await user_preference.lock(session)
+    candidates = (await session.execute(select(PreferenceCandidate).where(
+        PreferenceCandidate.conversation_id == conversation_id,
+        PreferenceCandidate.status == 'pending', PreferenceCandidate.proposal_id.is_not(None),
+    ))).scalars()
+    for candidate in candidates:
+        # Leave the candidate available for a later review.
+        await preference_candidate.detach(session, candidate)
+    result = await session.execute(
+        update(ChatMessage).where(ChatMessage.conversation_id == conversation_id, ChatMessage.proposal_status == "pending")
+        .values(proposal_status="cancelled").returning(ChatMessage.id)
+    )
+    return len(result.scalars().all())
+
+
 async def cancel_open_proposals(conversation_id: str) -> int:
-    async with get_session_maker()() as session:
-        from db.accessors import user_preference, preference_candidate
-        from db.models.preference_candidate import PreferenceCandidate
-        await user_preference.lock(session)
-        candidates = (await session.execute(select(PreferenceCandidate).where(
-            PreferenceCandidate.conversation_id == conversation_id,
-            PreferenceCandidate.status == 'pending', PreferenceCandidate.proposal_id.is_not(None),
-        ))).scalars()
-        for candidate in candidates:
-            # A newer card replaces an open preference card as before. The candidate
-            # stays pending and visible in the candidate list, so it can be reviewed later.
-            # The update below cancels and counts the card itself.
-            await preference_candidate.detach(session, candidate)
-        result = await session.execute(
-            update(ChatMessage).where(ChatMessage.conversation_id == conversation_id, ChatMessage.proposal_status == "pending")
-            .values(proposal_status="cancelled").returning(ChatMessage.id)
-        )
-        count = len(result.scalars().all())
-        await session.commit()
-        return count
+    async with get_session_maker().begin() as session:
+        return await _cancel_open_proposals(session, conversation_id)
+
+
+async def replace_with_calendar_proposal(card: ChatMessage, source_id: str, connection_ref: str) -> ChatMessage:
+    async with get_session_maker().begin() as session:
+        await _cancel_open_proposals(session, card.conversation_id)
+        if not await calendar_proposal_queue.can_offer(session, card.conversation_id, card.context_id, source_id, connection_ref):
+            raise calendar_proposal_queue.TargetUnavailable
+        session.add(card)
+        return card
 
 
 async def get_message(message_id: str) -> ChatMessage | None:

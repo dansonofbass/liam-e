@@ -71,6 +71,92 @@ async def _appointment_turn(streams, conversation, text, answer, *calls):
     return events[-1].conversation_id, [event.message for event in events if event.event == 'proposal']
 
 
+async def _change_work_access(change):
+    from db.accessors import calendar_source
+    from db.engine import get_session_maker
+    from db.models.calendar_source import CalendarSource
+    if change == 'paused':
+        await calendar_source.set_active('work', False)
+    elif change == 'removed':
+        await calendar_source.remove('work')
+    else:
+        async with get_session_maker().begin() as session:
+            source = await session.get(CalendarSource, 'work')
+            if change == 'rebound':
+                source.connection_ref = 'synthetic-replacement'
+            else:
+                assert change == 'read_only'
+                source.capabilities_json = '["read"]'
+
+
+@pytest.mark.parametrize('queued,change', [
+    (False, 'paused'), (False, 'removed'), (False, 'rebound'), (True, 'read_only'), (True, 'rebound'),
+])
+def test_prepared_calendar_target_changes_before_storage(appointment_stream, monkeypatch, queued, change):
+    from api.calendar import chat
+    from api.mail import agent_tools
+    from db.accessors import chat_message
+    from datetime import date
+
+    async def run():
+        await _seed_appointment_calendars()
+        first_request = 'Schedule breakfast in the Personal calendar.'
+        second_request = 'Schedule lunch in the Work calendar.'
+        streams, dispatched = appointment_stream
+        text = first_request + ' ' + second_request if queued else first_request
+        conversation, (first,) = await _appointment_turn(streams, None, text, 'Breakfast is ready.',
+            _create_args('Breakfast', '09:00', '10:00'))
+        ctx = agent_tools.TurnContext(conversation, None, date(2026, 11, 21), context_id=first.context.id,
+            calendar_source_ids=['personal', 'work'], user_text=second_request)
+        if queued:
+            ctx.calendar_sequence_id = first.id
+        prepare = chat.prepare
+        async def revoke_after_prepare(*args):
+            command = await prepare(*args)
+            assert command.source_id == 'work' and command.connection_ref == 'synthetic-work'
+            await _change_work_access(change)
+            return command
+        monkeypatch.setattr(chat, 'prepare', revoke_after_prepare)
+        result = await agent_tools.execute_tool('propose_calendar_change', _create_args('Lunch', '12:00', '13:00'), ctx)
+        assert json.loads(result.content) == {'error': 'calendar_not_writable'}
+        saved = await chat_message.get_message(first.id)
+        assert saved.proposal_status == 'pending'
+        assert not json.loads(saved.extras_json or '{}').get('calendar_followups')
+        assert [card.id for card in await _visible_cards(conversation)] == [first.id]
+        assert not dispatched
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('change', ['read_only', 'rebound', None])
+def test_concurrent_calendar_queue_entries_rechecked_at_publication(appointment_stream, change):
+    from datetime import date
+    from api.mail import agent_tools, proposals
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars()
+        opening = 'Schedule breakfast in Personal. Schedule lunch in Work. Schedule dinner in Personal.'
+        conversation, (first,) = await _appointment_turn(streams, None, opening, 'Breakfast is ready.',
+            _create_args('Breakfast', '09:00', '10:00'))
+        async def enqueue(title, calendar, start, end):
+            ctx = agent_tools.TurnContext(conversation, None, date(2026, 11, 21), context_id=first.context.id,
+                calendar_source_ids=['personal', 'work'], user_text=f'Schedule {title} in the {calendar} calendar.')
+            ctx.calendar_sequence_id = first.id
+            result = await agent_tools.execute_tool('propose_calendar_change', _create_args(title, start, end), ctx)
+            assert json.loads(result.content)['status'] == 'queued'
+        await asyncio.gather(enqueue('Lunch', 'Work', '12:00', '13:00'), enqueue('Dinner', 'Personal', '18:00', '19:00'))
+        if change:
+            await _change_work_access(change)
+        await proposals.cancel(first.id)
+        for _ in range(1 if change else 2):
+            card, = [card for card in await _visible_cards(conversation) if card.proposal_status == 'pending']
+            assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
+        expected = [('Dinner', 'personal')] if change else [('Dinner', 'personal'), ('Lunch', 'work')]
+        assert sorted((title, source) for title, source, _ in dispatched) == expected
+        assert not [card for card in await _visible_cards(conversation) if card.proposal_status == 'pending']
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('dentist_first', [False, True])
 @pytest.mark.parametrize('shared_verb,clarify,early', [(False, False, False), (True, False, False),
                                                     (False, True, False), (False, True, True)])
@@ -630,7 +716,8 @@ def test_calendar_default_revision_and_proposal_target(pg_db, monkeypatch):
     asyncio.run(run())
 
 
-def test_missing_explicit_event_rejected_before_either_chat_endpoint_calls_model(pg_db, monkeypatch):
+@pytest.mark.parametrize('denial', ['paused', 'missing_read', 'disconnected'])
+def test_missing_explicit_event_rejected_before_either_chat_endpoint_calls_model(pg_db, monkeypatch, denial):
     async def run():
         from datetime import date
         from fastapi import HTTPException
@@ -651,7 +738,16 @@ def test_missing_explicit_event_rejected_before_either_chat_endpoint_calls_model
                                            external_id=key, capabilities_json='["read"]', timezone='UTC'))
             session.add(CalendarOccurrence(id='selected', source_id='a', event_id='event', external_id='event',
                                           start_date=date(2026, 11, 13), end_date=date(2026, 11, 14)))
-        await calendar_source.set_active('a', False)
+        if denial == 'paused':
+            await calendar_source.set_active('a', False)
+        else:
+            from db.models.calendar_sync_state import CalendarSyncState
+            async with make.begin() as session:
+                if denial == 'missing_read':
+                    source = await session.get(CalendarSource, 'a')
+                    source.capabilities_json = '[]'
+                else:
+                    session.add(CalendarSyncState(source_id='a', last_error='reconnect_required'))
         assert await calendar_source.readable_ids(None) == ['b']
         monkeypatch.setattr(agent, 'mistral_client', lambda: pytest.fail('unexpected model call'))
         for occurrence_id in ('selected', 'absent'):

@@ -489,6 +489,9 @@ When one request creates several appointments, only the first card appears initi
 stores the other prepared commands with their chosen calendar and turn context. Confirming or
 cancelling a card makes the next one available for its own confirmation. An uncertain write
 keeps the next appointment waiting until the owner checks its outcome.
+Storing, queuing and publishing a calendar card each recheck the bound connection and write
+permission under a source lock. A rejected replacement leaves the original card pending.
+If a queued target loses write access, the next eligible appointment can proceed to confirmation.
 Time questions keep each unfinished appointment's calendar and place in the same sequence,
 including when a confirmation publishes another card between the question and the owner's reply.
 A reply can give times for several named appointments together. When two appointments share

@@ -140,14 +140,16 @@ def proposal_view(message: ChatMessage) -> Proposal | None:
 
 
 async def create_proposal(conversation_id: str, proposal: Proposal, *, context_id: str | None = None, extras_json: str = "") -> ChatMessage:
+    fields = dict(conversation_id=conversation_id, role="proposal", content=proposal.reason,
+        proposal_json=proposal.model_dump_json(context={"storage": True}), proposal_status="pending",
+        context_id=context_id, extras_json=extras_json)
     for attempt in range(2):
-        await message_access.cancel_open_proposals(conversation_id)
         try:
-            return await message_access.add_message(
-                conversation_id=conversation_id, role="proposal", content=proposal.reason,
-                proposal_json=proposal.model_dump_json(context={"storage": True}), proposal_status="pending", context_id=context_id,
-                extras_json=extras_json,
-            )
+            if proposal.calendar is not None:
+                return await message_access.replace_with_calendar_proposal(
+                    ChatMessage(**fields), proposal.calendar.source_id, proposal.calendar.connection_ref)
+            await message_access.cancel_open_proposals(conversation_id)
+            return await message_access.add_message(**fields)
         except IntegrityError:
             if attempt:
                 raise

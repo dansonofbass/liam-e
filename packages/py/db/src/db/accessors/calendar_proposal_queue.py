@@ -9,6 +9,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.accessors import calendar_source, chat_settings
 from db.engine import get_session_maker
+from db.models.calendar_source import CalendarSource
+from db.models.calendar_sync_state import CalendarSyncState
 from db.models.chat_context import ChatContext
 from db.models.chat_message import ChatMessage
 
@@ -17,21 +19,44 @@ class SequenceReplaced(ValueError):
     """Another proposal superseded this appointment sequence."""
 
 
+class TargetUnavailable(ValueError):
+    """The prepared calendar no longer permits this proposal."""
+
+
+async def can_offer(session: AsyncSession, conversation_id: str, context_id: str | None,
+                    source_id: str, connection_ref: str) -> bool:
+    context = await session.get(ChatContext, context_id) if context_id else None
+    if (context is None or context.revoked or context.conversation_id != conversation_id
+            or source_id not in json.loads(context.calendar_scope_json)):
+        return False
+    # Sync and source lifecycle writers lock this row before changing capabilities
+    # or sync state. Keep a shared lock until the card or queue entry commits.
+    source = await session.get(CalendarSource, source_id, with_for_update={"read": True}, populate_existing=True)
+    if source is None or source.connection_ref != connection_ref:
+        return False
+    state = await session.get(CalendarSyncState, source_id, populate_existing=True)
+    return (calendar_source.chat_access(source, state) == "writable"
+            and await chat_settings.permits_context(session, context)
+            and await calendar_source.permits_context(session, context))
+
+
 def sequence_extras(followups: Sequence[dict] = ()) -> str:
     return json.dumps({"calendar_followups": list(followups)})
 
 
 async def _publish_next(session: AsyncSession, previous: ChatMessage, extras: dict) -> ChatMessage | None:
-    following, *remaining = extras.pop("calendar_followups")
-    payload = following["proposal"]
-    context = await session.get(ChatContext, following["context_id"])
-    if (context is None or context.revoked or context.conversation_id != previous.conversation_id
-            or not await chat_settings.permits_context(session, context)
-            or not await calendar_source.permits_context(session, context)):
+    followups = extras.pop("calendar_followups")
+    for position, following in enumerate(followups):
+        payload = following["proposal"]
+        context_id = following["context_id"]
+        target = payload["calendar"]
+        if await can_offer(session, previous.conversation_id, context_id, target["source_id"], target["connection_ref"]):
+            break
+    else:
         return None
-    card = ChatMessage(conversation_id=previous.conversation_id, context_id=context.id,
+    card = ChatMessage(conversation_id=previous.conversation_id, context_id=context_id,
         role="proposal", proposal_status="pending", content=payload["reason"], proposal_json=json.dumps(payload),
-        extras_json=sequence_extras(remaining))
+        extras_json=sequence_extras(followups[position + 1:]))
     # A new request can take the conversation's pending slot while Google finishes
     # the first write. Its card takes precedence without rolling back that outcome.
     statement = insert(ChatMessage).values(**card.model_dump()).on_conflict_do_nothing(
@@ -70,6 +95,9 @@ async def append(first_id: str, *, conversation_id: str, context_id: str | None,
         closed = extras.get("calendar_sequence_closed")
         if "calendar_followups" not in extras or (not closed and card.proposal_status not in {"pending", "running", "unknown"}):
             raise SequenceReplaced
+        target = payload["calendar"]
+        if not await can_offer(session, conversation_id, context_id, target["source_id"], target["connection_ref"]):
+            raise TargetUnavailable
         extras["calendar_followups"].append({"context_id": context_id, "proposal": payload})
         published = None
         if closed:
