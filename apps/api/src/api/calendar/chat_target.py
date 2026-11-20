@@ -330,6 +330,22 @@ def named_choice(name, entries, selection: OwnerSelection, *, offered=()):
 
 _OR = re.compile(r"\b(?:or|oder)\b", re.I)
 _LIST_SEPARATOR = r"(?:,\s*(?:(?:or|oder|and|und)\b)?|[/&]|\b(?:or|oder|and|und)\b)"
+_CALENDAR_NOUN = re.compile(rf"\b{_CALENDAR}\b|\bstandardkalender\b", re.I)
+
+
+def _calendar_list_end(text: str, members, names) -> int:
+    """A completed calendar phrase can be followed by a separate event condition."""
+    for index in range(len(members) - 1, -1, -1):
+        member = members[index]
+        if _CALENDAR_NOUN.search(member[0]):
+            if index + 1 < len(members) and text[member.end():members[index + 1].start()].strip() == ",":
+                return index + 1
+            break
+        # A later named, quoted or explicitly selected option keeps the list
+        # together, including any unavailable options before it.
+        if member["name"].casefold() in names or member["name"] == "\ufffc" or re.match(_SELECT + r"\b", member[0], re.I):
+            break
+    return len(members)
 
 
 def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
@@ -353,11 +369,13 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
         groups[-1].append(member)
 
     complete = True
-    for group in groups:
+    for members in groups:
+        end = _calendar_list_end(text, members, names)
+        group = members[:end]
         first, last = group[0], group[-1]
         before, after = text[:first.start()], text[last.end():]
         left = re.search(rf"{_LIST_SEPARATOR}\s*$", before, re.I)
-        right = re.match(rf"\s*{_LIST_SEPARATOR}", after, re.I)
+        right = re.match(rf"\s*{_LIST_SEPARATOR}", after, re.I) if end == len(members) else None
         joiners = " ".join(text[a.end():b.start()] for a, b in zip(group, group[1:]))
         if not any(_OR.search(value) for value in (joiners, left[0] if left else "", right[0] if right else "")):
             continue
@@ -366,7 +384,7 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
         offered = {member["name"].casefold() for member in group}
         recognized = offered & names
         entire_reply = not before.strip() and not after.strip(" .?!")
-        calendar_noun = re.search(rf"\b{_CALENDAR}\b|\bstandardkalender\b", phrase, re.I)
+        calendar_noun = _CALENDAR_NOUN.search(phrase)
         calendar_field = re.search(rf"\b(?:for|für)\s+{_DETERMINER}{_CALENDAR}\s*[:,]?\s*$", before, re.I)
         if not (calendar_noun or calendar_field or (recognized and (qualified or entire_reply))
                 or (entire_reply and re.match(_SELECT + r"\b", first[0], re.I))):

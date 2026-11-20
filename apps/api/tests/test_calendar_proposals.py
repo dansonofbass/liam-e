@@ -360,7 +360,8 @@ def test_calendar_appointment_excerpts_cannot_reassign_an_explicit_title_or_trim
 
 
 @pytest.mark.parametrize('named', [None, 'Work'])
-async def test_non_calendar_alternative_does_not_change_explicit_destination(monkeypatch, named):
+@pytest.mark.parametrize('details', ['in the Work calendar tomorrow at 10', 'tomorrow at 10 in the Work calendar'])
+async def test_non_calendar_alternative_does_not_change_explicit_destination(monkeypatch, named, details):
     from db.accessors import calendar_source
     from db.models.calendar_source import CalendarSource
 
@@ -370,7 +371,7 @@ async def test_non_calendar_alternative_does_not_change_explicit_destination(mon
         return [(source, None) for source in sources if source.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
     ctx = TurnContext('synthetic', None, date(2026, 11, 20), calendar_source_ids=[s.id for s in sources],
-        user_text='Schedule a home inspection in the Work calendar tomorrow at 10, rain or shine')
+        user_text=f'Schedule a home inspection {details}, rain or shine')
     fields = {'action': 'create', 'title': 'Home inspection', 'start_local': '2026-11-21T10:00', 'end_local': '2026-11-21T11:00'}
     if named:
         fields['calendar_name'] = named

@@ -756,6 +756,7 @@ async def test_calendar_clarification_distinguishes_missing_and_unavailable_targ
 
 
 @pytest.mark.parametrize('destinations', ['in the Work calendar or in the Home calendar', 'in the Work or Home calendar',
+                                         'in the Work or Home calendar, rain or shine',
                                          'tomorrow at noon. For the calendar, use Work or Home'])
 @pytest.mark.parametrize('reply, named', [('Home, please.', None), ('Not Work', None), ('Not Work', 'Home'),
                                          ('Not Work', 'binding_changed'), ('Not Work', 'read_only')])
@@ -798,19 +799,20 @@ async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(s
         assert cards == ['home']
 
 
-@pytest.mark.parametrize('options', ['Research or Home', 'Home or Research'])
+@pytest.mark.parametrize('options', ['Research or Home', 'Home or Research', 'the Work calendar, Research or Home'])
 async def test_calendar_offer_with_a_paused_source_waits_for_owner_choice(store, monkeypatch, options):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
 
     sources = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='test', external_id=key,
-        capabilities_json='["read","write"]', timezone='UTC', is_active=key != 'research') for key in ('research', 'home', 'personal')]
+        capabilities_json='["read","write"]', timezone='UTC', is_active=key != 'research')
+        for key in ('research', 'home', 'personal', 'work')]
     async def catalog(*, ids):
         return [(source, None) for source in sources if source.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
     monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
     conversation = await store.create()
-    snapshot = store.snapshot('unavailable-option', calendar_scope_json='["home","personal"]')
+    snapshot = store.snapshot('unavailable-option', calendar_scope_json='["home","personal","work"]')
     values = {'action': 'create', 'title': 'Lunch', 'start_local': '2026-11-21T12:00', 'end_local': '2026-11-21T13:00'}
     fake = FakeMistral(streams=[[chunk('propose_calendar_change', values)], ['Which calendar?'],
                                 [chunk('propose_calendar_change', {**values, 'calendar_name': 'Research'})], ['Which available calendar?'],
