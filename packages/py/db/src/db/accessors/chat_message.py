@@ -9,7 +9,7 @@ import json
 from sqlalchemy import select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from db.accessors import chat_settings, mail_message, user_preference
+from db.accessors import calendar_source, chat_settings, mail_message, user_preference
 from db.engine import get_session_maker
 from db.models.chat_message import ChatMessage
 from db.models.chat_context import ChatContext
@@ -81,6 +81,9 @@ async def claim_proposal_in_session(session: AsyncSession, message_id: str) -> C
         (ChatMessage.context_id == ChatContext.id) & (ChatMessage.conversation_id == ChatContext.conversation_id)
     ).where(ChatMessage.id == message_id, ChatMessage.proposal_status == "pending"))).scalar_one_or_none()
     if not await chat_settings.permits_context(session, context):
+        return None
+    ids = json.loads(context.calendar_scope_json)
+    if ids and set(await calendar_source.readable_ids(session, ids)) != set(ids):
         return None
     result = await session.execute(
         update(ChatMessage).where(

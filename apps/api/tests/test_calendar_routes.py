@@ -12,10 +12,10 @@ def test_stale_depends_on_snapshot_completeness_not_age(client, monkeypatch):
     source = CalendarSource(provider="synthetic", connection_ref="example", external_id="example", name="Example", timezone="UTC")
     state = CalendarSyncState(source_id=source.id, last_success_at=datetime(2020, 1, 1, tzinfo=UTC), incomplete=False)
     async def sources():
-        return [source]
+        return [(source, state)]
     async def get(_):
         return state
-    monkeypatch.setattr(calendar_source, "list_all", sources)
+    monkeypatch.setattr(calendar_source, "catalog", sources)
     monkeypatch.setattr(calendar_sync_state, "get", get)
     assert client.get("/api/v1/calendar/sources").json()[0]["stale"] is False
     state.incomplete = True
@@ -110,3 +110,42 @@ def test_cursor_needs_time_and_id(client):
     params = {"from": "2026-01-01", "to": "2026-01-02"}
     for bad in (str(uuid4()), f"2026-01-01T00:00:00|{uuid4()}", "2026-01-01T00:00:00+00:00|not-an-id"):
         assert client.get("/api/v1/calendar/occurrences", params={**params, "cursor": enc(bad)}).status_code == 422
+
+
+def test_chat_reference_requires_current_read_permission(client, monkeypatch):
+    from datetime import date
+    from unittest.mock import AsyncMock
+    from db.accessors import calendar_occurrence, calendar_source
+
+    row = CalendarOccurrence(source_id="synthetic", event_id="test", external_id="example",
+        title="Synthetic event", start_date=date(2026, 11, 10), end_date=date(2026, 11, 11))
+    monkeypatch.setattr(calendar_occurrence, "get_visible", AsyncMock(return_value=row))
+    readable = AsyncMock(return_value=[row.source_id])
+    monkeypatch.setattr(calendar_source, "readable_ids", readable)
+    path = f"/api/v1/calendar/occurrences/{row.id}"
+    assert client.get(path, params={"chat_scope": True}).json()["title"] == row.title
+    readable.return_value = []
+    response = client.get(path, params={"chat_scope": True})
+    assert response.status_code == 404 and row.title not in response.text
+
+
+def test_default_calendar_api_preserves_conflicts_and_reports_non_writable_sources(client, monkeypatch):
+    from unittest.mock import AsyncMock
+    from db.accessors import calendar_settings
+    from db.accessors.prompt_template import StaleVersion
+    from db.models.calendar_settings import CalendarSettings
+
+    path = "/api/v1/settings/calendar"
+    monkeypatch.setattr(calendar_settings, "get", AsyncMock(return_value=CalendarSettings()))
+    update = AsyncMock(return_value=CalendarSettings(version=2, default_source_id="synthetic"))
+    monkeypatch.setattr(calendar_settings, "update", update)
+    assert client.get(path).json() == {"version": 1, "default_source_id": None}
+    assert client.patch(path, json={"expected_version": 1}).status_code == 422
+    update.assert_not_awaited()
+    body = {"expected_version": 1, "default_source_id": "synthetic"}
+    assert client.patch(path, json=body).json() == {"version": 2, "default_source_id": "synthetic"}
+    for error, status, code in [(StaleVersion, 409, "version_conflict"), (calendar_settings.CalendarNotWritable, 422, "calendar_settings_invalid")]:
+        update.side_effect = error
+        response = client.patch(path, json=body)
+        assert response.status_code == status
+        assert response.json()["detail"]["code"] == code

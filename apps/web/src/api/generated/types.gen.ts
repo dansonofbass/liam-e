@@ -336,6 +336,34 @@ export type CalendarRefOut = {
 };
 
 /**
+ * CalendarSettingsOut
+ */
+export type CalendarSettingsOut = {
+    /**
+     * Default Source Id
+     */
+    default_source_id: string | null;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * CalendarSettingsUpdate
+ */
+export type CalendarSettingsUpdate = {
+    /**
+     * Default Source Id
+     */
+    default_source_id: string | null;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+};
+
+/**
  * CalendarValues
  */
 export type CalendarValues = {
@@ -688,8 +716,10 @@ export type ChatStreamRequest = {
     account_id?: string | null;
     /**
      * Calendar Source Ids
+     *
+     * Omit to include every currently readable calendar. An explicit list narrows this turn.
      */
-    calendar_source_ids?: Array<string>;
+    calendar_source_ids?: Array<string> | null;
     /**
      * Calendar Timezone
      */
@@ -754,8 +784,10 @@ export type ChatTurnRequest = {
     account_id?: string | null;
     /**
      * Calendar Source Ids
+     *
+     * Omit to include every currently readable calendar. An explicit list narrows this turn.
      */
-    calendar_source_ids?: Array<string>;
+    calendar_source_ids?: Array<string> | null;
     /**
      * Calendar Timezone
      */
@@ -2761,6 +2793,10 @@ export type SourceOut = {
      */
     capabilities: Array<string>;
     /**
+     * Chat Access
+     */
+    chat_access?: 'writable' | 'read_only' | 'paused' | 'disconnected' | 'unreadable';
+    /**
      * Coverage End
      */
     coverage_end: string | null;
@@ -4330,7 +4366,12 @@ export type CalendarOccurrenceGetData = {
          */
         occurrence_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Chat Scope
+         */
+        chat_scope?: boolean;
+    };
     url: '/api/v1/calendar/occurrences/{occurrence_id}';
 };
 
@@ -5865,6 +5906,47 @@ export type SettingsUpdateResponses = {
 };
 
 export type SettingsUpdateResponse = SettingsUpdateResponses[keyof SettingsUpdateResponses];
+
+export type CalendarSettingsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/calendar';
+};
+
+export type CalendarSettingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarSettingsOut;
+};
+
+export type CalendarSettingsGetResponse = CalendarSettingsGetResponses[keyof CalendarSettingsGetResponses];
+
+export type CalendarSettingsUpdateData = {
+    body: CalendarSettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/calendar';
+};
+
+export type CalendarSettingsUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CalendarSettingsUpdateError = CalendarSettingsUpdateErrors[keyof CalendarSettingsUpdateErrors];
+
+export type CalendarSettingsUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: CalendarSettingsOut;
+};
+
+export type CalendarSettingsUpdateResponse = CalendarSettingsUpdateResponses[keyof CalendarSettingsUpdateResponses];
 
 export type ChatSettingsGetData = {
     body?: never;

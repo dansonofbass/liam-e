@@ -7,7 +7,7 @@ import { CalendarProposal } from './CalendarProposal'
 const message = { created_at: '2026-11-20T09:00:00Z', extras: {}, stopped: false, tool_name: '', id: 'proposal', conversation_id: 'conversation', role: 'assistant', content: '', proposal_status: 'pending', proposal: { kind: 'calendar', reason: 'Zeit anpassen', items: [], calendar: { action: 'update', source_id: 's', timezone: 'Europe/Berlin', before: { source_id: 's', title: 'Vorheriger Termin', start_date: '2026-11-20', end_date: '2026-11-21' }, after: { title: 'Neuer Titel', start_date: '2026-11-21', end_date: '2026-11-22', location: 'Raum' } } } } as ChatMessageOut
 afterEach(() => { cleanup(); mock.restore() })
 function mount(value = message) {
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 's', name: 'Planung', is_active: true, capabilities: ['read', 'write'] }] } as never)
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 's', name: 'Planung', is_active: true, chat_access: 'writable', capabilities: ['read', 'write'] }] } as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(<QueryClientProvider client={client}><CalendarProposal message={value} /></QueryClientProvider>)
   return client

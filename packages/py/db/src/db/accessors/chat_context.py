@@ -7,14 +7,13 @@ Task sources must also fit the central mail grant and any focused account.
 import json
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from db.accessors import chat_settings, mail_message, user_preference
+from db.accessors import calendar_source, chat_settings, mail_message, user_preference
 from db.engine import get_session_maker
 from db.models._common import utcnow
 from db.models.chat_context import ChatContext
 from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
 from db.models.mail_message import MailMessage
-from db.models.calendar_source import CalendarSource
 from db.models.prompt_revision import PromptRevision
 from db.models.prompt_template import OWNER_SCOPE, PromptTemplate
 from db.accessors.prompt_template import StaleVersion
@@ -119,10 +118,8 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             ChatContext, (ChatMessage.context_id == ChatContext.id)
             & (ChatMessage.conversation_id == ChatContext.conversation_id)
         ).where(ChatMessage.conversation_id == conversation.id).distinct())).scalars().all() if existing else []
-        calendar_ids = sorted(set(calendar_source_ids or []))
-        active_ids = set((await session.execute(select(CalendarSource.id).where(
-            CalendarSource.is_active.is_(True), CalendarSource.id.in_(calendar_ids)))).scalars()) if calendar_ids else set()
-        if active_ids != set(calendar_ids):
+        calendar_ids = await calendar_source.readable_ids(session, calendar_source_ids)
+        if calendar_source_ids is not None and set(calendar_ids) != set(calendar_source_ids):
             if history:
                 raise ScopeChange
             raise ValueError('calendar_invalid')
@@ -184,6 +181,4 @@ async def is_live(context_id: str) -> bool:
         ids = json.loads(row.calendar_scope_json)
         if not ids:
             return True
-        active = set((await session.execute(select(CalendarSource.id).where(
-            CalendarSource.id.in_(ids), CalendarSource.is_active.is_(True)))).scalars())
-        return active == set(ids)
+        return set(await calendar_source.readable_ids(session, ids)) == set(ids)

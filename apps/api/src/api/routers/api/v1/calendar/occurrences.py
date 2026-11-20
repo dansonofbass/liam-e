@@ -70,9 +70,9 @@ async def occurrences(
 
 
 @router.get("/{occurrence_id}", operation_id="calendar_occurrence_get")
-async def occurrence(occurrence_id: str) -> OccurrenceOut:
+async def occurrence(occurrence_id: str, chat_scope: bool = False) -> OccurrenceOut:
     row = await calendar_occurrence.get_visible(occurrence_id)
-    if row is None:
+    if row is None or (chat_scope and row.source_id not in await calendar_source.readable_ids(None, [row.source_id])):
         raise HTTPException(404, "occurrence_not_found")
     return _out(row)
 

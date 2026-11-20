@@ -15,9 +15,15 @@ from db.models.chat_message import ChatMessage
 
 @pytest.fixture
 def context(monkeypatch):
-    from db.accessors import calendar_source, calendar_occurrence
+    from db.accessors import calendar_settings, calendar_source, calendar_occurrence
     source = SimpleNamespace(id="synthetic-source", provider="google", is_active=True,
                              capabilities_json='["read","write"]', connection_ref="synthetic-private-ref")
+    async def default(): return SimpleNamespace(default_source_id=source.id)
+    async def catalog(*, ids):
+        current = await calendar_source.get(source.id)
+        return [(current, None)] if current and current.id in ids else []
+    monkeypatch.setattr(calendar_settings, "get", default)
+    monkeypatch.setattr(calendar_source, "catalog", catalog)
     async def get(_): return source
     async def occurrence(_): return SimpleNamespace(source_id=source.id)
     async def live(_): return writes.LiveEvent(occurrence_id="synthetic-occurrence", source_id=source.id, title="Before",
@@ -85,6 +91,18 @@ async def test_confirm_runs_one_write_with_proposal_id(card):
     assert result.proposal_status == "done" and card.calls[0][1] == card.message.id
 
 
+async def test_confirm_after_default_changes_keeps_original_target(card, monkeypatch):
+    from unittest.mock import AsyncMock
+    from db.accessors import calendar_settings
+    new_default = AsyncMock(return_value=SimpleNamespace(default_source_id="new-target"))
+    monkeypatch.setattr(calendar_settings, "get", new_default)
+    assert card.calls == []
+    result = await proposals.confirm(card.message.id, selected_ids=[])
+    assert result.proposal_status == "done"
+    assert [request.source_id for request, _ in card.calls] == ["synthetic-source"]
+    new_default.assert_not_awaited()
+
+
 async def test_second_confirm_proposal_not_pending(card):
     await proposals.confirm(card.message.id, selected_ids=[])
     with pytest.raises(proposals.ProposalStateError): await proposals.confirm(card.message.id, selected_ids=[])
@@ -120,7 +138,7 @@ def test_card_output_has_no_connection_ref(card):
 def test_prompt_version_and_calendar_rules_present():
     from api.mail.agent_prompt import APP_PROMPT_VERSION, system_prompt
     text = system_prompt(today=date(2026, 12, 5), account_scope=None)
-    assert APP_PROMPT_VERSION == "10" and "propose_calendar_change" in text
+    assert APP_PROMPT_VERSION == "11" and "propose_calendar_change" in text
     assert "ICS bleibt nur lesbar" in text
 
 

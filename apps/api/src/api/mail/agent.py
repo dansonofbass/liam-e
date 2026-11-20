@@ -105,7 +105,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         yield StatusEvent(code='thinking')
         account = await mail_account.get_account(account_id) if account_id else None
         ctx = TurnContext(conversation.id, account.id if account else None, datetime.now(ZoneInfo(calendar_timezone)).date(), account_ids=scope_ids, context_id=snapshot.id, source_message_id=user.id,
-                          calendar_source_ids=json.loads(getattr(snapshot, 'calendar_scope_json', '[]')), calendar_timezone=calendar_timezone,
+                          calendar_source_ids=json.loads(getattr(snapshot, 'calendar_scope_json', '[]')), calendar_timezone=calendar_timezone, user_text=text,
                           task_scope=json.loads(getattr(snapshot, 'task_scope_json', '{"source":"none"}')), locale=effective_locale, browser_locale=locale)
         history = await message_access.list_messages(conversation.id)
         context_ids = {row.context_id for row in history if row.context_id}

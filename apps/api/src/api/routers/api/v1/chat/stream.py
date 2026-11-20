@@ -36,7 +36,7 @@ class ChatStreamRequest(BaseModel):
     locale: Locale = Field(default=DEFAULT_LOCALE, description="Browser language when the saved setting follows the browser")
     context_message_id: str | None = None
     context_occurrence_id: str | None = None
-    calendar_source_ids: list[str] = Field(default_factory=list, max_length=50)
+    calendar_source_ids: list[str] | None = Field(default=None, description="Omit to include every currently readable calendar. An explicit list narrows this turn.")
     calendar_timezone: str = Field(default='Europe/Berlin', max_length=100)
     task_source: Literal['none', 'all', 'unlinked', 'account', 'account_and_unlinked'] = 'none'
     task_source_account_id: str | None = Field(default=None, max_length=200)

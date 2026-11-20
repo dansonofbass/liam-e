@@ -185,7 +185,7 @@ export function ProposalCard({ message, clock = systemClock, oldGrant = false, g
   })
   if (!proposal) return null
   if (oldGrant && current.proposal_status === 'pending') return <>
-    <Notice tone="info" action={{ label: texts.controls.cancel, onClick: () => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) } }}>{texts.chatAccounts.cancelOnly}</Notice>
+    <Notice tone="info" action={{ label: texts.controls.cancel, onClick: () => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) } }}>{proposal.kind === 'calendar' ? texts.calendarSettings.cancelOnly : texts.chatAccounts.cancelOnly}</Notice>
     {error && <Notice tone="danger">{failureText(error, proposal.kind, texts)}</Notice>}
   </>
   if (proposal.kind === 'calendar') return <CalendarProposal key={current.id} message={current} />

@@ -198,6 +198,17 @@ export const en = {
     empty: 'No mail accounts are enabled for chat.',
     conflict: 'The permissions or connected accounts have changed. Reload your selection.',
   },
+  calendarSettings: {
+    title: 'Default calendar', description: 'New event proposals use this calendar. You can also name another calendar in chat.',
+    clear: 'No default calendar', missing: 'The saved calendar has been removed.', noWritable: 'No connected calendar allows new events.',
+    reason: { read_only: 'Read only', paused: 'Paused', disconnected: 'Check connection', unreadable: 'No read access', writable: 'Writable' },
+    invalid: 'This calendar no longer allows changes. Reload the selection.',
+    conflict: 'The default calendar changed on another device. Reload the current selection.',
+    cancelOnly: 'This appointment was proposed with earlier chat permissions. You can discard it.',
+    restart: 'The calendars available to read have changed. Start a new chat to use the current selection.',
+    deadlines: 'Mail deadlines', events: 'Events', tasks: 'Tasks', empty: 'No calendars connected.',
+    incomplete: 'The calendar index is incomplete.', unavailable: 'Some calendars are currently unavailable.',
+  },
   settingsUi: {
     section: 'Controls', title: 'Swipe actions',
     intro: 'Choose what happens when you swipe across an email. Your choices apply on all your devices.',

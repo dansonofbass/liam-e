@@ -146,6 +146,8 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Preferences | GET | `/api/v1/preferences/contexts/{context_id}` | `preference_context_get` |
 | Settings | GET | `/api/v1/settings` | `settings_get` |
 | Settings / independent preference opt-ins | PATCH | `/api/v1/settings` | `settings_update` |
+| Settings | GET | `/api/v1/settings/calendar` | `calendar_settings_get` |
+| Settings | PATCH | `/api/v1/settings/calendar` | `calendar_settings_update` |
 | Settings | GET | `/api/v1/settings/chat` | `chat_settings_get` |
 | Settings | PATCH | `/api/v1/settings/chat` | `chat_settings_update` |
 | Settings | GET | `/api/v1/settings/ui` | `settings_ui_get` |
@@ -448,7 +450,7 @@ confirm that is still alive finds it taken at its own claim and sends nothing. R
 deletes its finished records, so without the calendar a missing record proves nothing: such a card
 ends with `calendar_unavailable`, never with "not applied". A late check preserves a card's
 terminal result. The private `connection_ref` is stored with the card but never sent to the browser, SSE or history,
-and cards do not keep the provider's `htmlLink`. The prompt rules are `APP_PROMPT_VERSION` 8.
+and cards do not keep the provider's `htmlLink`. The prompt rules are in `agent_prompt.py`.
 
 The live run of 2026-11-18 is in `docs/superpowers/probes/2026-11-18-google-calendar-write-probe.md`.
 All views group and display instants in the browser timezone; all-day entries stay on their
@@ -467,23 +469,26 @@ five minutes per source revision. A queued job does not prove provider freshness
 old state, missing coverage and pause. Their fixed IDs are skipped before enqueueing and before
 adapter execution.
 
-“Im Chat fragen” opens a new conversation with `context_occurrence_id` and an explicitly selected
-source. Calendar scope (`calendar_source_ids`, maximum 50) is separate from the mail account in
-the composer and stored as a JSON list in `chat_context.calendar_scope_json`. The database
-default `[]` gives legacy history no calendar access. Any selection change, including expansion,
-requires a new conversation when history exists (409 `conversation_scope_change_requires_new`);
-historical text remains. This conservative rule avoids an unsupported reassignment of old user,
-tool or assistant text. The resolver checks all historical message contexts; the agent rechecks
-the same provenance before building model messages. Pausing/removing invalidates a turn with that
-source at the next live check, including before further model and tool calls. Already transmitted
-model requests cannot be recalled. On restart the UI carries over only calendars it still knows
-to be active; without an evidenced selection the scope remains empty.
+“Im Chat fragen” passes the selected instance as `context_occurrence_id`. Each new turn
+automatically includes all active, connected sources with read permission. The settings page
+`/settings/calendar` lets the owner choose or clear a writable default for new appointments.
+Updates require the displayed settings version. A removed or paused default remains identifiable
+as unavailable until the owner changes it. The owner can name another writable calendar in a
+request. Ambiguous names require clarification. Each proposal binds the resolved source and
+connection before confirmation. A later settings change only affects new proposals.
+
+The API persists the full set of readable IDs in `chat_context.calendar_scope_json`. A caller
+supplying `calendar_source_ids` explicitly can still narrow that turn, including to an empty
+set. Older contexts retain their original scope. A changed set of sources requires a new
+conversation after history exists (409 `conversation_scope_change_requires_new`). Model requests
+and confirmed actions recheck stored access. The new chat starts with the current catalogue
+and carries over the unsent draft. The “Heute fällig” shortcut lists the available mail,
+calendar and task sources for the current selection.
 
 `api/mail/calendar_tools.py` provides `search_calendar` and `get_calendar_occurrence`: index
 access without a provider, local date windows up to 90 days and cursor pages up to 50 occurrences;
 tool parameters can only restrict the turn scope. Calendar text and source names appear in
-`untrusted_calendar_data`, including state and coverage. Calendar write tools are absent; the
-prompt also prohibits substitute actions as a mail proposal, calendar copy or task.
+`untrusted_calendar_data`, including state and coverage. Calendar changes use confirmation cards as described above.
 `calendar_timezone` comes from the browser; older clients without it retain Europe/Berlin. Chat
 extras and the SSE event `calendars` contain only `source_id`/`occurrence_id`, no titles or private
 connection references. Citations reread their display through the authorized source and stable
@@ -608,6 +613,7 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `preference_candidate` — unconfirmed value with own source message, conversation, field/scope, expected target version/revision and optional card ID; status `pending|accepted|rejected|expired`. Rejected and invalidated candidates retain only content-free references.
 - `personalization_settings` — server-side singleton with independent `use_preferences` and `suggest_preferences` (both default false), version and ID and time of the last suggestion activation.
 - `preference_extraction` — content-free one-time ID per source message and extractor version; binds activation and prevents repeated model calls even after errors or restart.
+- `calendar_settings` — the owner’s default writable calendar for new chat proposals and its settings version. Clearing the default keeps calendar reads available.
 - `ui_settings` — the single cross-device interaction configuration with fixed server-side scope (`installation`, unique): `swipe_left`/`swipe_right` from allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` for conditional updates and `updated_at`; initial assignment left `archive`, right `toggle_read`, plus `locale=browser`. Language overrides are `de` or `en`.
 
 ## Templates and turn context

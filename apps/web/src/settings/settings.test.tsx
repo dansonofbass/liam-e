@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { client as api } from '../api/generated/client.gen'
 import { Settings } from '../prompts/Settings'
 import { de } from '../i18n/de'
+import { CalendarSettings } from './CalendarSettings'
 import { ChatAccountSettings } from './ChatAccountSettings'
 import { SwipeSettings } from './SwipeSettings'
 import { useSwipeSettings } from './useSwipeSettings'
@@ -29,8 +30,9 @@ function setup(path: string, respond?: (request: Request) => Promise<Response | 
   const root = createRootRoute({ component: () => <QueryClientProvider client={query}><Outlet /></QueryClientProvider> })
   const settings = createRoute({ getParentRoute: () => root, path: '/settings', component: Settings })
   const chat = createRoute({ getParentRoute: () => settings, path: '/chat', component: ChatAccountSettings })
+  const calendar = createRoute({ getParentRoute: () => settings, path: '/calendar', component: CalendarSettings })
   const controls = createRoute({ getParentRoute: () => settings, path: '/controls', component: SwipeSettings })
-  const router = createRouter({ routeTree: root.addChildren([settings.addChildren([controls, chat])]), history: createMemoryHistory({ initialEntries: [path] }) })
+  const router = createRouter({ routeTree: root.addChildren([settings.addChildren([controls, chat, calendar])]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
   return { query, router }
 }
@@ -364,4 +366,66 @@ test('editing a visible account preserves a newly granted account omitted from a
   fireEvent.click(save)
   await screen.findByText(de.settingsUi.saved)
   expect(requests.find(item => item.method === 'PATCH')?.body).toEqual({ expected_version: 7, account_ids: ['elsewhere', 'work'] })
+})
+
+const calendarOptions = [
+  { id: 'work', name: 'Team', is_active: true, chat_access: 'writable' },
+  { id: 'personal', name: 'Privat', is_active: true, chat_access: 'writable' },
+  { id: 'feed', name: 'Ferien', is_active: true, chat_access: 'read_only' },
+  { id: 'old', name: 'Veraltet', is_active: false, chat_access: 'paused' },
+]
+
+function calendarForm(initial: string | null = null) {
+  let stored = { version: 1, default_source_id: initial }
+  const view = setup('/settings/calendar', async request => {
+    if (request.url.endsWith('/calendar/sources')) return Response.json(calendarOptions)
+    if (!request.url.endsWith('/settings/calendar')) return undefined
+    if (request.method === 'PATCH') {
+      const body = await request.json() as { expected_version: number; default_source_id: string | null }
+      if (body.expected_version !== stored.version) return Response.json({ detail: { code: 'version_conflict' } }, { status: 409 })
+      stored = { version: stored.version + 1, default_source_id: body.default_source_id }
+    }
+    return Response.json(stored)
+  })
+  return { ...view, changeElsewhere: () => { stored = { version: stored.version + 1, default_source_id: 'personal' } } }
+}
+
+test('the calendar default can be set and cleared while read-only and paused choices explain their status', async () => {
+  const { query } = calendarForm()
+  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: de.calendarSettings.title })
+  expect(select.value).toBe('')
+  for (const label of ['Ferien · Nur lesbar', 'Veraltet · Pausiert']) {
+    expect((screen.getByRole('option', { name: label }) as HTMLOptionElement).disabled).toBe(true)
+  }
+  fireEvent.change(select, { target: { value: 'work' } })
+  fireEvent.click(screen.getByRole('button', { name: de.settingsUi.save }))
+  await screen.findByText(de.settingsUi.saved)
+  await act(() => query.refetchQueries({ queryKey: ['calendar-settings'] }))
+  expect(select.value).toBe('work')
+  fireEvent.change(select, { target: { value: '' } })
+  fireEvent.click(screen.getByRole('button', { name: de.settingsUi.save }))
+  await screen.findByText(de.settingsUi.saved)
+  expect(requests.filter(r => r.method === 'PATCH').map(r => r.body)).toEqual([
+    { default_source_id: 'work', expected_version: 1 }, { default_source_id: null, expected_version: 2 },
+  ])
+})
+
+test('a conflicting calendar edit can reload the other device’s default', async () => {
+  const { changeElsewhere } = calendarForm()
+  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: de.calendarSettings.title })
+  fireEvent.change(select, { target: { value: 'work' } })
+  changeElsewhere()
+  fireEvent.click(screen.getByRole('button', { name: de.settingsUi.save }))
+  expect(await screen.findByText(de.calendarSettings.conflict)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: de.settingsUi.reload }))
+  await waitFor(() => expect(select.value).toBe('personal'))
+  expect(requests.filter(r => r.method === 'PATCH')).toHaveLength(1)
+})
+
+test('a removed default stays visible until the owner changes it', async () => {
+  calendarForm('removed')
+  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: de.calendarSettings.title })
+  expect(select.selectedOptions[0]?.textContent).toBe(de.calendarSettings.missing)
+  expect((screen.getByRole('button', { name: de.settingsUi.save }) as HTMLButtonElement).disabled).toBe(true)
+  expect(requests.filter(r => r.method === 'PATCH')).toHaveLength(0)
 })

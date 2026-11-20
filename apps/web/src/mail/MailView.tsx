@@ -69,7 +69,7 @@ export function MailView({ id }: { id: string }) {
     if (busy || !data) return
     setStarted(true)
     void send({ text: texts.taskChat.prompt, context_message_id: id, account_id: data.account_id,
-      task_source: 'account', task_source_account_id: data.account_id, calendar_source_ids: [] })
+      task_source: 'account', task_source_account_id: data.account_id })
   }
   const iconSize = !split || coarse ? 'lg' : 'md'
   const actions = data && !data.local_reference_only && <>

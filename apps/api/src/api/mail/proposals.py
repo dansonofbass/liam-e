@@ -342,9 +342,10 @@ async def _confirm_calendar(message: ChatMessage) -> ChatMessage:
             raise calendar_writes.WriteError("proposal_context_revoked")
         if command.source_id not in json.loads(context.calendar_scope_json):
             raise calendar_writes.WriteError("calendar_out_of_scope", 403)
-        source = await calendar_source.get(command.source_id)
-        if source is None or not source.is_active or "write" not in json.loads(source.capabilities_json):
+        entries = await calendar_source.catalog(ids=[command.source_id])
+        if not entries or calendar_source.chat_access(*entries[0]) != "writable":
             raise calendar_writes.WriteError("calendar_not_writable", 403)
+        source, _ = entries[0]
         if source.connection_ref != command.connection_ref:
             raise calendar_writes.WriteError("reconnect_required")
         outcome = await calendar_writes.execute(command.request(message.id), write_id=message.id)

@@ -5,11 +5,11 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import * as sdk from '../api/generated/sdk.gen'
 import type { SourceOut } from '../api/generated/types.gen'
 import { AskAboutCalendar, CalendarReference } from './CalendarContext'
-import { ChatSessionProvider, useChatSession } from './session'
+import { ChatSessionProvider } from './session'
 import { de } from '../i18n/de'
 
 afterEach(() => { cleanup(); mock.restore() })
-const source: SourceOut = { id: 'test-only-a', name: 'Verein', provider: 'ics', timezone: 'UTC', is_active: true, capabilities: ['read'], coverage_start: null, coverage_end: null, last_success_at: null, stale: true, incomplete: true }
+const source: SourceOut = { id: 'test-only-a', name: 'Verein', provider: 'ics', timezone: 'UTC', is_active: true, capabilities: ['read'], chat_access: 'read_only', coverage_start: null, coverage_end: null, last_success_at: null, stale: true, incomplete: true }
 function setup(sources = [source], sourceId = source.id, loadSources?: () => Promise<never>) {
   const list = spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
   if (loadSources) list.mockImplementation(loadSources)
@@ -21,18 +21,16 @@ function setup(sources = [source], sourceId = source.id, loadSources?: () => Pro
   render(<RouterProvider router={router} />)
   return { client, detail, list }
 }
-test('asking from an instance opens a fresh chat with an explicit source and structured identity', async () => {
+test('asking from an instance opens a fresh chat with the structured instance and automatic calendar access', async () => {
   const client = new QueryClient()
-  function Probe() { return <p>{JSON.stringify(useChatSession().calendarScopes.new)}</p> }
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
-  const detail = createRoute({ getParentRoute: () => root, path: '/calendar/$occurrenceId', component: () => <AskAboutCalendar occurrenceId="test-only-occurrence" sourceId="test-only-source" /> })
-  const start = createRoute({ getParentRoute: () => root, path: '/', component: Probe })
+  const detail = createRoute({ getParentRoute: () => root, path: '/calendar/$occurrenceId', component: () => <AskAboutCalendar occurrenceId="test-only-occurrence" /> })
+  const start = createRoute({ getParentRoute: () => root, path: '/', component: () => null })
   const router = createRouter({ routeTree: root.addChildren([detail, start]), history: createMemoryHistory({ initialEntries: ['/calendar/test-only-occurrence'] }) })
   render(<RouterProvider router={router} />)
   fireEvent.click(await screen.findByRole('button', { name: de.calendar.ask }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   expect(router.state.location.search).toEqual({ calendarAbout: 'test-only-occurrence' })
-  expect(screen.getByText('["test-only-source"]')).toBeTruthy()
 })
 
 test('calendar evidence waits for sources before requesting the instance', async () => {

@@ -188,6 +188,17 @@ export const de = {
     empty: 'Für den Chat ist kein Mailkonto freigegeben.',
     conflict: 'Die Freigaben oder verbundenen Konten haben sich geändert. Lade die Auswahl neu.',
   },
+  calendarSettings: {
+    title: 'Standardkalender', description: 'Neue Terminvorschläge verwenden diesen Kalender. Du kannst im Chat auch einen anderen Kalender ausdrücklich nennen.',
+    clear: 'Kein Standardkalender', missing: 'Der gespeicherte Kalender wurde entfernt.', noWritable: 'Kein verbundener Kalender erlaubt neue Termine.',
+    reason: { read_only: 'Nur lesbar', paused: 'Pausiert', disconnected: 'Verbindung prüfen', unreadable: 'Kein Lesezugriff', writable: 'Beschreibbar' },
+    invalid: 'Dieser Kalender erlaubt keine Änderungen mehr. Lade die Auswahl erneut.',
+    conflict: 'Der Standardkalender wurde auf einem anderen Gerät geändert. Lade die aktuelle Auswahl.',
+    cancelOnly: 'Dieser Terminvorschlag stammt aus einem früheren Chat-Kontext. Du kannst ihn verwerfen.',
+    restart: 'Die lesbaren Kalender haben sich geändert. Starte einen neuen Chat für den aktuellen Umfang.',
+    deadlines: 'Mailfristen', events: 'Termine', tasks: 'Aufgaben', empty: 'Keine Kalender verbunden.',
+    incomplete: 'Der Kalenderstand ist unvollständig.', unavailable: 'Einige Kalender sind derzeit nicht lesbar.',
+  },
   settingsUi: {
     section: 'Bedienung', title: 'Wischaktionen',
     intro: 'Was ein Wisch über eine Mailzeile bewirkt. Die Wahl gilt auf allen deinen Geräten.',

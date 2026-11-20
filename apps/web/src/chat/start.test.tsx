@@ -38,7 +38,7 @@ test('greeting, status and four quick actions show summary counts', async () => 
   setup()
   expect(await screen.findByText('Hallo,')).toBeTruthy()
   expect(await screen.findByText('3 ungelesene Mails in 1 Konto')).toBeTruthy()
-  for (const text of ['Ungelesenes zusammenfassen', '3 Mails', 'Priorisieren', 'Was wartet auf dich?', 'Newsletter aufräumen', '2 Absender', 'Heute fällig', 'Fristen und Termine']) expect(screen.getByText(text)).toBeTruthy()
+  for (const text of ['Ungelesenes zusammenfassen', '3 Mails', 'Priorisieren', 'Was wartet auf dich?', 'Newsletter aufräumen', '2 Absender', 'Heute fällig', 'Mailfristen']) expect(screen.getByText(text)).toBeTruthy()
   expect(screen.getByText('Standardmodell')).toBeTruthy()
 })
 
@@ -61,17 +61,16 @@ test('empty grants offer settings and keep general chat available', async () => 
 test('a calendar reference and composer remain available when the mail summary fails', async () => {
   setup(true, '/?calendarAbout=occurrence-test')
   spyOn(sdk, 'mailSummary').mockRejectedValue(new Error('test-only'))
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true, chat_access: 'read_only' }] } as never)
   spyOn(sdk, 'calendarOccurrenceGet').mockResolvedValue({ data: { id: 'occurrence-test', source_id: 'work', title: 'Planung', start_date: '2026-11-13', end_date: '2026-11-14' } } as never)
   expect(await screen.findByText(de.chat.summaryError)).toBeTruthy()
   expect(await screen.findByRole('link', { name: 'Planung' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Senden' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: de.calendar.addToChat }))
-  fireEvent.click(screen.getByRole('button', { name: 'Arbeit' }))
+  expect(screen.queryByRole('button', { name: de.calendar.addToChat })).toBeNull()
   fireEvent.change(screen.getByPlaceholderText(de.chat.placeholder), { target: { value: 'Was steht an?' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
   await waitFor(() => expect(request?.context_occurrence_id).toBe('occurrence-test'))
-  expect(request.calendar_source_ids).toEqual(['work'])
+  expect(request.calendar_source_ids).toBeUndefined()
 })
 
 test('a calendar reference keeps the composer visible while sources are still loading', async () => {
@@ -86,24 +85,24 @@ test('a calendar reference keeps the composer visible while sources are still lo
 test('active calendars keep the composer available without a mail summary or reference', async () => {
   setup()
   spyOn(sdk, 'mailSummary').mockRejectedValue(new Error('test-only'))
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true, chat_access: 'read_only' }] } as never)
   expect(await screen.findByText(de.chat.summaryError)).toBeTruthy()
   expect(await screen.findByRole('button', { name: 'Senden' })).toBeTruthy()
 })
 
-test('a collapsed calendar selection calls out a source that was paused', async () => {
-  const { testClient } = setup(true, '/?about=mail1')
-  const source = { id: 'work', name: 'Arbeit', is_active: true }
+test('Today includes readable calendars without mail and reflects a pause', async () => {
+  const { testClient } = setup(false)
+  const source = { id: 'work', name: 'Arbeit', is_active: true, chat_access: 'read_only', incomplete: true }
   const sources = spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [source] } as never)
-  fireEvent.click(await screen.findByRole('button', { name: de.calendar.addToChat }))
-  fireEvent.click(screen.getByRole('button', { name: source.name }))
-  fireEvent.click(screen.getByRole('button', { name: de.calendar.scopeSelected(1) }))
-  expect(screen.queryByRole('button', { name: source.name })).toBeNull()
-  sources.mockResolvedValue({ data: [{ ...source, is_active: false }] } as never)
+  const action = await screen.findByRole('button', { name: /Heute fällig/ })
+  expect(action.textContent).toContain(de.calendarSettings.events)
+  expect(action.textContent).not.toContain(de.calendarSettings.deadlines)
+  expect(screen.getByText(de.calendarSettings.incomplete)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: de.calendar.addToChat })).toBeNull()
+  sources.mockResolvedValue({ data: [{ ...source, is_active: false, chat_access: 'paused' }] } as never)
   await act(() => testClient.invalidateQueries({ queryKey: ['calendar', 'sources'] }))
-  fireEvent.click(await screen.findByRole('button', { name: de.calendar.checkSelection }))
-  fireEvent.click(screen.getByRole('button', { name: de.calendar.unavailableSource, pressed: true }))
-  expect(screen.queryByRole('region', { name: de.calendar.chatScope })).toBeNull()
+  expect(await screen.findByText(de.calendarSettings.unavailable)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /Heute fällig/ })).toBeNull()
 })
 
 test('priority sends its fixed prompt and central grant revision', async () => {

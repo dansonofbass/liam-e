@@ -158,14 +158,12 @@ test('account scope and composer focus survive navigation to the conversation', 
 
 test('a live follow-up keeps the central mail grant and calendars after navigation', async () => {
   setup()
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
-  fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true, chat_access: 'read_only' }] } as never)
   await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
   expect(requestBody.text).toBe('Weiter fragen')
-  expect(requestBody.calendar_source_ids).toEqual(['work'])
+  expect(requestBody.calendar_source_ids).toBeUndefined()
   expect(requestBody.account_id).toBeNull()
   expect(requestBody.expected_mail_scope_version).toBe(4)
   expect(requestBody.conversation_id).toBe('c')
@@ -188,15 +186,14 @@ test('reload restores the saved account for the composer', async () => {
 
 test('the pencil on a mail card keeps the live calendar scope after navigation', async () => {
   setup()
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
-  fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true, chat_access: 'read_only' }] } as never)
   await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', snippet: 'Einwände bis Freitag möglich', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   expect(await screen.findByRole('img', { name: 'Dringend' })).toBeTruthy()
   expect(screen.getByText('Einwände bis Freitag möglich').classList.contains('le-mailref-snippet')).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
-  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1', calendar_source_ids: ['work'] })
+  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
+  expect(requestBody.calendar_source_ids).toBeUndefined()
   expect(requestBody.expected_mail_scope_version).toBe(4)
 })
 
@@ -409,29 +406,25 @@ test.each([null, 'a'])('a restarted chat preserves the permitted mail and task f
   expect(requestBody.history).toBeUndefined()
 })
 
-test('calendar selection is separate from mail and survives a scope-conflict restart', async () => {
+test('a newly readable calendar requires a fresh chat and keeps the previous turn restricted', async () => {
   const { client, router } = setup('/chat/c', false, 'a')
+  const source = { id: 'work', name: 'Arbeitskalender', is_active: true, chat_access: 'read_only' }
+  const prior = { ...historyRow('saved', 'assistant'), context: { ...currentContext, calendar_scope_json: '[]' } }
   await screen.findByRole('button', { name: 'Senden' })
-  const sources = [{ id: 'work', name: 'Arbeitskalender', provider: 'google', is_active: true }]
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
-  act(() => client.setQueryData(['calendar', 'sources'], sources))
-  fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Arbeitskalender' }))
-  globalThis.fetch = ((_url: unknown, init: RequestInit) => {
-    requestBody = JSON.parse(String(init.body))
-    return Promise.resolve(Response.json({ detail: { code: 'conversation_scope_change_requires_new' } }, { status: 409 }))
-  }) as typeof fetch
-  await send()
-  const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
-  expect(requestBody.calendar_source_ids).toEqual(['work'])
-  expect(requestBody.account_id).toBe('a')
-  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  act(() => client.setQueryData(['history', 'c'], [prior]))
+  expect(await screen.findByRole('button', { name: 'Senden' })).toBeTruthy()
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [source] } as never)
+  act(() => client.setQueryData(['calendar', 'sources'], [source]))
+  const notice = await screen.findByText(de.calendarSettings.restart)
+  expect(screen.queryByRole('button', { name: 'Senden' })).toBeNull()
+  fireEvent.click(within(notice.closest('[role="status"], [role="alert"]') ?? notice.parentElement!).getByRole('button', { name: de.prompts.restart }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-  const scope = await screen.findByRole('button', { name: '1 Kalender ausgewählt' })
-  expect(scope.getAttribute('aria-expanded')).toBe('false')
-  fireEvent.click(scope)
-  expect(screen.getByRole('button', { name: 'Arbeitskalender' }).getAttribute('aria-pressed')).toBe('true')
-  expect(screen.queryByRole('button', { name: 'Privat' })).toBeNull()
+  await send()
+  expect(requestBody.conversation_id).toBeUndefined()
+  expect(requestBody.calendar_source_ids).toBeUndefined()
+  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.history).toBeUndefined()
+  expect(prior.context.calendar_scope_json).toBe('[]')
 })
 
 test('revoked context during an answer offers a fresh conversation', async () => {
