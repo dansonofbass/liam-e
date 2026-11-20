@@ -600,7 +600,7 @@ async def test_insight_batch_stops_and_discards_prior_results_after_revocation(s
 
 
 @pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'independent_title',
-                                   'repeated_title', 'repeated_title_after_duration', 'switch', 'reschedule', 'default', 'default_de'])
+                                   'repeated_title', 'repeated_title_after_duration', 'start_field', 'switch', 'reschedule', 'default', 'default_de'])
 async def test_calendar_create_keeps_owner_target_through_scheduling_question(store, monkeypatch, case):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
@@ -622,7 +622,8 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
               'end_local': '2026-11-21T11:00', 'timezone': 'UTC'}
     if case == 'named':
         choose['calendar_name'] = 'Work'
-    if case.startswith('repeated_title'):
+    sprint = case.startswith('repeated_title') or case == 'start_field'
+    if sprint:
         choose['title'] = 'Sprint Planning'
     if case == 'independent_title':
         choose['title'] = 'Lunch'
@@ -636,7 +637,7 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         return [event async for event in agent.run_turn_events(conversation_id=conversation.id, text=text,
             resolved_context=(conversation, snapshot, None))]
 
-    opening = 'Schedule Sprint Planning in the Work calendar' if case.startswith('repeated_title') else 'Create a review in the Work calendar'
+    opening = 'Schedule Sprint Planning in the Work calendar' if sprint else 'Create a review in the Work calendar'
     opened = await turn(opening)
     assert opened[-1].event == 'done' and all(event.event != 'proposal' for event in opened)
     if case == 'write_revoked':
@@ -648,6 +649,7 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         'independent_title': 'Schedule lunch for Friday at ten',
         'repeated_title': 'Schedule Sprint Planning for Friday at 10.',
         'repeated_title_after_duration': 'Schedule Sprint Planning for Friday at 10.',
+        'start_field': 'Set the start time to Friday at 10.',
         'switch': 'Tomorrow at ten, in the Personal calendar instead',
         'reschedule': 'Schedule the review tomorrow at ten',
         'default': 'Tomorrow at ten, use my default calendar instead',
@@ -742,6 +744,33 @@ async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(s
         assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_not_writable'
     else:
         assert cards == ['home']
+
+
+@pytest.mark.parametrize('listing', ['Work, Home or Travel', 'Work, Home, or Travel', 'Work or Home or Travel',
+                                     '“Work”, “Home” or “Travel”', 'Work, Private or Travel', 'Work, “Private” or Travel'])
+async def test_calendar_elimination_requires_a_single_verified_option(store, monkeypatch, listing):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    sources = [CalendarSource(id=name.lower(), name=name, provider='google', connection_ref='synthetic',
+        external_id=name, capabilities_json='["read","write"]', timezone='UTC') for name in ('Work', 'Home', 'Travel', 'Personal')]
+    async def catalog(*, ids):
+        return [(s, None) for s in sources if s.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    conversation = await store.create()
+    snapshot = store.snapshot('alternatives', calendar_scope_json=json.dumps([s.id for s in sources]))
+    args = {'action': 'create', 'title': 'Review', 'start_date': '2026-11-21', 'end_date': '2026-11-22'}
+    fake = FakeMistral(streams=[[chunk('propose_calendar_change', args)], ['Which calendar?'],
+                                [chunk('propose_calendar_change', args)], ['Which remaining calendar?'],
+                                [chunk('propose_calendar_change', args)], ['Ready.']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def turn(text):
+        return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(conversation_id=conversation.id,
+            text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
+    assert await turn('Schedule the review in the ' + listing + ' calendar.') == []
+    assert await turn('Not Travel.') == []
+    assert await turn('Use Work.') == ['work']
 
 
 @pytest.mark.parametrize('attempt', ['plain_question', 'work_first', 'work_last'])

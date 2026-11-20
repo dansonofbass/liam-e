@@ -7,7 +7,7 @@ from db.accessors import calendar_occurrence, calendar_settings, calendar_source
 from pydantic import ValidationError
 
 from api.calendar import writes
-from api.calendar.chat_target import appointment_part, appointment_parts, named_choice, owner_selection, stated_destination
+from api.calendar.chat_target import appointment_part, appointment_parts, named_choice, owner_selection, pending_for_request, stated_destination
 from api.calendar.proposals import CalendarCommand, CalendarValues, values
 
 
@@ -23,7 +23,9 @@ async def _create_source(arguments, ctx):
     ctx.calendar_request_part = part
     entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
     selection = owner_selection(part, arguments.get("title"), entries=entries)
-    previous = ctx.requested_calendar or (ctx.calendar_choice if part == parts[0] else None)
+    previous = ctx.requested_calendar
+    if previous is None and part == parts[0]:
+        previous = pending_for_request(ctx.calendar_choice, part, arguments.get("title"))
     target = stated_destination(selection, entries, previous)
     if target:
         ctx.calendar_targets[part] = target

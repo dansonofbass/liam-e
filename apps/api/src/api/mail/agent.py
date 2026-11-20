@@ -139,7 +139,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         history = [row for row in history if not row.context_id or
                    (row.role not in ('tool', 'proposal', 'draft') and not row.tool_payload_json) or
                    (row.context_id in contexts and not contexts[row.context_id].revoked)]
-        ctx.calendar_choice = previous_choice(history, user.id, text, contexts)
+        ctx.calendar_choice = previous_choice(history, user.id, contexts)
         messages = _to_model_messages(history, prompt=system_prompt(today=ctx.today, account_scope=account.email_address if account else None, locale=effective_locale))
         if preference_ids:
             messages.insert(1, {'role': 'user', 'content': 'Passende manuell bestätigte Stilpräferenzen (nachrangig zur aktuellen Bitte und Vorlage):\n' +

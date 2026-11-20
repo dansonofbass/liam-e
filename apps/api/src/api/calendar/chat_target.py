@@ -41,6 +41,7 @@ class OwnerSelection:
     text: str
     quoted_names: tuple[str, ...]
     excluded_targets: frozenset[str] = frozenset()
+    alternatives_text: str = ""
 
     def mentions(self, name: str) -> bool:
         folded = name.strip().casefold()
@@ -50,7 +51,7 @@ class OwnerSelection:
         return bool(re.search(r"(?<![\w-])" + re.escape(source_id) + r"(?![\w-])", self.text))
 
 
-def _selection_words(text: str, title: str | None) -> OwnerSelection:
+def _selection_words(text: str, title: str | None, entries) -> OwnerSelection:
     """Quoted descriptions are content. A quoted destination is one exact name."""
     names = []
 
@@ -62,10 +63,14 @@ def _selection_words(text: str, title: str | None) -> OwnerSelection:
             names.append(match.group()[1:-1].strip().casefold())
         return " "
 
-    text = _QUOTED.sub(quoted, text)
     if isinstance(title, str) and title.strip():
         text = re.sub(r"\b(?:titled|called|named|mit (?:dem )?Titel|namens)\s+" + re.escape(title.strip()), " ", text, flags=re.I)
-    return OwnerSelection(text, tuple(names))
+    alternatives = text
+    if re.search(r"\b(?:or|oder)\b", text, re.I):
+        known = {source.name.strip().casefold() for source, _ in entries} | _DEFAULT_NAMES
+        # Keep a boundary for other quoted text so its neighbouring list items cannot collapse.
+        alternatives = _QUOTED.sub(lambda match: match[0][1:-1] if match[0][1:-1].strip().casefold() in known else "\ufffc", text)
+    return OwnerSelection(_QUOTED.sub(quoted, text), tuple(names), alternatives_text=alternatives)
 
 
 _EXCLUSION = re.compile(r"(?<!\w)(?:do not|don['’]t|not|never|except(?: for)?|instead of|rather than|avoid|excluding|"
@@ -81,7 +86,7 @@ def owner_selection(text: str, title: str | None = None, *, entries=()) -> Owner
                         lambda match: " " * len(match.group()), masked, flags=re.I)
     exclusions = list(_EXCLUSION.finditer(masked))
     if not exclusions:
-        return _selection_words(text, title)
+        return _selection_words(text, title, entries)
     names = _DEFAULT_NAMES.union(value for source, _ in entries for value in (source.name.strip(), source.id) if value)
     choices = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
     operand = re.compile(
@@ -105,8 +110,8 @@ def owner_selection(text: str, title: str | None = None, *, entries=()) -> Owner
             offset = match.end()
             join = re.match(r"\s+(?:or|oder|and|und)\s+", text[offset:], re.I)
             match = operand.match(text, offset + join.end()) if join else None
-    selected = _selection_words(" ".join([*positive, text[offset:]]), title)
-    return OwnerSelection(selected.text, selected.quoted_names, frozenset(blocked))
+    selected = _selection_words(" ".join([*positive, text[offset:]]), title, entries)
+    return OwnerSelection(selected.text, selected.quoted_names, frozenset(blocked), selected.alternatives_text)
 
 
 _ACTION = r"(?:put|schedule|create|book|add|arrange|make|set|plan[e]?|erstell[e]?|trag[e]?|leg[e]?|buch[e]?)"
@@ -171,17 +176,29 @@ def _appointment_subject(text: str) -> str:
     return " ".join(subject.casefold().split())
 
 
-def _new_appointment(text: str, pending_subject: str) -> bool:
+def pending_for_request(previous: CalendarChoice | None, text: str, title=None) -> CalendarChoice | None:
+    if not previous:
+        return None
     subject = _appointment_subject(text)
-    if subject and subject == pending_subject:
-        return False
+    if subject and subject == previous.appointment_subject:
+        return previous
     explicit = r"\b(?:another|different|new|weiteren?|andere[nmrs]?|neue[nmrs]?)\s+(?:appointment|event|meeting|termin)\b"
-    if re.search(explicit, owner_selection(text).text, re.I):
-        return True
-    return bool(subject)
+    words = owner_selection(text).text
+    if re.search(explicit, words, re.I):
+        return None
+    # "Set/make/put ..." can fill a field of the pending appointment. Only a
+    # separately identifiable appointment should acquire a fresh default.
+    field = re.search(r"\b(?:set|change|move|adjust|update|make|use|ändere|setze|verschiebe)\s+"
+                      r"(?:(?:the|its|die|den|das)\s+)?(?:start(?:ing)? time|end time|time|date|duration|title|"
+                      r"location|description|startzeit|endzeit|uhrzeit|datum|dauer|titel|ort|beschreibung)\b", words, re.I)
+    if field or not subject:
+        return previous
+    create = re.search(r"\b(?:schedule|create|book|arrange|add|set up|erstelle|plane|buche)\s+", words, re.I)
+    proposed = " ".join(title.casefold().split()) if isinstance(title, str) else ""
+    return None if create or (proposed and proposed == subject) else previous
 
 
-def previous_choice(history, user_id: str, text: str, contexts) -> CalendarChoice | None:
+def previous_choice(history, user_id: str, contexts) -> CalendarChoice | None:
     if len(history) < 2 or history[-1].id != user_id:
         return None
     reply = history[-2]
@@ -197,7 +214,7 @@ def previous_choice(history, user_id: str, text: str, contexts) -> CalendarChoic
             return None
         choice = CalendarChoice.model_validate(data)
         subject = choice.appointment_subject or _appointment_subject(previous_user.content)
-        return None if _new_appointment(appointment_parts(text)[0], subject) else choice
+        return choice.model_copy(update={"appointment_subject": subject})
     except (AttributeError, TypeError, ValueError):
         return None
 
@@ -217,28 +234,43 @@ def named_choice(name, entries, selection: OwnerSelection, *, offered=()):
     return CalendarChoice(**matches[0].model_dump())
 
 
-def _calendar_alternatives(text: str, entries) -> set[str]:
+_OR = re.compile(r"\b(?:or|oder)\b", re.I)
+_LIST_SEPARATOR = r"(?:,\s*(?:(?:or|oder|and|und)\b)?|[/&]|\b(?:or|oder|and|und)\b)"
+
+
+def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
+    """Read each contiguous list as a whole. An unknown member prevents elimination."""
     alternatives = set()
-    disjunctions = list(re.finditer(r"\b(?:or|oder)\b", text, re.I))
-    if not disjunctions:
-        return alternatives
-    names = {source.name.strip() for source, _ in entries if source.name.strip()}
-    names.update(("default calendar", "Standardkalender"))
+    if not _OR.search(text):
+        return alternatives, True
+    names = _DEFAULT_NAMES.union(source.name.strip() for source, _ in entries if source.name.strip())
     names_pattern = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
     determiner = r"(?:(?:the|my|den|dem|meinen|meinem)\s+)?"
     operand = rf"(?:{_PREFIX}|{determiner})(?:{_CALENDAR}\s+)?(?P<name>{names_pattern})(?:\s+{_CALENDAR})?"
-    for join in disjunctions:
-        left = text[:join.start()].rstrip()
-        right = text[join.end():].lstrip()
-        first = re.search(rf"(?<![\w-]){operand}$", left, re.I)
-        second = re.match(rf"{operand}(?![\w-])", right, re.I)
-        if first and second and first["name"].casefold() != second["name"].casefold():
-            words = first[0] + " " + second[0]
-            if (re.search(rf"\b{_CALENDAR}\b|\bstandardkalender\b", words, re.I)
-                    or re.match(_PREFIX, first[0], re.I)
-                    or (first.start() == 0 and not right[second.end():].strip(" .?!"))):
-                alternatives.update((first["name"].casefold(), second["name"].casefold()))
-    return alternatives
+    groups = []
+    for member in re.finditer(rf"(?<![\w-]){operand}(?![\w-])", text, re.I):
+        if not groups or not re.fullmatch(rf"\s*{_LIST_SEPARATOR}\s*", text[groups[-1][-1].end():member.start()], re.I):
+            groups.append([])
+        groups[-1].append(member)
+
+    complete = True
+    for group in groups:
+        first, last = group[0], group[-1]
+        before, after = text[:first.start()], text[last.end():]
+        left = re.search(rf"{_LIST_SEPARATOR}\s*$", before, re.I)
+        right = re.match(rf"\s*{_LIST_SEPARATOR}", after, re.I)
+        joiners = " ".join(text[a.end():b.start()] for a, b in zip(group, group[1:]))
+        if not any(_OR.search(value) for value in (joiners, left[0] if left else "", right[0] if right else "")):
+            continue
+        qualified = re.match(_PREFIX, first[0], re.I)
+        phrase = text[first.start():last.end()]
+        if not (qualified or re.search(rf"\b{_CALENDAR}\b|\bstandardkalender\b", phrase, re.I)
+                or (not before.strip() and not after.strip(" .?!"))):
+            continue
+        alternatives.update(member["name"].casefold() for member in group)
+        if right or (left and not (qualified and left[0].strip() == ",")):
+            complete = False
+    return alternatives, complete
 
 
 def _affirmative_destination(selection: OwnerSelection, entries, previous: CalendarChoice | None) -> CalendarChoice | None:
@@ -249,7 +281,9 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
         return None
     use_default = bool(_DEFAULT.search(text))
     folded = text.casefold()
-    alternatives = _calendar_alternatives(text, entries)
+    alternatives, complete = _calendar_alternatives(selection.alternatives_text, entries)
+    if not complete:
+        return CalendarChoice(error="calendar_name_ambiguous")
     use_default |= bool(alternatives & _DEFAULT_NAMES)
     names = set(selection.quoted_names) | (alternatives - _DEFAULT_NAMES)
     for source, _ in entries:
@@ -320,7 +354,7 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
     entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
     choices = []
     for part in unfinished:
-        inherited = ctx.calendar_choice if part == parts[0] else None
+        inherited = pending_for_request(ctx.calendar_choice, part) if part == parts[0] else None
         choice = ctx.calendar_targets.get(part) or stated_destination(owner_selection(part, entries=entries), entries, inherited) or inherited
         choices.append(choice)
     # A follow-up containing only a time cannot choose between unfinished
@@ -329,7 +363,7 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
         return CalendarChoice(error="calendar_appointment_ambiguous")
     choice = choices[0]
     if choice and len(unfinished) == 1:
-        inherited = ctx.calendar_choice if unfinished[0] == parts[0] else None
-        subject = _appointment_subject(unfinished[0]) or (inherited.appointment_subject if inherited else "")
+        inherited = pending_for_request(ctx.calendar_choice, unfinished[0]) if unfinished[0] == parts[0] else None
+        subject = (inherited.appointment_subject if inherited else "") or _appointment_subject(unfinished[0])
         return choice.model_copy(update={"appointment_subject": subject})
     return choice
