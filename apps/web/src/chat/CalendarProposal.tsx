@@ -3,13 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { chatProposalCancel, chatProposalCheck, chatProposalConfirm } from '../api/generated/sdk.gen'
 import type { CalendarValues, ChatMessageOut, LiveEvent } from '../api/generated/types.gen'
-import { calendarSourcesQuery } from '../api/queries'
+import { chatCalendarSourcesQuery } from '../api/queries'
 import { errorCode } from '../api/unwrap'
 import { Button, Notice } from '../ds'
 import { Dot } from '../ds/Chip'
 import { formatMinuteOfDay } from '../i18n/format'
 import { useI18n } from '../i18n/I18n'
-import { addDays, calendarDate } from '../calendar/state'
+import { addDays, calendarDate, calendarTargetLabel } from '../calendar/state'
 import { writeError } from '../calendar/write-state'
 import './calendar-proposal.css'
 
@@ -27,7 +27,7 @@ function Values({ value, zone }: { value: CalendarValues | LiveEvent; zone: stri
 }
 export function CalendarProposal({ message }: { message: ChatMessageOut }) {
   const { texts, locale } = useI18n()
-  const client = useQueryClient(), sources = useQuery(calendarSourcesQuery())
+  const client = useQueryClient(), sources = useQuery(chatCalendarSourcesQuery())
   const [updated, setUpdated] = useState<ChatMessageOut>()
   const settled = ['done', 'failed', 'cancelled'].includes(message.proposal_status ?? '')
   const current = updated?.id === message.id && !settled ? updated : message
@@ -75,7 +75,8 @@ export function CalendarProposal({ message }: { message: ChatMessageOut }) {
       {sources.isPending && <><p role="status">{texts.calendar.loading}</p><div className="le-calendar-proposal-placeholder" aria-hidden="true" /></>}
       {sources.isError && <Notice tone="danger" action={{ label: texts.calendar.retry, onClick: () => { void sources.refetch() } }}>{texts.calendar.error}</Notice>}
       {sources.isSuccess && !source?.is_active && <Notice tone="info">{texts.calendar.writeErrors.calendar_unavailable}</Notice>}
-      {source?.is_active && !sources.isError && <><p><Dot colorIndex={sources.data!.filter(s => s.is_active).findIndex(s => s.id === source.id)} /> {source.name}</p><p>{current.proposal?.reason}</p>
+      {sources.isSuccess && source?.is_active && source.chat_access !== 'writable' && <Notice tone="info">{texts.calendar.writeErrors.calendar_not_writable}</Notice>}
+      {source?.is_active && !sources.isError && <><p><Dot colorIndex={sources.data!.filter(s => s.is_active).findIndex(s => s.id === source.id)} /> {calendarTargetLabel(source, sources.data!)}</p><p>{current.proposal?.reason}</p>
         <div className="le-calendar-proposal-values">{command.before && <section><h4>{texts.calendar.cardBefore}</h4><Values value={command.before} zone={command.timezone} /></section>}{command.after && <section><h4>{texts.calendar.cardAfter}</h4><Values value={command.after} zone={command.timezone} /></section>}</div>
         <p>{texts.calendar.eventZone}: {command.timezone}</p>
         {command.action === 'delete' && <p>{texts.calendar.deleteWarning}</p>}<p className="le-hint">{texts.calendar.writeRisk}</p>
@@ -83,7 +84,7 @@ export function CalendarProposal({ message }: { message: ChatMessageOut }) {
       {status === 'failed' && <Notice tone="danger">{failed === 'calendar_event_changed' ? texts.calendar.cardChanged : failed === 'calendar_write_not_applied' ? texts.calendar.cardNotApplied : writeError(failed, locale)}</Notice>}
       {(status === 'unknown' || status === 'running') && <p role="status">{texts.calendar.checking}</p>}
       <div className="le-calendar-proposal-actions">
-        {status === 'pending' && <><Button variant="primary" disabled={busy || !source?.is_active || !source.capabilities.includes('write') || sources.isError} onClick={() => { void apply('confirm') }}>{texts.calendar.cardConfirm}</Button><Button variant="ghost" disabled={busy} onClick={() => { void apply('cancel') }}>{texts.controls.cancel}</Button></>}
+        {status === 'pending' && <><Button variant="primary" disabled={busy || !source?.is_active || source.chat_access !== 'writable' || sources.isError} onClick={() => { void apply('confirm') }}>{texts.calendar.cardConfirm}</Button><Button variant="ghost" disabled={busy} onClick={() => { void apply('cancel') }}>{texts.controls.cancel}</Button></>}
         {/* running: a confirm may have died after claiming the card; the server answers while one is still in flight. */}
         {(status === 'unknown' || status === 'running') && <Button variant="secondary" disabled={busy} onClick={() => { void apply('check') }}>{texts.calendar.check}</Button>}
       </div>

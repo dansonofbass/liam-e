@@ -139,14 +139,17 @@ def proposal_view(message: ChatMessage) -> Proposal | None:
     return None
 
 
-async def create_proposal(conversation_id: str, proposal: Proposal, *, context_id: str | None = None) -> ChatMessage:
+async def create_proposal(conversation_id: str, proposal: Proposal, *, context_id: str | None = None, extras_json: str = "") -> ChatMessage:
+    fields = dict(conversation_id=conversation_id, role="proposal", content=proposal.reason,
+        proposal_json=proposal.model_dump_json(context={"storage": True}), proposal_status="pending",
+        context_id=context_id, extras_json=extras_json)
     for attempt in range(2):
-        await message_access.cancel_open_proposals(conversation_id)
         try:
-            return await message_access.add_message(
-                conversation_id=conversation_id, role="proposal", content=proposal.reason,
-                proposal_json=proposal.model_dump_json(context={"storage": True}), proposal_status="pending", context_id=context_id,
-            )
+            if proposal.calendar is not None:
+                return await message_access.replace_with_calendar_proposal(
+                    ChatMessage(**fields), proposal.calendar.source_id, proposal.calendar.connection_ref)
+            await message_access.cancel_open_proposals(conversation_id)
+            return await message_access.add_message(**fields)
         except IntegrityError:
             if attempt:
                 raise
@@ -342,9 +345,10 @@ async def _confirm_calendar(message: ChatMessage) -> ChatMessage:
             raise calendar_writes.WriteError("proposal_context_revoked")
         if command.source_id not in json.loads(context.calendar_scope_json):
             raise calendar_writes.WriteError("calendar_out_of_scope", 403)
-        source = await calendar_source.get(command.source_id)
-        if source is None or not source.is_active or "write" not in json.loads(source.capabilities_json):
+        entries = await calendar_source.catalog(ids=[command.source_id])
+        if not entries or calendar_source.chat_access(*entries[0]) != "writable":
             raise calendar_writes.WriteError("calendar_not_writable", 403)
+        source, _ = entries[0]
         if source.connection_ref != command.connection_ref:
             raise calendar_writes.WriteError("reconnect_required")
         outcome = await calendar_writes.execute(command.request(message.id), write_id=message.id)

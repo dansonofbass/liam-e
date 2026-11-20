@@ -1,13 +1,14 @@
+import { oldSource } from '../../calendar/state'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { calendarSourcesQuery, chatMailReferenceQuery, MessageNotFoundError, modelsQuery, summaryQuery } from '../../api/queries'
-import { CalendarReference } from '../../chat/CalendarContext'
+import { chatCalendarSourcesQuery, chatMailReferenceQuery, MessageNotFoundError, modelsQuery, summaryQuery } from '../../api/queries'
+import { CalendarReference, readableCalendar } from '../../chat/CalendarContext'
 import { ChatComposer } from '../../chat/Conversation'
 import { ModelMenu } from '../../chat/ModelMenu'
 import { TemplateMenu } from '../../prompts/TemplateMenu'
 import { ChatHeader } from '../../chat/ChatHeader'
-import { useChatSession } from '../../chat/session'
+import { useChatSession, useTaskScope } from '../../chat/session'
 import { Button as ActionButton, IconButton, MailReference, Notice, QuickAction } from '../../ds'
 import { providerLabel } from '../../ds/providerLabel'
 import { useI18n } from '../../i18n/I18n'
@@ -32,8 +33,9 @@ function Greeting() {
   const search = useSearch({ strict: false })
   const calendarAbout = typeof search.calendarAbout === 'string' ? search.calendarAbout : undefined
   const about = typeof search.about === 'string' ? search.about : undefined
+  const tasks = useTaskScope()
   const summary = useQuery(summaryQuery(true))
-  const calendars = useQuery(calendarSourcesQuery())
+  const calendars = useQuery(chatCalendarSourcesQuery())
   const reference = useQuery(chatMailReferenceQuery(about ?? '', summary.data?.mail_scope_version))
   const [started, setStarted] = useState(false)
   // The model chosen in the chip rides along with the first message and becomes the model of the new conversation.
@@ -59,6 +61,12 @@ function Greeting() {
     }
   }, [started, state.conversationId, navigate])
   const data = summary.data
+  const readable = calendars.data?.filter(readableCalendar) ?? []
+  const dueSources = [
+    ...(data?.accounts.length ? [texts.calendarSettings.deadlines] : []),
+    ...(readable.length ? [texts.calendarSettings.events] : []),
+    ...(tasks.scope.source !== 'none' ? [texts.calendarSettings.tasks] : []),
+  ]
   const turnError = started && state.phase === 'error' && !state.conversationId
   const mail = reference.isSuccess ? reference.data : undefined
   const account = mail && data?.accounts.find(item => item.id === mail.account_id)
@@ -72,12 +80,21 @@ function Greeting() {
       {turnError && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : modelGone ? undefined : { label: texts.chat.retry, onClick: () => { void retry() } }}>{texts.errors[state.errorCode ?? 'internal']}</Notice>}
       {summary.isPending && <p className="le-hint">{texts.chat.loadingSummary}</p>}
       {summary.isError && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void summary.refetch() } }}>{texts.chat.summaryError}</Notice>}
-      {!about && data && (data.accounts.length === 0 ? <><Notice tone="info">{texts.chatAccounts.empty}</Notice><ActionButton variant="primary" onClick={() => { void navigate({ to: '/settings/chat' }) }}>{texts.chatAccounts.section}</ActionButton></> : <><p className="le-hint">{texts.chat.stand(data.unread_total, data.accounts.length, data.last_sync_at ? formatTime(new Date(data.last_sync_at), undefined, locale) : undefined)}</p><div className="le-chat-quick-actions">
-        <QuickAction icon="mail-open" title={texts.quickActions.unread.title} sub={texts.quickActions.unread.subtitle(data.unread_total)} onClick={() => quickSend(texts.quickActions.unread.prompt)} />
-        <QuickAction icon="flag" title={texts.quickActions.priority.title} sub={texts.quickActions.priority.subtitle} onClick={() => quickSend(texts.quickActions.priority.prompt)} />
-        <QuickAction icon="newspaper" title={texts.quickActions.newsletters.title} sub={texts.quickActions.newsletters.subtitle(data.newsletter_senders)} onClick={() => quickSend(texts.quickActions.newsletters.prompt)} />
-        <QuickAction icon="clock" title={texts.quickActions.dueToday.title} sub={texts.quickActions.dueToday.subtitle} onClick={() => quickSend(texts.quickActions.dueToday.prompt)} />
-      </div></>)}
+      {!about && data && (data.accounts.length === 0
+        ? <><Notice tone="info">{texts.chatAccounts.empty}</Notice><ActionButton variant="primary" onClick={() => { void navigate({ to: '/settings/chat' }) }}>{texts.chatAccounts.section}</ActionButton></>
+        : <p className="le-hint">{texts.chat.stand(data.unread_total, data.accounts.length, data.last_sync_at ? formatTime(new Date(data.last_sync_at), undefined, locale) : undefined)}</p>)}
+      {!about && (data || calendars.isSuccess) && <div className="le-chat-quick-actions">
+        {!!data?.accounts.length && <>
+          <QuickAction icon="mail-open" title={texts.quickActions.unread.title} sub={texts.quickActions.unread.subtitle(data.unread_total)} onClick={() => quickSend(texts.quickActions.unread.prompt)} />
+          <QuickAction icon="flag" title={texts.quickActions.priority.title} sub={texts.quickActions.priority.subtitle} onClick={() => quickSend(texts.quickActions.priority.prompt)} />
+          <QuickAction icon="newspaper" title={texts.quickActions.newsletters.title} sub={texts.quickActions.newsletters.subtitle(data.newsletter_senders)} onClick={() => quickSend(texts.quickActions.newsletters.prompt)} />
+        </>}
+        {dueSources.length > 0 && <QuickAction icon="clock" title={texts.quickActions.dueToday.title} sub={dueSources.join(' · ')} onClick={() => quickSend(texts.quickActions.dueToday.prompt)} />}
+      </div>}
+      {!about && calendars.isError && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void calendars.refetch() } }}>{texts.calendar.error}</Notice>}
+      {!about && calendars.isSuccess && !calendars.data.length && <p className="le-hint">{texts.calendarSettings.empty}</p>}
+      {!about && calendars.data?.some(source => !readableCalendar(source)) && <p className="le-hint">{texts.calendarSettings.unavailable}</p>}
+      {!about && readable.some(source => source.stale || source.incomplete || oldSource(source)) && <p className="le-hint">{texts.calendarSettings.incomplete}</p>}
     </div></div>}
     {(about || data || calendars.data?.some(source => source.is_active) || calendarAbout) && <div className="le-chat-composer">
       {calendarAbout && <div className="le-chat-reference"><CalendarReference occurrenceId={calendarAbout} /><IconButton icon="x" label={texts.calendar.removeReference} onClick={() => { void navigate({ to: '/', search: { about } }) }} /></div>}

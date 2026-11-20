@@ -1,6 +1,5 @@
 """Manage local calendar source selection and refresh jobs."""
 
-import json
 from datetime import UTC, datetime, time, timedelta
 
 from db.accessors import calendar_source, calendar_sync_state
@@ -13,16 +12,14 @@ router = APIRouter()
 
 
 async def source_out(source) -> SourceOut:
-    state = await calendar_sync_state.get(source.id)
-    try:
-        capabilities = json.loads(source.capabilities_json)
-        if not isinstance(capabilities, list) or not all(isinstance(x, str) for x in capabilities):
-            capabilities = []
-    except (TypeError, ValueError):
-        capabilities = []
+    return source_status(source, await calendar_sync_state.get(source.id))
+
+
+def source_status(source, state) -> SourceOut:
     last = state.last_success_at if state else None
     return SourceOut(id=source.id, provider=source.provider, name=source.name, timezone=source.timezone,
-                     is_active=source.is_active, capabilities=capabilities,
+                     is_active=source.is_active, capabilities=calendar_source.capabilities(source),
+                     chat_access=calendar_source.chat_access(source, state),
                      coverage_start=state.coverage_start if state else None,
                      coverage_end=state.coverage_end if state else None, last_success_at=last,
                      stale=last is None or state.incomplete,
@@ -36,7 +33,7 @@ async def source_out(source) -> SourceOut:
 
 @router.get("", operation_id="calendar_sources_list")
 async def sources() -> list[SourceOut]:
-    return [await source_out(row) for row in await calendar_source.list_all()]
+    return [source_status(source, state) for source, state in await calendar_source.catalog()]
 
 
 @router.patch("/{source_id}", operation_id="calendar_source_update")

@@ -1,13 +1,16 @@
 """Calendar source storage."""
 
 import json
+from contextlib import nullcontext
 from datetime import datetime, timedelta
+from typing import Literal
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from db.engine import get_session_maker
 from db.accessors._calendar_lock import lock_source
+from db.accessors.calendar_feed_sync import STOP_ERRORS
 from db.models.calendar_source import CalendarSource
 from db.models.calendar_event import CalendarEvent
 from db.models.calendar_feed_config import CalendarFeedConfig
@@ -15,6 +18,76 @@ from db.models.calendar_occurrence import CalendarOccurrence
 from db.models.calendar_sync_state import CalendarSyncState
 from db.models.calendar_write import CalendarWrite
 from db.models.mail_job import MailJob
+
+
+ChatAccess = Literal["writable", "read_only", "paused", "disconnected", "unreadable"]
+READABLE = {"writable", "read_only"}
+
+
+def capabilities(source: CalendarSource) -> list[str]:
+    try:
+        values = json.loads(source.capabilities_json)
+    except (TypeError, ValueError):
+        return []
+    return values if isinstance(values, list) and all(isinstance(value, str) for value in values) else []
+
+
+def chat_access(source: CalendarSource, state: CalendarSyncState | None) -> ChatAccess:
+    if not source.is_active:
+        return "paused"
+    if not source.connection_ref or (state and (state.access_blocked or state.last_error in STOP_ERRORS)):
+        return "disconnected"
+    rights = capabilities(source)
+    if "read" not in rights:
+        return "unreadable"
+    return "writable" if source.provider == "google" and "write" in rights else "read_only"
+
+
+async def catalog(session=None, ids=None) -> list[tuple[CalendarSource, CalendarSyncState | None]]:
+    stmt = select(CalendarSource, CalendarSyncState).outerjoin(
+        CalendarSyncState, CalendarSyncState.source_id == CalendarSource.id).order_by(CalendarSource.id)
+    if ids is not None:
+        stmt = stmt.where(CalendarSource.id.in_(ids))
+    async with (nullcontext(session) if session is not None else get_session_maker()()) as reader:
+        return list((await reader.execute(stmt)).all())
+
+
+async def readable_ids(session, ids=None) -> list[str]:
+    if ids is not None and not ids:
+        return []
+    return [source.id for source, state in await catalog(session, ids) if chat_access(source, state) in READABLE]
+
+
+async def configured_names() -> set[str]:
+    """Display names for recognizing owner-supplied calendar options, including paused sources."""
+    async with get_session_maker()() as session:
+        names = await session.scalars(select(CalendarSource.name).distinct())
+        return {name.strip().casefold() for name in names if name.strip()}
+
+
+async def feed_bindings(session, ids) -> dict[str, str]:
+    """Fingerprint the stored encrypted configuration, which ordinary syncs never rewrite."""
+    if not ids:
+        return {}
+    fingerprint = func.encode(func.sha256(func.convert_to(CalendarFeedConfig.encrypted_payload, "UTF8")), "hex")
+    query = select(CalendarFeedConfig.source_id, fingerprint).where(CalendarFeedConfig.source_id.in_(ids))
+    async with (nullcontext(session) if session is not None else get_session_maker()()) as reader:
+        return dict((await reader.execute(query)).all())
+
+
+def stored_feed_bindings(context) -> dict[str, str] | None:
+    """Compare the stored mapping independently of how its JSON was formatted."""
+    try:
+        bindings = json.loads(context.calendar_feed_bindings_json)
+    except (TypeError, ValueError):
+        return None
+    return bindings if isinstance(bindings, dict) and all(isinstance(value, str) for value in bindings.values()) else None
+
+
+async def permits_context(session, context) -> bool:
+    ids = json.loads(context.calendar_scope_json)
+    return (set(await readable_ids(session, ids)) == set(ids)
+            and await feed_bindings(session, ids) == stored_feed_bindings(context))
 
 
 async def get(source_id: str) -> CalendarSource | None:

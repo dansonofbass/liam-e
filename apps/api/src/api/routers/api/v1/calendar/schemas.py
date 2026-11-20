@@ -4,6 +4,8 @@ from datetime import date, datetime
 
 from uuid import UUID
 
+from db.accessors.calendar_source import ChatAccess
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -14,6 +16,7 @@ class SourceOut(BaseModel):
     timezone: str
     is_active: bool
     capabilities: list[str]
+    chat_access: ChatAccess = "unreadable"
     coverage_start: datetime | None
     coverage_end: datetime | None
     last_success_at: datetime | None

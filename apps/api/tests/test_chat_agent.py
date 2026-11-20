@@ -34,6 +34,11 @@ async def store(fake_store, monkeypatch):
     async def cancel(id):
         for r in rows:
             if r.conversation_id == id and r.proposal_status == 'pending': r.proposal_status = 'cancelled'
+    async def replace_card(card, source_id, connection_ref):
+        await cancel(card.conversation_id)
+        rows.append(card)
+        return card
+    monkeypatch.setattr(chat_message, 'replace_with_calendar_proposal', replace_card)
     for obj, name, fn in [(chat_conversation, 'create_conversation', create), (chat_conversation, 'get_conversation', get), (chat_conversation, 'touch_conversation', touch), (chat_message, 'add_message', add), (chat_message, 'get_message', get_message), (chat_message, 'list_messages', list_messages), (chat_message, 'cancel_open_proposals', cancel)]: monkeypatch.setattr(obj, name, fn)
     monkeypatch.setattr(mail_message, 'list_page', AsyncMock(return_value=[]))
     monkeypatch.setattr(mail_insight, 'get_for_messages', AsyncMock(return_value={}))
@@ -81,18 +86,17 @@ async def test_calendar_context_reference_only_reaches_model_when_visible_and_in
     events, fake = await run(store, monkeypatch, [['Antwort']], context_occurrence_id=requested,
         calendar_source_ids=scope, resolved_context=(conversation, snapshot, None))
     visible.assert_awaited_once_with(requested)
+    if case != 'in_scope':
+        assert [(event.event, event.code) for event in events] == [('error', 'calendar_reference_unavailable')]
+        assert fake.requests == [] and store.rows == []
+        return
     assert events[-1].event == 'done'
     messages = fake.requests[0]['messages']
     references = [message for message in messages if message.get('content', '').startswith('Strukturierter Terminbezug')]
-    if case == 'in_scope':
-        assert len(references) == 1
-        assert references[0]['role'] == 'user'
-        assert json.loads(references[0]['content'].split(': ', 1)[1]) == {
-            'occurrence_id': occurrence.id, 'source_id': occurrence.source_id,
-        }
-    else:
-        assert references == []
-        assert requested not in json.dumps(messages)
+    assert len(references) == 1 and references[0]['role'] == 'user'
+    assert json.loads(references[0]['content'].split(': ', 1)[1]) == {
+        'occurrence_id': occurrence.id, 'source_id': occurrence.source_id,
+    }
     assert occurrence.title not in json.dumps(messages)
     assert not any(event.event == 'calendars' and event.calendars for event in events)
     assert all(requested not in row.content and requested not in row.extras_json for row in store.rows)
@@ -460,13 +464,17 @@ async def test_invalid_message_ids_create_no_partial_proposal(store):
 
 
 @pytest.mark.parametrize('message', ['', 'x' * 8001])
-async def test_chat_turn_rejects_message_outside_length_bounds(message):
+@pytest.mark.parametrize('path,field', [('/api/v1/chat', 'message'), ('/api/v1/chat/stream', 'text')])
+async def test_chat_turn_rejects_message_outside_length_bounds(message, path, field):
     from api.routers.api.v1.chat.route import router
+    from api.routers.api.v1.chat.stream import router as stream_router
     app = FastAPI()
     app.include_router(router, prefix='/api/v1/chat')
+    app.include_router(stream_router, prefix='/api/v1/chat/stream')
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-        response = await client.post('/api/v1/chat', json={'message': message})
+        response = await client.post(path, json={field: message})
     assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'chat_invalid'
 
 
 async def test_calendar_history_guard_blocks_foreign_assistant_and_user_text_before_model(store, monkeypatch):
@@ -598,3 +606,378 @@ async def test_insight_batch_stops_and_discards_prior_results_after_revocation(s
     result = await agent_tools.execute_tool('get_insights', {'message_ids': [m.id for m in rows]}, ctx)
     assert json.loads(result.content) == {'error': 'context_revoked'}
     cached.assert_awaited_once_with(rows[0].id, locale=ctx.browser_locale, context_id='turn')
+
+
+@pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'independent_title', 'independent_location',
+                                   'repeated_title', 'repeated_title_after_duration', 'start_field', 'switch', 'reschedule', 'default', 'default_de',
+                                   'weekday', 'weekday_with_period', 'bare_name', 'bare_tool', 'bare_detail', 'bare_venue'])
+async def test_calendar_create_keeps_owner_target_through_scheduling_question(store, monkeypatch, case):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    def source(key):
+        return CalendarSource(id='source-' + key, name=key.title(), provider='google', connection_ref='synthetic-' + key,
+                              external_id=key, capabilities_json='["read","write"]', timezone='UTC')
+
+    work, personal = source('work'), source('personal')
+    async def catalog(*, ids):
+        return [(row, None) for row in (work, personal) if row.id in ids]
+
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_source, 'configured_names', AsyncMock(return_value={'work', 'personal'}))
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id=personal.id)))
+    conversation = await store.create()
+    snapshot = store.snapshot('with-calendars', calendar_scope_json=json.dumps([work.id, personal.id]))
+    first = {'action': 'create', 'reason': 'Review', 'title': 'Review', 'calendar_name': 'Work'}
+    choose = {'action': 'create', 'reason': 'Review', 'title': 'Review', 'start_local': '2026-11-21T10:00',
+              'end_local': '2026-11-21T11:00', 'timezone': 'UTC'}
+    if case == 'named':
+        choose['calendar_name'] = 'Work'
+    sprint = case.startswith('repeated_title') or case == 'start_field'
+    if sprint:
+        choose['title'] = 'Sprint Planning'
+    if case.startswith('weekday'):
+        hours = ('14:00', '15:00') if case == 'weekday_with_period' else ('12:00', '13:00')
+        choose.update(title='Lunch', start_local=f'2026-11-24T{hours[0]}', end_local=f'2026-11-24T{hours[1]}')
+    if case.startswith('independent_'):
+        choose['title'] = 'Lunch'
+    if case == 'independent_location':
+        choose['location'] = 'Café Central'
+    if case == 'bare_tool':
+        first.pop('calendar_name')
+    if case == 'bare_venue':
+        choose['location'] = 'Work kitchen'
+    rounds = [[chunk('propose_calendar_change', first)]] if case in ('tool_clarification', 'bare_tool') else []
+    additional = [['What time should it start?']] if case == 'repeated_title_after_duration' else []
+    fake = FakeMistral(streams=[*rounds, ['When should the review start?'],
+                                *additional, [chunk('propose_calendar_change', choose)], ['Response']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+
+    async def turn(text):
+        return [event async for event in agent.run_turn_events(conversation_id=conversation.id, text=text,
+            resolved_context=(conversation, snapshot, None))]
+
+    opening = 'Schedule Sprint Planning in the Work calendar' if sprint else 'Create a review in the Work calendar'
+    if case.startswith('bare_'):
+        opening = {'bare_detail': 'Schedule a review in Work tomorrow.', 'bare_venue': 'Schedule a review in the Work kitchen.'}.get(case, 'Schedule a review in Work')
+    if case == 'weekday':
+        opening = 'Schedule lunch in the Work calendar, Monday or Tuesday'
+    elif case == 'weekday_with_period':
+        opening = 'Schedule lunch in the Work calendar, on Monday morning or on Tuesday afternoon'
+    opened = await turn(opening)
+    assert opened[-1].event == 'done' and all(event.event != 'proposal' for event in opened)
+    if case == 'write_revoked':
+        work.capabilities_json = '["read"]'
+    if additional:
+        assert all(e.event != 'proposal' for e in await turn('Make it one hour long.'))
+    second = {
+        'fresh_request': 'Create another appointment tomorrow at ten',
+        'independent_title': 'Schedule lunch for Friday at ten',
+        'independent_location': 'Schedule Lunch for Friday at noon and please set the location to Café Central.',
+        'repeated_title': 'Schedule Sprint Planning for Friday at 10.',
+        'repeated_title_after_duration': 'Schedule Sprint Planning for Friday at 10.',
+        'start_field': 'Set the start time to Friday at 10.',
+        'switch': 'Tomorrow at ten, in the Personal calendar instead',
+        'reschedule': 'Schedule the review tomorrow at ten',
+        'default': 'Tomorrow at ten, use my default calendar instead',
+        'default_de': 'Morgen um zehn, nimm doch meinen Standardkalender',
+        'weekday': 'Tuesday at noon for one hour',
+        'weekday_with_period': 'Tuesday at 2 pm for one hour',
+    }.get(case, 'Tomorrow at ten')
+    finished = await turn(second)
+    assert finished[-1].event == 'done'
+    cards = [event.message for event in finished if event.event == 'proposal']
+    if case == 'write_revoked':
+        assert not cards
+        assert any('calendar_not_writable' in row.content for row in store.rows if row.role == 'tool')
+    else:
+        assert len(cards) == 1 and cards[0].proposal_status == 'pending'
+        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'independent_title', 'independent_location', 'switch', 'default', 'default_de', 'bare_venue') else work.id)
+        if case == 'bare_venue':
+            assert cards[0].proposal.calendar.after.location == 'Work kitchen'
+        assert cards[0].context.calendar_scope_json == snapshot.calendar_scope_json
+    assert 'calendar_clarification' not in json.dumps(fake.requests, default=str)
+
+
+@pytest.mark.parametrize('attempt', ['question', 'tool'])
+@pytest.mark.parametrize('opening, reply, expected', [
+    ('Schedule lunch', 'Tomorrow at noon', 'work'),
+    ('Schedule lunch in my default calendar', 'Tomorrow at noon', 'work'),
+    ('Schedule lunch', 'Tomorrow at noon, use my default calendar instead', 'home'),
+    ('Schedule lunch', 'Schedule a separate checkup tomorrow at noon', 'home'),
+    ('Schedule lunch', 'Tomorrow at noon', 'changed_connection'),
+])
+async def test_default_calendar_remains_bound_during_clarification(store, monkeypatch, attempt, opening, reply, expected):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    sources = [CalendarSource(id=name, name=name.title(), provider='google', connection_ref=f'synthetic-{name}',
+        external_id=name, capabilities_json='["read","write"]', timezone='UTC') for name in ('work', 'home')]
+    async def catalog(*, ids):
+        return [(source, None) for source in sources if source.id in ids]
+    settings = NS(default_source_id='work')
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=settings))
+    conversation = await store.create()
+    snapshot = store.snapshot('default-binding', calendar_scope_json='["work","home"]')
+    incomplete = {'action': 'create', 'title': 'Lunch'}
+    complete = {**incomplete, 'start_local': '2026-11-21T12:00', 'end_local': '2026-11-21T13:00'}
+    if 'checkup' in reply:
+        complete['title'] = 'Checkup'
+    first = [[chunk('propose_calendar_change', incomplete)]] if attempt == 'tool' else []
+    if first and 'my default calendar' in opening:
+        first.append([chunk('propose_calendar_change', incomplete, id='second-attempt')])
+    fake = FakeMistral(streams=[*first, ['What time?'], [chunk('propose_calendar_change', complete)], ['Response']])
+    stream = fake.stream_async
+    async def stream_with_settings_change(**kwargs):
+        if attempt == 'tool' and len(fake.requests) == 1:
+            assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_time_invalid'
+            settings.default_source_id = 'home'
+        return await stream(**kwargs)
+    monkeypatch.setattr(fake, 'stream_async', stream_with_settings_change)
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def cards(text):
+        return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(
+            conversation_id=conversation.id, text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
+
+    assert await cards(opening) == []
+    saved = json.loads(store.rows[-1].extras_json or '{}').get('calendar_clarification', {})
+    assert (saved.get('source_id'), saved.get('connection_ref')) == ('work', 'synthetic-work')
+    settings.default_source_id = 'home'
+    if expected == 'changed_connection':
+        sources[0].connection_ref = 'synthetic-different'
+        assert await cards(reply) == []
+        assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_not_writable'
+    else:
+        assert await cards(reply) == [expected]
+
+
+@pytest.mark.parametrize('attempt', ['question', 'tool', 'named_tool'])
+@pytest.mark.parametrize('owner_request, requested_name', [
+    ('Schedule a review', None),
+    ('Schedule a review in the Research calendar', 'Research'),
+    ('Schedule a review im Kalender Forschung', 'Forschung'),
+    ('Schedule a review in the R&D calendar', 'R&D'),
+    ('Plane die Besprechung im Kalender Team West', 'Team West'),
+    ('Trage die Übergabe im Kalender On Call ein', 'On Call'),
+])
+async def test_calendar_clarification_distinguishes_missing_and_unavailable_target(store, monkeypatch, attempt, owner_request, requested_name):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    sources = [CalendarSource(id=key, name=name, provider='google', connection_ref='synthetic', external_id=key,
+        capabilities_json='["read","write"]', timezone='UTC', is_active=active)
+        for key, name, active in [('personal', 'Personal', True), ('team', 'Team', True), ('west', 'Team West', False)]]
+    async def catalog(*, ids):
+        return [(source, None) for source in sources if source.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    conversation = await store.create()
+    snapshot = store.snapshot('missing-vs-unavailable', calendar_scope_json='["personal","team"]')
+    incomplete = {'action': 'create', 'title': 'Review'}
+    values = {**incomplete, 'start_local': '2026-11-21T10:00', 'end_local': '2026-11-21T11:00'}
+    if attempt == 'named_tool' and requested_name:
+        incomplete['calendar_name'] = requested_name
+    rounds = [[chunk('propose_calendar_change', incomplete)]] if attempt != 'question' else []
+    fake = FakeMistral(streams=[*rounds, ['How long should it last?'], ['What time should it start?'],
+                                [chunk('propose_calendar_change', values)], ['Which calendar?'],
+                                [chunk('propose_calendar_change', values)], ['Ready.']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def turn(text):
+        return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(conversation_id=conversation.id,
+            text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
+    assert await turn(owner_request) == []
+    if requested_name:
+        choice = json.loads(store.rows[-1].extras_json)['calendar_clarification']
+        assert choice['name'].casefold() == requested_name.casefold()
+    assert await turn('One hour.') == []
+    assert await turn('Morgen um neun.') == ([] if requested_name else ['personal'])
+    if requested_name:
+        assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_name_unknown'
+        if requested_name == 'Team West':
+            assert await turn('Team, bitte.') == ['team']
+        else:
+            assert await turn('Use my default calendar instead.') == ['personal']
+
+
+@pytest.mark.parametrize('destinations', ['in the Work calendar or in the Home calendar', 'in the Work or Home calendar',
+                                         'in the Work or Home calendar, rain or shine',
+                                         'tomorrow at noon. For the calendar, use Work or Home'])
+@pytest.mark.parametrize('reply, named', [('Home, please.', None), ('Not Work', None), ('Not Work', 'Home'),
+                                         ('Not Work', 'binding_changed'), ('Not Work', 'read_only')])
+async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(store, monkeypatch, destinations, reply, named):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    calendars = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='test',
+        external_id=key, capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'home', 'personal')]
+    async def catalog(*, ids):
+        return [(row, None) for row in calendars if row.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_source, 'configured_names', AsyncMock(return_value={s.name.casefold() for s in calendars}))
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    conversation = await store.create()
+    snapshot = store.snapshot('calendar-options', calendar_scope_json=json.dumps([s.id for s in calendars]))
+    values = {'action': 'create', 'title': 'Review', 'start_date': '2026-11-21', 'end_date': '2026-11-22'}
+    fake = FakeMistral(streams=[
+        [chunk('propose_calendar_change', {**values, 'calendar_name': 'Work'})],
+        [chunk('propose_calendar_change', values)], ['Which calendar?'],
+        [chunk('propose_calendar_change', {**values, 'calendar_name': named} if named == 'Home' else values)], ['Response'],
+    ])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def turn(text):
+        return [e async for e in agent.run_turn_events(conversation_id=conversation.id, text=text,
+                resolved_context=(conversation, snapshot, None))]
+    first = await turn('Put the review ' + destinations + '.')
+    assert first[-1].event == 'done' and all(e.event != 'proposal' for e in first)
+    assert [json.loads(row.content)['error'] for row in store.rows if row.role == 'tool'] == ['calendar_name_ambiguous'] * 2
+    home = calendars[1]
+    if named == 'binding_changed':
+        home.connection_ref = 'another-test-connection'
+    if named == 'read_only':
+        home.capabilities_json = '["read"]'
+    second = await turn(reply)
+    cards = [e.message.proposal.calendar.source_id for e in second if e.event == 'proposal']
+    if named in ('binding_changed', 'read_only'):
+        assert not cards
+        assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_not_writable'
+    else:
+        assert cards == ['home']
+
+
+@pytest.mark.parametrize('selection, paused, chosen', [
+    ('For the calendar, use Research or Home', {'research'}, 'home'),
+    ('For the calendar, use Home or Research', {'research'}, 'home'),
+    ('For the calendar, use the Work calendar, Research or Home', {'research'}, 'home'),
+    ('For the calendar, use the Work calendar, Research or Home', {'research', 'home'}, 'work'),
+    ('Use the Work calendar, Research or Home', {'research', 'home'}, 'work'),
+    ('in the Work calendar, Research, or Home', {'research', 'home'}, 'work'),
+    ('in the Work calendar, research or home', {'research', 'home'}, 'work'),
+    ('in the Work calendar, Removed One or Removed Two', {'research', 'home'}, 'work'),
+    ('For the calendar, use the Work calendar, team east or team west', {'research', 'home'}, 'work'),
+])
+async def test_calendar_offer_with_a_paused_source_waits_for_owner_choice(store, monkeypatch, selection, paused, chosen):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    sources = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='test', external_id=key,
+        capabilities_json='["read","write"]', timezone='UTC', is_active=key not in paused)
+        for key in ('research', 'home', 'personal', 'work')]
+    async def catalog(*, ids):
+        return [(source, None) for source in sources if source.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_source, 'configured_names', AsyncMock(return_value={s.name.casefold() for s in sources}))
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    conversation = await store.create()
+    snapshot = store.snapshot('unavailable-option', calendar_scope_json=json.dumps([source.id for source in sources if source.is_active]))
+    values = {'action': 'create', 'title': 'Lunch', 'start_local': '2026-11-21T12:00', 'end_local': '2026-11-21T13:00'}
+    unavailable_reply = [[chunk('propose_calendar_change', {**values, 'calendar_name': 'Research'})],
+                         ['Which available calendar?']] if len(paused) == 1 else []
+    fake = FakeMistral(streams=[[chunk('propose_calendar_change', values)], ['Which calendar?'], *unavailable_reply,
+                                [chunk('propose_calendar_change', values)], ['Ready.']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def cards(text):
+        return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(conversation_id=conversation.id,
+                text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
+    lead = 'Schedule lunch tomorrow at noon' if selection.startswith('in ') else 'Schedule lunch tomorrow at noon.'
+    assert await cards(f'{lead} {selection}.') == []
+    assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_name_ambiguous'
+    if unavailable_reply:
+        assert await cards('Research, please.') == []
+        assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_name_unknown'
+    assert await cards(chosen.title() + ', please.') == [chosen]
+
+
+@pytest.mark.parametrize('listing', ['Work, Home or Travel', 'Work, Home, or Travel', 'Work or Home or Travel',
+                                     '“Work”, “Home” or “Travel”', 'Work, Private or Travel', 'Work, “Private” or Travel'])
+async def test_calendar_elimination_requires_a_single_verified_option(store, monkeypatch, listing):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    sources = [CalendarSource(id=name.lower(), name=name, provider='google', connection_ref='synthetic',
+        external_id=name, capabilities_json='["read","write"]', timezone='UTC') for name in ('Work', 'Home', 'Travel', 'Personal')]
+    async def catalog(*, ids):
+        return [(s, None) for s in sources if s.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_source, 'configured_names', AsyncMock(return_value={s.name.casefold() for s in sources}))
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    conversation = await store.create()
+    snapshot = store.snapshot('alternatives', calendar_scope_json=json.dumps([s.id for s in sources]))
+    args = {'action': 'create', 'title': 'Review', 'start_date': '2026-11-21', 'end_date': '2026-11-22'}
+    fake = FakeMistral(streams=[[chunk('propose_calendar_change', args)], ['Which calendar?'],
+                                [chunk('propose_calendar_change', args)], ['Which remaining calendar?'],
+                                [chunk('propose_calendar_change', args)], ['Ready.']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def turn(text):
+        return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(conversation_id=conversation.id,
+            text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
+    assert await turn('Schedule the review in the ' + listing + ' calendar.') == []
+    assert await turn('Not Travel.') == []
+    assert await turn('Use Work.') == ['work']
+
+
+@pytest.mark.parametrize('attempt', ['plain_question', 'work_first', 'work_last'])
+async def test_unfinished_calendar_request_survives_a_completed_card(store, monkeypatch, attempt):
+    from db.accessors import calendar_proposal_queue, calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    calendars = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic',
+        external_id=key, capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'personal')]
+    async def catalog(*, ids):
+        return [(source, None) for source in calendars if source.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    queued = AsyncMock(return_value=None)
+    monkeypatch.setattr(calendar_proposal_queue, 'append', queued)
+    conversation = await store.create()
+    snapshot = store.snapshot('mixed-requests', calendar_scope_json='["work","personal"]')
+    dentist = {'action': 'create', 'title': 'Dentist', 'start_local': '2026-11-21T09:00', 'end_local': '2026-11-21T10:00'}
+    review = {'action': 'create', 'title': 'Review', 'calendar_name': 'Work'}
+    calls = {'plain_question': [dentist], 'work_first': [review, dentist], 'work_last': [dentist, review]}[attempt]
+    fake = FakeMistral(streams=[
+        [chunk('propose_calendar_change', args, id=f'call{i}', index=i) for i, args in enumerate(calls)],
+        ['When should the review start?'],
+        [chunk('propose_calendar_change', {'action': 'create', 'title': 'Review', 'start_local': '2026-11-21T15:00',
+                                          'end_local': '2026-11-21T16:00'})], ['Response'],
+    ])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def turn(text):
+        return [event.message.proposal.calendar async for event in agent.run_turn_events(
+            conversation_id=conversation.id, text=text, resolved_context=(conversation, snapshot, None)) if event.event == 'proposal']
+    assert [card.source_id for card in await turn('Schedule a dentist visit at 09:00. Create a review in the Work calendar.')] == ['personal']
+    assert await turn('Tomorrow at 15:00') == []
+    queued.assert_awaited_once()
+    assert queued.await_args.kwargs['payload']['calendar']['source_id'] == 'work'
+    first, = [row for row in store.rows if row.role == 'proposal']
+    assert first.id == queued.await_args.args[0] and first.proposal_status == 'pending'
+
+
+async def test_calendar_edit_does_not_set_a_target_for_the_next_create(store, monkeypatch):
+    from api.calendar import writes
+    from db.accessors import calendar_occurrence, calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    sources = [CalendarSource(id=name.lower(), name=name, provider='google', connection_ref='synthetic',
+        external_id=name, capabilities_json='["read","write"]', timezone='UTC') for name in ('Work', 'Personal')]
+    async def catalog(*, ids):
+        return [(source, None) for source in sources if source.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    monkeypatch.setattr(calendar_occurrence, 'get_visible', AsyncMock(return_value=NS(source_id='work')))
+    monkeypatch.setattr(writes, 'live', AsyncMock(return_value=writes.LiveEvent(occurrence_id='meeting', source_id='work',
+        title='Meeting', start_date=date(2026, 11, 21), end_date=date(2026, 11, 22), revision='one', editable=True)))
+    conversation = await store.create()
+    snapshot = store.snapshot('edit-then-create', calendar_scope_json='["work","personal"]')
+    fake = FakeMistral(streams=[
+        [chunk('propose_calendar_change', {'action': 'update', 'occurrence_id': 'meeting', 'title': 'Budget review'})],
+        ['The title change is ready for confirmation.'],
+        [chunk('propose_calendar_change', {'action': 'create', 'title': 'Lunch', 'start_local': '2026-11-27T12:00',
+                                          'end_local': '2026-11-27T13:00'})], ['Ready for confirmation.'],
+    ])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def turn(text):
+        return [e.message.proposal.calendar async for e in agent.run_turn_events(conversation_id=conversation.id,
+            text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
+    assert [c.source_id for c in await turn('Set the title of the meeting in the Work calendar to Budget review.')] == ['work']
+    assert 'calendar_clarification' not in json.loads(store.rows[-1].extras_json)
+    assert [c.source_id for c in await turn('Schedule lunch for Friday at noon.')] == ['personal']

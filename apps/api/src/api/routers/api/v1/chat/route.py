@@ -23,7 +23,7 @@ class ChatTurnRequest(BaseModel):
     model: str | None = None
     context_message_id: str | None = None
     context_occurrence_id: str | None = None
-    calendar_source_ids: list[str] = Field(default_factory=list, max_length=50)
+    calendar_source_ids: list[str] | None = Field(default=None, description="Omit to include every currently readable calendar. An explicit list narrows this turn.")
     calendar_timezone: str = Field(default='Europe/Berlin', max_length=100)
     task_source: Literal['none', 'all', 'unlinked', 'account', 'account_and_unlinked'] = 'none'
     task_source_account_id: str | None = Field(default=None, max_length=200)
@@ -41,6 +41,8 @@ async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
             if event.event == 'start':
                 conversation_id, user_id = event.conversation_id, event.user_message_id
             elif event.event == 'error':
+                if event.code == 'calendar_reference_unavailable':
+                    raise refuse(404, event.code, 'Dieser Termin ist für den Chat nicht mehr verfügbar.')
                 if event.code == 'context_revoked':
                     raise refuse(409, 'context_revoked', 'Die Vorlage, Präferenzen oder die Auswahl von Konten, Kalendern oder Aufgaben sind nicht mehr gültig. Starte eine neue Unterhaltung.')
                 if event.code == 'preferences_unavailable':

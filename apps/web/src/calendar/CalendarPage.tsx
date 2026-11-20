@@ -69,7 +69,7 @@ export function CalendarDetail({ id }: { id: string }) {
       {!writable && <><span className="le-tag">{texts.calendar.readOnlyTag}</span><p>{reason}</p></>}
       {href && <a className="le-link" href={href} target="_blank" rel="noopener noreferrer">{texts.calendar.googleOpen}</a>}
       <UnresolvedNotice writes={open} />
-      <div className="le-calendar-controls">{writable && <><Button variant="secondary" disabled={open.length > 0} onClick={() => setEditing(true)}>{texts.calendar.editEvent}</Button><Button variant="danger" disabled={open.length > 0} onClick={() => setDeleting(true)}>{texts.calendar.deleteEvent}</Button></>}<AskAboutCalendar occurrenceId={id} sourceId={source.id} /></div>
+      <div className="le-calendar-controls">{writable && <><Button variant="secondary" disabled={open.length > 0} onClick={() => setEditing(true)}>{texts.calendar.editEvent}</Button><Button variant="danger" disabled={open.length > 0} onClick={() => setDeleting(true)}>{texts.calendar.deleteEvent}</Button></>}{(source.chat_access === 'read_only' || source.chat_access === 'writable') && <AskAboutCalendar occurrenceId={id} />}</div>
       {editing && <EventDialog key={id} mode="edit" initial={{ ...row, occurrence_id: id }} sources={sources.data!} onClose={() => { setEditing(false); reread() }} />}
       {deleting && <DeleteEventDialog key={id} event={{ ...row, occurrence_id: id }} onClose={() => { setDeleting(false); reread() }} onDone={() => { void client.invalidateQueries({ queryKey: ['calendar'] }); void navigate({ to: '/calendar', search }) }} />}
     </>}

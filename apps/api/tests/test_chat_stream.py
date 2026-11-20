@@ -113,6 +113,14 @@ async def test_stream_disconnect_marks_answer_stopped(store, monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_close_after_start_saves_stopped_reply_before_turn_context_exists(store):
+    events = agent.run_turn_events(conversation_id=None, text='Synthetic message')
+    assert (await anext(events)).event == 'start'
+    await events.aclose()
+    assert store.rows[-1].role == 'assistant' and store.rows[-1].stopped
+
+
+@pytest.mark.anyio
 async def test_ping_keeps_pending_step_alive():
     from api.routers.api.v1.chat.stream import sse_frames
     from api.mail.chat_events import DeltaEvent

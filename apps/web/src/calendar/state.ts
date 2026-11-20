@@ -1,6 +1,13 @@
 import { REFERENCE_LOCALE, intlLocale, type Locale } from '../i18n/locales'
 import type { SourceOut, ApiRoutersApiV1CalendarSchemasOccurrenceOut as OccurrenceOut } from '../api/generated/types.gen'
 
+/** The local source ID stays stable across renames, reordering and duplicate provider names. */
+export function calendarTargetLabel(source: SourceOut, sources: SourceOut[]) {
+  const name = source.name.trim().toLowerCase()
+  const duplicate = sources.some(other => other.id !== source.id && other.name.trim().toLowerCase() === name)
+  return duplicate ? `${source.name} · ${source.id}` : source.name
+}
+
 const DAY = 86_400_000
 export const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 export function localDay(value: string | Date, timeZone = browserZone()) {

@@ -1,24 +1,102 @@
 """Prepare calendar cards from scoped server reads, never execute changes."""
 
-import json
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from db.accessors import calendar_occurrence, calendar_source
+from db.accessors import calendar_occurrence, calendar_settings, calendar_source
 from pydantic import ValidationError
 
 from api.calendar import writes
+from api.calendar.chat_target import CalendarChoice, appointment_destination, appointment_part, appointment_parts, named_choice, owner_selection, stated_destination
 from api.calendar.proposals import CalendarCommand, CalendarValues, values
 
 
+async def _create_source(arguments, ctx):
+    named = arguments.get("calendar_name")
+    source_id = arguments.get("source_id")
+    if source_id and source_id not in ctx.calendar_source_ids:
+        raise writes.WriteError("calendar_out_of_scope", 403)
+    parts = appointment_parts(ctx.user_text, ctx.calendar_choice)
+    part = appointment_part(parts, arguments.get("title"), arguments.get("appointment_request"))
+    if part is None or part in ctx.completed_calendar_requests:
+        raise writes.WriteError("calendar_appointment_ambiguous", 422)
+    ctx.calendar_request_part = part
+    entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
+    selection = owner_selection(part, arguments.get("title"), entries=entries, location=arguments.get("location"))
+    previous = ctx.requested_calendar
+    if previous is None:
+        previous, target = await appointment_destination(ctx.calendar_choice, part, arguments.get("title"),
+            first=part == parts[0], selection=selection, entries=entries)
+        if ctx.calendar_choice and ctx.calendar_choice.appointments:
+            ctx.calendar_continuations[part] = previous
+    else:
+        target = await stated_destination(selection, entries, previous)
+    if previous and previous.appointments:
+        raise writes.WriteError("calendar_appointment_ambiguous", 422)
+    if (previous and target and previous.source_id and previous.source_id == target.source_id
+            and previous.connection_ref != target.connection_ref):
+        raise writes.WriteError("calendar_not_writable", 403)
+    current = ctx.requested_calendar
+    if target and current and current.source_id and (
+            target.source_id == current.source_id or (target.use_default and current.use_default)):
+        # Another tool attempt on the same owner message retains the original binding.
+        target = current
+    if target:
+        ctx.calendar_targets[part] = target
+        if target.error:
+            raise writes.WriteError(target.error, 422)
+    pending = target or previous
+    if not target and previous and previous.error and named is None:
+        names = {source.name for source, _ in entries if selection.names_target(source.name)}
+        if len(names) == 1:
+            pending = named_choice(names.pop(), entries, selection, offered=previous.offered)
+    if named is not None and not (target and target.use_default):
+        if not isinstance(named, str) or not named.strip():
+            raise writes.WriteError("calendar_name_required", 422)
+        matches_pending = pending and pending.name.strip().casefold() == named.strip().casefold()
+        if target and target.name and not matches_pending:
+            raise writes.WriteError("calendar_name_required", 422)
+        if selection.names_target(named) and not matches_pending:
+            pending = named_choice(named, entries, selection, offered=previous.offered if previous else ())
+            if target:
+                pending = pending.model_copy(update={"excluded_source_ids": target.excluded_source_ids,
+                                                     "exclude_default": target.exclude_default})
+        elif not matches_pending:
+            raise writes.WriteError("calendar_name_required", 422)
+    if pending:
+        ctx.calendar_targets[part] = pending
+        if pending.error:
+            raise writes.WriteError(pending.error, 422)
+    using_default = pending is None or pending.source_id is None
+    if using_default:
+        chosen = (await calendar_settings.get()).default_source_id
+        if source_id and source_id != chosen:
+            raise writes.WriteError("calendar_name_required", 422)
+        if not chosen:
+            raise writes.WriteError("calendar_default_missing", 422)
+        if chosen not in ctx.calendar_source_ids:
+            raise writes.WriteError("calendar_default_unavailable", 409)
+    else:
+        if pending.source_id not in ctx.calendar_source_ids or (source_id and source_id != pending.source_id):
+            raise writes.WriteError("calendar_out_of_scope", 403)
+        chosen = pending.source_id
+    if pending and (chosen in pending.excluded_source_ids or
+                    pending.exclude_default and (using_default or chosen == (await calendar_settings.get()).default_source_id)):
+        ctx.calendar_targets[part] = pending.model_copy(update={"error": "calendar_name_required"})
+        raise writes.WriteError("calendar_name_required", 422)
+    return chosen
+
+
 async def prepare(arguments: dict, ctx) -> CalendarCommand:
-    allowed = {"action", "reason", "source_id", "occurrence_id", "title", "start_local", "end_local",
+    allowed = {"action", "reason", "source_id", "calendar_name", "appointment_request", "occurrence_id", "title", "start_local", "end_local",
                "start_date", "end_date", "timezone", "location", "description"}
     if set(arguments) - allowed:
         raise writes.WriteError("calendar_time_invalid", 422)
     action = arguments.get("action")
     source_id = arguments.get("source_id")
     occurrence_id = arguments.get("occurrence_id")
+    if action == "create":
+        source_id = await _create_source(arguments, ctx)
     if action in {"update", "delete"}:
         row = await calendar_occurrence.get_visible(occurrence_id or "")
         if row is None:
@@ -28,9 +106,15 @@ async def prepare(arguments: dict, ctx) -> CalendarCommand:
         source_id = row.source_id
     if source_id not in ctx.calendar_source_ids:
         raise writes.WriteError("calendar_out_of_scope", 403)
-    source = await calendar_source.get(source_id)
-    if source is None or not source.is_active or source.provider != "google" or "write" not in json.loads(source.capabilities_json):
+    entry = await calendar_source.catalog(ids=[source_id])
+    if not entry or calendar_source.chat_access(*entry[0]) != "writable":
         raise writes.WriteError("calendar_not_writable", 403)
+    source, _ = entry[0]
+    choice = ctx.requested_calendar
+    if action == "create" and choice and source.id == choice.source_id and source.connection_ref != choice.connection_ref:
+        raise writes.WriteError("calendar_not_writable", 403)
+    if action == "create" and (choice is None or not choice.source_id):
+        ctx.calendar_targets[ctx.calendar_request_part] = (choice or CalendarChoice()).bind_default(source)
     before = await writes.live(occurrence_id) if action in {"update", "delete"} else None
     if before and (before.source_id != source_id or not before.editable):
         raise writes.WriteError("calendar_event_not_editable")
@@ -53,6 +137,10 @@ async def prepare(arguments: dict, ctx) -> CalendarCommand:
             occurrence_id=occurrence_id, expected_revision=before.revision if before else None,
             timezone=zone, before=before, after=after)
         command.request(str(uuid4()))
+        if action == "create" and choice is None:
+            # The validated command owns this binding. There is no outstanding
+            # clarification to carry into a separate create.
+            del ctx.calendar_targets[ctx.calendar_request_part]
         return command
     except (ValidationError, ValueError, TypeError, ZoneInfoNotFoundError):
         raise writes.WriteError("calendar_time_invalid", 422) from None

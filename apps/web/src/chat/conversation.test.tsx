@@ -158,14 +158,12 @@ test('account scope and composer focus survive navigation to the conversation', 
 
 test('a live follow-up keeps the central mail grant and calendars after navigation', async () => {
   setup()
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
-  fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true, chat_access: 'read_only' }] } as never)
   await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
   expect(requestBody.text).toBe('Weiter fragen')
-  expect(requestBody.calendar_source_ids).toEqual(['work'])
+  expect(requestBody.calendar_source_ids).toBeUndefined()
   expect(requestBody.account_id).toBeNull()
   expect(requestBody.expected_mail_scope_version).toBe(4)
   expect(requestBody.conversation_id).toBe('c')
@@ -188,15 +186,14 @@ test('reload restores the saved account for the composer', async () => {
 
 test('the pencil on a mail card keeps the live calendar scope after navigation', async () => {
   setup()
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
-  fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true, chat_access: 'read_only' }] } as never)
   await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', snippet: 'Einwände bis Freitag möglich', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   expect(await screen.findByRole('img', { name: 'Dringend' })).toBeTruthy()
   expect(screen.getByText('Einwände bis Freitag möglich').classList.contains('le-mailref-snippet')).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
-  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1', calendar_source_ids: ['work'] })
+  expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1' })
+  expect(requestBody.calendar_source_ids).toBeUndefined()
   expect(requestBody.expected_mail_scope_version).toBe(4)
 })
 
@@ -409,29 +406,25 @@ test.each([null, 'a'])('a restarted chat preserves the permitted mail and task f
   expect(requestBody.history).toBeUndefined()
 })
 
-test('calendar selection is separate from mail and survives a scope-conflict restart', async () => {
+test('a newly readable calendar requires a fresh chat and keeps the previous turn restricted', async () => {
   const { client, router } = setup('/chat/c', false, 'a')
+  const source = { id: 'work', name: 'Arbeitskalender', is_active: true, chat_access: 'read_only' }
+  const prior = { ...historyRow('saved', 'assistant'), context: { ...currentContext, calendar_scope_json: '[]' } }
   await screen.findByRole('button', { name: 'Senden' })
-  const sources = [{ id: 'work', name: 'Arbeitskalender', provider: 'google', is_active: true }]
-  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
-  act(() => client.setQueryData(['calendar', 'sources'], sources))
-  fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Arbeitskalender' }))
-  globalThis.fetch = ((_url: unknown, init: RequestInit) => {
-    requestBody = JSON.parse(String(init.body))
-    return Promise.resolve(Response.json({ detail: { code: 'conversation_scope_change_requires_new' } }, { status: 409 }))
-  }) as typeof fetch
-  await send()
-  const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
-  expect(requestBody.calendar_source_ids).toEqual(['work'])
-  expect(requestBody.account_id).toBe('a')
-  fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
+  act(() => client.setQueryData(['history', 'c'], [prior]))
+  expect(await screen.findByRole('button', { name: 'Senden' })).toBeTruthy()
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [source] } as never)
+  act(() => client.setQueryData(['calendar', 'sources'], [source]))
+  const notice = await screen.findByText(de.calendarSettings.restart)
+  expect(screen.queryByRole('button', { name: 'Senden' })).toBeNull()
+  fireEvent.click(within(notice.closest('[role="status"], [role="alert"]') ?? notice.parentElement!).getByRole('button', { name: de.prompts.restart }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-  const scope = await screen.findByRole('button', { name: '1 Kalender ausgewählt' })
-  expect(scope.getAttribute('aria-expanded')).toBe('false')
-  fireEvent.click(scope)
-  expect(screen.getByRole('button', { name: 'Arbeitskalender' }).getAttribute('aria-pressed')).toBe('true')
-  expect(screen.queryByRole('button', { name: 'Privat' })).toBeNull()
+  await send()
+  expect(requestBody.conversation_id).toBeUndefined()
+  expect(requestBody.calendar_source_ids).toBeUndefined()
+  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.history).toBeUndefined()
+  expect(prior.context.calendar_scope_json).toBe('[]')
 })
 
 test('revoked context during an answer offers a fresh conversation', async () => {
@@ -735,4 +728,76 @@ test.each(['loading', 'playing'])('changing a grant stops %s speech', async phas
     if (previousAudio) Object.defineProperty(globalThis, 'Audio', previousAudio)
     else Reflect.deleteProperty(globalThis, 'Audio')
   }
+})
+
+test('adding another readable calendar still allows confirmation of the original named target', async () => {
+  const { client } = setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  const sources = ['work', 'second-team'].map(id => ({ id, name: 'Team', is_active: true, chat_access: 'writable' }))
+  const card: ChatMessageOut = {
+    ...historyRow('bound', 'proposal'), context: { ...currentContext, calendar_scope_json: '["second-team"]' },
+    proposal: { kind: 'calendar', reason: 'Test', items: [], calendar: {
+      action: 'create', source_id: 'second-team', timezone: 'UTC', after: { title: 'Review', start_date: '2026-11-21', end_date: '2026-11-22' },
+    } },
+  }
+  history = [card]
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: { ...card, proposal_status: 'done' }, response: { status: 200 } } as never)
+  act(() => {
+    client.setQueryData(['calendar', 'sources'], sources)
+    client.setQueryData(['history', 'c'], history)
+  })
+  await screen.findByText(de.calendarSettings.restart)
+  expect(screen.queryByPlaceholderText('Frag etwas zu deinen Mails …')).toBeNull()
+  await screen.findByText('Team · second-team')
+  expect(screen.queryByText('Team · work')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.cardConfirm }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+  expect(confirm.mock.calls[0]?.[0]).toEqual({ path: { proposal_id: 'bound' }, body: { selected_ids: [] } })
+})
+
+test('an unavailable calendar list can be retried before confirming the pending card', async () => {
+  const { client } = setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  const card: ChatMessageOut = {
+    ...historyRow('pending', 'proposal'), context: { ...currentContext, calendar_scope_json: '["work"]' },
+    proposal: { kind: 'calendar', reason: 'Test', items: [], calendar: { action: 'create', source_id: 'work', timezone: 'UTC' } },
+  }
+  const sources = [{ id: 'work', name: 'Work', is_active: true, chat_access: 'writable' }]
+  const list = spyOn(sdk, 'calendarSourcesList').mockRejectedValue(new Error('synthetic failure'))
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: { ...card, proposal_status: 'done' }, response: { status: 200 } } as never)
+  history = [card]
+  act(() => {
+    client.setQueryData(['calendar', 'sources'], sources)
+    client.setQueryData(['history', 'c'], history)
+  })
+  await act(() => client.refetchQueries({ queryKey: ['calendar', 'sources'] }))
+  await screen.findByText(de.calendar.error)
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: de.calendar.cardConfirm }).disabled).toBe(true)
+  expect(screen.queryByText(de.calendarSettings.cancelOnly)).toBeNull()
+  list.mockResolvedValue({ data: sources } as never)
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.retry }))
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: de.calendar.cardConfirm }).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.cardConfirm }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+})
+
+test('the original pending card becomes confirmable when a failed mail grant lookup recovers', async () => {
+  const { client } = setup('/chat/c')
+  const mail = spyOn(sdk, 'mailSummary').mockRejectedValue(new Error('synthetic summary failure'))
+  const card = { ...historyRow('original', 'proposal'), context: { ...currentContext, calendar_scope_json: '[]' } }
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: { ...card, proposal_status: 'done' } } as never)
+  history = [card]
+  act(() => client.setQueryData(['history', 'c'], [card]))
+  await act(() => client.refetchQueries({ queryKey: ['summary'] }))
+  const failure = await screen.findByText(de.chat.summaryError)
+  expect(screen.queryByText(de.chatAccounts.cancelOnly)).toBeNull()
+  expect(screen.queryByRole('button', { name: de.proposal.confirm.archive(1) })).toBeNull()
+  mail.mockResolvedValue({ data: summary } as never)
+  fireEvent.click(within(failure.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: de.chat.retry }))
+  const recovered = await screen.findByRole<HTMLButtonElement>('button', { name: de.proposal.confirm.archive(1) })
+  expect(recovered.disabled).toBe(false)
+  expect(recovered.closest('.le-chat-entry')?.id).toBe('message-original')
+  fireEvent.click(recovered)
+  await waitFor(() => expect(confirm.mock.calls[0]?.[0]?.path).toEqual({ proposal_id: 'original' }))
 })

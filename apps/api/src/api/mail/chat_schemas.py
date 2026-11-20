@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 from db.models.chat_message import ChatMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from api.mail.proposals import Proposal, proposal_view
 
@@ -29,6 +29,7 @@ class ContextOut(BaseModel):
     account_scope_json: str
     mail_scope_version: int | None = None
     calendar_scope_json: str = '[]'
+    calendar_sources_replaced: bool = False
     task_scope_json: str = '{"source":"none"}'
     preference_revision_id: str | None
     preference_revision_ids_json: str = '[]'
@@ -52,14 +53,22 @@ class ChatMessageOut(BaseModel):
 
 
 def to_message_out(message: ChatMessage) -> ChatMessageOut:
+    proposal = proposal_view(message)
     status = ""
     if message.role == "proposal":
         status = message.proposal_status
     elif message.role == "draft":
         status = {"sent": "done", "failed": "failed", "cancelled": "cancelled", "pending": "cancelled"}.get(json.loads(message.draft_json).get("status"), "cancelled")
+    try:
+        extras = ChatExtrasOut.model_validate_json(message.extras_json) if message.extras_json else ChatExtrasOut()
+    except ValidationError:
+        if not proposal or proposal.kind != "calendar":
+            raise
+        # The confirmed command lives in proposal_json. A damaged queue cannot hide the card.
+        extras = ChatExtrasOut()
     return ChatMessageOut(
         id=message.id, conversation_id=message.conversation_id, role=message.role,
         content=message.content, tool_name=message.tool_name, created_at=message.created_at,
-        proposal=proposal_view(message), proposal_status=status, stopped=message.stopped,
-        extras=ChatExtrasOut.model_validate_json(message.extras_json) if message.extras_json else ChatExtrasOut(),
+        proposal=proposal, proposal_status=status, stopped=message.stopped,
+        extras=extras,
     )

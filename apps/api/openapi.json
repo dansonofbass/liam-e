@@ -569,6 +569,58 @@
         "title": "CalendarRefOut",
         "type": "object"
       },
+      "CalendarSettingsOut": {
+        "properties": {
+          "default_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Source Id"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "default_source_id"
+        ],
+        "title": "CalendarSettingsOut",
+        "type": "object"
+      },
+      "CalendarSettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "default_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Source Id"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version",
+          "default_source_id"
+        ],
+        "title": "CalendarSettingsUpdate",
+        "type": "object"
+      },
       "CalendarValues": {
         "additionalProperties": false,
         "properties": {
@@ -1233,12 +1285,19 @@
             "title": "Account Id"
           },
           "calendar_source_ids": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 50,
-            "title": "Calendar Source Ids",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Omit to include every currently readable calendar. An explicit list narrows this turn.",
+            "title": "Calendar Source Ids"
           },
           "calendar_timezone": {
             "default": "Europe/Berlin",
@@ -1380,12 +1439,19 @@
             "title": "Account Id"
           },
           "calendar_source_ids": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 50,
-            "title": "Calendar Source Ids",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Omit to include every currently readable calendar. An explicit list narrows this turn.",
+            "title": "Calendar Source Ids"
           },
           "calendar_timezone": {
             "default": "Europe/Berlin",
@@ -1584,6 +1650,11 @@
             "default": "[]",
             "title": "Calendar Scope Json",
             "type": "string"
+          },
+          "calendar_sources_replaced": {
+            "default": false,
+            "title": "Calendar Sources Replaced",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -1904,6 +1975,7 @@
               "aborted",
               "internal",
               "context_revoked",
+              "calendar_reference_unavailable",
               "preferences_unavailable"
             ],
             "title": "Code",
@@ -4944,6 +5016,18 @@
             "title": "Capabilities",
             "type": "array"
           },
+          "chat_access": {
+            "default": "unreadable",
+            "enum": [
+              "writable",
+              "read_only",
+              "paused",
+              "disconnected",
+              "unreadable"
+            ],
+            "title": "Chat Access",
+            "type": "string"
+          },
           "coverage_end": {
             "anyOf": [
               {
@@ -7784,6 +7868,16 @@
               "title": "Occurrence Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "chat_scope",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Chat Scope",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -9980,6 +10074,60 @@
           }
         },
         "summary": "Update Settings"
+      }
+    },
+    "/api/v1/settings/calendar": {
+      "get": {
+        "operationId": "calendar_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Calendar Settings"
+      },
+      "patch": {
+        "operationId": "calendar_settings_update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Calendar Settings"
       }
     },
     "/api/v1/settings/chat": {

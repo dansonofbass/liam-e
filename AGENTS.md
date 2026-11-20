@@ -146,6 +146,8 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Preferences | GET | `/api/v1/preferences/contexts/{context_id}` | `preference_context_get` |
 | Settings | GET | `/api/v1/settings` | `settings_get` |
 | Settings / independent preference opt-ins | PATCH | `/api/v1/settings` | `settings_update` |
+| Settings | GET | `/api/v1/settings/calendar` | `calendar_settings_get` |
+| Settings | PATCH | `/api/v1/settings/calendar` | `calendar_settings_update` |
 | Settings | GET | `/api/v1/settings/chat` | `chat_settings_get` |
 | Settings | PATCH | `/api/v1/settings/chat` | `chat_settings_update` |
 | Settings | GET | `/api/v1/settings/ui` | `settings_ui_get` |
@@ -448,7 +450,7 @@ confirm that is still alive finds it taken at its own claim and sends nothing. R
 deletes its finished records, so without the calendar a missing record proves nothing: such a card
 ends with `calendar_unavailable`, never with "not applied". A late check preserves a card's
 terminal result. The private `connection_ref` is stored with the card but never sent to the browser, SSE or history,
-and cards do not keep the provider's `htmlLink`. The prompt rules are `APP_PROMPT_VERSION` 8.
+and cards do not keep the provider's `htmlLink`. The prompt rules are in `agent_prompt.py`.
 
 The live run of 2026-11-18 is in `docs/superpowers/probes/2026-11-18-google-calendar-write-probe.md`.
 All views group and display instants in the browser timezone; all-day entries stay on their
@@ -467,25 +469,65 @@ five minutes per source revision. A queued job does not prove provider freshness
 old state, missing coverage and pause. Their fixed IDs are skipped before enqueueing and before
 adapter execution.
 
-“Im Chat fragen” opens a new conversation with `context_occurrence_id` and an explicitly selected
-source. Calendar scope (`calendar_source_ids`, maximum 50) is separate from the mail account in
-the composer and stored as a JSON list in `chat_context.calendar_scope_json`. The database
-default `[]` gives legacy history no calendar access. Any selection change, including expansion,
-requires a new conversation when history exists (409 `conversation_scope_change_requires_new`);
-historical text remains. This conservative rule avoids an unsupported reassignment of old user,
-tool or assistant text. The resolver checks all historical message contexts; the agent rechecks
-the same provenance before building model messages. Pausing/removing invalidates a turn with that
-source at the next live check, including before further model and tool calls. Already transmitted
-model requests cannot be recalled. On restart the UI carries over only calendars it still knows
-to be active; without an evidenced selection the scope remains empty.
+“Im Chat fragen” passes the selected instance as `context_occurrence_id`. Each new turn
+automatically includes all active, connected sources with read permission. The settings page
+`/settings/calendar` lets the owner choose or clear a writable default for new appointments.
+Updates require the displayed settings version. A removed or paused default remains identifiable
+as unavailable until the owner changes it. The owner can name another writable calendar in a
+request. A scheduling clarification keeps the resolved source and connection with the pending
+appointment, including when it uses the default, and rechecks write permission. An explicit request
+to use the default again reads the current setting. Ambiguous names require clarification. Settings and cards
+identify duplicate names with the local source ID. The owner can use that ID to resolve a
+shared name or explicitly switch back to the default when answering a scheduling question. Each proposal binds the resolved source and
+connection before confirmation. A later settings change only affects new proposals.
+For multiple appointments in one owner message, a calendar choice belongs to its appointment.
+Each create call identifies the corresponding request. A completed card leaves the target
+of a separate unfinished appointment available for scheduling questions. Where the request
+or its target is ambiguous, the owner clarifies it before a card is created. A pending card can retry a failed lookup
+of either the mail grant or calendar access.
+When one request creates several appointments, only the first card appears initially. The API
+stores the other prepared commands with their chosen calendar and turn context. Confirming or
+cancelling a card makes the next one available for its own confirmation. An uncertain write
+keeps the next appointment waiting until the owner checks its outcome.
+Storing, queuing and publishing a calendar card each recheck the bound connection and write
+permission under a source lock. A rejected replacement leaves the original card pending.
+If a queued target loses write access, the next eligible appointment can proceed to confirmation.
+A later time clarification can complete an unfinished appointment even after every queued target
+lost write access. An independent pending card still takes precedence.
+Time questions keep each unfinished appointment's calendar and place in the same sequence,
+including when a confirmation publishes another card between the question and the owner's reply.
+A reply can give times for several named appointments together. When two appointments share
+a title, an explicit calendar can identify which one receives the supplied time.
+An explicitly excluded calendar stays excluded through scheduling questions. If the default
+is excluded, the owner chooses a target. An edit or deletion carries its target only on its own card.
+When the owner rules out one of several offered calendars, the chat keeps the remaining
+options and rechecks the selected source. A time clarification can repeat the pending appointment's title.
+Field updates keep that appointment's target. A list with an unidentified calendar requires an explicit choice.
+An unavailable calendar named by the owner stays unresolved through time and duration questions.
+Location changes affect the event's location. Only a separate calendar instruction selects the destination.
+
+The API persists the full set of readable IDs in `chat_context.calendar_scope_json`. For ICS
+subscriptions it also records a private fingerprint of each encrypted feed configuration.
+An ordinary retry keeps that binding. Replacing a feed under the same source ID requires a
+new conversation. Legacy turns without proof of the current feed also require a fresh chat.
+A caller
+supplying `calendar_source_ids` explicitly can still narrow that turn, including to an empty
+set. Older contexts retain their original scope. A changed set of sources requires a new
+conversation after history exists (409 `conversation_scope_change_requires_new`). Model requests
+and confirmed actions recheck stored access. A pending card can still be confirmed after additional
+sources become readable if the original scope and its bound target remain eligible. A lost explicit
+appointment reference returns 404 `calendar_reference_unavailable` before the model runs. After
+a provider denies access, scheduling retries preserves the block on cached appointments until
+that source completes a verified snapshot. The new chat starts with the current catalogue
+and carries over the unsent draft. The “Heute fällig” shortcut lists the available mail,
+calendar and task sources for the current selection.
 
 `api/mail/calendar_tools.py` provides `search_calendar` and `get_calendar_occurrence`: index
 access without a provider, local date windows up to 90 days and cursor pages up to 50 occurrences;
 tool parameters can only restrict the turn scope. Calendar text and source names appear in
-`untrusted_calendar_data`, including state and coverage. Calendar write tools are absent; the
-prompt also prohibits substitute actions as a mail proposal, calendar copy or task.
+`untrusted_calendar_data`, including state and coverage. Calendar changes use confirmation cards as described above.
 `calendar_timezone` comes from the browser; older clients without it retain Europe/Berlin. Chat
-extras and the SSE event `calendars` contain only `source_id`/`occurrence_id`, no titles or private
+responses and the SSE event `calendars` expose calendar references with only `source_id`/`occurrence_id`, no titles or private
 connection references. Citations reread their display through the authorized source and stable
 occurrence route; paused, removed or mismatched sources show no appointment data. Location and
 description are absent from the index contract and are not pretended. The autogenerated migration
@@ -608,6 +650,7 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `preference_candidate` — unconfirmed value with own source message, conversation, field/scope, expected target version/revision and optional card ID; status `pending|accepted|rejected|expired`. Rejected and invalidated candidates retain only content-free references.
 - `personalization_settings` — server-side singleton with independent `use_preferences` and `suggest_preferences` (both default false), version and ID and time of the last suggestion activation.
 - `preference_extraction` — content-free one-time ID per source message and extractor version; binds activation and prevents repeated model calls even after errors or restart.
+- `calendar_settings` — the owner’s default writable calendar for new chat proposals and its settings version. Clearing the default keeps calendar reads available.
 - `ui_settings` — the single cross-device interaction configuration with fixed server-side scope (`installation`, unique): `swipe_left`/`swipe_right` from allowlist `none`, `archive`, `toggle_read`, `trash`, `revision` for conditional updates and `updated_at`; initial assignment left `archive`, right `toggle_read`, plus `locale=browser`. Language overrides are `de` or `en`.
 
 ## Templates and turn context

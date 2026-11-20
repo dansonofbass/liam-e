@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions, type QueryClient } from '@tanstack/react-query'
-import { promptsList, promptGet, mailSummary, chatSettingsGet, chatMailReferenceGet, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
+import { promptsList, promptGet, mailSummary, calendarSettingsGet, chatSettingsGet, chatMailReferenceGet, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
 import { REFERENCE_LOCALE, type Locale } from '../i18n/locales'
 import type { SourceOut, MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData, UiSettingsOut } from './generated/types.gen'
 import { calendarIndexCache, readCalendarIndex, refreshChangedIndexes, sourceScope } from '../calendar/cache'
@@ -62,8 +62,20 @@ export const calendarSourcesQuery = () => queryOptions({
     return sources
   },
 })
+// Access may change in another tab while this one still has a fresh index cache.
+export const chatCalendarSourcesQuery = () => ({
+  ...calendarSourcesQuery(),
+  refetchOnWindowFocus: 'always' as const,
+})
 export const calendarPageQuery = (from: string, to: string, source?: string, cursor?: string) => queryOptions({ queryKey: ['calendar', 'occurrences', from, to, source, cursor], queryFn: () => unwrap(calendarOccurrencesList({ query: { from, to, source_ids: source ? [source] : undefined, cursor, limit: 50 }, throwOnError: true })) })
-export const calendarDetailQuery = (id: string) => queryOptions({ queryKey: ['calendar', 'occurrence', id], queryFn: () => unwrap(calendarOccurrenceGet({ path: { occurrence_id: id }, throwOnError: true })) })
+export const calendarDetailQuery = (id: string, chatScope = false) => queryOptions({
+  queryKey: ['calendar', chatScope ? 'chat-occurrence' : 'occurrence', id],
+  queryFn: () => unwrap(calendarOccurrenceGet({ path: { occurrence_id: id }, query: chatScope ? { chat_scope: true } : undefined, throwOnError: true })),
+})
+export const calendarSettingsQuery = () => queryOptions({
+  queryKey: ['calendar-settings'], refetchOnWindowFocus: 'always',
+  queryFn: ({ signal }) => unwrap(calendarSettingsGet({ signal, throwOnError: true })),
+})
 import { queryWindows } from '../calendar/state'
 export const calendarAgendaQuery = (from: string, to: string, timeZone: string, sources: SourceOut[], source?: string) => {
   const windows = queryWindows(from, to, timeZone)

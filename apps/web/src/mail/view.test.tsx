@@ -67,7 +67,7 @@ test('task proposal starts a fresh chat with explicit mail and task account scop
   expect(request()?.task_source).toBe('account')
   expect(request()?.task_source_account_id).toBe('a')
   expect(request()?.conversation_id).toBeUndefined()
-  expect(request()?.calendar_source_ids).toEqual([])
+  expect(request()?.calendar_source_ids).toBeUndefined()
   expect(confirm).not.toHaveBeenCalled()
   expect(action).not.toHaveBeenCalled()
   await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c1'))

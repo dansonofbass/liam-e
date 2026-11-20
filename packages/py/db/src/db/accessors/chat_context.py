@@ -7,14 +7,14 @@ Task sources must also fit the central mail grant and any focused account.
 import json
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from db.accessors import chat_settings, mail_message, user_preference
+from db.accessors import calendar_source, chat_settings, mail_message, user_preference
 from db.engine import get_session_maker
 from db.models._common import utcnow
+from db.models.calendar_occurrence import CalendarOccurrence
 from db.models.chat_context import ChatContext
 from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
 from db.models.mail_message import MailMessage
-from db.models.calendar_source import CalendarSource
 from db.models.prompt_revision import PromptRevision
 from db.models.prompt_template import OWNER_SCOPE, PromptTemplate
 from db.accessors.prompt_template import StaleVersion
@@ -25,6 +25,10 @@ class PreferencesUnavailable(Exception):
 
 
 class ContextUnavailable(Exception):
+    pass
+
+
+class CalendarReferenceUnavailable(Exception):
     pass
 
 
@@ -73,7 +77,8 @@ async def configure(conversation_id, expected_version, *, revision_id=None, chan
 
 
 async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version, calendar_source_ids=None,
-                  task_source='none', task_source_account_id=None, without_preferences=False, context_message_id=None, expected_mail_scope_version=None):
+                  task_source='none', task_source_account_id=None, without_preferences=False, context_message_id=None,
+                  context_occurrence_id=None, expected_mail_scope_version=None):
     async with get_session_maker()() as session:
         await user_preference.lock(session)
         grants = await chat_settings.in_session(session)
@@ -119,10 +124,13 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             ChatContext, (ChatMessage.context_id == ChatContext.id)
             & (ChatMessage.conversation_id == ChatContext.conversation_id)
         ).where(ChatMessage.conversation_id == conversation.id).distinct())).scalars().all() if existing else []
-        calendar_ids = sorted(set(calendar_source_ids or []))
-        active_ids = set((await session.execute(select(CalendarSource.id).where(
-            CalendarSource.is_active.is_(True), CalendarSource.id.in_(calendar_ids)))).scalars()) if calendar_ids else set()
-        if active_ids != set(calendar_ids):
+        calendar_ids = await calendar_source.readable_ids(session, calendar_source_ids)
+        bindings = await calendar_source.feed_bindings(session, calendar_ids)
+        if context_occurrence_id is not None:
+            source_id = await session.scalar(select(CalendarOccurrence.source_id).where(CalendarOccurrence.id == context_occurrence_id))
+            if source_id not in calendar_ids:
+                raise CalendarReferenceUnavailable
+        if calendar_source_ids is not None and set(calendar_ids) != set(calendar_source_ids):
             if history:
                 raise ScopeChange
             raise ValueError('calendar_invalid')
@@ -145,13 +153,15 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             if (prior is None or prior.mail_scope_version != grants.version
                     or json.loads(prior.account_scope_json) != account_scope
                     or sorted(json.loads(prior.calendar_scope_json)) != calendar_ids
+                    or calendar_source.stored_feed_bindings(prior) != bindings
                     or json.loads(prior.task_scope_json) != task_scope):
                 raise ScopeChange
         conversation.account_scope_json = provenance
         snapshot = ChatContext(conversation_id=conversation.id, prompt_revision_id=selected,
                                prompt_hash=revision.content_hash if revision else None,
                                app_prompt_version=app_prompt_version, account_scope_json=provenance, mail_scope_version=grants.version,
-                               calendar_scope_json=json.dumps(calendar_ids), task_scope_json=json.dumps(task_scope),
+                               calendar_scope_json=json.dumps(calendar_ids), calendar_feed_bindings_json=json.dumps(bindings, sort_keys=True),
+                               task_scope_json=json.dumps(task_scope),
                                preferences_enabled=enabled, preference_revision_ids_json=json.dumps(preference_ids))
         session.add(snapshot)
         await session.commit()
@@ -176,14 +186,16 @@ async def get_contexts(context_ids: set[str]) -> dict[str, ChatContext]:
         return {row.id: row for row in rows}
 
 
+async def replaced_feed_contexts(contexts) -> set[str]:
+    scopes = {context.id: json.loads(context.calendar_scope_json) for context in contexts.values()}
+    bindings = await calendar_source.feed_bindings(None, {source for ids in scopes.values() for source in ids})
+    return {key for key, ids in scopes.items() if
+            {source: bindings[source] for source in ids if source in bindings} != calendar_source.stored_feed_bindings(contexts[key])}
+
+
 async def is_live(context_id: str) -> bool:
     async with get_session_maker()() as session:
         row = await session.get(ChatContext, context_id)
         if row is None or row.revoked or not await chat_settings.permits_context(session, row):
             return False
-        ids = json.loads(row.calendar_scope_json)
-        if not ids:
-            return True
-        active = set((await session.execute(select(CalendarSource.id).where(
-            CalendarSource.id.in_(ids), CalendarSource.is_active.is_(True)))).scalars())
-        return active == set(ids)
+        return await calendar_source.permits_context(session, row)
