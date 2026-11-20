@@ -652,3 +652,62 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'switch', 'default', 'default_de') else work.id)
         assert cards[0].context.calendar_scope_json == snapshot.calendar_scope_json
     assert 'calendar_clarification' not in json.dumps(fake.requests, default=str)
+
+
+@pytest.mark.parametrize('dentist_first', [False, True])
+async def test_two_appointment_requests_bind_each_card_to_its_own_target(store, monkeypatch, dentist_first):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    calendars = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic',
+        external_id=key, capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'personal')]
+    async def catalog(*, ids):
+        return [(row, None) for row in calendars if row.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    conversation = await store.create()
+    snapshot = store.snapshot('two-requests', calendar_scope_json='["work","personal"]')
+    def create(title, start, end, **fields):
+        return {'action': 'create', 'title': title, 'start_local': '2026-11-21T' + start,
+                'end_local': '2026-11-21T' + end, 'timezone': 'UTC', **fields}
+    calls = [create('Review', '09:00', '10:00', calendar_name='Work'), create('Dentist appointment', '15:00', '15:30')]
+    if dentist_first:
+        calls.reverse()
+    fake = FakeMistral(streams=[[chunk('propose_calendar_change', args, id=f'call{i}', index=i) for i, args in enumerate(calls)], ['Response']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    owner = 'Put the 09:00 review in the Work calendar. Separately, schedule a dentist appointment at 15:00.'
+    events = [e async for e in agent.run_turn_events(conversation_id=conversation.id, text=owner,
+              resolved_context=(conversation, snapshot, None))]
+    assert events[-1].event == 'done'
+    cards = [json.loads(row.proposal_json)['calendar'] for row in store.rows if row.role == 'proposal']
+    assert len(cards) == 2
+    assert {c['after']['title']: c['source_id'] for c in cards} == {'Review': 'work', 'Dentist appointment': 'personal'}
+
+
+async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(store, monkeypatch):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    calendars = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='test',
+        external_id=key, capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'home', 'personal')]
+    async def catalog(*, ids):
+        return [(row, None) for row in calendars if row.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    conversation = await store.create()
+    snapshot = store.snapshot('calendar-options', calendar_scope_json=json.dumps([s.id for s in calendars]))
+    values = {'action': 'create', 'title': 'Review', 'start_date': '2026-11-21', 'end_date': '2026-11-22'}
+    fake = FakeMistral(streams=[
+        [chunk('propose_calendar_change', {**values, 'calendar_name': 'Work'})],
+        [chunk('propose_calendar_change', values)], ['Which calendar?'],
+        [chunk('propose_calendar_change', values)], ['Response'],
+    ])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def turn(text):
+        return [e async for e in agent.run_turn_events(conversation_id=conversation.id, text=text,
+                resolved_context=(conversation, snapshot, None))]
+    first = await turn('Put the review in the Work calendar or in the Home calendar.')
+    assert first[-1].event == 'done' and all(e.event != 'proposal' for e in first)
+    assert [json.loads(row.content)['error'] for row in store.rows if row.role == 'tool'] == ['calendar_name_ambiguous'] * 2
+    second = await turn('Home, please.')
+    assert [e.message.proposal.calendar.source_id for e in second if e.event == 'proposal'] == ['home']

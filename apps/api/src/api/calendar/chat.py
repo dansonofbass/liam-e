@@ -7,7 +7,7 @@ from db.accessors import calendar_occurrence, calendar_settings, calendar_source
 from pydantic import ValidationError
 
 from api.calendar import writes
-from api.calendar.chat_target import named_choice, owner_selection, stated_destination
+from api.calendar.chat_target import appointment_part, appointment_parts, named_choice, owner_selection, stated_destination
 from api.calendar.proposals import CalendarCommand, CalendarValues, values
 
 
@@ -16,11 +16,25 @@ async def _create_source(arguments, ctx):
     source_id = arguments.get("source_id")
     if source_id and source_id not in ctx.calendar_source_ids:
         raise writes.WriteError("calendar_out_of_scope", 403)
-    selection = owner_selection(ctx.user_text, arguments.get("title"))
+    parts = appointment_parts(ctx.user_text)
+    part = appointment_part(parts, arguments.get("title"), arguments.get("appointment_request"))
+    if part is None or part in ctx.completed_calendar_requests:
+        raise writes.WriteError("calendar_appointment_ambiguous", 422)
+    if part != ctx.calendar_request_part:
+        ctx.requested_calendar = None
+        ctx.calendar_request_part = part
+    selection = owner_selection(part, arguments.get("title"))
     entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
-    previous = ctx.requested_calendar or ctx.calendar_choice
+    previous = ctx.requested_calendar or (ctx.calendar_choice if part == parts[0] else None)
     target = stated_destination(selection, entries, previous)
+    if target and target.error:
+        ctx.requested_calendar = target
+        raise writes.WriteError(target.error, 422)
     pending = target or previous
+    if not target and previous and previous.error and named is None:
+        names = {source.name for source, _ in entries if selection.mentions(source.name)}
+        if len(names) == 1:
+            pending = named_choice(names.pop(), entries, selection)
     if named is not None and not (target and target.use_default):
         if not isinstance(named, str) or not named.strip():
             raise writes.WriteError("calendar_name_required", 422)
@@ -50,7 +64,7 @@ async def _create_source(arguments, ctx):
 
 
 async def prepare(arguments: dict, ctx) -> CalendarCommand:
-    allowed = {"action", "reason", "source_id", "calendar_name", "occurrence_id", "title", "start_local", "end_local",
+    allowed = {"action", "reason", "source_id", "calendar_name", "appointment_request", "occurrence_id", "title", "start_local", "end_local",
                "start_date", "end_date", "timezone", "location", "description"}
     if set(arguments) - allowed:
         raise writes.WriteError("calendar_time_invalid", 422)

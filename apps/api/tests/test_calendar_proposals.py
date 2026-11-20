@@ -138,7 +138,7 @@ def test_card_output_has_no_connection_ref(card):
 def test_prompt_version_and_calendar_rules_present():
     from api.mail.agent_prompt import APP_PROMPT_VERSION, system_prompt
     text = system_prompt(today=date(2026, 12, 5), account_scope=None)
-    assert APP_PROMPT_VERSION == "13" and "propose_calendar_change" in text
+    assert APP_PROMPT_VERSION == "14" and "propose_calendar_change" in text
     assert "ICS bleibt nur lesbar" in text
 
 
@@ -337,3 +337,17 @@ async def test_duplicate_calendar_needs_an_identifier_in_the_owner_request(monke
     reply = replace(ctx, user_text='Team · second-team', calendar_choice=first.requested_calendar)
     with pytest.raises(writes.WriteError, match='calendar_not_writable'):
         await chat.prepare({**args, 'source_id': 'second-team'}, reply)
+
+
+def test_calendar_appointment_excerpts_cannot_reassign_an_explicit_title_or_trim_an_alternative():
+    from api.calendar.chat_target import appointment_part, appointment_parts
+
+    first = 'Put the review in the Work calendar or the Home calendar'
+    second = 'Separately, schedule a dentist appointment'
+    parts = appointment_parts(first + '. ' + second + '.')
+    assert appointment_part(parts, 'Dentist', first) is None
+    assert appointment_part(parts, 'Review', 'Put the review in the Work calendar') is None
+    assert appointment_part(parts, 'Dentist', second) == parts[1]
+    assert appointment_part(parts, 'Different wording', None) is None
+    one = 'Schedule a review. Put it in the Work calendar.'
+    assert appointment_parts(one) == [one]

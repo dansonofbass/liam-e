@@ -479,6 +479,10 @@ checks its current write permission. Ambiguous names require clarification. Sett
 identify duplicate names with the local source ID. The owner can use that ID to resolve a
 shared name or explicitly switch back to the default when answering a scheduling question. Each proposal binds the resolved source and
 connection before confirmation. A later settings change only affects new proposals.
+For multiple appointments in one owner message, a calendar choice belongs to its appointment.
+Each create call identifies the corresponding request. Ambiguous associations and alternatives
+require clarification before a card can be created. A pending card can retry a failed lookup
+of either the mail grant or calendar access.
 
 The API persists the full set of readable IDs in `chat_context.calendar_scope_json`. For ICS
 subscriptions it also records a private fingerprint of each encrypted feed configuration.

@@ -56,6 +56,47 @@ def owner_selection(text: str, title: str | None = None) -> OwnerSelection:
     return OwnerSelection(text, tuple(names))
 
 
+_NEXT_REQUEST = re.compile(
+    r"(?:[.!?;]\s+|\n+|,\s*(?=separately|außerdem|separat)|\s+(?:and|und)\s+)"
+    r"(?=(?:(?:separately|also|then|außerdem|danach|separat)[, ]+)*"
+    r"(?:put|schedule|create|book|add|arrange|make|set|plan|erstelle|plane|trage|lege|buche)\b)", re.I)
+
+
+def appointment_parts(text: str) -> list[str]:
+    """Split independent requests outside quoted event text, keeping alternatives together."""
+    masked = _QUOTED.sub(lambda match: " " * len(match.group()), text)
+    parts = []
+    offset = 0
+    for boundary in _NEXT_REQUEST.finditer(masked):
+        # "Put it in Work" after a sentence about the review still describes that review.
+        if re.match(r"(?:put|schedule|book|set|plane|buche|trage)\s+(?:it|this one|that one|ihn|diesen Termin)\b",
+                    masked[boundary.end():], re.I):
+            continue
+        if part := text[offset:boundary.start()].strip():
+            parts.append(part)
+        offset = boundary.end()
+    return [*parts, text[offset:].strip()]
+
+
+def appointment_part(parts: list[str], title, excerpt) -> str | None:
+    if len(parts) == 1:
+        return parts[0]
+    title_matches = []
+    if isinstance(title, str) and title.strip():
+        pattern = r"(?<!\w)" + re.escape(title.strip().casefold()) + r"(?!\w)"
+        title_matches = [part for part in parts if re.search(pattern, part.casefold())]
+    if excerpt is None:
+        return title_matches[0] if len(title_matches) == 1 else None
+    if not isinstance(excerpt, str):
+        return None
+    # The whole clause is required: a model cannot discard a disjunction or use
+    # another appointment's calendar when the title identifies a different clause.
+    matches = [part for part in parts if part.strip(" .!?;") == excerpt.strip(" .!?;")]
+    if len(matches) != 1 or (title_matches and matches[0] not in title_matches):
+        return None
+    return matches[0]
+
+
 def _new_appointment(text: str) -> bool:
     explicit = r"\b(?:another|different|new|weiteren?|andere[nmrs]?|neue[nmrs]?)\s+(?:appointment|event|meeting|termin)\b"
     fresh = r"\b(?:create|schedule|book|arrange|add|erstelle|plane)\s+(?:a|an|another|einen?|eine[nmrs]?)\s"
@@ -74,7 +115,7 @@ def previous_choice(history, user_id: str, text: str, contexts) -> CalendarChoic
         return None
     try:
         data = json.loads(reply.extras_json).get("calendar_clarification")
-        return CalendarChoice.model_validate(data) if data and not _new_appointment(owner_selection(text).text) else None
+        return CalendarChoice.model_validate(data) if data and not _new_appointment(owner_selection(appointment_parts(text)[0]).text) else None
     except (AttributeError, TypeError, ValueError):
         return None
 
@@ -96,6 +137,10 @@ def stated_destination(selection: OwnerSelection, entries, previous: CalendarCho
     # asks for a time in plain text or leaves calendar_name out of its later tool call.
     text = selection.text
     use_default = bool(_DEFAULT.search(text))
+    if re.search(r"\b(?:or|oder)\b", text, re.I):
+        alternatives = {source.name.casefold() for source, _ in entries if selection.mentions(source.name)}
+        if len(alternatives) + int(use_default) > 1:
+            return CalendarChoice(error="calendar_name_ambiguous")
     identified = [source for source, _ in entries if selection.includes_id(source.id)
                   and (selection.mentions(source.name) or previous and previous.name.casefold() == source.name.casefold())]
     if identified:
@@ -120,14 +165,16 @@ def stated_destination(selection: OwnerSelection, entries, previous: CalendarCho
 
 
 async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
+    if len(appointment_parts(ctx.user_text)) != 1:
+        return CalendarChoice(error="calendar_name_ambiguous") if ctx.requested_calendar else None
     if ctx.requested_calendar:
         return ctx.requested_calendar
     # A completed unrelated answer ends the pending request. A further scheduling
     # question may carry the same source through another clarification.
     details = re.search(r"\b(?:when|what time|date|duration|title|location|where|how long|wann|zeit|uhrzeit|datum|dauer|titel|ort|wie lange)\b", answer, re.I)
-    if not details:
+    if not details and "?" not in answer:
         return None
-    creating = re.search(r"\b(?:create|schedule|book|arrange|add|erstelle\w*|plane\w*|trag\w*|anlegen|eintragen)\b", ctx.user_text, re.I)
+    creating = re.search(r"\b(?:create|schedule|book|arrange|add|put|set|erstelle\w*|plane\w*|trag\w*|anlegen|eintragen)\b", ctx.user_text, re.I)
     if ctx.calendar_choice or creating:
         entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
         return stated_destination(owner_selection(ctx.user_text), entries, ctx.calendar_choice) or ctx.calendar_choice

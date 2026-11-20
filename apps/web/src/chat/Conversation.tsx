@@ -90,7 +90,8 @@ export function turnOrder(messages: ChatMessageOut[]): ChatMessageOut[] {
 export function Conversation({ conversationId }: { conversationId: string }) {
   const { texts } = useI18n()
   const history = useQuery(historyQuery(conversationId))
-  const { data: summary } = useQuery(summaryQuery(true))
+  const mailSummary = useQuery(summaryQuery(true))
+  const summary = mailSummary.isSuccess ? mailSummary.data : undefined
   const { data: models = [] } = useQuery(modelsQuery())
   const { state, send, retry, retryWithoutPreferences, audioDraftLocked } = useChatSession()
   const tts = useAudioCapabilities()?.tts
@@ -109,15 +110,20 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const renderProposal = (message: ChatMessageOut) => {
     const context = message.context
     const revoked = !context || context.revoked || context.calendar_sources_replaced ||
-      grantVersion == null || context.mail_scope_version !== grantVersion
+      context.mail_scope_version == null || (grantVersion != null && context.mail_scope_version !== grantVersion) ||
+      (sources.isSuccess && !calendarScopeAvailable(context.calendar_scope_json, readable))
+    if (!revoked && message.proposal_status === 'pending' && grantVersion == null) {
+      return mailSummary.isPending
+        ? <p role="status">{texts.chat.loadingSummary}</p>
+        : <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void mailSummary.refetch() } }}>{texts.chat.summaryError}</Notice>
+    }
     const needsCalendars = !calendarScopeAvailable(context?.calendar_scope_json, new Set<string>())
     if (!revoked && needsCalendars && message.proposal_status === 'pending' && !sources.isSuccess && message.proposal?.kind !== 'calendar') {
       return sources.isError
         ? <Notice tone="danger" action={{ label: texts.calendar.retry, onClick: () => { void sources.refetch() } }}>{texts.calendar.error}</Notice>
         : <p role="status">{texts.calendar.loading}</p>
     }
-    const blocked = revoked || (sources.isSuccess && !calendarScopeAvailable(context?.calendar_scope_json, readable))
-    return <ProposalCard key={message.id} message={message} oldGrant={blocked} grantVersion={grantVersion} />
+    return <ProposalCard key={message.id} message={message} oldGrant={revoked} grantVersion={grantVersion} />
   }
   const speechEnabled = grantVersion != null && !oldGrant && tts?.status === 'available' && tts.formats.includes('audio/mpeg') &&
     typeof Audio !== 'undefined' && typeof URL.createObjectURL === 'function'

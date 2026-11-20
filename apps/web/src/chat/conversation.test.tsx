@@ -781,3 +781,23 @@ test('an unavailable calendar list can be retried before confirming the pending 
   fireEvent.click(screen.getByRole('button', { name: de.calendar.cardConfirm }))
   await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
 })
+
+test('the original pending card becomes confirmable when a failed mail grant lookup recovers', async () => {
+  const { client } = setup('/chat/c')
+  const mail = spyOn(sdk, 'mailSummary').mockRejectedValue(new Error('synthetic summary failure'))
+  const card = { ...historyRow('original', 'proposal'), context: { ...currentContext, calendar_scope_json: '[]' } }
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: { ...card, proposal_status: 'done' } } as never)
+  history = [card]
+  act(() => client.setQueryData(['history', 'c'], [card]))
+  await act(() => client.refetchQueries({ queryKey: ['summary'] }))
+  const failure = await screen.findByText(de.chat.summaryError)
+  expect(screen.queryByText(de.chatAccounts.cancelOnly)).toBeNull()
+  expect(screen.queryByRole('button', { name: de.proposal.confirm.archive(1) })).toBeNull()
+  mail.mockResolvedValue({ data: summary } as never)
+  fireEvent.click(within(failure.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: de.chat.retry }))
+  const recovered = await screen.findByRole<HTMLButtonElement>('button', { name: de.proposal.confirm.archive(1) })
+  expect(recovered.disabled).toBe(false)
+  expect(recovered.closest('.le-chat-entry')?.id).toBe('message-original')
+  fireEvent.click(recovered)
+  await waitFor(() => expect(confirm.mock.calls[0]?.[0]?.path).toEqual({ proposal_id: 'original' }))
+})
