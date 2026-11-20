@@ -25,7 +25,9 @@ class TargetUnavailable(ValueError):
 
 async def can_offer(session: AsyncSession, conversation_id: str, context_id: str | None,
                     source_id: str, connection_ref: str) -> bool:
-    context = await session.get(ChatContext, context_id) if context_id else None
+    if not context_id:
+        return False
+    context = await session.get(ChatContext, context_id, with_for_update={"read": True}, populate_existing=True)
     if (context is None or context.revoked or context.conversation_id != conversation_id
             or source_id not in json.loads(context.calendar_scope_json)):
         return False
@@ -53,6 +55,9 @@ async def _publish_next(session: AsyncSession, previous: ChatMessage, extras: di
         if await can_offer(session, previous.conversation_id, context_id, target["source_id"], target["connection_ref"]):
             break
     else:
+        # All prepared targets expired. A still-unfinished appointment can later
+        # use the empty sequence, as it could after settling a card with no queue.
+        extras["calendar_followups"] = []
         return None
     card = ChatMessage(conversation_id=previous.conversation_id, context_id=context_id,
         role="proposal", proposal_status="pending", content=payload["reason"], proposal_json=json.dumps(payload),

@@ -157,6 +157,135 @@ def test_concurrent_calendar_queue_entries_rechecked_at_publication(appointment_
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('confirm_first,superseded', [(False, False), (True, False), (True, True)])
+def test_unfinished_appointment_survives_discarded_queue(appointment_stream, confirm_first, superseded):
+    from datetime import date
+    from api.mail import proposals, agent_tools
+    from db.accessors import chat_message
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars()
+        opening = 'Schedule breakfast at 08:00. Schedule lunch in the Work calendar at 12:00. Schedule dinner in Personal.'
+        conversation, (first,) = await _appointment_turn(streams, None, opening, 'What time for dinner?',
+            _create_args('Breakfast', '08:00', '09:00'), _create_args('Lunch', '12:00', '13:00'), _create_args('Dinner'))
+        await _change_work_access('read_only')
+        if confirm_first:
+            assert (await proposals.confirm(first.id, selected_ids=[])).proposal_status == 'done'
+        else:
+            assert (await proposals.cancel(first.id)).proposal_status == 'cancelled'
+        assert [card.id for card in await _visible_cards(conversation)] == [first.id]
+        if superseded:
+            other_turn = agent_tools.TurnContext(conversation, None, date(2026, 11, 21), context_id=first.context.id,
+                calendar_source_ids=['personal', 'work'], user_text='Schedule an independent appointment in Personal.')
+            independent = await agent_tools.execute_tool('propose_calendar_change', _create_args('Independent', '10:00', '11:00'), other_turn)
+            assert independent.proposal_message.proposal_status == 'pending'
+        _, cards = await _appointment_turn(streams, conversation, 'Tomorrow at 18:00 for one hour.', 'Ready.',
+            _create_args('Dinner', '18:00', '19:00'))
+        if superseded:
+            assert not cards
+            history = await chat_message.list_messages(conversation)
+            assert json.loads([row for row in history if row.role == 'tool'][-1].content)['error'] == 'proposal_not_pending'
+            pending, = [card for card in await _visible_cards(conversation) if card.proposal_status == 'pending']
+            assert pending.id == independent.proposal_message.id
+            assert (await proposals.confirm(pending.id, selected_ids=[])).proposal_status == 'done'
+            assert dispatched == [('Breakfast', 'personal', first.id), ('Independent', 'personal', pending.id)]
+            return
+        dinner, = cards
+        assert dinner.proposal.calendar.source_id == 'personal'
+        assert (await proposals.confirm(dinner.id, selected_ids=[])).proposal_status == 'done'
+        expected = [('Breakfast', 'personal', first.id)] if confirm_first else []
+        assert dispatched == [*expected, ('Dinner', 'personal', dinner.id)]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('revoke_first', [False, True])
+def test_queue_publication_serializes_with_context_revocation(appointment_stream, monkeypatch, revoke_first):
+    from sqlalchemy.exc import DBAPIError
+    from api.mail import proposals
+    from db.accessors import calendar_proposal_queue as queue
+    from db.engine import get_session_maker
+    from db.models.chat_context import ChatContext
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars()
+        conversation, (first,) = await _appointment_turn(streams, None,
+            'Schedule breakfast in Personal. Schedule lunch in Work.', 'Ready.',
+            _create_args('Breakfast', '08:00', '09:00'), _create_args('Lunch', '12:00', '13:00'))
+        async def revoke():
+            try:
+                async with get_session_maker().begin() as session:
+                    context = await session.get(ChatContext, first.context.id, with_for_update={'nowait': True})
+                    context.revoked = True
+            except DBAPIError as error:
+                assert error.orig.sqlstate == '55P03'  # locked by the publishing transaction
+                return False
+            return True
+        revocations = []
+        if revoke_first:
+            assert await revoke()
+        else:
+            original = queue.can_offer
+            async def checked(*args):
+                allowed = await original(*args)
+                if allowed:
+                    revocations.append(await revoke())
+                return allowed
+            monkeypatch.setattr(queue, 'can_offer', checked)
+        await proposals.cancel(first.id)
+        pending = [c for c in await _visible_cards(conversation) if c.proposal_status == 'pending']
+        if revoke_first:
+            assert not pending
+        else:
+            assert revocations == [False]
+            card, = pending
+            assert await revoke()
+            with pytest.raises(proposals.ProposalContextRevokedError):
+                await proposals.confirm(card.id, selected_ids=[])
+        assert not dispatched
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('representation', ['reordered', 'changed', 'malformed'])
+def test_feed_binding_representation_during_a_real_chat_turn(appointment_stream, representation):
+    from fastapi import HTTPException
+    from sqlalchemy import select
+    from api.mail import agent
+    from db.accessors import chat_context
+    from db.engine import get_session_maker
+    from db.models.calendar_feed_config import CalendarFeedConfig
+    from db.models.calendar_source import CalendarSource
+    from db.models.chat_context import ChatContext
+    streams, _ = appointment_stream
+
+    async def run():
+        async with get_session_maker().begin() as session:
+            for key in ('a', 'b'):
+                session.add(CalendarSource(id=key, name=key, provider='ics', connection_ref='synthetic-' + key,
+                    external_id=key, timezone='UTC', capabilities_json='["read"]'))
+                session.add(CalendarFeedConfig(source_id=key, encrypted_payload='synthetic-config-' + key))
+        conversation, _ = await _appointment_turn(streams, None, 'What is on the calendar?', 'Synthetic agenda.')
+        async with get_session_maker().begin() as session:
+            prior = (await session.scalars(select(ChatContext).where(ChatContext.conversation_id == conversation))).one()
+            bindings = json.loads(prior.calendar_feed_bindings_json)
+            assert set(bindings) == {'a', 'b'}
+            if representation == 'changed':
+                bindings['a'] = 'a different fingerprint'
+            prior.calendar_feed_bindings_json = (json.dumps(dict(reversed(bindings.items())), indent=2)
+                if representation != 'malformed' else '{')
+        if representation == 'reordered':
+            assert await chat_context.is_live(prior.id)
+            await _appointment_turn(streams, conversation, 'Continue.', 'The same two calendars.')
+        else:
+            assert not await chat_context.is_live(prior.id)
+            with pytest.raises(HTTPException) as refusal:
+                _ = [event async for event in agent.run_turn_events(conversation_id=conversation, text='Continue.')]
+            assert refusal.value.detail['code'] == 'conversation_scope_change_requires_new'
+            assert not streams
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('dentist_first', [False, True])
 @pytest.mark.parametrize('shared_verb,clarify,early', [(False, False, False), (True, False, False),
                                                     (False, True, False), (False, True, True)])

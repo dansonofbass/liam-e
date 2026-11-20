@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.exc import SQLAlchemyError
 
 from db.accessors import chat_conversation as conversation_access, chat_message as message_access
-from db.accessors import mail_account, mail_insight, mail_message, chat_context, calendar_occurrence, preference_revision
+from db.accessors import mail_account, mail_insight, mail_message, chat_context, calendar_occurrence, calendar_source, preference_revision
 from api.calendar.chat_target import choice_for_clarification, previous_choice
 from api.locales import DEFAULT_LOCALE, Locale, resolve_locale
 from api.mail.context_resolver import resolve_context
@@ -124,6 +124,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         history = await message_access.list_messages(conversation.id)
         context_ids = {row.context_id for row in history if row.context_id}
         contexts = await chat_context.get_contexts(context_ids)
+        bindings = calendar_source.stored_feed_bindings(snapshot)
         # Defense in depth for concurrent turns: no historical text, even a user or
         # assistant answer, may cross a mail, task or calendar boundary.
         for row in history:
@@ -132,7 +133,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                     or previous.mail_scope_version != snapshot.mail_scope_version
                     or json.loads(previous.account_scope_json) != account_scope
                     or set(json.loads(previous.calendar_scope_json)) != set(ctx.calendar_source_ids)
-                    or previous.calendar_feed_bindings_json != snapshot.calendar_feed_bindings_json
+                    or bindings is None or calendar_source.stored_feed_bindings(previous) != bindings
                     or json.loads(previous.task_scope_json) != ctx.task_scope):
                 yield ErrorEvent(code='context_revoked')
                 return

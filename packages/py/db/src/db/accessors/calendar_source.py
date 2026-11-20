@@ -75,10 +75,19 @@ async def feed_bindings(session, ids) -> dict[str, str]:
         return dict((await reader.execute(query)).all())
 
 
+def stored_feed_bindings(context) -> dict[str, str] | None:
+    """Compare the stored mapping independently of how its JSON was formatted."""
+    try:
+        bindings = json.loads(context.calendar_feed_bindings_json)
+    except (TypeError, ValueError):
+        return None
+    return bindings if isinstance(bindings, dict) and all(isinstance(value, str) for value in bindings.values()) else None
+
+
 async def permits_context(session, context) -> bool:
     ids = json.loads(context.calendar_scope_json)
     return (set(await readable_ids(session, ids)) == set(ids)
-            and await feed_bindings(session, ids) == json.loads(context.calendar_feed_bindings_json))
+            and await feed_bindings(session, ids) == stored_feed_bindings(context))
 
 
 async def get(source_id: str) -> CalendarSource | None:

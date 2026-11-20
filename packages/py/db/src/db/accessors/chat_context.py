@@ -153,7 +153,7 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             if (prior is None or prior.mail_scope_version != grants.version
                     or json.loads(prior.account_scope_json) != account_scope
                     or sorted(json.loads(prior.calendar_scope_json)) != calendar_ids
-                    or json.loads(prior.calendar_feed_bindings_json) != bindings
+                    or calendar_source.stored_feed_bindings(prior) != bindings
                     or json.loads(prior.task_scope_json) != task_scope):
                 raise ScopeChange
         conversation.account_scope_json = provenance
@@ -190,7 +190,7 @@ async def replaced_feed_contexts(contexts) -> set[str]:
     scopes = {context.id: json.loads(context.calendar_scope_json) for context in contexts.values()}
     bindings = await calendar_source.feed_bindings(None, {source for ids in scopes.values() for source in ids})
     return {key for key, ids in scopes.items() if
-            {source: bindings[source] for source in ids if source in bindings} != json.loads(contexts[key].calendar_feed_bindings_json)}
+            {source: bindings[source] for source in ids if source in bindings} != calendar_source.stored_feed_bindings(contexts[key])}
 
 
 async def is_live(context_id: str) -> bool:

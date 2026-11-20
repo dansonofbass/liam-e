@@ -492,6 +492,8 @@ keeps the next appointment waiting until the owner checks its outcome.
 Storing, queuing and publishing a calendar card each recheck the bound connection and write
 permission under a source lock. A rejected replacement leaves the original card pending.
 If a queued target loses write access, the next eligible appointment can proceed to confirmation.
+A later time clarification can complete an unfinished appointment even after every queued target
+lost write access. An independent pending card still takes precedence.
 Time questions keep each unfinished appointment's calendar and place in the same sequence,
 including when a confirmation publishes another card between the question and the owner's reply.
 A reply can give times for several named appointments together. When two appointments share
