@@ -283,12 +283,15 @@ test('a removed start template can be cleared before sending', async () => {
   expect(request.prompt_revision_id).toBeNull()
 })
 
-test('about displays a mail and sends its context, which can be removed', async () => {
-  const router = setup(true, '/?about=mail1')
+test.each(['mail1', 'former-mail-id'])('about=%s loads the authorized reference and sends its canonical mail ID', async requestedId => {
+  const router = setup(true, '/?about=' + requestedId)
   expect(await screen.findByText('Termin')).toBeTruthy()
   expect(screen.getByRole('button', { name: /Mail öffnen.*Termin.*Anna/ })).toBeTruthy()
   expect(screen.getByText('Gmail')).toBeTruthy()
   const field = await screen.findByPlaceholderText(de.inbox.mailQuestionPlaceholder)
+  expect(sdk.chatMailReferenceGet).toHaveBeenCalledWith(expect.objectContaining({
+    path: { message_id: requestedId }, query: { expected_version: 7, context_id: undefined },
+  }))
   expect(document.activeElement).toBe(field)
   expect(screen.queryByText(de.chat.greetingFirst)).toBeNull()
   fireEvent.change(field, { target: { value: 'Was steht drin?' } })
@@ -341,4 +344,14 @@ test('an excluded mail reference shows its grant error and offers no contextual 
   expect(screen.queryByText('Termin')).toBeNull()
   expect(screen.queryByPlaceholderText(de.inbox.mailQuestionPlaceholder)).toBeNull()
   expect(screen.getByRole('button', { name: de.chat.removeReference })).toBeTruthy()
+})
+
+test('an alias that loses authorization hides the previous preview and composer', async () => {
+  const { testClient } = setup(true, '/?about=former-mail-id')
+  await screen.findByPlaceholderText(de.inbox.mailQuestionPlaceholder)
+  spyOn(sdk, 'chatMailReferenceGet').mockResolvedValue({ error: {}, response: new Response(null, { status: 404 }) } as never)
+  await act(() => testClient.invalidateQueries({ queryKey: ['chat-mail-reference', 'former-mail-id'] }))
+  expect(await screen.findByText(de.errors.chat_account_not_granted)).toBeTruthy()
+  expect(screen.queryByText('Termin')).toBeNull()
+  expect(screen.queryByPlaceholderText(de.inbox.mailQuestionPlaceholder)).toBeNull()
 })

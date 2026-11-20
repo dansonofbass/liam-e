@@ -43,7 +43,7 @@ function Greeting() {
   const quickSend = (text: string) => {
     if (busy || audioDraftLocked) return
     setStarted(true)
-    void send({ text, account_id: about ? mail?.account_id : search.chatAccount, context_message_id: about, context_occurrence_id: calendarAbout, model, prompt_revision_id: revision })
+    void send({ text, account_id: about ? mail?.account_id : search.chatAccount, context_message_id: mail?.id, context_occurrence_id: calendarAbout, model, prompt_revision_id: revision })
   }
   const modelGone = started && state.phase === 'error' && !state.conversationId && state.errorCode === 'model_unknown'
   useEffect(() => {
@@ -60,7 +60,7 @@ function Greeting() {
   }, [started, state.conversationId, navigate])
   const data = summary.data
   const turnError = started && state.phase === 'error' && !state.conversationId
-  const mail = reference.data
+  const mail = reference.isSuccess ? reference.data : undefined
   const account = mail && data?.accounts.find(item => item.id === mail.account_id)
   return <div className={about ? 'le-chat-view le-chat-view--mail-question' : 'le-chat-view'}>
     <ChatHeader modelMenu={<ModelMenu disabled={audioDraftLocked} model={model} onChange={setModel} />}>
@@ -89,7 +89,7 @@ function Greeting() {
         {mail && account && <MailReference compact mail={mail} accountLabel={account && providerLabel(account)} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} />}
         <IconButton icon="x" label={texts.chat.removeReference} onClick={() => { void navigate({ to: '/', search: { about: undefined } }) }} />
       </div>}
-      {(!about || (reference.isSuccess && mail?.id === about && account)) && <ChatComposer key={about} autoFocus={Boolean(about)} contextMail={mail} contextOccurrenceId={calendarAbout} model={model} promptRevisionId={revision} onSend={() => setStarted(true)} />}
+      {(!about || (mail && account)) && <ChatComposer key={about} autoFocus={Boolean(about)} contextMail={mail} contextOccurrenceId={calendarAbout} model={model} promptRevisionId={revision} onSend={() => setStarted(true)} />}
     </div>}
   </div>
 }
