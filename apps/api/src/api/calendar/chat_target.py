@@ -537,6 +537,11 @@ async def _affirmative_destination(selection: OwnerSelection, entries, previous:
             patterns.append(rf"(?<!\w){_PREFIX}{operand}(?=\s*(?:[,.;!?]|$))")
         for pattern in patterns:
             names.update(match["name"] for match in re.finditer(pattern, folded))
+        # A complete source name in "in Work" can bind a scheduling question.
+        # A longer venue or a scheduling month such as "in May" cannot.
+        bare = rf"(?<!\w)(?:in|into|im)\s+{_DETERMINER}{operand}(?!{_NAME_CONTINUATION})"
+        names.update(match["name"] for match in re.finditer(bare, folded)
+                     if not _SCHEDULING_OPTION.fullmatch(match["name"]))
     # The owner can explicitly name a paused, removed or unknown calendar. The
     # readable catalog cannot supply that name; only the owner's text can.
     if not use_default and not names:

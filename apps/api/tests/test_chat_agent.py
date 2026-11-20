@@ -601,13 +601,13 @@ async def test_insight_batch_stops_and_discards_prior_results_after_revocation(s
 
 @pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'independent_title', 'independent_location',
                                    'repeated_title', 'repeated_title_after_duration', 'start_field', 'switch', 'reschedule', 'default', 'default_de',
-                                   'weekday', 'weekday_with_period'])
+                                   'weekday', 'weekday_with_period', 'bare_name', 'bare_tool', 'bare_detail', 'bare_venue'])
 async def test_calendar_create_keeps_owner_target_through_scheduling_question(store, monkeypatch, case):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
 
     def source(key):
-        return CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic-' + key,
+        return CalendarSource(id='source-' + key, name=key.title(), provider='google', connection_ref='synthetic-' + key,
                               external_id=key, capabilities_json='["read","write"]', timezone='UTC')
 
     work, personal = source('work'), source('personal')
@@ -634,7 +634,11 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         choose['title'] = 'Lunch'
     if case == 'independent_location':
         choose['location'] = 'Café Central'
-    rounds = [[chunk('propose_calendar_change', first)]] if case == 'tool_clarification' else []
+    if case == 'bare_tool':
+        first.pop('calendar_name')
+    if case == 'bare_venue':
+        choose['location'] = 'Work kitchen'
+    rounds = [[chunk('propose_calendar_change', first)]] if case in ('tool_clarification', 'bare_tool') else []
     additional = [['What time should it start?']] if case == 'repeated_title_after_duration' else []
     fake = FakeMistral(streams=[*rounds, ['When should the review start?'],
                                 *additional, [chunk('propose_calendar_change', choose)], ['Response']])
@@ -645,6 +649,8 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
             resolved_context=(conversation, snapshot, None))]
 
     opening = 'Schedule Sprint Planning in the Work calendar' if sprint else 'Create a review in the Work calendar'
+    if case.startswith('bare_'):
+        opening = {'bare_detail': 'Schedule a review in Work tomorrow.', 'bare_venue': 'Schedule a review in the Work kitchen.'}.get(case, 'Schedule a review in Work')
     if case == 'weekday':
         opening = 'Schedule lunch in the Work calendar, Monday or Tuesday'
     elif case == 'weekday_with_period':
@@ -677,7 +683,9 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         assert any('calendar_not_writable' in row.content for row in store.rows if row.role == 'tool')
     else:
         assert len(cards) == 1 and cards[0].proposal_status == 'pending'
-        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'independent_title', 'independent_location', 'switch', 'default', 'default_de') else work.id)
+        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'independent_title', 'independent_location', 'switch', 'default', 'default_de', 'bare_venue') else work.id)
+        if case == 'bare_venue':
+            assert cards[0].proposal.calendar.after.location == 'Work kitchen'
         assert cards[0].context.calendar_scope_json == snapshot.calendar_scope_json
     assert 'calendar_clarification' not in json.dumps(fake.requests, default=str)
 
