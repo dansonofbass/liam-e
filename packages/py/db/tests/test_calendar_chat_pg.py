@@ -28,12 +28,12 @@ def appointment_stream(pg_db, monkeypatch):
     return fake.streams, dispatched
 
 
-async def _seed_appointment_calendars():
+async def _seed_appointment_calendars(first='work'):
     from db.accessors import calendar_settings
     from db.engine import get_session_maker
     from db.models.calendar_source import CalendarSource
     async with get_session_maker().begin() as session:
-        for key in ('work', 'personal'):
+        for key in (first, 'personal'):
             session.add(CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic-' + key,
                 external_id=key, capabilities_json='["read","write"]', timezone='UTC'))
     await calendar_settings.update(1, 'personal')
@@ -59,6 +59,16 @@ async def _visible_cards(conversation):
     from api.mail.chat_schemas import to_message_out
     from db.accessors import chat_message
     return [to_message_out(row) for row in agent.visible_messages(await chat_message.list_messages(conversation)) if row.role == 'proposal']
+
+
+async def _appointment_turn(streams, conversation, text, answer, *calls):
+    from api.mail import agent
+    if calls:
+        streams.append(_calendar_calls(*calls))
+    streams.append([answer])
+    events = [event async for event in agent.run_turn_events(conversation_id=conversation, text=text)]
+    assert events[-1].event == 'done'
+    return events[-1].conversation_id, [event.message for event in events if event.event == 'proposal']
 
 
 @pytest.mark.parametrize('dentist_first', [False, True])
@@ -270,7 +280,7 @@ def test_clarify_same_title_by_original_calendar(appointment_stream, monkeypatch
                 return setting
             monkeypatch.setattr(calendar_settings, 'get', change_after_read)
         if ask_duration:
-            streams.append(['How long should this review last?'])
+            streams.append(['Which duration would work for this review?' if switch_default else 'How long should this review last?'])
             answer = [e async for e in agent.run_turn_events(conversation_id=conversation, text=reply)]
             assert answer[-1].event == 'done' and not await _visible_cards(conversation)
             first, = await turn('One hour.', morning, 'What time is the other review?')
@@ -290,6 +300,65 @@ def test_clarify_same_title_by_original_calendar(appointment_stream, monkeypatch
         assert stored['connection_ref'] == 'synthetic-personal'
         assert (await proposals.confirm(other.id, selected_ids=[])).proposal_status == 'done'
         assert dispatched == [('Review', 'work', first.id), ('Review', 'personal', other.id)]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('selection', ['Office.', 'Use the Office calendar.'])
+@pytest.mark.parametrize('suggest_office', [False, True])
+def test_venue_does_not_select_a_review_calendar(appointment_stream, selection, suggest_office):
+    from api.mail import proposals
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars('office')
+        opening = 'Schedule the review in the Office calendar. Schedule the review in the Personal calendar.'
+        conversation, cards = await _appointment_turn(streams, None, opening, 'What times for the reviews?')
+        assert cards == []
+        morning = _create_args('Review', '09:00', '10:00', location='office kitchen')
+        guess = {**morning, 'calendar_name': 'Office'} if suggest_office else morning
+        _, cards = await _appointment_turn(streams, conversation, 'The review is at 09:00 for one hour in the office kitchen.',
+                                          'Which review is that for?', guess)
+        assert cards == [] and not await _visible_cards(conversation) and dispatched == []
+        _, (office,) = await _appointment_turn(streams, conversation, selection, 'What time for the other review?', morning)
+        assert (office.proposal.calendar.source_id, office.proposal.calendar.after.location) == ('office', 'office kitchen')
+        assert (await proposals.confirm(office.id, selected_ids=[])).proposal_status == 'done'
+        _, (personal,) = await _appointment_turn(streams, conversation, '15:00 for one hour.', 'Ready.', _create_args('Review', '15:00', '16:00'))
+        assert personal.proposal.calendar.source_id == 'personal'
+        assert (await proposals.confirm(personal.id, selected_ids=[])).proposal_status == 'done'
+        assert dispatched == [('Review', 'office', office.id), ('Review', 'personal', personal.id)]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('question,needs_choice', [
+    ('What time should the review in the Personal calendar start?', False),
+    ('What time should the review in the Work or Personal calendar start?', True),
+    ('What time should the review in the Travel calendar start?', True),
+    ('Which review do you mean?', True),
+])
+def test_time_question_selects_only_a_unique_bound_review(appointment_stream, question, needs_choice):
+    from api.mail import proposals
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars()
+        opening = 'Schedule the review in the Work calendar. Schedule the review in the Personal calendar.'
+        conversation, _ = await _appointment_turn(streams, None, opening, 'What times for the reviews?')
+        partial = _create_args('Review', start_local='2026-11-21T09:00')
+        _, cards = await _appointment_turn(streams, conversation, 'Schedule the review in the Work calendar at 09:00.', question, partial)
+        assert cards == []
+        afternoon = _create_args('Review', '15:00', '16:00')
+        _, cards = await _appointment_turn(streams, conversation, '15:00 for one hour.',
+                                          'Which review?' if needs_choice else 'Ready.', afternoon)
+        if needs_choice:
+            assert cards == [] and dispatched == []
+            _, cards = await _appointment_turn(streams, conversation, 'Use the Personal calendar.', 'Ready.', afternoon)
+        personal, = cards
+        assert (personal.proposal.calendar.source_id, personal.proposal.calendar.after.start_local) == ('personal', '2026-11-21T15:00')
+        assert (await proposals.confirm(personal.id, selected_ids=[])).proposal_status == 'done'
+        _, (work,) = await _appointment_turn(streams, conversation, 'One hour starting at 09:00.', 'Ready.', _create_args('Review', '09:00', '10:00'))
+        assert (work.proposal.calendar.source_id, work.proposal.calendar.after.start_local) == ('work', '2026-11-21T09:00')
+        assert (await proposals.confirm(work.id, selected_ids=[])).proposal_status == 'done'
+        assert dispatched == [('Review', 'personal', personal.id), ('Review', 'work', work.id)]
     asyncio.run(run())
 
 

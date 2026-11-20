@@ -87,15 +87,16 @@ class OwnerSelection:
     def includes_id(self, source_id: str) -> bool:
         return bool(re.search(r"(?<![\w-])" + re.escape(source_id) + r"(?![\w-])", self.text))
 
+    def is_name_answer(self, name: str) -> bool:
+        key = name.strip().casefold()
+        operand = rf"(?:{_CALENDAR}\s+)?{re.escape(key)}(?![\w-])(?:\s+{_CALENDAR})?"
+        return bool(re.fullmatch(rf"(?:please\s+|bitte\s+)?{operand}(?:,?\s+(?:please|bitte))?[.!?]?", self.text.strip().casefold()))
+
     def names_target(self, name: str) -> bool:
         key = name.strip().casefold()
-        if key in self.quoted_names:
-            return True
-        folded = self.text.strip().casefold()
-        operand = rf"(?:{_CALENDAR}\s+)?{re.escape(key)}(?![\w-])(?:\s+{_CALENDAR})?"
-        if re.search(rf"(?<!\w){_DESTINATION_PREFIX}{operand}", folded):
-            return True
-        return bool(re.fullmatch(rf"(?:please\s+|bitte\s+)?{operand}(?:,?\s+(?:please|bitte))?[.!?]?", folded))
+        operand = rf"(?:{_CALENDAR}\s+)?{re.escape(key)}(?![\w-])(?:\s+{_CALENDAR}\b|(?!{_NAME_CONTINUATION}))"
+        return (key in self.quoted_names or self.is_name_answer(name)
+                or bool(re.search(rf"(?<!\w){_DESTINATION_PREFIX}{operand}", self.text.casefold())))
 
 
 def _without_scheduling_days(words: str, entries) -> str:
@@ -369,7 +370,7 @@ async def appointment_destination(previous, part, title=None, *, first, selectio
     if not choice or not choice.appointments:
         return choice, target
     if target is None:
-        names = {source.name for source, _ in entries if selection.names_target(source.name)}
+        names = {source.name for source, _ in entries if selection.is_name_answer(source.name)}
         if len(names) == 1:
             target = named_choice(names.pop(), entries, selection)
     if target and target.use_default and not target.error:
@@ -590,25 +591,47 @@ async def stated_destination(selection: OwnerSelection, entries, previous: Calen
     return choice.model_copy(update={"excluded_source_ids": tuple(sorted(blocked)), "exclude_default": default_blocked})
 
 
-def _clarification(appointments: list[AppointmentCalendar], sequence_id: str | None, answer: str,
-                   selected: AppointmentCalendar | None = None) -> CalendarChoice | None:
+async def _question_appointment(appointments, question, selected, entries):
+    mentioned = _mentioned_appointments(appointments, question)
+    selection = owner_selection(question, entries=entries)
+    target = await stated_destination(selection, entries, None)
+    candidates = mentioned or appointments
+    if target or _CALENDAR_NOUN.search(question):
+        if not target or target.error or not target.source_id:
+            return None
+        matches = [item for item in candidates if item.source_id == target.source_id and item.connection_ref == target.connection_ref]
+        return matches[0] if len(matches) == 1 else None
+    if len(mentioned) == 1:
+        return mentioned[0]
+    # A calendar name can also be an ordinary word, as in "would work".
+    bound_ids = {item.source_id for item in candidates}
+    if any(source.id in bound_ids and (selection.names_target(source.name) or
+           re.search(r"\bfor\s+(?:the\s+)?" + re.escape(source.name) + r"(?![\w-])", selection.text, re.I))
+           for source, _ in entries):
+        return None
+    if re.search(r"\b(?:which (?:one|of|appointment)|welche[rnms]? (?:davon|termin)|other|andere[nrms]?)\b", question, re.I):
+        return None
+    if mentioned and not (selected in mentioned and re.search(r"\b(?:this|that|its|same|diese[nrms]?|dessen)\b", question, re.I)):
+        return None
+    return selected
+
+
+async def _clarification(appointments: list[AppointmentCalendar], sequence_id: str | None, answer: str,
+                         source_ids, entries, selected: AppointmentCalendar | None = None) -> CalendarChoice | None:
     if not appointments:
         return None
     if len(appointments) == 1:
         return CalendarChoice(**appointments[0].model_dump(), sequence_id=sequence_id)
     questions = " ".join(re.findall(r"[^.!?]*\?", answer))
-    mentioned = _mentioned_appointments(appointments, questions)
-    if len(mentioned) == 1:
-        selected = mentioned[0]
-    elif mentioned and selected not in mentioned:
-        selected = None
+    if not questions and re.search(r"\b(?:what time|when|how long|which|please tell|wann|wie lange|welche[rnms]?|bitte nenn\w*)\b", answer, re.I):
+        questions = answer
+    if questions:
+        if entries is None:
+            entries = await calendar_source.catalog(ids=source_ids)
+        selected = await _question_appointment(appointments, questions, selected, entries)
     index = appointments.index(selected) if selected is not None else None
-    subjects = {item.appointment_subject for item in mentioned}
-    subject = selected.appointment_subject if selected else ""
-    if not subject and len(subjects) == 1:
-        subject = subjects.pop()
     return CalendarChoice(appointments=tuple(appointments), sequence_id=sequence_id, error="calendar_appointment_ambiguous",
-                          focused_index=index, appointment_subject=subject)
+                          focused_index=index, appointment_subject=selected.appointment_subject if selected else "")
 
 
 async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
@@ -637,7 +660,7 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
         addressed = [choice.appointment() for choice in continuations.values() if choice and not choice.appointments]
         appointments.extend(item for item in previous.appointments if item not in addressed)
     if not unfinished:
-        return _clarification(appointments, sequence_id, answer)
+        return await _clarification(appointments, sequence_id, answer, ctx.calendar_source_ids, entries)
     details = re.search(r"\b(?:when|what time|date|duration|title|location|where|how long|wann|zeit|uhrzeit|datum|dauer|titel|ort|wie lange)\b", answer, re.I)
     asking = "?" in answer or (details and re.search(r"\b(?:please|tell me|i need|bitte|nenne|ich brauche)\b", answer, re.I))
     if not any(part in ctx.calendar_targets for part in unfinished) and not asking:
@@ -668,4 +691,4 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
             appointments.append(binding)
             if inherited and len(unfinished) == 1:
                 selected = binding
-    return _clarification(appointments, sequence_id, answer, selected)
+    return await _clarification(appointments, sequence_id, answer, ctx.calendar_source_ids, entries, selected)
