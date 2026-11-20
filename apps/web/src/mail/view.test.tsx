@@ -19,7 +19,7 @@ function StartPageTasks({ scope }: { scope?: TaskScope }) {
   useEffect(() => { if (scope) setTaskScope('new', scope) }, [])
   return null
 }
-function setup({ mobile = false, unread = false, missing = false, loading = false, failed = false, path = '/mail/m1', stream = false, insight, startTasks, preferencesFail = false }: { mobile?: boolean; unread?: boolean; missing?: boolean; loading?: boolean; failed?: boolean; path?: string; stream?: boolean; insight?: () => Promise<{ data: InsightOut }>; startTasks?: TaskScope; preferencesFail?: boolean } = {}) {
+function setup({ mobile = false, unread = false, referenceOnly = false, missing = false, loading = false, failed = false, path = '/mail/m1', stream = false, insight, startTasks, preferencesFail = false }: { mobile?: boolean; unread?: boolean; referenceOnly?: boolean; missing?: boolean; loading?: boolean; failed?: boolean; path?: string; stream?: boolean; insight?: () => Promise<{ data: InsightOut }>; startTasks?: TaskScope; preferencesFail?: boolean } = {}) {
   window.matchMedia = ((q: string) => ({ matches: !mobile && (q.includes('1024px') || q.includes('640px')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   let request: Record<string, unknown> | undefined
   const requests: Record<string, unknown>[] = []
@@ -34,7 +34,7 @@ function setup({ mobile = false, unread = false, missing = false, loading = fals
   spyOn(sdk, 'chatSettingsGet').mockResolvedValue({ data: { version: 3, account_ids: ['a'] } } as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' }], unread_total: unread ? 1 : 0, last_sync_at: null } })) as never)
   spyOn(sdk, 'mailMessagesList').mockImplementation((async () => ({ data: { items: rows, next_cursor: null } })) as never)
-  const get = spyOn(sdk, 'mailMessageGet').mockImplementation((async (options: { path: { message_id: string } }) => { if (missing) return { error: { detail: 'Mail nicht gefunden.' }, response: new Response(null, { status: 404 }) }; if (failed) return { error: { detail: 'down' }, response: new Response(null, { status: 500 }) }; if (loading) return await new Promise(() => {}); return { data: rows.find(row => row.id === options.path.message_id) ?? mail } }) as never)
+  const get = spyOn(sdk, 'mailMessageGet').mockImplementation((async (options: { path: { message_id: string } }) => { if (missing) return { error: { detail: 'Mail nicht gefunden.' }, response: new Response(null, { status: 404 }) }; if (failed) return { error: { detail: 'down' }, response: new Response(null, { status: 500 }) }; if (loading) return await new Promise(() => {}); if (referenceOnly) return { data: { ...mail, id: options.path.message_id, is_read: false, local_reference_only: true, can_unsubscribe: false, can_show_original: false } }; return { data: rows.find(row => row.id === options.path.message_id) ?? mail } }) as never)
   const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => ({ data: { action_id: 'act', message: rows.find(row => row.id === options.path.message_id) }, response: { status: 200 } })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><StartPageTasks scope={startTasks} /><Outlet /></ChatSessionProvider></QueryClientProvider> })
@@ -71,6 +71,18 @@ test('task proposal starts a fresh chat with explicit mail and task account scop
   expect(confirm).not.toHaveBeenCalled()
   expect(action).not.toHaveBeenCalled()
   await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c1'))
+})
+
+test('a task source retained locally opens as read-only and makes no provider requests', async () => {
+  const { action, getInsight } = setup({ referenceOnly: true, path: '/mail/earlier' })
+  await screen.findByText(de.mail.localReference)
+  expect(document.querySelector('.le-mail-text')?.textContent).toBe(mail.body_text)
+  expect(screen.queryByRole('button', { name: de.mail.askInChat })).toBeNull()
+  expect(screen.queryByRole('button', { name: de.mail.more })).toBeNull()
+  fireEvent.keyDown(document, { key: 'e' })
+  await settle()
+  expect(action).not.toHaveBeenCalled()
+  expect(getInsight).not.toHaveBeenCalled()
 })
 
 test('open mail shows the provider when the account has no display name', async () => {

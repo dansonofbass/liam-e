@@ -3088,6 +3088,11 @@
             "title": "Is Read",
             "type": "boolean"
           },
+          "local_reference_only": {
+            "default": false,
+            "title": "Local Reference Only",
+            "type": "boolean"
+          },
           "needs_reply": {
             "title": "Needs Reply",
             "type": "boolean"

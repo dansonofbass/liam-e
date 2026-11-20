@@ -511,6 +511,7 @@ export const de = {
     askTip: 'Öffnet den Chat mit dieser Mail als Bezug', draftTip: 'Schreibt im Chat einen Entwurf, den liam-e erst sendet, wenn du ihn bestätigst',
     draftPrompt: 'Entwirf eine Antwort auf diese Mail.', forward: 'Weiterleiten', forwardPrompt: 'Leite diese Mail weiter.', unsubscribe: 'Newsletter abbestellen', unsubscribePrompt: 'Bestelle diesen Newsletter ab.', unsubscribeUnavailable: 'In dieser Mail steht kein Weg zum Abbestellen.', spam: 'Als Spam markieren',
     original: 'Original anzeigen', originalUnavailable: 'Bei diesem Konto lässt sich das Original nicht abrufen.',
+    localReference: 'Gespeicherte lokale Kopie. Die Zuordnung zum verbundenen Konto ist ungeprüft.',
     originalTitle: 'Original der Mail', originalLoading: 'Original wird abgerufen …', originalHeaders: 'Kopfzeilen', originalSource: 'Quelltext',
     originalTruncated: 'Die Mail ist groß, deshalb siehst du hier nur den Anfang des Quelltexts.', originalEmpty: 'Der Anbieter hat zu dieser Mail keinen Quelltext geliefert.',
     originalRefused: 'Bei dieser Mail lässt sich das Original nicht abrufen.', originalError: 'Das Original ließ sich beim Anbieter nicht abrufen. Versuch es gleich noch mal.',

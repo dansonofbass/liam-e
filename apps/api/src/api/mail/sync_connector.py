@@ -356,6 +356,7 @@ async def _message_in_inbox(provider, thread_id, message, labels, thread_size, e
 async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_chars: int, *, restored_members=None) -> SyncChanges:
     """Direct reads by thread ID need current inbox evidence before restoring messages."""
     recovered = SyncChanges()
+    recheck = {}
     for thread_id in thread_ids:
         messages = await _thread_messages(account.provider, thread_id)
         pending = messages is None
@@ -369,6 +370,9 @@ async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_ch
             uid = parsed["provider_uid"]
             in_inbox = await _message_in_inbox(account.provider, thread_id, parsed, row.get("labelIds"), len(messages), evidence, restored)
             if in_inbox is None:
+                if restored:
+                    recheck[thread_id, uid] = parsed
+                    continue
                 recovered.unconfirmed_uids.add(uid)
                 pending = True
             elif in_inbox:
@@ -377,6 +381,29 @@ async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_ch
                 recovered.moved_out.append(uid)
         if pending:
             recovered.deferred_threads.append(thread_id)
+    if recheck:
+        # Some connectors expose message labels only in the recent listing. Reread it
+        # after the full threads. A sibling or an earlier positive is never sufficient.
+        try:
+            threads = await _search(account.provider, "in:inbox newer_than:14d")
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code in (401, 403):
+                raise
+            threads = []
+        except (ValueError, TypeError, httpx.TransportError):
+            threads = []
+        labels_by_item = {(thread["id"], uid): labels for thread in threads
+                          for uid, labels in (_member_labels(thread) or {}).items() if isinstance(labels, list)}
+        for (thread_id, uid), parsed in recheck.items():
+            labels = labels_by_item.get((thread_id, uid))
+            if labels is None:
+                recovered.unconfirmed_uids.add(uid)
+                recovered.deferred_threads.append(thread_id)
+            elif "INBOX" in labels:
+                parsed.update(_label_fields(labels))
+                recovered.upserts.append(parsed)
+            else:
+                recovered.moved_out.append(uid)
     return recovered
 
 

@@ -1723,6 +1723,10 @@ export type MessageDetailOut = {
      */
     is_read: boolean;
     /**
+     * Local Reference Only
+     */
+    local_reference_only?: boolean;
+    /**
      * Needs Reply
      */
     needs_reply: boolean;

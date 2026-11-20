@@ -205,7 +205,7 @@ async def _send(draft: SendDraft, result: ProposalResult) -> None:
         fail("send_failed")
 
 
-async def _apply(item: ProposalItem, kind: ProposalKind, result: ProposalResult) -> None:
+async def _apply(item: ProposalItem, kind: ProposalKind, result: ProposalResult, mail_targets: set[str]) -> None:
     def fail(code: str):
         result.failed.append(ItemProblem(id=item.id, code=code))
 
@@ -231,7 +231,14 @@ async def _apply(item: ProposalItem, kind: ProposalKind, result: ProposalResult)
                     result.done += 1
             return
         mail = await mail_access.get_message(item.id)
-        if mail is None or mail.folder != "INBOX":
+        if mail is None:
+            fail("item_gone")
+            return
+        if mail.id in mail_targets:
+            item.selected = False
+            return
+        mail_targets.add(mail.id)
+        if mail.folder != "INBOX" or mail.unverified_connector:
             fail("item_gone")
             return
         action = await actions.apply_action(item.id, kind)
@@ -442,9 +449,10 @@ async def confirm(proposal_id: str, *, selected_ids: list[str], body: str | None
                 proposal.draft.body = body
             await _send(proposal.draft, result)
         else:
+            mail_targets: set[str] = set()
             for item in proposal.items:
                 if item.selected:
-                    await _apply(item, proposal.kind, result)
+                    await _apply(item, proposal.kind, result, mail_targets)
         status = "done" if not result.failed else "partial" if result.done or result.manual else "failed"
     finally:
         updated = await message_access.set_proposal(proposal_id, proposal_json=proposal.model_dump_json(), proposal_status=status)

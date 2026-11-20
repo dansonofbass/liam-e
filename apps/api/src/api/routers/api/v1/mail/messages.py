@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 from db.accessors import mail_account as account_access
 from db.accessors import mail_insight as insight_access
 from db.accessors import mail_message as message_access
+from db.accessors import mail_reference_snapshot
 from db.models.mail_insight import MailInsight
 from db.models.mail_message import MailMessage
 from fastapi import APIRouter, HTTPException, Query
@@ -119,7 +120,12 @@ async def bulk_message_action(body: BulkMessageActionIn) -> BulkMessageActionOut
                 logger.warning("Bulk action display failed: %s", type(error).__name__)
             return result
 
-    return BulkMessageActionOut(results=await asyncio.gather(*(apply(mid) for mid in body.message_ids)))
+    aliases = await message_access.resolve_aliases(body.message_ids)
+    targets = {}
+    for message_id in body.message_ids:
+        targets.setdefault(aliases.get(message_id, message_id), message_id)
+    # Resolve the first submitted reference again at dispatch in case its binding was withdrawn.
+    return BulkMessageActionOut(results=await asyncio.gather(*(apply(first_id) for first_id in targets.values())))
 
 
 @router.post("/{message_id}/actions", operation_id="mail_message_action", summary="Apply an undoable message action")
@@ -176,9 +182,12 @@ async def message_original(message_id: str) -> MessageOriginalOut:
 async def get_message(message_id: str) -> MessageDetailOut:
     """Return one indexed message or 404 if it does not exist."""
     message = await message_access.get_message(message_id)
+    local_reference = message is None
+    if local_reference:
+        message = await mail_reference_snapshot.read(message_id)
     if message is None:
         raise refuse(404, "message_not_found", "Die Mail ist nicht mehr da.")
-    insights = await insight_access.get_for_messages([message.id])
+    insights = {} if local_reference else await insight_access.get_for_messages([message.id])
     accounts = await account_access.list_accounts()
     colors = color_indexes(accounts)
     account = next((account for account in accounts if account.id == message.account_id), None)
@@ -186,6 +195,6 @@ async def get_message(message_id: str) -> MessageDetailOut:
         **list_item(message, colors, insights.get(message.id)).model_dump(),
         to=json.loads(message.recipients_json), cc=json.loads(message.cc_json),
         body_text=message.body_text, attachments=json.loads(message.attachments_json),
-        thread_id=message.thread_id, can_unsubscribe=bool(message.list_unsubscribe),
-        can_show_original=original.available(account),
+        thread_id=message.thread_id, can_unsubscribe=not local_reference and bool(message.list_unsubscribe),
+        can_show_original=not local_reference and original.available(account), local_reference_only=local_reference,
     )

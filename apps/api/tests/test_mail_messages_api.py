@@ -20,6 +20,7 @@ def access(monkeypatch):
     accounts = AsyncMock(return_value=[])
     monkeypatch.setattr(messages.message_access, "list_page", page)
     monkeypatch.setattr(messages.message_access, "get_message", get)
+    monkeypatch.setattr(messages.mail_reference_snapshot, "read", AsyncMock(return_value=None))
     monkeypatch.setattr(messages.insight_access, "get_for_messages", insights)
     monkeypatch.setattr(messages.account_access, "list_accounts", accounts)
     return SimpleNamespace(page=page, get=get, insights=insights, accounts=accounts)

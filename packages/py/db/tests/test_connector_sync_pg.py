@@ -3,12 +3,13 @@ import asyncio
 import json
 import os
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
 
 from api.mail import connector_mailbox, connectors, service, sync
-from db.accessors import chat_settings, mail_message, mail_sync_state
+from db.accessors import chat_settings, mail_account, mail_message, mail_sync_state
 from db.engine import get_session_maker
 from db.models.mail_insight import MailInsight
 from db.models.mail_message import MailMessage
@@ -115,6 +116,7 @@ def test_connector_provider_restore_and_rearchive_commit_with_new_arrival(pg_db,
         assert await mail_message.get_scoped_message(original, ["another-account"], folder="ARCHIVE") is None
         assert (await mail_message.get_scoped_message(original, [account.id], folder="ARCHIVE")).id == kept
         if legacy_copy:
+            assert await mail_message.resolve_aliases([original, kept]) == {original: kept}
             async with get_session_maker()() as session:
                 assert await session.scalar(select(MailInsight.id).where(MailInsight.message_id == original)) is None
             assert await chat_settings.mail_preview(original, 1, None) is None
@@ -159,4 +161,93 @@ def test_recent_restores_reread_quarantined_mail_in_bounded_batches(pg_db, monke
         for old in archived:
             row = await mail_message.get_message(old.id)
             assert (row.folder, row.body_text, row.unverified_connector) == ("INBOX", "Verified", False)
+    asyncio.run(run())
+
+
+def test_upgrade_preserves_unverified_archived_task_source_as_read_only(pg_db, monkeypatch):
+    from fastapi import HTTPException
+    from api.routers.api.v1.mail import messages
+
+    async def run():
+        account = await service.upsert_account(provider="gmail", auth_type=connectors.CONNECTOR, email_address="owner@example.test")
+        await mail_sync_state.save_state(account_id=account.id, cursor="15")
+        old = MailMessage(account_id=account.id, provider_uid="same", folder="ARCHIVE",
+                          body_text="Original task source", unverified_connector=True)
+        inbox = MailMessage(account_id=account.id, provider_uid="same", folder="INBOX", unverified_connector=True)
+        task = TaskSeries(scope="app", creation_key="original-link", creation_hash="fixture", title="Follow up",
+                          source_account_id=account.id, source_message_id=old.id)
+        async with get_session_maker().begin() as session:
+            session.add_all([old, inbox, task])
+        anchor = {"id": "sent", "messages": [{"id": "sent-item", "sender": account.email_address, "labelIds": ["SENT"]}]}
+        now = datetime.now(UTC)
+        async def provider(_, tool, args):
+            if args.get("query") == "in:sent from:me":
+                return {"threads": [anchor]}
+            if args.get("threadId") == "sent":
+                return anchor
+            if tool == "search_threads":
+                return {"threads": [{"id": "thread"}]}
+            return {"id": "thread", "messages": [{"id": "same", "date": now.isoformat(),
+                    "plaintextBody": "Freshly verified content", "labelIds": ["INBOX"]}]}
+        monkeypatch.setattr(connector_mailbox, "_credential", AsyncMock(return_value="named"))
+        monkeypatch.setattr(connectors, "call_read_tool_json", provider)
+        assert (await sync.sync_account(account.id)).status == "ok"
+        live = await messages.get_message(inbox.id)
+        assert live.body_text == "Freshly verified content" and not live.local_reference_only
+        async with get_session_maker()() as session:
+            source_id = (await session.get(TaskSeries, task.id)).source_message_id
+        saved = await messages.get_message(source_id)
+        assert saved.id == old.id and saved.body_text == "Original task source" and saved.local_reference_only
+        assert not saved.can_show_original and not saved.can_unsubscribe
+        grant = await chat_settings.update(1, [account.id])
+        assert await chat_settings.mail_preview(old.id, grant.version, None) is None
+        assert await mail_message.get_message(old.id) is None
+        assert await mail_message.resolve_aliases([old.id]) == {}
+        assert await mail_account.delete_account(account.id)
+        with pytest.raises(HTTPException) as error:
+            await messages.get_message(source_id)
+        assert error.value.status_code == 404
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("still_in_inbox", [True, False])
+def test_restore_checks_recent_per_message_labels_after_reading_mixed_thread(pg_db, monkeypatch, still_in_inbox):
+    async def run():
+        account, state, anchor = await connected()
+        now = datetime.now(UTC)
+        yesterday = now - timedelta(days=1)
+        async with mail_sync_state.connector_transaction(account.id, state, verified=True) as (session, locked):
+            watermark = str(int(now.timestamp()))
+            locked.cursor = watermark
+            locked.connector_cursor = connector_mailbox.encode(("named", "anchor", "proof"), watermark)
+            local = {uid: MailMessage(account_id=account.id, provider_uid=uid, thread_id="mixed", folder="ARCHIVE",
+                                      internal_date=yesterday) for uid in ("target", "sibling")}
+            session.add_all(local.values())
+        reads = []
+        async def provider(_, tool, args):
+            if args.get("threadId") == "anchor":
+                return anchor
+            if tool == "get_thread":
+                assert connectors.mailbox_credential.get() == "named"
+                reads.append("content")
+                return {"id": "mixed", "messages": [{"id": uid, "date": yesterday.isoformat(),
+                        "plaintextBody": "Bound content"} for uid in local]}
+            query = args["query"]
+            if query == "in:inbox newer_than:14d":
+                reads.append("recent")
+                labels = ["INBOX", "UNREAD", "STARRED"] if still_in_inbox or "content" not in reads else []
+                return {"threads": [{"id": "mixed", "messages": [
+                    {"id": "target", "labelIds": labels}, {"id": "sibling", "labelIds": []}]}]}
+            if "before:" in query:
+                return {"threads": [{"id": "mixed"}]}
+            return {"threads": []}
+        monkeypatch.setattr(connectors, "call_read_tool_json", provider)
+        assert (await sync.sync_account(account.id)).status == "ok"
+        assert reads == ["recent", "content", "recent"]
+        assert (await mail_message.get_message(local["sibling"].id)).folder == "ARCHIVE"
+        target = await mail_message.get_message(local["target"].id)
+        assert target.folder == ("INBOX" if still_in_inbox else "ARCHIVE")
+        if still_in_inbox:
+            assert target.body_text == "Bound content" and not target.is_read and target.is_flagged
+        assert not (await mail_sync_state.get_state(account.id)).connector_deferred_threads
     asyncio.run(run())

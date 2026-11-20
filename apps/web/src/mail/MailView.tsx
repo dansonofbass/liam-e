@@ -34,7 +34,7 @@ export function MailView({ id }: { id: string }) {
   const busy = state.phase === 'working' || state.phase === 'streaming'
   const data = message.data
   useEffect(() => {
-    if (!data || opened.current.has(id)) return
+    if (!data || data.local_reference_only || opened.current.has(id)) return
     opened.current.add(id)
     if (!data.is_read) void run(id, 'mark_read', { silent: true })
   }, [id, data, run])
@@ -72,13 +72,13 @@ export function MailView({ id }: { id: string }) {
       task_source: 'account', task_source_account_id: data.account_id, calendar_source_ids: [] })
   }
   const iconSize = !split || coarse ? 'lg' : 'md'
-  const actions = data && <>
+  const actions = data && !data.local_reference_only && <>
     <IconButton label={texts.controls.archive} icon="archive" size={iconSize} shortcut={split ? 'E' : undefined} onClick={() => remove('archive')} />
     <IconButton label={data.is_read ? texts.controls.markUnread : texts.controls.markRead} icon="mail-open" size={iconSize} shortcut={split ? 'U' : undefined} onClick={() => { void run(id, data.is_read ? 'mark_unread' : 'mark_read') }} />
     <IconButton label={texts.controls.trash} icon="trash-2" size={iconSize} tone="danger" shortcut={split ? 'Entf' : undefined} onClick={() => remove('trash')} />
     <Menu placement={split ? 'down-start' : 'down-end'} trigger={props => <IconButton {...props} label={texts.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: texts.taskChat.ask, icon: 'check', onSelect: proposeTask }, { label: texts.mail.forward, icon: 'forward', onSelect: () => start(texts.mail.forwardPrompt) }, { label: texts.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : texts.mail.unsubscribeUnavailable, onSelect: () => start(texts.mail.unsubscribePrompt) }, { label: texts.mail.spam, icon: 'ban', onSelect: () => remove('spam') }, { label: texts.mail.original, icon: 'file-code', disabled: !data.can_show_original, hint: data.can_show_original ? undefined : texts.mail.originalUnavailable, onSelect: () => setOriginal(id) }]} />
   </>
-  const chatButtons = <>
+  const chatButtons = data && !data.local_reference_only && <>
     <Tooltip content={texts.mail.askTip}><Button variant="secondary" icon="message-circle" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{texts.mail.askInChat}</Button></Tooltip>
     <Tooltip content={texts.mail.draftTip}><Button variant="primary" icon="pencil" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={() => start(texts.mail.draftPrompt)}>{texts.mail.draftReply}</Button></Tooltip>
   </>
@@ -90,13 +90,13 @@ export function MailView({ id }: { id: string }) {
       {message.isPending && <><span className="le-sr" role="status">{texts.mail.loading}</span><div className="le-mail-placeholder" aria-hidden="true"><div className="le-mail-placeholder-head"><span /><div><span /><span /></div></div><span /><span /><span /><span /></div></>}
       {message.isError && <div className="le-mail-error">{message.error instanceof MessageNotFoundError ? <Notice tone="danger" action={{ label: texts.mail.toInbox, onClick: back }}>{texts.proposalErrors.item_gone}</Notice> : <><Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void message.refetch() } }}>{texts.mail.loadError}</Notice><Button variant="secondary" className="le-mail-to-inbox" onClick={back}>{texts.mail.toInbox}</Button></>}</div>}
       {data && <article className="le-mail-article"><h1 className="title">{texts.mail.subjectText(data.subject)}</h1><div className="le-mail-header"><Avatar name={data.sender_name || data.sender_address} address={data.sender_address} colorIndex={data.color_index} size="lg" /><div className="le-mail-sender"><div className="body-strong">{data.sender_name || data.sender_address}</div>{breakpoint !== 'mobile' && <div className="small le-muted le-mail-address">{data.to.length ? texts.mail.addressTo(data.sender_address, data.to.join(', ')) : data.sender_address}</div>}</div>{account && <Tag tone="on-surface" dot={data.color_index}>{providerLabel(account)}</Tag>}{data.internal_date && <time className="small le-muted le-num" dateTime={data.internal_date}>{formatMailTime(new Date(data.internal_date), new Date(), undefined, locale)}</time>}</div>
-        <InsightBox id={id} onFollowup={start} />
+        {data.local_reference_only ? <Notice tone="info">{texts.mail.localReference}</Notice> : <InsightBox id={id} onFollowup={start} />}
         {data.body_text && <div className="le-mail-text body">{paragraphs(data.body_text).map((text, index) => <p key={index}>{text}</p>)}</div>}
         {data.attachments.length > 0 && <div className="le-mail-attachments">{data.attachments.map((attachment, index) => <span key={index} className="le-mail-attachment"><Icon name="paperclip" size="sm" /><span className="le-mail-attachment-name">{attachment.name}</span><span className="le-mail-attachment-size">{formatBytes(attachment.size, locale)}</span></span>)}</div>}
       </article>}
     </div>
-    {original === id && <OriginalDialog id={id} onClose={() => setOriginal(null)} />}
+    {original === id && data?.can_show_original && <OriginalDialog id={id} onClose={() => setOriginal(null)} />}
     {!split && <ActionToast inline />}
-    {!split && data && <div className="le-mail-bottom">{chatButtons}</div>}
+    {!split && chatButtons && <div className="le-mail-bottom">{chatButtons}</div>}
   </div>
 }

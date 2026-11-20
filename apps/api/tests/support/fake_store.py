@@ -2,7 +2,7 @@
 
 import json
 from sqlalchemy.exc import IntegrityError
-from db.accessors import mail_account, mail_action, mail_credential, mail_insight, mail_sync_state, mail_job, mail_message
+from db.accessors import mail_account, mail_action, mail_credential, mail_insight, mail_sync_state, mail_job, mail_message, mail_reference_snapshot
 from db.models.mail_action import MailAction
 from db.models.mail_job import MailJob
 from db.models.mail_account import MailAccount
@@ -22,6 +22,10 @@ class FakeStore:
         for name in ("record", "get_many", "mark_undone", "release", "latest_open", "delete_for_account"):
             monkeypatch.setattr(mail_action, name, getattr(self, "action_" + name))
         monkeypatch.setattr(mail_message, "get_message", self.get_message)
+        monkeypatch.setattr(mail_message, "resolve_aliases", self.resolve_aliases)
+        async def no_snapshot(message_id):
+            return None
+        monkeypatch.setattr(mail_reference_snapshot, "read", no_snapshot)
         monkeypatch.setattr(mail_message, "set_state", self.set_message_state)
         monkeypatch.setattr(mail_message, "delete_duplicate", self.delete_duplicate)
         monkeypatch.setattr(mail_message, "stale_body_texts", self.stale_body_texts)
@@ -52,10 +56,18 @@ class FakeStore:
 
     async def get_message(self, message_id):
         row = self.messages.get(message_id)
+        if row is None:
+            target = (await self.resolve_aliases([message_id])).get(message_id)
+            row = self.messages.get(target)
         return row.model_copy() if row else None
 
+    async def resolve_aliases(self, message_ids):
+        return {alias: row.id for row in self.messages.values() if not row.unverified_connector
+                for alias in set(message_ids).intersection(row.connector_alias_ids)}
+
     async def set_message_state(self, message_id, **kwargs):
-        row = self.messages.get(message_id)
+        target = (await self.resolve_aliases([message_id])).get(message_id, message_id)
+        row = self.messages.get(target)
         if row:
             folder = kwargs.get("folder", row.folder)
             uid = kwargs.get("provider_uid", row.provider_uid)

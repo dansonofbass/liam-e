@@ -10,6 +10,7 @@ from sqlalchemy import String, and_, any_, bindparam, delete, exists, func, or_,
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from db.accessors import mail_reference_snapshot
 from db.models.mail_insight import MailInsight
 from db.models.mail_action import MailAction
 
@@ -156,6 +157,17 @@ def matches_ids(message_ids: Collection[str]):
 async def get_message(message_id: str, session: AsyncSession | None = None) -> MailMessage | None:
     async with (nullcontext(session) if session is not None else get_session_maker()()) as reader:
         return (await reader.execute(select(MailMessage).where(matches_ids([message_id])))).scalar_one_or_none()
+
+
+async def resolve_aliases(message_ids: Collection[str]) -> dict[str, str]:
+    """Resolve former local IDs for a single batch before dispatching provider actions."""
+    ids = set(message_ids)
+    stmt = select(MailMessage.id, MailMessage.connector_alias_ids).where(
+        MailMessage.unverified_connector.is_(False), func.cardinality(MailMessage.connector_alias_ids) > 0,
+        MailMessage.connector_alias_ids.overlap(list(ids)),
+    )
+    async with get_session_maker()() as session:
+        return {alias: target for target, aliases in await session.execute(stmt) for alias in ids.intersection(aliases)}
 
 
 async def get_scoped_message(message_id: str, account_ids: list[str], *, folder: str) -> MailMessage | None:
@@ -347,6 +359,8 @@ async def reconcile_connector_folders(session: AsyncSession, account_id: str, in
                 keep.connector_alias_ids = sorted(set(keep.connector_alias_ids + duplicate.connector_alias_ids + [duplicate.id]))
                 await session.execute(update(MailAction).where(MailAction.account_id == account_id,
                     MailAction.message_id == duplicate.id).values(message_id=keep.id))
+            else:
+                await mail_reference_snapshot.preserve(session, duplicate)
             duplicate_ids.append(duplicate.id)
             await session.delete(duplicate)
         else:

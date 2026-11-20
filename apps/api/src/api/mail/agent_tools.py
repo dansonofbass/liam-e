@@ -210,6 +210,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         if kind == 'send': return result({'error':'use_create_draft'})
         if kind not in ('archive','trash','mark_read','unsubscribe'): return result({'error':'invalid_arguments'})
         items = []
+        mail_targets = set()
         ids = list(dict.fromkeys(arguments.get('sender_ids' if kind == 'unsubscribe' else 'message_ids', [])))
         for id in ids:
             if len(items) == 50: break
@@ -220,9 +221,10 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
                 items.append(proposals.ProposalItem(id=id, kind='sender', title=s.display_name, subtitle=subtitle, count=s.total, unread=s.unread, last_read_at=s.last_read_at, method=s.method, target=s.link))
             else:
                 m = verified_messages.get(id)
-                if not m or m.folder != 'INBOX' or (kind == 'mark_read' and m.is_read): continue
+                if not m or m.id in mail_targets or m.folder != 'INBOX' or (kind == 'mark_read' and m.is_read): continue
+                mail_targets.add(m.id)
                 account = await mail_account.get_account(m.account_id)
-                items.append(proposals.ProposalItem(id=id, kind='mail', title=m.subject or ('No subject' if ctx.locale == 'en' else 'Ohne Betreff'), subtitle=f'{headers.sender_name(m.sender)} · {account.email_address if account else ""}'))
+                items.append(proposals.ProposalItem(id=m.id, kind='mail', title=m.subject or ('No subject' if ctx.locale == 'en' else 'Ohne Betreff'), subtitle=f'{headers.sender_name(m.sender)} · {account.email_address if account else ""}'))
         if not items: return result({'error':'no_valid_items'})
         return await _proposal(ctx, proposals.Proposal(kind=kind, reason=arguments.get('reason',''), items=items))
     if name == 'create_draft':
