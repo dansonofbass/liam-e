@@ -28,15 +28,15 @@ def appointment_stream(pg_db, monkeypatch):
     return fake.streams, dispatched
 
 
-async def _seed_appointment_calendars(first='work'):
+async def _seed_appointment_calendars(first='work', *, default='personal'):
     from db.accessors import calendar_settings
     from db.engine import get_session_maker
     from db.models.calendar_source import CalendarSource
     async with get_session_maker().begin() as session:
-        for key in (first, 'personal'):
+        for key in (first, default):
             session.add(CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic-' + key,
                 external_id=key, capabilities_json='["read","write"]', timezone='UTC'))
-    await calendar_settings.update(1, 'personal')
+    await calendar_settings.update(1, default)
 
 
 def _create_args(title, start=None, end=None, **fields):
@@ -69,6 +69,135 @@ async def _appointment_turn(streams, conversation, text, answer, *calls):
     events = [event async for event in agent.run_turn_events(conversation_id=conversation, text=text)]
     assert events[-1].event == 'done'
     return events[-1].conversation_id, [event.message for event in events if event.event == 'proposal']
+
+
+@pytest.mark.parametrize('access,opening', [
+    ('paused', 'Schedule a review; use Work'), ('disconnected', 'Schedule a review; use Work'),
+    ('paused', 'Schedule a review in Work'), ('paused', 'Schedule a review'),
+])
+def test_unavailable_configured_calendar_after_plain_time_question(appointment_stream, access, opening):
+    from db.accessors import calendar_source, chat_message
+    from db.engine import get_session_maker
+    from db.models.calendar_sync_state import CalendarSyncState
+    from api.mail import proposals
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars(default='home')
+        if access == 'paused':
+            await calendar_source.set_active('work', False)
+        else:
+            async with get_session_maker().begin() as session:
+                session.add(CalendarSyncState(source_id='work', last_error='reconnect_required'))
+        assert await calendar_source.readable_ids(None) == ['home']
+        conversation, cards = await _appointment_turn(streams, None, opening, 'What time should the review start?')
+        assert not cards
+        history = await chat_message.list_messages(conversation)
+        choice = json.loads(history[-1].extras_json)['calendar_clarification']
+        named = 'Work' in opening
+        if named:
+            assert choice['name'].casefold() == 'work' and choice['source_id'] is None
+        else:
+            assert choice['source_id'] == 'home'
+        args = _create_args('Review', '10:00', '11:00')
+        _, cards = await _appointment_turn(streams, conversation, 'Tomorrow at ten for one hour.',
+            'Which calendar?' if named else 'Ready.', args)
+        if named:
+            assert not cards and not dispatched
+            history = await chat_message.list_messages(conversation)
+            assert json.loads([row for row in history if row.role == 'tool'][-1].content)['error'] == 'calendar_name_unknown'
+            _, cards = await _appointment_turn(streams, conversation, 'Use my default calendar instead.', 'Ready.', args)
+        card, = cards
+        assert card.proposal.calendar.source_id == 'home'
+        assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
+        assert dispatched == [('Review', 'home', card.id)]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('tool_names_calendar', [False, True])
+def test_calendar_name_answer_is_saved_before_time_question(appointment_stream, tool_names_calendar):
+    from api.mail import proposals
+    from db.accessors import chat_message
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars(default='home')
+        conversation, cards = await _appointment_turn(streams, None,
+            'Schedule the review in the Work or Home calendar.', 'Which calendar should I use?')
+        assert not cards
+        opening = (await chat_message.list_messages(conversation))[-1]
+        assert json.loads(opening.extras_json)['calendar_clarification']['error'] == 'calendar_name_ambiguous'
+        _, cards = await _appointment_turn(streams, conversation, 'Work', 'What time should the review start?')
+        assert not cards and not dispatched
+        question = (await chat_message.list_messages(conversation))[-1]
+        target = json.loads(question.extras_json)['calendar_clarification']
+        assert (target['source_id'], target['connection_ref'], target['error']) == ('work', 'synthetic-work', None)
+        args = _create_args('Review', '09:00', '10:00')
+        if tool_names_calendar:
+            args['calendar_name'] = 'Work'
+        _, (card,) = await _appointment_turn(streams, conversation, 'Tomorrow at 09:00 for one hour.', 'Ready.', args)
+        assert card.proposal.calendar.source_id == 'work' and not dispatched
+        assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
+        assert dispatched == [('Review', 'work', card.id)]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('raw,confirm', [
+    ('{', True), ('[]', False), ('{"calendar_followups":null}', True),
+])
+def test_corrupt_queue_cannot_append_or_block_settling_an_existing_card(appointment_stream, raw, confirm):
+    from datetime import date
+    from api.mail import agent_tools, proposals
+    from db.engine import get_session_maker
+    from db.models.chat_message import ChatMessage
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars()
+        conversation, (first,) = await _appointment_turn(streams, None, 'Schedule breakfast. Schedule lunch in Work.',
+            'Breakfast is ready.', _create_args('Breakfast', '08:00', '09:00'))
+        async with get_session_maker().begin() as session:
+            row = await session.get(ChatMessage, first.id)
+            row.extras_json = raw
+        ctx = agent_tools.TurnContext(conversation, None, date(2026, 11, 21), context_id=first.context.id,
+            calendar_source_ids=['personal', 'work'], user_text='Schedule lunch in Work.')
+        ctx.calendar_sequence_id = first.id
+        result = await agent_tools.execute_tool('propose_calendar_change', _create_args('Lunch', '12:00', '13:00'), ctx)
+        assert json.loads(result.content) == {'error': 'proposal_not_pending'} and not dispatched
+        pending, = await _visible_cards(conversation)
+        assert pending.id == first.id and pending.proposal_status == 'pending'
+        if confirm:
+            assert (await proposals.confirm(first.id, selected_ids=[])).proposal_status == 'done'
+            assert dispatched == [('Breakfast', 'personal', first.id)]
+        else:
+            assert (await proposals.cancel(first.id)).proposal_status == 'cancelled'
+            assert not dispatched
+        assert [card.id for card in await _visible_cards(conversation)] == [first.id]
+    asyncio.run(run())
+
+
+def test_malformed_followup_does_not_block_a_later_valid_card(appointment_stream):
+    from api.mail import proposals
+    from db.engine import get_session_maker
+    from db.models.chat_message import ChatMessage
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars()
+        conversation, (first,) = await _appointment_turn(streams, None,
+            'Schedule breakfast in Personal. Schedule lunch in Work.', 'Breakfast is ready.',
+            _create_args('Breakfast', '08:00', '09:00'), _create_args('Lunch', '12:00', '13:00'))
+        async with get_session_maker().begin() as session:
+            row = await session.get(ChatMessage, first.id)
+            extras = json.loads(row.extras_json)
+            extras['calendar_followups'][:0] = [None, {'proposal': {}}]
+            row.extras_json = json.dumps(extras)
+        assert (await proposals.cancel(first.id)).proposal_status == 'cancelled'
+        lunch, = [card for card in await _visible_cards(conversation) if card.proposal_status == 'pending']
+        assert lunch.proposal.calendar.source_id == 'work' and not dispatched
+        assert (await proposals.confirm(lunch.id, selected_ids=[])).proposal_status == 'done'
+        assert dispatched == [('Lunch', 'work', lunch.id)]
+    asyncio.run(run())
 
 
 async def _change_work_access(change):
@@ -200,12 +329,14 @@ def test_unfinished_appointment_survives_discarded_queue(appointment_stream, con
 
 
 @pytest.mark.parametrize('revoke_first', [False, True])
-def test_queue_publication_serializes_with_context_revocation(appointment_stream, monkeypatch, revoke_first):
+@pytest.mark.parametrize('resource', ['context', 'source'])
+def test_queue_publication_serializes_with_context_revocation(appointment_stream, monkeypatch, revoke_first, resource):
     from sqlalchemy.exc import DBAPIError
     from api.mail import proposals
     from db.accessors import calendar_proposal_queue as queue
     from db.engine import get_session_maker
     from db.models.chat_context import ChatContext
+    from db.models.calendar_source import CalendarSource
     streams, dispatched = appointment_stream
 
     async def run():
@@ -216,8 +347,12 @@ def test_queue_publication_serializes_with_context_revocation(appointment_stream
         async def revoke():
             try:
                 async with get_session_maker().begin() as session:
-                    context = await session.get(ChatContext, first.context.id, with_for_update={'nowait': True})
-                    context.revoked = True
+                    if resource == 'context':
+                        context = await session.get(ChatContext, first.context.id, with_for_update={'nowait': True})
+                        context.revoked = True
+                    else:
+                        source = await session.get(CalendarSource, 'work', with_for_update={'nowait': True})
+                        source.is_active = False
             except DBAPIError as error:
                 assert error.orig.sqlstate == '55P03'  # locked by the publishing transaction
                 return False

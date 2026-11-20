@@ -65,6 +65,8 @@ _DATE_TAIL = (rf"(?:(?:(?:{_RELATIVE_DAY}|{_TIME_PREPOSITION})\s+)*{_TIME_VALUE}
 _SCHEDULING_OPTION = re.compile(rf"{_DATE_TAIL}(?:\s+{_DATE_TAIL})*", re.I)
 _GENERIC_CALENDAR_DATE = re.compile(rf"{_CALENDAR_LEAD}(?=\s+{_DATE_TAIL})", re.I)
 _NAME_CONTINUATION = rf"\s+(?!{_DATE_TAIL})(?:&\s+)?{_NAME_WORD}"
+_BARE_TARGET = re.compile(rf"(?<!\w)(?:(?P<select>{_SELECT})|in|into|im)\s+{_DETERMINER}", re.I)
+_NAME_END = re.compile(rf"(?![\w-]|{_NAME_CONTINUATION})", re.I)
 _CALENDAR_FIRST = re.compile(rf"{_CALENDAR_LEAD}\s+(?P<name>(?:{_TIME_PREPOSITION}\s+)?{_NAME_WORD}(?:{_NAME_CONTINUATION})*)", re.I)
 _CALENDAR_DAY = re.compile(rf"{_CALENDAR_LEAD}\s+(?P<day>(?:(?:on|am)\s+)?(?:{_RELATIVE_DAY}\s+)?"
                            rf"(?:{_DAY_OR_PERIOD}|today|tomorrow|heute|morgen))\b", re.I)
@@ -510,6 +512,17 @@ async def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
     return alternatives, complete
 
 
+def _bare_names(text, leads, vocabulary):
+    """A literal source name must fill the destination. A longer venue or a date stays event text."""
+    names = set()
+    for lead in leads:
+        for name in vocabulary:
+            if (text.startswith(name, lead.end()) and _NAME_END.match(text, lead.end() + len(name))
+                    and (lead["select"] or not _SCHEDULING_OPTION.fullmatch(name))):
+                names.add(name)
+    return names
+
+
 async def _affirmative_destination(selection: OwnerSelection, entries, previous: CalendarChoice | None) -> CalendarChoice | None:
     # A direct reference such as "in the Work calendar" also works when the assistant
     # asks for a time in plain text or leaves calendar_name out of its later tool call.
@@ -524,6 +537,11 @@ async def _affirmative_destination(selection: OwnerSelection, entries, previous:
     use_default |= bool(alternatives & _DEFAULT_NAMES)
     names = set(selection.quoted_names) | (alternatives - _DEFAULT_NAMES)
     catalog = {source.name.strip().casefold() for source, _ in entries if source.name.strip()}
+    if previous and previous.error:
+        names.update(name for name in catalog if selection.is_name_answer(name))
+    bare = [match for match in _BARE_TARGET.finditer(folded)
+            if not _NEGATIVE_CALENDAR_PREFIX.search(folded[:match.start()])
+            and not re.match(rf"{_CALENDAR}\b", folded[match.end():])]
     if catalog:
         # Match one complete catalog name per destination. A shorter name can
         # itself be a source, e.g. both "On" and "On Call".
@@ -531,21 +549,20 @@ async def _affirmative_destination(selection: OwnerSelection, entries, previous:
         patterns = [
             rf"{_CALENDAR_LEAD}\s+{operand}(?!{_NAME_CONTINUATION})",
             rf"(?<!\w){_DESTINATION_PREFIX}{operand}\s+{_CALENDAR}\b",
-            rf"(?<!\w){_SELECT}\s+{_DETERMINER}{operand}(?=\s*(?:[,.;!?]|$))",
         ]
         if selection.excluded_targets:
             patterns.append(rf"(?<!\w){_PREFIX}{operand}(?=\s*(?:[,.;!?]|$))")
         for pattern in patterns:
             names.update(match["name"] for match in re.finditer(pattern, folded))
-        # A complete source name in "in Work" can bind a scheduling question.
-        # A longer venue or a scheduling month such as "in May" cannot.
-        bare = rf"(?<!\w)(?:in|into|im)\s+{_DETERMINER}{operand}(?!{_NAME_CONTINUATION})"
-        names.update(match["name"] for match in re.finditer(bare, folded)
-                     if not _SCHEDULING_OPTION.fullmatch(match["name"]))
+        names.update(_bare_names(folded, bare, catalog))
     # The owner can explicitly name a paused, removed or unknown calendar. The
     # readable catalog cannot supply that name; only the owner's text can.
     if not use_default and not names:
         names.update(_declared_names(folded))
+        if not names and bare:
+            # Configured names identify the owner's words. Only permitted entries
+            # can supply a source and connection to named_choice.
+            names.update(_bare_names(folded, bare, await calendar_source.configured_names()))
     if use_default and not names:
         return CalendarChoice(use_default=True)
     if len(names) == 1 and not use_default:

@@ -46,13 +46,30 @@ def sequence_extras(followups: Sequence[dict] = ()) -> str:
     return json.dumps({"calendar_followups": list(followups)})
 
 
+def _metadata(raw: str) -> dict:
+    try:
+        data = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 async def _publish_next(session: AsyncSession, previous: ChatMessage, extras: dict) -> ChatMessage | None:
     followups = extras.pop("calendar_followups")
     for position, following in enumerate(followups):
-        payload = following["proposal"]
-        context_id = following["context_id"]
-        target = payload["calendar"]
-        if await can_offer(session, previous.conversation_id, context_id, target["source_id"], target["connection_ref"]):
+        try:
+            payload = following["proposal"]
+            context_id = following["context_id"]
+            target = payload["calendar"]
+            source_id, connection = target["source_id"], target["connection_ref"]
+            if (payload["kind"] != "calendar" or target["action"] != "create" or not isinstance(payload["reason"], str)
+                    or not all(isinstance(value, str) and value for value in (context_id, source_id, connection))):
+                continue
+        except (KeyError, TypeError):
+            # An unreadable queued entry cannot hold up settlement of the
+            # preceding card or a later appointment with a verifiable target.
+            continue
+        if await can_offer(session, previous.conversation_id, context_id, source_id, connection):
             break
     else:
         # All prepared targets expired. A still-unfinished appointment can later
@@ -76,8 +93,8 @@ async def release(session: AsyncSession, card: ChatMessage | None) -> None:
     """Advance only on an explicit cancellation or a settled confirmation, in its transaction."""
     if card is None or not card.extras_json or card.proposal_status not in {"cancelled", "done", "failed"}:
         return
-    extras = json.loads(card.extras_json)
-    if "calendar_followups" not in extras or extras.get("calendar_sequence_closed"):
+    extras = _metadata(card.extras_json)
+    if not isinstance(extras.get("calendar_followups"), list) or extras.get("calendar_sequence_closed"):
         return
     extras["calendar_sequence_closed"] = True
     if extras["calendar_followups"]:
@@ -93,12 +110,14 @@ async def append(first_id: str, *, conversation_id: str, context_id: str | None,
             card = await session.get(ChatMessage, card_id, with_for_update=True)
             if card is None or card.conversation_id != conversation_id:
                 raise SequenceReplaced
-            extras = json.loads(card.extras_json or "{}")
+            extras = _metadata(card.extras_json)
             card_id = extras.get("next_calendar_proposal_id")
             if not card_id:
                 break
+            if not isinstance(card_id, str):
+                raise SequenceReplaced
         closed = extras.get("calendar_sequence_closed")
-        if "calendar_followups" not in extras or (not closed and card.proposal_status not in {"pending", "running", "unknown"}):
+        if not isinstance(extras.get("calendar_followups"), list) or (not closed and card.proposal_status not in {"pending", "running", "unknown"}):
             raise SequenceReplaced
         target = payload["calendar"]
         if not await can_offer(session, conversation_id, context_id, target["source_id"], target["connection_ref"]):
