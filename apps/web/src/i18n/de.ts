@@ -106,6 +106,7 @@ export const de = {
       proposal_context_revoked: 'Dieser Vorschlag stammt aus einem widerrufenen Kontext. Starte eine neue Unterhaltung.',
     },
     view: 'Ansicht', close: 'Schließen', month: 'Monat', week: 'Woche', day: 'Tag', list: 'Liste', dayStrip: 'Tage dieser Woche', previous: 'Vorheriger Zeitraum', next: 'Nächster Zeitraum',
+    updating: 'Termine werden aktualisiert …', cachedError: 'Die Termine konnten nicht aktualisiert werden. Du siehst den zuletzt geladenen Stand.',
     capped: 'Nicht alle Termine wurden geladen. Wähle einen kürzeren Zeitraum.',
     further: (count: number) => `+${count} weitere`, sourceDetails: 'Kalenderstand anzeigen',
     subscribe: 'Kalender abonnieren', subscribeConfirm: 'Abonnieren', replaceAddress: 'Adresse ersetzen',

@@ -83,3 +83,16 @@ test.each([
   expect(screen.queryByRole('button', { name: de.calendar.replaceAddress })).toBeNull()
   expect(screen.getByRole('button', { name: de.calendar.refresh })).toBeTruthy()
 })
+
+test.each(['pause', 'remove'] as const)('confirmed %s still restricts the source cache when the next read fails', async action => {
+  const { query, list } = setup()
+  const button = await screen.findByRole('button', { name: de.calendar[action] })
+  list.mockRejectedValue(new Error('test-only'))
+  spyOn(sdk, 'calendarSourceUpdate').mockResolvedValue({ data: { ...source, is_active: false, revision: 3 }, response: { ok: true } } as never)
+  spyOn(sdk, 'calendarSourceDelete').mockResolvedValue({ response: { ok: true } } as never)
+  fireEvent.click(button)
+  if (action === 'remove') fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: de.calendar.remove }))
+  await screen.findByText(de.calendar.error)
+  const cached = query.getQueryData<SourceOut[]>(['calendar', 'sources'])
+  expect(cached?.filter(s => s.is_active)).toEqual([])
+})

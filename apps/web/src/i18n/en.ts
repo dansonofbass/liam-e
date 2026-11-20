@@ -116,6 +116,7 @@ export const en = {
       proposal_context_revoked: 'This proposal’s context has been revoked. Start a new conversation.',
     },
     view: 'View', close: 'Close', month: 'Month', week: 'Week', day: 'Day', list: 'List', dayStrip: 'Days of this week', previous: 'Previous period', next: 'Next period',
+    updating: 'Updating events …', cachedError: 'Events couldn’t be updated. You’re seeing the last loaded version.',
     capped: 'Some events couldn’t be loaded. Choose a shorter period.',
     further: count => '+' + numberFormat.format(count) + ' more', sourceDetails: 'Show calendar status',
     subscribe: 'Subscribe to a calendar', subscribeConfirm: 'Subscribe', replaceAddress: 'Replace address',
