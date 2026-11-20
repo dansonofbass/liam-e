@@ -1,5 +1,6 @@
 """Accessor for ``mail_message`` rows: upsert during sync, search for the chat agent."""
 
+import json
 from collections.abc import Collection
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass
@@ -23,6 +24,21 @@ async def _writer(session):
         yield session
 
 
+def _connector_labels(stored: str, *, folder: str | None = None, is_read: bool | None = None, is_flagged: bool | None = None) -> str:
+    try:
+        labels = json.loads(stored)
+    except (TypeError, ValueError):
+        labels = []
+    labels = [label for label in labels if isinstance(label, str)] if isinstance(labels, list) else []
+    for label, present in (("INBOX", folder == "INBOX" if folder is not None else None),
+                           ("UNREAD", not is_read if is_read is not None else None), ("STARRED", is_flagged)):
+        if present and label not in labels:
+            labels.append(label)
+        elif present is False:
+            labels = [value for value in labels if value != label]
+    return json.dumps(labels)
+
+
 async def upsert_message(
     *,
     account_id: str,
@@ -36,8 +52,8 @@ async def upsert_message(
     body_text: str = "",
     internal_date: datetime | None = None,
     has_attachments: bool = False,
-    is_read: bool = False,
-    labels_json: str = "[]",
+    is_read: bool | None = False,
+    labels_json: str | None = "[]",
     sender_address: str = "",
     list_unsubscribe: str = "",
     list_unsubscribe_post: str = "",
@@ -46,7 +62,7 @@ async def upsert_message(
     cc_json: str = "[]",
     reply_to_json: str = "[]",
     attachments_json: str = "[]",
-    is_flagged: bool = False,
+    is_flagged: bool | None = False,
     body_version: int = 0,
     drop_insight: bool = False,
     unverified_connector: bool = False,
@@ -64,6 +80,7 @@ async def upsert_message(
             ).with_for_update()
         )
         message = result.scalar_one_or_none()
+        new = message is None
         if message is None:
             message = MailMessage(
                 account_id=account_id, folder=folder, provider_uid=provider_uid
@@ -82,15 +99,21 @@ async def upsert_message(
         message.cc_json = cc_json
         message.reply_to_json = reply_to_json
         message.attachments_json = attachments_json
-        message.is_flagged = is_flagged
+        # A connector can prove inbox membership without returning its flags. Preserve
+        # trusted flags on an existing row, and never carry unverified labels into chat.
+        if is_flagged is not None or new or reverified:
+            message.is_flagged = is_flagged if is_flagged is not None else False
         message.recipients_json = recipients_json
         message.snippet = snippet
         message.body_text = body_text
         message.body_version = body_version
         message.internal_date = internal_date
         message.has_attachments = has_attachments
-        message.is_read = is_read
-        message.labels_json = labels_json
+        if is_read is not None or new or reverified:
+            message.is_read = is_read if is_read is not None else True
+        message.labels_json = (labels_json if labels_json is not None else
+            _connector_labels("[]" if new or reverified else message.labels_json,
+                              folder=folder, is_read=is_read, is_flagged=is_flagged))
         session.add(message)
         if drop_insight and message.id:
             removed = await _drop_insight(session, message.id)
@@ -214,11 +237,13 @@ async def count_unread(*, chat_only: bool = False, folder: str = "INBOX", accoun
         return dict(rows.all())
 
 
-async def set_state(message_id: str, *, session: AsyncSession | None = None, folder: str | None = None, is_read: bool | None = None, is_flagged: bool | None = None, provider_uid: str | None = None, labels_json: str | None = None) -> MailMessage | None:
+async def set_state(message_id: str, *, session: AsyncSession | None = None, folder: str | None = None, is_read: bool | None = None, is_flagged: bool | None = None, provider_uid: str | None = None, labels_json: str | None = None, connector_labels: bool = False) -> MailMessage | None:
     async with _writer(session) as session:
         row = await session.get(MailMessage, message_id)
         if row is None:
             return None
+        if connector_labels and labels_json is None:
+            labels_json = _connector_labels(row.labels_json, folder=folder, is_read=is_read, is_flagged=is_flagged)
         for name, value in (("folder", folder), ("is_read", is_read), ("is_flagged", is_flagged), ("provider_uid", provider_uid), ("labels_json", labels_json)):
             if value is not None:
                 setattr(row, name, value)
@@ -287,6 +312,43 @@ async def known_uids(account_id: str, folder: str, *, verified_only: bool = Fals
         query = query.where(MailMessage.unverified_connector.is_(False))
     async with (nullcontext(session) if session is not None else get_session_maker()()) as session:
         return dict((await session.execute(query)).all())
+
+
+async def reconcile_connector_folders(session: AsyncSession, account_id: str, inbox: set[str], archived: set[str]) -> None:
+    """The Studio provider UID follows a message between INBOX and ARCHIVE."""
+    if not inbox and not archived:
+        return
+    rows = (await session.scalars(select(MailMessage).where(
+        MailMessage.account_id == account_id, MailMessage.provider_uid.in_(inbox | archived),
+        MailMessage.folder.in_(("INBOX", "ARCHIVE")),
+    ).order_by(MailMessage.id).with_for_update())).all()
+    by_uid: dict[str, dict[str, MailMessage]] = {}
+    for row in rows:
+        by_uid.setdefault(row.provider_uid, {})[row.folder] = row
+    moves = []
+    duplicate_ids = []
+    for uid, copies in by_uid.items():
+        target = "ARCHIVE" if uid in archived else "INBOX"
+        active = copies.get("INBOX")
+        stored = copies.get("ARCHIVE")
+        if active is not None and stored is not None:
+            # Retain the active inbox identity. An unverified copy cannot displace a
+            # verified archive when the only new evidence is that the UID left the inbox.
+            keep_archive = target == "ARCHIVE" and active.unverified_connector and not stored.unverified_connector
+            keep, duplicate = (stored, active) if keep_archive else (active, stored)
+            duplicate_ids.append(duplicate.id)
+            await session.delete(duplicate)
+        else:
+            keep = next(iter(copies.values()))
+        if keep.folder != target:
+            moves.append((keep, target))
+    if duplicate_ids:
+        await session.execute(delete(MailInsight).where(MailInsight.message_id.in_(duplicate_ids)))
+        await session.flush()
+    for row, target in moves:
+        row.folder = target
+        row.labels_json = _connector_labels(row.labels_json, folder=target)
+    await session.flush()
 
 
 async def stale_body_texts(account_id: str, folder: str, version: int, uids: list[str], *, session: AsyncSession | None = None) -> dict[str, str]:

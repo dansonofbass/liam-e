@@ -90,7 +90,7 @@ async def sync_account(account_id: str) -> SyncResult:
             stored_progress = changes.cursor
         if is_connector:
             async with sync_state_access.connector_transaction(account_id, previous, verified=verified) as (session, state):
-                new_ids, invalidated = await _apply_changes(account_id, changes, unverified=not verified, session=session)
+                new_ids, invalidated = await _apply_changes(account_id, changes, unverified=not verified, connector_session=session)
                 state.connector_deferred_threads = deferred
                 if verified:
                     state.connector_proof_revision += 1
@@ -131,13 +131,19 @@ async def _connector_changes(account, progress, deferred, options):
     if retry_count:
         recovered = await sync_connector.retry_threads(account, deferred[:retry_count], options["max_body_chars"])
         sync_connector.merge_observations(changes, recovered)
+    excluded = set(changes.moved_out) | changes.unconfirmed_uids
+    changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in excluded]
     return changes, list(dict.fromkeys([*deferred[retry_count:], *changes.deferred_threads]))
 
 
-async def _apply_changes(account_id, changes, *, unverified, session=None):
-    transaction = {"session": session} if session is not None else {}
+async def _apply_changes(account_id, changes, *, unverified, connector_session=None):
+    transaction = {"session": connector_session} if connector_session is not None else {}
     invalidated = []
     known = await message_access.known_uids(account_id, "INBOX", **transaction)
+    moved = set(changes.moved_out)
+    if connector_session is not None:
+        await message_access.reconcile_connector_folders(
+            connector_session, account_id, {row["provider_uid"] for row in changes.upserts}, moved)
     # Rows this run rewrites that still hold text from an older extraction.
     old_texts = {} if changes.full_rebuild else await message_access.stale_body_texts(account_id, "INBOX", BODY_VERSION, [parsed["provider_uid"] for parsed in changes.upserts], **transaction)
     if changes.full_rebuild:
@@ -145,14 +151,18 @@ async def _apply_changes(account_id, changes, *, unverified, session=None):
     new_ids = []
     for parsed in changes.upserts:
         uid = parsed["provider_uid"]
+        if connector_session is not None:
+            if uid in changes.read_updates:
+                parsed["is_read"] = changes.read_updates[uid]
+            if uid in changes.flag_updates:
+                parsed["is_flagged"] = changes.flag_updates[uid]
         outdated = uid in old_texts and insight_outdated(old_texts[uid], parsed["body_text"])
         row = await message_access.upsert_message(account_id=account_id, **parsed, body_version=BODY_VERSION, drop_insight=outdated,
                                                   unverified_connector=unverified, invalidated_insights=invalidated, **transaction)
         if uid not in known:
             new_ids.append(row.id)
-        if changes.full_rebuild:
+        if changes.full_rebuild or connector_session is not None:
             known[parsed["provider_uid"]] = row.id
-    moved = set(changes.moved_out)
     for uid in set(changes.read_updates) | set(changes.flag_updates) | moved:
         if uid not in known:
             continue
@@ -161,9 +171,12 @@ async def _apply_changes(account_id, changes, *, unverified, session=None):
             updates["is_read"] = changes.read_updates[uid]
         if uid in changes.flag_updates:
             updates["is_flagged"] = changes.flag_updates[uid]
-        if uid in moved:
+        if uid in moved and connector_session is None:
             updates["folder"] = "ARCHIVE"
-        await message_access.set_state(known[uid], **updates, **transaction)
+        if updates:
+            if connector_session is not None:
+                updates["connector_labels"] = True
+            await message_access.set_state(known[uid], **updates, **transaction)
     return new_ids, invalidated
 
 

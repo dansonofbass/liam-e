@@ -88,18 +88,29 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
 def merge_observations(current: SyncChanges, later: SyncChanges) -> None:
     """Combine successive reads of the same mailbox. The caller owns pagination."""
     excluded = set(later.moved_out) | later.unconfirmed_uids
-    returned = {row["provider_uid"]: row for row in later.upserts if row["provider_uid"] not in excluded}
     rows = {row["provider_uid"]: row for row in current.upserts if row["provider_uid"] not in excluded}
-    rows.update(returned)
+    returned = set()
+    for row in later.upserts:
+        uid = row["provider_uid"]
+        if uid in excluded:
+            continue
+        previous = rows.get(uid, {})
+        if row["labels_json"] is None:
+            # A singleton inbox match proves the folder but says nothing about the flags.
+            row = {**row, "labels_json": previous.get("labels_json"),
+                   "is_read": current.read_updates.get(uid, previous.get("is_read")),
+                   "is_flagged": current.flag_updates.get(uid, previous.get("is_flagged"))}
+        else:
+            current.read_updates.pop(uid, None)
+            current.flag_updates.pop(uid, None)
+        rows[uid] = row
+        returned.add(uid)
     current.upserts = list(rows.values())
     current.moved_out = list(dict.fromkeys([uid for uid in current.moved_out if uid not in returned] + later.moved_out))
     current.unconfirmed_uids.difference_update(returned)
     current.unconfirmed_uids.update(later.unconfirmed_uids)
-    # Earlier reconciliation must not overwrite flags on a subsequently fetched message.
-    for updates, new_updates in ((current.read_updates, later.read_updates), (current.flag_updates, later.flag_updates)):
-        for uid in returned:
-            updates.pop(uid, None)
-        updates.update(new_updates)
+    current.read_updates.update(later.read_updates)
+    current.flag_updates.update(later.flag_updates)
     current.deferred_threads.extend(later.deferred_threads)
 
 
@@ -237,6 +248,7 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
                     changes.moved_out.append(uid)
                 else:
                     changes.read_updates[uid] = "UNREAD" not in labels
+                    changes.flag_updates[uid] = "STARRED" in labels
             elif message.thread_id not in present:
                 changes.moved_out.append(uid)
             else:
@@ -281,6 +293,7 @@ def _apply_inbox_evidence(message, labels, thread_size, members) -> bool | None:
         message.update(_label_fields(matched_labels))
         return "INBOX" in matched_labels
     if thread_size == 1 and (not members or set(members) == {uid}):
+        message.update(labels_json=None, is_read=None, is_flagged=None)
         return True
     # The search matched the thread, but a sibling may be its only inbox message.
     return None
