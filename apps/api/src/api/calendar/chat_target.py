@@ -31,6 +31,11 @@ class CalendarChoice(CalendarOption):
 _QUOTED = re.compile(r""""[^"]*"|“[^”]*”|„[^“]*“|‘[^’]*’|‚[^‘]*‘|«[^»]*»|»[^«]*«|(?<!\w)'[^']*'(?!\w)""")
 _PREFIX = r"(?:in|into|to|on|im|für)\s+(?:(?:the|my|mein(?:em|en)?|den|dem|der|das)\s+)?"
 _CALENDAR = r"(?:calendar|kalender)"
+_NAME_WORD = (r"(?!(?:the|a|my|den|dem|der|das|in|im|into|on|for|at|from|to|am|um|für|"
+              r"today|tomorrow|heute|morgen|instead|statt|please|bitte|eintragen|anlegen|"
+              r"and|und|or|oder|calendar|kalender)\b)\w+(?:[-&/'’]\w+)*")
+_NAME_FIRST = re.compile(rf"(?<!\w){_PREFIX}(?P<name>{_NAME_WORD}(?:\s+(?:(?:&|and|und)\s+)?{_NAME_WORD})*)\s+{_CALENDAR}\b", re.I)
+_CALENDAR_FIRST = re.compile(rf"(?<!\w){_PREFIX}{_CALENDAR}\s+(?P<name>{_NAME_WORD}(?:\s+{_NAME_WORD})*)", re.I)
 _DEFAULT = re.compile(
     r"\b(?:use|choose|pick|in|into|on|to)\s+(?:(?:my|the)\s+)?default calendar\b"
     r"|\b(?:nimm|nutze|verwende|im|in|auf|zum|den)\s+(?:doch\s+)?(?:(?:meinen|meinem|den|dem)\s+)?standardkalender\b", re.I)
@@ -88,8 +93,35 @@ _EXCLUSION = re.compile(r"(?<!\w)(?:do not|don['’]t|not|never|except(?: for)?|
 _DEFAULT_NAMES = frozenset(("default calendar", "standardkalender"))
 
 
-def owner_selection(text: str, title: str | None = None, *, entries=()) -> OwnerSelection:
+_LOCATION = re.compile(r"\b(?:location|venue|place|ort|veranstaltungsort|treffpunkt)\s*"
+                       r"(?:(?:set|changed|geändert|gesetzt)\s+)?(?:[:=]|\b(?:to|as|is|auf|ist)\b)\s*", re.I)
+_FIELD_END = re.compile(r"[,;.!?\n]|\b(?:and|und|but|aber)\s+(?=(?:(?:please|bitte)\s+)?"
+                        r"(?:put|use|choose|schedule|create|verwende|nimm|plane|erstelle)\b)", re.I)
+
+
+def _without_locations(text: str, location: str | None) -> str:
+    masked = _QUOTED.sub(lambda match: " " * len(match[0]), text)
+    fields = list(_LOCATION.finditer(masked))
+    if isinstance(location, str) and location.strip():
+        fields.extend(re.finditer(r"\b(?:at|bei)\s+(?=" + re.escape(location.strip()) + r"(?!\w))", masked, re.I))
+    for field in reversed(sorted(fields, key=lambda match: match.start())):
+        start = field.end()
+        if isinstance(location, str) and text[start:start + len(location)].casefold() == location.casefold():
+            start += len(location)
+        ends = [match.start() for pattern in (_FIELD_END, _NAME_FIRST, _CALENDAR_FIRST)
+                if (match := pattern.search(masked, start))]
+        end = min(ends, default=len(text))
+        text = text[:field.start()] + " " * (end - field.start()) + text[end:]
+    return text
+
+
+def _declared_names(text: str) -> set[str]:
+    return {match["name"].strip().casefold() for pattern in (_NAME_FIRST, _CALENDAR_FIRST) for match in pattern.finditer(text)}
+
+
+def owner_selection(text: str, title: str | None = None, *, entries=(), location: str | None = None) -> OwnerSelection:
     """An exclusion applies to its named calendar operand, including quoted names."""
+    text = _without_locations(text, location)
     masked = _QUOTED.sub(lambda match: " " * len(match.group()), text)
     if isinstance(title, str) and title.strip():
         masked = re.sub(r"\b(?:titled|called|named|mit (?:dem )?Titel|namens)\s+" + re.escape(title.strip()),
@@ -97,7 +129,7 @@ def owner_selection(text: str, title: str | None = None, *, entries=()) -> Owner
     exclusions = list(_EXCLUSION.finditer(masked))
     if not exclusions:
         return _selection_words(text, title, entries)
-    names = _DEFAULT_NAMES.union(value for source, _ in entries for value in (source.name.strip(), source.id) if value)
+    names = _DEFAULT_NAMES.union(_declared_names(masked), (value for source, _ in entries for value in (source.name.strip(), source.id) if value))
     choices = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
     operand = re.compile(
         rf"\s*(?:(?:put|place|schedule|book|add|use|choose|pick|select|nutze|verwende|nimm)\s+"
@@ -307,6 +339,10 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
         bare = selection.excluded_targets and re.search(rf'(?<!\w){_PREFIX}{name}(?=\s*(?:[,.;!?]|$))', folded)
         if bare or re.search(rf'(?<!\w)(?:{calendar_phrase}|{directive})', folded):
             names.add(source.name.strip().casefold())
+    # The owner can explicitly name a paused, removed or unknown calendar. The
+    # readable catalog cannot supply that name; only the owner's text can.
+    if not use_default and not names:
+        names.update(_declared_names(folded))
     if use_default and not names:
         return CalendarChoice(use_default=True)
     if len(names) == 1 and not use_default:

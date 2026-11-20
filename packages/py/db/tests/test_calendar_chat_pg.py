@@ -188,8 +188,10 @@ def test_calendar_default_revision_and_proposal_target(pg_db, monkeypatch):
 
         first, second = source('primary', 'Team'), source('secondary', 'Privat')
         feed, twin = source('ics', 'Ferien', 'ics', False), source('twin', 'Team')
+        paused = source('paused-research', 'Research')
+        paused.is_active = False
         async with get_session_maker().begin() as session:
-            session.add_all([first, second, feed, twin])
+            session.add_all([first, second, feed, twin, paused])
         conversation, snapshot, _ = await chat_context.resolve(conversation_id=None, title='Test', model='',
             revision_id=None, account_id=None, app_prompt_version='test')
         ctx = TurnContext(conversation.id, None, date(2026, 11, 12), context_id=snapshot.id,
@@ -206,6 +208,12 @@ def test_calendar_default_revision_and_proposal_target(pg_db, monkeypatch):
         assert chosen.version == 2 and chosen.default_source_id in {first.id, second.id}
         card = await chat.prepare(values, ctx)
         assert card.source_id == chosen.default_source_id
+        from api.calendar.chat_target import choice_for_clarification
+        assert paused.id not in ctx.calendar_source_ids
+        pending = await choice_for_clarification(replace(ctx, user_text='Schedule a review in the Research calendar'), 'What time?')
+        assert pending and pending.name.casefold() == 'research'
+        with pytest.raises(writes.WriteError, match='calendar_name_unknown'):
+            await chat.prepare(values, replace(ctx, calendar_choice=pending, user_text='Tomorrow at 10.'))
         dispatched = []
         async def execute(request, *, write_id):
             dispatched.append((request.source_id, write_id))

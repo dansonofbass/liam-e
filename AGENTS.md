@@ -489,6 +489,8 @@ is excluded, the owner chooses a target. An edit or deletion carries its target 
 When the owner rules out one of several offered calendars, the chat keeps the remaining
 options and rechecks the selected source. A time clarification can repeat the pending appointment's title.
 Field updates keep that appointment's target. A list with an unidentified calendar requires an explicit choice.
+An unavailable calendar named by the owner stays unresolved through time and duration questions.
+Location changes affect the event's location. Only a separate calendar instruction selects the destination.
 
 The API persists the full set of readable IDs in `chat_context.calendar_scope_json`. For ICS
 subscriptions it also records a private fingerprint of each encrypted feed configuration.

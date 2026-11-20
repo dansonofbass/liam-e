@@ -377,6 +377,28 @@ async def test_non_calendar_alternative_does_not_change_explicit_destination(mon
     assert (await chat.prepare(fields, ctx)).source_id == 'work'
 
 
+@pytest.mark.parametrize('default', ['personal', 'work'])
+async def test_location_correction_does_not_choose_or_exclude_a_calendar(monkeypatch, default):
+    from dataclasses import replace
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+    from unittest.mock import AsyncMock
+
+    sources = [CalendarSource(id=name.lower(), name=name, provider='google', connection_ref='synthetic',
+        external_id=name, capabilities_json='["read","write"]', timezone='UTC') for name in ('Home', 'Work', 'Personal')]
+    async def catalog(*, ids):
+        return [(s, None) for s in sources if s.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=SimpleNamespace(default_source_id=default)))
+    text = 'Schedule lunch tomorrow at noon with the location set to Home instead of Work'
+    ctx = TurnContext('synthetic', None, date(2026, 11, 20), calendar_source_ids=[s.id for s in sources], user_text=text)
+    values = {'action': 'create', 'title': 'Lunch', 'location': 'Home', 'start_local': '2026-11-21T12:00', 'end_local': '2026-11-21T13:00'}
+    command = await chat.prepare(values, ctx)
+    assert (command.source_id, command.after.location) == (default, 'Home')
+    explicit = replace(ctx, user_text=text + ', put it in the Home calendar.')
+    assert (await chat.prepare(values, explicit)).source_id == 'home'
+
+
 @pytest.mark.parametrize('default, request_text, expected', [
     ('personal', 'Schedule lunch tomorrow at noon, but do not put it in the Work calendar', 'personal'),
     ('personal', 'Plane ein Mittagessen, aber bitte nicht im Kalender „Work“', 'personal'),
