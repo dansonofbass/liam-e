@@ -80,7 +80,8 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
         return current
     rows = {item["provider_uid"]: item for item in history.upserts}
     rows.update((item["provider_uid"], item) for item in current.upserts)
-    current.upserts = list(rows.values())
+    current.unconfirmed_uids.update(history.unconfirmed_uids)
+    current.upserts = [row for uid, row in rows.items() if uid not in current.unconfirmed_uids]
     current.deferred_threads.extend(history.deferred_threads)
     if history.cursor.startswith("initial:"):
         _, token = json.loads(history.cursor.removeprefix("initial:"))
@@ -93,6 +94,8 @@ async def _thread_messages(provider: str, thread_id: str):
         thread = await connectors.call_read_tool_json(provider, "get_thread",
             {"threadId": thread_id, "messageFormat": "FULL_CONTENT"})
     except httpx.HTTPStatusError as error:
+        if error.response.status_code in (401, 403):
+            raise
         return [] if error.response.status_code == 404 else None
     except (ValueError, TypeError, httpx.TransportError):
         return None
@@ -146,6 +149,7 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
                     changes.deferred_threads.append(thread_id)
                     continue
                 thread_latest = None
+                members = _member_labels(thread)
                 for message in messages:
                     parsed = _indexed_message(message, thread_id, max_body_chars)
                     if parsed is None:
@@ -157,10 +161,16 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
                     if (lower is not None and stamp <= lower) or (upper is not None and stamp >= upper):
                         continue
                     latest = stamp if latest is None else max(latest, stamp)
-                    labels = message.get("labelIds")
-                    if (labels is None or "INBOX" in labels) and parsed["provider_uid"] not in seen:
+                    uid = parsed["provider_uid"]
+                    belongs = _listed_inbox(uid, message.get("labelIds"), len(messages), members)
+                    if belongs is None:
+                        changes.deferred_threads.append(thread_id)
+                        changes.unconfirmed_uids.add(uid)
+                    elif belongs and uid not in seen:
                         changes.upserts.append(parsed)
-                        seen.add(parsed["provider_uid"])
+                        seen.add(uid)
+                    elif not belongs and uid in known:
+                        changes.moved_out.append(uid)
                 if thread_latest is not None:
                     frontier = min(thread_latest, upper) if upper is not None else thread_latest
             token = next_token
@@ -196,9 +206,8 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
     if valid:
         threads = await _search(account.provider, "in:inbox newer_than:14d")
         present = {thread["id"] for thread in threads}
-        labels_by_uid = {message["id"]: set(message["labelIds"])
-                         for thread in threads for message in (thread.get("messages") or [])
-                         if isinstance(message.get("labelIds"), list)}
+        labels_by_uid = {uid: labels for thread in threads
+                         for uid, labels in (_member_labels(thread) or {}).items() if isinstance(labels, list)}
         fallback = {}
         cutoff = datetime.now(UTC) - timedelta(days=14)
         for uid, local_id in known.items():
@@ -234,7 +243,29 @@ def _indexed_message(row, thread_id, max_body_chars):
     return parsed if parsed["internal_date"] is not None else None
 
 
-async def _inbox_evidence(provider: str, thread_id: str, stamp: int) -> tuple[bool | None, dict[str, list | None]]:
+def _member_labels(thread: dict) -> dict[str, Any] | None:
+    rows = thread.get("messages")
+    if rows is None:
+        return {}
+    if not isinstance(rows, list) or not all(isinstance(row, dict) and isinstance(row.get("id"), str) and row["id"] for row in rows):
+        return None
+    return {row["id"]: row.get("labelIds") for row in rows}
+
+
+def _listed_inbox(uid, labels, thread_size, members) -> bool | None:
+    if isinstance(labels, list):
+        return "INBOX" in labels
+    if members is None:
+        return None
+    if isinstance(members.get(uid), list):
+        return "INBOX" in members[uid]
+    if thread_size == 1 and (not members or set(members) == {uid}):
+        return True
+    # The search matched the thread, but a sibling may be its only inbox message.
+    return None
+
+
+async def _inbox_evidence(provider: str, thread_id: str, stamp: int):
     """Check the current inbox near the message date, even for mail outside the recent window."""
     token = ""
     query = f"in:inbox after:{max(0, stamp - 1)} before:{stamp + 2}"
@@ -246,10 +277,7 @@ async def _inbox_evidence(provider: str, thread_id: str, stamp: int) -> tuple[bo
         for item in threads:
             if item["id"] != thread_id:
                 continue
-            rows = item.get("messages") or []
-            if not isinstance(rows, list) or not all(isinstance(row, dict) and row.get("id") for row in rows):
-                raise ValueError("Incomplete connector inbox match")
-            return True, {row["id"]: row.get("labelIds") for row in rows}
+            return True, _member_labels(item)
         if not token:
             return False, {}
     return None, {}
@@ -260,46 +288,41 @@ async def _message_in_inbox(provider, thread_id, message, labels, thread_size, e
         return "INBOX" in labels
     stamp = int(message["internal_date"].timestamp())
     if stamp not in evidence:
-        evidence[stamp] = await _inbox_evidence(provider, thread_id, stamp)
+        try:
+            evidence[stamp] = await _inbox_evidence(provider, thread_id, stamp)
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code in (401, 403):
+                raise
+            evidence[stamp] = (None, {})
+        except (ValueError, TypeError, httpx.TransportError):
+            evidence[stamp] = (None, {})
     listed, members = evidence[stamp]
     if listed is not True:
         return listed
-    uid = message["provider_uid"]
-    if isinstance(members.get(uid), list):
-        return "INBOX" in members[uid]
-    if thread_size == 1 and (not members or set(members) == {uid}):
-        return True
-    # A different message in this thread could be the inbox match.
-    return None
+    return _listed_inbox(message["provider_uid"], labels, thread_size, members)
 
 
 async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_chars: int) -> SyncChanges:
     """Direct reads by thread ID need current inbox evidence before restoring messages."""
     recovered = SyncChanges()
     for thread_id in thread_ids:
-        pending = False
-        try:
-            messages = await _thread_messages(account.provider, thread_id)
-            if messages is None:
-                raise ValueError("Incomplete connector thread")
-            evidence = {}
-            for row in messages:
-                parsed = _indexed_message(row, thread_id, max_body_chars)
-                if parsed is None:
-                    pending = True
-                    continue
-                uid = parsed["provider_uid"]
-                in_inbox = await _message_in_inbox(account.provider, thread_id, parsed, row.get("labelIds"), len(messages), evidence)
-                if in_inbox is None:
-                    pending = True
-                    continue
-                if in_inbox:
-                    recovered.upserts.append(parsed)
-                else:
-                    recovered.moved_out.append(uid)
-        except (ValueError, KeyError, TypeError, httpx.HTTPError):
-            # Keep independent new arrivals. The caller verifies the mailbox after this read.
-            pending = True
+        messages = await _thread_messages(account.provider, thread_id)
+        pending = messages is None
+        evidence = {}
+        for row in messages or []:
+            parsed = _indexed_message(row, thread_id, max_body_chars)
+            if parsed is None:
+                pending = True
+                continue
+            uid = parsed["provider_uid"]
+            in_inbox = await _message_in_inbox(account.provider, thread_id, parsed, row.get("labelIds"), len(messages), evidence)
+            if in_inbox is None:
+                recovered.unconfirmed_uids.add(uid)
+                pending = True
+            elif in_inbox:
+                recovered.upserts.append(parsed)
+            else:
+                recovered.moved_out.append(uid)
         if pending:
             recovered.deferred_threads.append(thread_id)
     return recovered

@@ -130,7 +130,7 @@ async def _connector_changes(account, progress, deferred, options):
     retry_count = min(5, len(deferred))
     if retry_count:
         recovered = await sync_connector.retry_threads(account, deferred[:retry_count], options["max_body_chars"])
-        removed = set(recovered.moved_out)
+        removed = set(recovered.moved_out) | recovered.unconfirmed_uids
         returned = {item["provider_uid"]: item for item in recovered.upserts}
         by_uid = {item["provider_uid"]: item for item in changes.upserts if item["provider_uid"] not in removed}
         by_uid.update(returned)

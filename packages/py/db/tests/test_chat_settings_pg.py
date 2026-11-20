@@ -495,6 +495,44 @@ def test_first_verified_page_commits_valid_mail_and_retries_only_the_malformed_t
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.parametrize("refused_thread", ["current", "deferred"])
+def test_full_content_refusal_after_successful_listing_marks_sync_expired(pg_db, monkeypatch, status, refused_thread):
+    from api.mail import connector_mailbox, connectors, sync
+    from db.accessors import mail_message, mail_sync_state
+    from db.models.mail_sync_state import MailSyncState
+
+    async def run():
+        account = await service.upsert_account(provider="gmail", auth_type=connectors.CONNECTOR, email_address="reader@example.test")
+        bound = connector_mailbox.encode(("named", "anchor", "proof"), "15")
+        state = await mail_sync_state.save_state(account_id=account.id, cursor="15", connector_cursor=bound, connector_verified=True)
+        if refused_thread == "deferred":
+            async with get_session_maker().begin() as session:
+                stored = await session.get(MailSyncState, state.id)
+                stored.connector_deferred_threads = ["deferred"]
+        reads = []
+
+        async def provider(_, tool, args):
+            if tool == "search_threads":
+                return {"threads": [{"id": "current"}]}
+            if args["messageFormat"] == "MINIMAL":
+                return {"id": "anchor", "messages": [{"id": "proof", "sender": account.email_address, "labelIds": ["SENT"]}]}
+            reads.append(args["threadId"])
+            if args["threadId"] == refused_thread:
+                request = httpx.Request("GET", "https://connector.example.test/thread")
+                httpx.Response(status, request=request).raise_for_status()
+            return {"id": "current", "messages": [{"id": "fresh", "date": "2026-06-01T11:00:00Z", "labelIds": ["INBOX"]}]}
+
+        monkeypatch.setattr(connectors, "call_read_tool_json", provider)
+        result = await sync.sync_account(account.id)
+        assert reads == (["current"] if refused_thread == "current" else ["current", "deferred"])
+        assert (result.status, result.error_code) == ("error", "auth_expired")
+        after = await mail_sync_state.get_state(account.id)
+        assert (after.status, after.last_error, after.cursor, after.connector_cursor) == ("error", "auth_expired", "15", bound)
+        assert await mail_message.known_uids(account.id, "INBOX") == {}
+    asyncio.run(run())
+
+
 def test_base_worker_cannot_claim_targeted_refreshes_even_after_expiry_or_retry(pg_db):
     from datetime import UTC, datetime, timedelta
     from sqlalchemy import and_, or_, select

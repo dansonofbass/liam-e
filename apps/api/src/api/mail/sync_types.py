@@ -24,6 +24,7 @@ class SyncChanges:
     cursor: str = ""
     full_rebuild: bool = False
     deferred_threads: list[str] = field(default_factory=list)
+    unconfirmed_uids: set[str] = field(default_factory=set)
 
 
 @dataclass

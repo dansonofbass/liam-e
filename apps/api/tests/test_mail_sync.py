@@ -474,7 +474,7 @@ async def test_connector_skips_messages_without_inbox_label(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_connector_scan_keeps_messages_with_unknown_labels(monkeypatch):
+async def test_connector_scan_uses_per_message_listing_when_full_labels_are_missing(monkeypatch):
     async def known(*_): return {}
     async def call(provider, tool, args):
         if tool == "get_thread":
@@ -482,7 +482,9 @@ async def test_connector_scan_keeps_messages_with_unknown_labels(monkeypatch):
                 {"id": "missing", "date": "1970-01-01T00:01:40+00:00"},
                 {"id": "none", "date": "1970-01-01T00:03:20+00:00", "labelIds": None},
             ]}
-        return {"threads": [{"id": "t"}]}
+        return {"threads": [{"id": "t", "messages": [
+            {"id": "missing", "labelIds": ["INBOX"]}, {"id": "none", "labelIds": ["INBOX"]},
+        ]}]}
     monkeypatch.setattr(sync_connector.message_access, "known_uids", known)
     monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
     result = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="", folders=["INBOX"], limit=10, max_body_chars=100)
@@ -858,3 +860,30 @@ async def test_retry_does_not_infer_membership_from_another_message_in_the_threa
     changes = await sync_connector.retry_threads(account("gmail", "connector"), ["held"], 100)
     assert [message["provider_uid"] for message in changes.upserts] == ["visible"]
     assert changes.deferred_threads == ["held"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("initial_labels", [None, ["INBOX"]])
+@pytest.mark.parametrize("membership_timeout", [False, True])
+async def test_regular_and_deferred_reads_only_publish_confirmed_siblings(monkeypatch, initial_labels, membership_timeout):
+    stamp = "2026-06-01T11:00:00+00:00"
+    visible = {"id": "visible", "date": stamp, "labelIds": ["INBOX"]}
+    reads = 0
+
+    async def provider(_, tool, args):
+        nonlocal reads
+        if tool == "get_thread":
+            reads += 1
+            archived = {"id": "archived", "date": stamp, "labelIds": initial_labels if reads == 1 else None}
+            return {"id": "mixed", "messages": [archived, visible]}
+        if membership_timeout and "before:" in args["query"]:
+            raise httpx.ReadTimeout("Inbox lookup timed out")
+        return {"threads": [{"id": "mixed", "messages": [visible]}]}
+
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", provider)
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", AsyncMock(return_value={}))
+    options = {"folders": ["INBOX"], "limit": 10, "max_body_chars": 100}
+    changes, pending = await sync._connector_changes(account("gmail", "connector"), "15", ["mixed"], options)
+    assert reads == 2
+    assert [message["provider_uid"] for message in changes.upserts] == ["visible"]
+    assert pending == ["mixed"]
