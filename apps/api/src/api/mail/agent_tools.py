@@ -72,7 +72,7 @@ TOOLS = [
     _schema('get_insights', 'Get mail insights', {'message_ids': A}, ['message_ids']),
     _schema('find_newsletters', 'Find newsletter senders', {}),
     _schema('propose_action', 'Propose a mail action for confirmation', {'kind': {'type':'string', 'enum':['archive','trash','mark_read','unsubscribe']}, 'message_ids': A, 'sender_ids': A, 'reason': S}, ['kind','reason']),
-    _schema('create_draft', 'Propose a mail to send', {'to': A, 'cc': A, 'subject': S, 'body': S, 'mode': {'type':'string', 'enum':['new','reply','reply_all','forward']}, 'reply_to_message_id': S}, ['to','subject','body']),
+    _schema('create_draft', 'Propose a mail to send. For new mail use the requested sender from list_accounts. Ask which account to use when several are available and the sender is unclear.', {'account_id': S, 'to': A, 'cc': A, 'subject': S, 'body': S, 'mode': {'type':'string', 'enum':['new','reply','reply_all','forward']}, 'reply_to_message_id': S}, ['to','subject','body']),
     _schema('show_mails', 'Display mail cards', {'message_ids': A}, ['message_ids']),
     _schema('suggest_followups', 'Suggest follow-up actions', {'texts': A}, ['texts']),
 ]
@@ -227,11 +227,22 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         if not _valid_addresses(to + cc): return result({'error':'invalid_address'})
         original = await mail_message.get_message(arguments.get('reply_to_message_id', '')) if mode != 'new' else None
         if mode != 'new' and not original: return result({'error':'message_not_found'})
+        sender_id = arguments.get('account_id')
         if original:
-            account = await mail_account.get_account(original.account_id)
-        else:
-            account = await mail_account.get_account(ctx.account_id) if ctx.account_id else next((a for a in await mail_account.list_accounts() if a.is_active and a.id in scope), None)
-        if not account: return result({'error':'no_account'})
+            if sender_id is not None and sender_id != original.account_id:
+                return result({'error': 'sender_must_match_original'})
+            sender_id = original.account_id
+        if sender_id is None:
+            sender_id = ctx.account_id
+        if sender_id is None:
+            if len(scope) > 1:
+                return result({'error': 'sender_account_required'})
+            if not scope:
+                return result({'error': 'no_account'})
+            sender_id = scope[0]
+        account = await mail_account.get_account(sender_id)
+        if not account or not account.is_active:
+            return result({'error': 'no_account'})
         if mode in ('reply','reply_all'):
             to, base_cc = send.reply_recipients(original, account, reply_all=mode == 'reply_all')
             seen = {address.casefold() for address in to}
@@ -244,7 +255,8 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         if not to: return result({'error':'recipients_missing'})
         if not _valid_addresses(to + cc): return result({'error':'invalid_address'})
         to_text = ', '.join(to)
-        reason = {'new':f'Neue Mail an {to_text}.', 'reply':f'Antwort an {to_text}.', 'reply_all':f'Antwort an alle: {to_text}.', 'forward':f'Weiterleitung an {to_text}.'}[mode]
+        new_reason = f'Email from {account.email_address} to {to_text}.' if ctx.locale == 'en' else f'Neue Mail von {account.email_address} an {to_text}.'
+        reason = {'new':new_reason, 'reply':f'Antwort an {to_text}.', 'reply_all':f'Antwort an alle: {to_text}.', 'forward':f'Weiterleitung an {to_text}.'}[mode]
         draft = proposals.SendDraft(account_id=account.id, mode=mode, to=to, cc=cc, subject=arguments.get('subject') or (original.subject if original else ''), body=arguments.get('body', ''), quote=send.quote_original(original) if original else '', reply_to_message_id=original.id if original else None)
         return await _proposal(ctx, proposals.Proposal(kind='send', reason=reason, items=[], draft=draft))
     if name == 'show_mails':

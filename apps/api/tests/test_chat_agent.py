@@ -561,3 +561,26 @@ async def test_mail_tools_use_the_granted_accounts_including_an_empty_selection(
         if not ids:
             assert await tool('create_draft', {'to': ['owner@example.test'], 'body': 'Test'}) == {'error': 'no_account'}
     assert store.rows == []
+
+
+async def test_new_draft_uses_the_requested_granted_sender(store):
+    from api.mail.agent_tools import TOOLS, TurnContext, execute_tool
+
+    other = await store.mail.create_account(provider='imap', auth_type='imap_password', email_address='work@example.test')
+    ctx = TurnContext('chat', None, date.today(), account_ids=[store.account.id, other.id])
+    fields = {'to': ['reader@example.test'], 'subject': 'Example', 'body': 'Hello'}
+    schema = next(tool['function'] for tool in TOOLS if tool['function']['name'] == 'create_draft')
+    assert 'account_id' in schema['parameters']['properties']
+    for extra, error in [({}, 'sender_account_required'), ({'account_id': 'excluded'}, 'account_out_of_scope')]:
+        outcome = await execute_tool('create_draft', fields | extra, ctx)
+        assert json.loads(outcome.content) == {'error': error}
+    original = MailMessage(account_id=store.account.id, provider_uid='one', sender='reader@example.test')
+    store.mail.messages[original.id] = original
+    reply = await execute_tool('create_draft', fields | {'mode': 'reply', 'reply_to_message_id': original.id, 'account_id': other.id}, ctx)
+    assert json.loads(reply.content) == {'error': 'sender_must_match_original'}
+    assert store.rows == []
+    outcome = await execute_tool('create_draft', fields | {'account_id': other.id}, ctx)
+    proposal = json.loads(outcome.proposal_message.proposal_json)
+    assert proposal['draft']['account_id'] == other.id
+    assert other.email_address in proposal['reason']
+    assert outcome.proposal_message.proposal_status == 'pending'

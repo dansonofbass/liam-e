@@ -646,9 +646,9 @@ set. A changed revision, missing historical context or pre-migration history req
 conversation. The owner can still read the original messages and cancel an old pending proposal.
 The claim for confirmation rechecks the grant under the same lock as a settings update. A claim
 that already succeeded can finish. The browser sends the revision seen in its scoped inbox
-summary (or the settings API) with every chat request. History shows the restart action when a grant has changed. An old reply is ineligible for speech synthesis. Quick actions, draft entry points and task account choices use
+summary (or the settings API) with every chat request. History shows the restart action when a grant has changed. Changing the grant stops active or loading speech. An old reply is ineligible for speech synthesis. Quick actions, draft entry points and task account choices use
 the same grant. General task access includes eligible personal tasks and tasks belonging to the
-granted accounts. Ordinary inbox access is independent of these chat settings.
+granted accounts. For new mail with multiple eligible senders, the chat asks which account to use. The draft card shows the sender. Replies and forwards keep the original account. Ordinary inbox access is independent of these chat settings.
 
 ## Explicit preferences (#38)
 

@@ -678,3 +678,47 @@ test.each([null, { ...currentContext, mail_scope_version: 3 }])('an earlier or u
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   expect((await screen.findByPlaceholderText(de.chat.placeholder) as HTMLTextAreaElement).value).toBe('')
 })
+
+
+test.each(['loading', 'playing'])('changing a grant stops %s speech', async phase => {
+  const previousAudio = Object.getOwnPropertyDescriptor(globalThis, 'Audio')
+  const pause = mock(() => {})
+  const play = mock(async () => {})
+  class FakeAudio extends EventTarget {
+    play = play
+    pause = pause
+    load() {}
+    removeAttribute() {}
+  }
+  Object.defineProperty(globalThis, 'Audio', { value: FakeAudio, configurable: true })
+  try {
+    let finish!: () => void
+    const download = new Promise<void>(resolve => { finish = resolve })
+    let requestSignal: AbortSignal | undefined
+    const speech = spyOn(sdk, 'audioSpeech').mockImplementation((async ({ signal }: { signal: AbortSignal }) => {
+      requestSignal = signal
+      await download
+      return { data: new Blob(['audio'], { type: 'audio/mpeg' }) }
+    }) as never)
+    spyOn(sdk, 'audioCapabilitiesGet').mockResolvedValue({ data: { tts: { status: 'available', formats: ['audio/mpeg'] } } } as never)
+    const { client } = setup('/chat/c')
+    await screen.findByPlaceholderText(de.chat.placeholder)
+    act(() => { client.setQueryData(['history', 'c'], [historyRow('answer', 'assistant')]) })
+    fireEvent.click(await screen.findByRole('button', { name: de.audio.speech }))
+    await waitFor(() => expect(speech).toHaveBeenCalledTimes(1))
+    if (phase === 'playing') {
+      await act(async () => { finish() })
+      await screen.findByText(de.audio.speechPlaying)
+    }
+    act(() => { client.setQueryData(['summary', 'chat'], { ...summary, mail_scope_version: 5 }) })
+    await screen.findByText(de.chatAccounts.restart)
+    expect(requestSignal?.aborted).toBe(true)
+    expect(screen.queryByRole('button', { name: de.audio.speechStop })).toBeNull()
+    await act(async () => { finish() })
+    expect(play).toHaveBeenCalledTimes(phase === 'playing' ? 1 : 0)
+    expect(pause).toHaveBeenCalledTimes(phase === 'playing' ? 1 : 0)
+  } finally {
+    if (previousAudio) Object.defineProperty(globalThis, 'Audio', previousAudio)
+    else Reflect.deleteProperty(globalThis, 'Audio')
+  }
+})

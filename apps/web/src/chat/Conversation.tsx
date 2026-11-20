@@ -94,9 +94,6 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const { data: models = [] } = useQuery(modelsQuery())
   const { state, send, retry, retryWithoutPreferences, audioDraftLocked } = useChatSession()
   const tts = useAudioCapabilities()?.tts
-  const speechEnabled = tts?.status === 'available' && tts.formats.includes('audio/mpeg') &&
-    typeof Audio !== 'undefined' && typeof URL.createObjectURL === 'function'
-  const speech = useSpeechPlayback(conversationId, speechEnabled, audioDraftLocked)
   const { scope, ready } = useConversationScope(conversationId)
   const calendar = useCalendarScope(conversationId)
   const restart = useRestartConversation(conversationId)
@@ -106,6 +103,9 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const messages = history.data ?? []
   const grantVersion = summary?.mail_scope_version
   const oldGrant = grantVersion != null && messages.some(message => message.context?.mail_scope_version !== grantVersion)
+  const speechEnabled = grantVersion != null && !oldGrant && tts?.status === 'available' && tts.formats.includes('audio/mpeg') &&
+    typeof Audio !== 'undefined' && typeof URL.createObjectURL === 'function'
+  const speech = useSpeechPlayback(conversationId, speechEnabled, audioDraftLocked)
   const ordered = turnOrder(messages)
   const lastAssistant = messages.findLast(message => message.role === 'assistant')
   // Follow-ups come after the last answer and the cards of its turn.
@@ -125,7 +125,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     if (message.role === 'proposal' || message.role === 'draft') return <ProposalCard key={message.id} message={message} oldGrant={oldGrant} />
     if (message.role !== 'assistant') return null
     return <>{message.context && <PreferenceContext context={message.context} />}{message.context?.revoked && <Notice tone="info" action={{ label: texts.prompts.restart, onClick: restart }}>{message.context.preferences_enabled ? texts.errors.context_revoked : texts.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>
-      {speechEnabled && !oldGrant && !message.stopped && !message.context?.revoked && message.content.trim() &&
+      {speechEnabled && !message.stopped && !message.context?.revoked && message.content.trim() &&
         <SpeechControls messageId={message.id} player={speech} disabled={audioDraftLocked} />}
       {message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}{message.extras.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}</>
   }
