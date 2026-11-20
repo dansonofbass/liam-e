@@ -19,6 +19,7 @@ from alembic import context
 from alembic.autogenerate import comparators
 from alembic.operations import ops
 from db import metadata as target_metadata
+from db.migrations import row_triggers  # noqa: F401 (register the model trigger comparator and renderer)
 from db.schema_filter import include_object
 from env.db import env
 from sqlalchemy import CheckConstraint, inspect, pool, text
