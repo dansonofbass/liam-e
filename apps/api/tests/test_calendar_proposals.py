@@ -397,15 +397,46 @@ async def test_location_correction_does_not_choose_or_exclude_a_calendar(monkeyp
     assert (command.source_id, command.after.location) == (default, 'Home')
     explicit = replace(ctx, user_text=text + ', put it in the Home calendar.')
     assert (await chat.prepare(values, explicit)).source_id == 'home'
-    for ending in ('but not in the Work calendar', 'and do not put it in the Work calendar'):
+    for ending in ('but not in the Work calendar', 'and do not put it in the Work calendar',
+                   'but do not use the Work calendar', 'but please don’t choose the Work calendar'):
         after_location = replace(ctx, user_text=f'Schedule lunch tomorrow at noon at Café Central {ending}.')
         args = {**values, 'location': 'Café Central'}
         if default == 'work':
             with pytest.raises(writes.WriteError, match='calendar_name_required'):
                 await chat.prepare(args, after_location)
+            reply = replace(ctx, calendar_choice=after_location.requested_calendar, user_text='Personal, please.')
+            assert (await chat.prepare(args, reply)).source_id == 'personal'
         else:
             card = await chat.prepare(args, after_location)
             assert (card.source_id, card.after.location) == ('personal', 'Café Central')
+
+
+@pytest.mark.parametrize('named', [False, True])
+async def test_named_calendar_starting_with_a_date_word(monkeypatch, named):
+    from dataclasses import replace
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+    from unittest.mock import AsyncMock
+
+    calendars = [CalendarSource(id=key, name=name, provider='google', connection_ref='synthetic',
+        external_id=key, capabilities_json='["read","write"]', timezone='UTC')
+        for key, name in [('short-name', 'On'), ('on-call', 'On Call'), ('personal', 'Personal')]]
+    async def catalog(*, ids):
+        return [(row, None) for row in calendars if row.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=SimpleNamespace(default_source_id='personal')))
+    ctx = TurnContext('synthetic', None, date(2026, 11, 20), calendar_source_ids=[s.id for s in calendars],
+                      user_text='Trage die Übergabe morgen um neun im Kalender On Call ein')
+    args = {'action': 'create', 'title': 'Übergabe', 'start_local': '2026-11-21T09:00', 'end_local': '2026-11-21T10:00'}
+    if named:
+        args['calendar_name'] = 'On Call'
+    assert (await chat.prepare(args, ctx)).source_id == 'on-call'
+    lunch = {'action': 'create', 'title': 'Lunch', 'start_local': '2026-11-23T12:00', 'end_local': '2026-11-23T13:00'}
+    for when in ('next Monday', 'on Thursday'):
+        generic = replace(ctx, user_text=f'Put lunch in my calendar {when} at noon')
+        assert (await chat.prepare(lunch, generic)).source_id == 'personal'
+        with pytest.raises(writes.WriteError, match='calendar_name_required'):
+            await chat.prepare({**lunch, 'calendar_name': 'On'}, generic)
 
 
 @pytest.mark.parametrize('default, request_text, expected', [

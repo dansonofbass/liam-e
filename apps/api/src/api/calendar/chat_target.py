@@ -29,20 +29,27 @@ class CalendarChoice(CalendarOption):
 
 
 _QUOTED = re.compile(r""""[^"]*"|“[^”]*”|„[^“]*“|‘[^’]*’|‚[^‘]*‘|«[^»]*»|»[^«]*«|(?<!\w)'[^']*'(?!\w)""")
-_PREFIX = r"(?:in|into|to|on|im|für)\s+(?:(?:the|my|mein(?:em|en)?|den|dem|der|das)\s+)?"
+_DETERMINER = r"(?:(?:the|my|mein(?:em|en)?|den|dem|der|das)\s+)?"
+_PREFIX = rf"(?:in|into|to|on|im|für)\s+{_DETERMINER}"
+_SELECT = r"(?:use|choose|pick|select|nutze|verwende|nimm|wähle)"
+_DESTINATION_PREFIX = rf"(?:{_PREFIX}|{_SELECT}\s+{_DETERMINER})"
 _CALENDAR = r"(?:calendar|kalender)"
 _NAME_WORD = (r"(?!(?:the|a|my|den|dem|der|das|in|im|into|on|for|at|from|to|am|um|für|"
               r"today|tomorrow|heute|morgen|instead|statt|please|bitte|eintragen|anlegen|"
               r"and|und|or|oder|calendar|kalender)\b)\w+(?:[-&/'’]\w+)*")
-_NAME_FIRST = re.compile(rf"(?<!\w){_PREFIX}(?P<name>{_NAME_WORD}(?:\s+(?:(?:&|and|und)\s+)?{_NAME_WORD})*)\s+{_CALENDAR}\b", re.I)
-_CALENDAR_FIRST = re.compile(rf"(?<!\w){_PREFIX}{_CALENDAR}\s+(?P<name>{_NAME_WORD}(?:\s+{_NAME_WORD})*)", re.I)
+_NAME_FIRST = re.compile(rf"(?<!\w){_DESTINATION_PREFIX}(?P<name>{_NAME_WORD}(?:\s+(?:(?:&|and|und)\s+)?{_NAME_WORD})*)\s+{_CALENDAR}\b", re.I)
+_CALENDAR_LEAD = rf"(?<!\w){_DESTINATION_PREFIX}{_CALENDAR}\b"
+_CALENDAR_FIRST = re.compile(rf"{_CALENDAR_LEAD}\s+(?P<name>{_NAME_WORD}(?:\s+{_NAME_WORD})*)", re.I)
 _DAY_OR_PERIOD = (r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week(?:end)?|month|year|"
                   r"morning|afternoon|evening|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|"
                   r"woche(?:nende)?|monat|jahr|vormittag|nachmittag|abend)")
-_DATE_TAIL = (rf"(?:(?:next|this|coming|following|last|every|nächste[nrms]?|diese[nrms]?|kommende[nrms]?|"
+_RELATIVE_DAY = r"(?:next|this|coming|following|last|every|nächste[nrms]?|diese[nrms]?|kommende[nrms]?)"
+_DATE_TAIL = (rf"(?:(?:{_RELATIVE_DAY}|"
               rf"on|at|after|before|during|between|from|until|am|um|nach|vor|ab|bis|zwischen)\b|"
               rf"{_DAY_OR_PERIOD}\b|today\b|tomorrow\b|heute\b|morgen\b|\d{{1,4}}[./:-]\d)")
-_GENERIC_CALENDAR_DATE = re.compile(rf"(?<!\w){_PREFIX}{_CALENDAR}\b(?=\s+{_DATE_TAIL})", re.I)
+_GENERIC_CALENDAR_DATE = re.compile(rf"{_CALENDAR_LEAD}(?=\s+{_DATE_TAIL})", re.I)
+_CALENDAR_DAY = re.compile(rf"{_CALENDAR_LEAD}\s+(?P<day>(?:(?:on|am)\s+)?(?:{_RELATIVE_DAY}\s+)?"
+                           rf"(?:{_DAY_OR_PERIOD}|today|tomorrow|heute|morgen))\b", re.I)
 _DEFAULT = re.compile(
     r"\b(?:use|choose|pick|in|into|on|to)\s+(?:(?:my|the)\s+)?default calendar\b"
     r"|\b(?:nimm|nutze|verwende|im|in|auf|zum|den)\s+(?:doch\s+)?(?:(?:meinen|meinem|den|dem)\s+)?standardkalender\b", re.I)
@@ -68,9 +75,23 @@ class OwnerSelection:
             return True
         folded = self.text.strip().casefold()
         operand = rf"(?:{_CALENDAR}\s+)?{re.escape(key)}(?![\w-])(?:\s+{_CALENDAR})?"
-        if re.search(rf"(?<!\w)(?:{_PREFIX}|(?:use|choose|pick|nutze|verwende|nimm)\s+(?:(?:the|den)\s+)?){operand}", folded):
+        if re.search(rf"(?<!\w){_DESTINATION_PREFIX}{operand}", folded):
             return True
         return bool(re.fullmatch(rf"(?:please\s+|bitte\s+)?{operand}(?:,?\s+(?:please|bitte))?[.!?]?", folded))
+
+
+def _without_scheduling_days(words: str, entries) -> str:
+    def replace(match):
+        day = match["day"].casefold()
+        tail = words[match.start("day"):].casefold()
+        # A complete source such as "Monday Shifts" can start with a day.
+        # A name matching only part of "on Thursday" cannot select a calendar.
+        for source, _ in entries:
+            name = source.name.strip().casefold()
+            if len(name) >= len(day) and re.match(re.escape(name) + r"(?![\w-])", tail):
+                return match[0]
+        return " "
+    return _CALENDAR_DAY.sub(replace, words)
 
 
 def _selection_words(text: str, title: str | None, entries) -> OwnerSelection:
@@ -79,8 +100,8 @@ def _selection_words(text: str, title: str | None, entries) -> OwnerSelection:
 
     def quoted(match):
         before, after = text[:match.start()], text[match.end():]
-        before_name = re.search(rf"\b{_PREFIX}{_CALENDAR}\s+$", before, re.I)
-        after_name = re.search(rf"\b{_PREFIX}$", before, re.I) and re.match(rf"\s+{_CALENDAR}\b", after, re.I)
+        before_name = re.search(rf"{_CALENDAR_LEAD}\s+$", before, re.I)
+        after_name = re.search(rf"\b{_DESTINATION_PREFIX}$", before, re.I) and re.match(rf"\s+{_CALENDAR}\b", after, re.I)
         if before_name or after_name:
             names.append(match.group()[1:-1].strip().casefold())
         return " "
@@ -93,15 +114,14 @@ def _selection_words(text: str, title: str | None, entries) -> OwnerSelection:
         # Keep a boundary for other quoted text so its neighbouring list items cannot collapse.
         alternatives = _QUOTED.sub(lambda match: match[0][1:-1] if match[0][1:-1].strip().casefold() in known else "\ufffc", text)
     positive = _QUOTED.sub(quoted, text)
-    # A date after the generic calendar noun supplies appointment timing. Exact
-    # quoted names and names before "calendar" still identify real destinations.
-    return OwnerSelection(_GENERIC_CALENDAR_DATE.sub(" ", positive), tuple(names),
-                          alternatives_text=_GENERIC_CALENDAR_DATE.sub(" ", alternatives))
+
+    return OwnerSelection(_without_scheduling_days(positive, entries), tuple(names),
+                          alternatives_text=_without_scheduling_days(alternatives, entries))
 
 
 _EXCLUSION = re.compile(r"(?<!\w)(?:do not|don['’]t|not|never|except(?: for)?|instead of|rather than|avoid|excluding|"
                         r"nicht|nie|keinesfalls|außer|statt|ohne)\b", re.I)
-_TARGET_VERB = (r"(?:(?:put|place|schedule|book|add|use|choose|pick|select|nutze|verwende|nimm)\s+"
+_TARGET_VERB = (rf"(?:(?:put|place|schedule|book|add|{_SELECT})\s+"
                 r"(?:(?:it|this (?:event|appointment)|den Termin|ihn)\s+)?)?")
 _NEGATIVE_CALENDAR_PREFIX = re.compile(rf"{_EXCLUSION.pattern}\s*{_TARGET_VERB}$", re.I)
 _DEFAULT_NAMES = frozenset(("default calendar", "standardkalender"))
@@ -111,10 +131,13 @@ _LOCATION = re.compile(r"\b(?:location|venue|place|ort|veranstaltungsort|treffpu
                        r"(?:(?:set|changed|geändert|gesetzt)\s+)?(?:[:=]|\b(?:to|as|is|auf|ist)\b)\s*", re.I)
 _FIELD_END = re.compile(r"[,;.!?\n]|\b(?:and|und|but|aber)\s+(?=(?:(?:please|bitte)\s+)?"
                         r"(?:put|use|choose|schedule|create|verwende|nimm|plane|erstelle)\b)", re.I)
+_CALENDAR_INSTRUCTION = re.compile(rf"{_CALENDAR_LEAD}|(?<!\w){_SELECT}\s+", re.I)
 
 
 def _without_locations(text: str, location: str | None) -> str:
-    masked = _QUOTED.sub(lambda match: " " * len(match[0]), text)
+    # Keep a quoted value as one opaque word so a following calendar directive
+    # still has its operand, without interpreting instructions inside the quote.
+    masked = _QUOTED.sub(lambda match: "x".ljust(len(match[0])), text)
     fields = list(_LOCATION.finditer(masked))
     if isinstance(location, str) and location.strip():
         fields.extend(re.finditer(r"\b(?:at|bei)\s+(?=" + re.escape(location.strip()) + r"(?!\w))", masked, re.I))
@@ -124,7 +147,7 @@ def _without_locations(text: str, location: str | None) -> str:
             start += len(location)
         boundary = _FIELD_END.search(masked, start)
         end = boundary.start() if boundary else len(text)
-        for pattern in (_NAME_FIRST, _CALENDAR_FIRST):
+        for pattern in (_NAME_FIRST, _CALENDAR_INSTRUCTION):
             if match := pattern.search(masked, start, end):
                 calendar_start = match.start()
                 # The negation before a separately named calendar belongs with
@@ -136,6 +159,9 @@ def _without_locations(text: str, location: str | None) -> str:
 
 
 def _declared_names(text: str) -> set[str]:
+    # This fallback infers names absent from the catalog. A scheduling phrase
+    # after "my calendar" is not evidence of an unknown calendar name.
+    text = _GENERIC_CALENDAR_DATE.sub(" ", text)
     return {match["name"].strip().casefold() for pattern in (_NAME_FIRST, _CALENDAR_FIRST) for match in pattern.finditer(text)}
 
 
@@ -351,13 +377,20 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
         return CalendarChoice(error="calendar_name_ambiguous")
     use_default |= bool(alternatives & _DEFAULT_NAMES)
     names = set(selection.quoted_names) | (alternatives - _DEFAULT_NAMES)
-    for source, _ in entries:
-        name = re.escape(source.name.strip().casefold())
-        calendar_phrase = rf'{_PREFIX}(?:{name}\s+{_CALENDAR}|{_CALENDAR}\s+{name})(?!\w)'
-        directive = rf'(?:use|choose|pick|nutze|nimm|verwende)\s+(?:(?:the|den)\s+)?{name}(?=\s*(?:{_CALENDAR}\b|[,.;!?]|$))'
-        bare = selection.excluded_targets and re.search(rf'(?<!\w){_PREFIX}{name}(?=\s*(?:[,.;!?]|$))', folded)
-        if bare or re.search(rf'(?<!\w)(?:{calendar_phrase}|{directive})', folded):
-            names.add(source.name.strip().casefold())
+    catalog = {source.name.strip().casefold() for source, _ in entries if source.name.strip()}
+    if catalog:
+        # Match one complete catalog name per destination. A shorter name can
+        # itself be a source, e.g. both "On" and "On Call".
+        operand = "(?P<name>" + "|".join(re.escape(name) for name in sorted(catalog, key=len, reverse=True)) + r")(?![\w-])"
+        patterns = [
+            rf"{_CALENDAR_LEAD}\s+{operand}",
+            rf"(?<!\w){_DESTINATION_PREFIX}{operand}\s+{_CALENDAR}\b",
+            rf"(?<!\w){_SELECT}\s+{_DETERMINER}{operand}(?=\s*(?:[,.;!?]|$))",
+        ]
+        if selection.excluded_targets:
+            patterns.append(rf"(?<!\w){_PREFIX}{operand}(?=\s*(?:[,.;!?]|$))")
+        for pattern in patterns:
+            names.update(match["name"] for match in re.finditer(pattern, folded))
     # The owner can explicitly name a paused, removed or unknown calendar. The
     # readable catalog cannot supply that name; only the owner's text can.
     if not use_default and not names:
