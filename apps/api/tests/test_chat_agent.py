@@ -708,24 +708,31 @@ async def test_two_appointment_requests_bind_each_card_to_its_own_target(store, 
 
 
 @pytest.mark.parametrize('attempt', ['question', 'tool', 'named_tool'])
-@pytest.mark.parametrize('destination', ['', ' in the Research calendar', ' im Kalender Forschung', ' in the R&D calendar'])
-async def test_calendar_clarification_distinguishes_missing_and_unavailable_target(store, monkeypatch, attempt, destination):
+@pytest.mark.parametrize('owner_request, requested_name', [
+    ('Schedule a review', None),
+    ('Schedule a review in the Research calendar', 'Research'),
+    ('Schedule a review im Kalender Forschung', 'Forschung'),
+    ('Schedule a review in the R&D calendar', 'R&D'),
+    ('Plane die Besprechung im Kalender Team West', 'Team West'),
+    ('Trage die Übergabe im Kalender On Call ein', 'On Call'),
+])
+async def test_calendar_clarification_distinguishes_missing_and_unavailable_target(store, monkeypatch, attempt, owner_request, requested_name):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
 
-    personal = CalendarSource(id='personal', name='Personal', provider='google', connection_ref='synthetic',
-        external_id='personal', capabilities_json='["read","write"]', timezone='UTC')
+    sources = [CalendarSource(id=key, name=name, provider='google', connection_ref='synthetic', external_id=key,
+        capabilities_json='["read","write"]', timezone='UTC', is_active=active)
+        for key, name, active in [('personal', 'Personal', True), ('team', 'Team', True), ('west', 'Team West', False)]]
     async def catalog(*, ids):
-        return [(personal, None)] if personal.id in ids else []
+        return [(source, None) for source in sources if source.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
-    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id=personal.id)))
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
     conversation = await store.create()
-    snapshot = store.snapshot('missing-vs-unavailable', calendar_scope_json='["personal"]')
+    snapshot = store.snapshot('missing-vs-unavailable', calendar_scope_json='["personal","team"]')
     incomplete = {'action': 'create', 'title': 'Review'}
     values = {**incomplete, 'start_local': '2026-11-21T10:00', 'end_local': '2026-11-21T11:00'}
-    if attempt == 'named_tool' and destination:
-        incomplete['calendar_name'] = {' in the Research calendar': 'Research', ' im Kalender Forschung': 'Forschung',
-                                       ' in the R&D calendar': 'R&D'}[destination]
+    if attempt == 'named_tool' and requested_name:
+        incomplete['calendar_name'] = requested_name
     rounds = [[chunk('propose_calendar_change', incomplete)]] if attempt != 'question' else []
     fake = FakeMistral(streams=[*rounds, ['How long should it last?'], ['What time should it start?'],
                                 [chunk('propose_calendar_change', values)], ['Which calendar?'],
@@ -734,15 +741,22 @@ async def test_calendar_clarification_distinguishes_missing_and_unavailable_targ
     async def turn(text):
         return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(conversation_id=conversation.id,
             text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
-    assert await turn('Schedule a review' + destination) == []
+    assert await turn(owner_request) == []
+    if requested_name:
+        choice = json.loads(store.rows[-1].extras_json)['calendar_clarification']
+        assert choice['name'].casefold() == requested_name.casefold()
     assert await turn('One hour.') == []
-    assert await turn('Tomorrow at 10.') == ([] if destination else ['personal'])
-    if destination:
+    assert await turn('Morgen um neun.') == ([] if requested_name else ['personal'])
+    if requested_name:
         assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_name_unknown'
-        assert await turn('Use my default calendar instead.') == ['personal']
+        if requested_name == 'Team West':
+            assert await turn('Team, bitte.') == ['team']
+        else:
+            assert await turn('Use my default calendar instead.') == ['personal']
 
 
-@pytest.mark.parametrize('destinations', ['in the Work calendar or in the Home calendar', 'in the Work or Home calendar'])
+@pytest.mark.parametrize('destinations', ['in the Work calendar or in the Home calendar', 'in the Work or Home calendar',
+                                         'tomorrow at noon. For the calendar, use Work or Home'])
 @pytest.mark.parametrize('reply, named', [('Home, please.', None), ('Not Work', None), ('Not Work', 'Home'),
                                          ('Not Work', 'binding_changed'), ('Not Work', 'read_only')])
 async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(store, monkeypatch, destinations, reply, named):

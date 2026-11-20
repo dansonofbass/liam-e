@@ -34,20 +34,23 @@ _PREFIX = rf"(?:in|into|to|on|im|für)\s+{_DETERMINER}"
 _SELECT = r"(?:use|choose|pick|select|nutze|verwende|nimm|wähle)"
 _DESTINATION_PREFIX = rf"(?:{_PREFIX}|{_SELECT}\s+{_DETERMINER})"
 _CALENDAR = r"(?:calendar|kalender)"
-_NAME_WORD = (r"(?!(?:the|a|my|den|dem|der|das|in|im|into|on|for|at|from|to|am|um|für|"
-              r"today|tomorrow|heute|morgen|instead|statt|please|bitte|eintragen|anlegen|"
+_NAME_WORD = (r"(?!(?:the|a|my|den|dem|der|das|in|im|into|on|for|at|from|to|am|um|für|with|mit|"
+              r"today|tomorrow|heute|morgen|instead|statt|please|bitte|ein|eintragen|anlegen|"
               r"and|und|or|oder|calendar|kalender)\b)\w+(?:[-&/'’]\w+)*")
 _NAME_FIRST = re.compile(rf"(?<!\w){_DESTINATION_PREFIX}(?P<name>{_NAME_WORD}(?:\s+(?:(?:&|and|und)\s+)?{_NAME_WORD})*)\s+{_CALENDAR}\b", re.I)
 _CALENDAR_LEAD = rf"(?<!\w){_DESTINATION_PREFIX}{_CALENDAR}\b"
-_CALENDAR_FIRST = re.compile(rf"{_CALENDAR_LEAD}\s+(?P<name>{_NAME_WORD}(?:\s+{_NAME_WORD})*)", re.I)
 _DAY_OR_PERIOD = (r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week(?:end)?|month|year|"
                   r"morning|afternoon|evening|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|"
                   r"woche(?:nende)?|monat|jahr|vormittag|nachmittag|abend)")
 _RELATIVE_DAY = r"(?:next|this|coming|following|last|every|nächste[nrms]?|diese[nrms]?|kommende[nrms]?)"
-_DATE_TAIL = (rf"(?:(?:{_RELATIVE_DAY}|"
-              rf"on|at|after|before|during|between|from|until|am|um|nach|vor|ab|bis|zwischen)\b|"
-              rf"{_DAY_OR_PERIOD}\b|today\b|tomorrow\b|heute\b|morgen\b|\d{{1,4}}[./:-]\d)")
+_TIME_PREPOSITION = r"(?:on|at|after|before|during|between|from|until|am|um|nach|vor|ab|bis|zwischen)"
+_MONTH = r"(?:january|januar|february|februar|march|märz|april|may|mai|june|juni|july|juli|august|september|october|oktober|november|december|dezember)"
+_TIME_VALUE = rf"(?:{_DAY_OR_PERIOD}|{_MONTH}|today|tomorrow|heute|morgen|noon|midnight|mittag|mitternacht|\d+[./:-]\d+|\d+\s*(?:am|pm|uhr))"
+_DATE_TAIL = (rf"(?:(?:(?:{_RELATIVE_DAY}|{_TIME_PREPOSITION})\s+)*{_TIME_VALUE}\b|"
+              rf"{_TIME_PREPOSITION}\s+(?:\d+|the|a|an|my|dem|der|den|einem|meinem)\b)")
 _GENERIC_CALENDAR_DATE = re.compile(rf"{_CALENDAR_LEAD}(?=\s+{_DATE_TAIL})", re.I)
+_NAME_CONTINUATION = rf"\s+(?!{_DATE_TAIL})(?:&\s+)?{_NAME_WORD}"
+_CALENDAR_FIRST = re.compile(rf"{_CALENDAR_LEAD}\s+(?P<name>(?:{_TIME_PREPOSITION}\s+)?{_NAME_WORD}(?:{_NAME_CONTINUATION})*)", re.I)
 _CALENDAR_DAY = re.compile(rf"{_CALENDAR_LEAD}\s+(?P<day>(?:(?:on|am)\s+)?(?:{_RELATIVE_DAY}\s+)?"
                            rf"(?:{_DAY_OR_PERIOD}|today|tomorrow|heute|morgen))\b", re.I)
 _DEFAULT = re.compile(
@@ -337,7 +340,7 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
     names = _DEFAULT_NAMES.union(source.name.strip() for source, _ in entries if source.name.strip())
     names_pattern = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
     determiner = r"(?:(?:the|my|den|dem|meinen|meinem)\s+)?"
-    operand = rf"(?:{_PREFIX}|{determiner})(?:{_CALENDAR}\s+)?(?P<name>{names_pattern})(?:\s+{_CALENDAR})?"
+    operand = rf"(?:{_DESTINATION_PREFIX}|{determiner})(?:{_CALENDAR}\s+)?(?P<name>{names_pattern})(?:\s+{_CALENDAR})?"
     groups = []
     for member in re.finditer(rf"(?<![\w-]){operand}(?![\w-])", text, re.I):
         if not groups or not re.fullmatch(rf"\s*{_LIST_SEPARATOR}\s*", text[groups[-1][-1].end():member.start()], re.I):
@@ -353,7 +356,7 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
         joiners = " ".join(text[a.end():b.start()] for a, b in zip(group, group[1:]))
         if not any(_OR.search(value) for value in (joiners, left[0] if left else "", right[0] if right else "")):
             continue
-        qualified = re.match(_PREFIX, first[0], re.I)
+        qualified = re.match(_DESTINATION_PREFIX, first[0], re.I)
         phrase = text[first.start():last.end()]
         if not (qualified or re.search(rf"\b{_CALENDAR}\b|\bstandardkalender\b", phrase, re.I)
                 or (not before.strip() and not after.strip(" .?!"))):
@@ -383,7 +386,7 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
         # itself be a source, e.g. both "On" and "On Call".
         operand = "(?P<name>" + "|".join(re.escape(name) for name in sorted(catalog, key=len, reverse=True)) + r")(?![\w-])"
         patterns = [
-            rf"{_CALENDAR_LEAD}\s+{operand}",
+            rf"{_CALENDAR_LEAD}\s+{operand}(?!{_NAME_CONTINUATION})",
             rf"(?<!\w){_DESTINATION_PREFIX}{operand}\s+{_CALENDAR}\b",
             rf"(?<!\w){_SELECT}\s+{_DETERMINER}{operand}(?=\s*(?:[,.;!?]|$))",
         ]
