@@ -12,7 +12,7 @@ import { modelMenuItems } from './model-menu-items'
 import { useChatSession, useConversationScope } from './session'
 
 // With a conversation the choice is saved on it. Without one (the start page) the parent owns the choice: it is reported via onChange and shown from `model`; the first message carries it.
-export function ModelMenu({ conversationId, model, onChange }: { conversationId?: string; model?: string; onChange?: (model: string) => void }) {
+export function ModelMenu({ conversationId, model, onChange, disabled = false }: { conversationId?: string; model?: string; onChange?: (model: string) => void; disabled?: boolean }) {
   const { texts } = useI18n()
   const catalogue = useQuery(modelsQuery())
   const models = catalogue.data ?? []
@@ -24,7 +24,7 @@ export function ModelMenu({ conversationId, model, onChange }: { conversationId?
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [error, setError] = useState<string>()
   const answering = state.phase === 'working' || state.phase === 'streaming'
-  const busy = saving || (answering && (!conversationId || state.conversationId === conversationId))
+  const busy = saving || disabled || (answering && (!conversationId || state.conversationId === conversationId))
   // An empty choice uses the configured default. A conversation still loading has no known choice.
   const selected = conversationId ? saved?.model : model ?? ''
   const id = selected === '' ? models.find(item => item.is_default)?.id : selected

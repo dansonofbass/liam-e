@@ -20,6 +20,9 @@ from conftest import build_app
 # deciding that it must not be reachable from a Studio agent.
 MUTATING_OPERATIONS: frozenset[str] = frozenset(
     {
+        "audio_transcribe",
+        "audio_speech",
+        "audio_device_test_record",
         "calendar_google_connect",
         "calendar_event_create",
         "calendar_event_update",
@@ -74,6 +77,8 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
 BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
     {
         "audio_capabilities_get",  # Owner-only application capability.
+        "audio_device_test_get",
+        "audio_device_test_sample",
         # Provider calls expose private calendar names; never an agent discovery tool.
         "calendar_google_calendars_list",
         "calendar_occurrence_live",

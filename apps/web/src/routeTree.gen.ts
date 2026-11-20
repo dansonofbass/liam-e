@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as AudioDeviceTestRouteImport } from './routes/audio-device-test'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAccountsRouteImport } from './routes/_app/accounts'
 import { Route as AppCalendarRouteImport } from './routes/_app/calendar'
@@ -34,6 +35,11 @@ import { Route as AppSettingsPromptsNewRouteImport } from './routes/_app/setting
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AudioDeviceTestRoute = AudioDeviceTestRouteImport.update({
+  id: '/audio-device-test',
+  path: '/audio-device-test',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -150,6 +156,7 @@ const AppSettingsPromptsNewRoute = AppSettingsPromptsNewRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/audio-device-test': typeof AudioDeviceTestRoute
   '/accounts': typeof AppAccountsRoute
   '/calendar': typeof AppCalendarRouteWithChildren
   '/mail': typeof AppMailRouteWithChildren
@@ -172,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/settings/prompts/': typeof AppSettingsPromptsIndexRoute
 }
 export interface FileRoutesByTo {
+  '/audio-device-test': typeof AudioDeviceTestRoute
   '/accounts': typeof AppAccountsRoute
   '/tasks': typeof AppTasksRouteWithChildren
   '/': typeof AppIndexRoute
@@ -194,6 +202,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/audio-device-test': typeof AudioDeviceTestRoute
   '/_app/accounts': typeof AppAccountsRoute
   '/_app/calendar': typeof AppCalendarRouteWithChildren
   '/_app/mail': typeof AppMailRouteWithChildren
@@ -220,6 +229,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/audio-device-test'
     | '/accounts'
     | '/calendar'
     | '/mail'
@@ -242,6 +252,7 @@ export interface FileRouteTypes {
     | '/settings/prompts/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/audio-device-test'
     | '/accounts'
     | '/tasks'
     | '/'
@@ -263,6 +274,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_app'
+    | '/audio-device-test'
     | '/_app/accounts'
     | '/_app/calendar'
     | '/_app/mail'
@@ -288,6 +300,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  AudioDeviceTestRoute: typeof AudioDeviceTestRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -297,6 +310,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audio-device-test': {
+      id: '/audio-device-test'
+      path: '/audio-device-test'
+      fullPath: '/audio-device-test'
+      preLoaderRoute: typeof AudioDeviceTestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -541,6 +561,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  AudioDeviceTestRoute: AudioDeviceTestRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

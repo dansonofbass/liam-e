@@ -953,6 +953,39 @@ export type DependencyStatus = {
 };
 
 /**
+ * DeviceRecordingOut
+ */
+export type DeviceRecordingOut = {
+    /**
+     * Request Id
+     */
+    request_id: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * DeviceTestOut
+ */
+export type DeviceTestOut = {
+    app_limits: TranscriptionLimitsOut;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Format
+     */
+    format: 'audio/webm;codecs=opus';
+    /**
+     * Sample Text
+     */
+    sample_text: string;
+};
+
+/**
  * DiscardInput
  */
 export type DiscardInput = {
@@ -3366,6 +3399,24 @@ export type TranscriptionLimitsOut = {
 };
 
 /**
+ * TranscriptionOut
+ */
+export type TranscriptionOut = {
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Request Id
+     */
+    request_id: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
  * UiSettingsOut
  */
 export type UiSettingsOut = {
@@ -3837,6 +3888,168 @@ export type AudioCapabilitiesGetResponses = {
 };
 
 export type AudioCapabilitiesGetResponse = AudioCapabilitiesGetResponses[keyof AudioCapabilitiesGetResponses];
+
+export type AudioDeviceTestGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/device-test';
+};
+
+export type AudioDeviceTestGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeviceTestOut;
+};
+
+export type AudioDeviceTestGetResponse = AudioDeviceTestGetResponses[keyof AudioDeviceTestGetResponses];
+
+export type AudioDeviceTestRecordData = {
+    body: {
+        file: Blob | File;
+        language?: 'de' | 'en';
+        request_id: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/device-test/recording';
+};
+
+export type AudioDeviceTestRecordResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeviceRecordingOut;
+};
+
+export type AudioDeviceTestRecordResponse = AudioDeviceTestRecordResponses[keyof AudioDeviceTestRecordResponses];
+
+export type AudioDeviceTestSampleData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/device-test/sample';
+};
+
+export type AudioDeviceTestSampleResponses = {
+    /**
+     * Successful Response
+     */
+    200: Blob | File;
+};
+
+export type AudioDeviceTestSampleResponse = AudioDeviceTestSampleResponses[keyof AudioDeviceTestSampleResponses];
+
+export type AudioSpeechData = {
+    /**
+     * SpeechReference
+     */
+    body: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/speech';
+};
+
+export type AudioSpeechErrors = {
+    /**
+     * Owner access could not be verified
+     */
+    401: unknown;
+    /**
+     * The reply is not available for speech
+     */
+    404: unknown;
+    /**
+     * Speech reference too large
+     */
+    413: unknown;
+    /**
+     * Invalid speech reference or reply text too long
+     */
+    422: unknown;
+    /**
+     * Provider rate limit
+     */
+    429: unknown;
+    /**
+     * Speech unavailable
+     */
+    503: unknown;
+    /**
+     * Speech timed out
+     */
+    504: unknown;
+};
+
+export type AudioSpeechResponses = {
+    /**
+     * Successful Response
+     */
+    200: Blob | File;
+};
+
+export type AudioSpeechResponse = AudioSpeechResponses[keyof AudioSpeechResponses];
+
+export type AudioTranscribeData = {
+    body: {
+        file: Blob | File;
+        language?: 'de' | 'en';
+        request_id: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/transcriptions';
+};
+
+export type AudioTranscribeErrors = {
+    /**
+     * Owner access could not be verified
+     */
+    401: unknown;
+    /**
+     * Recording too large
+     */
+    413: unknown;
+    /**
+     * Unsupported recording format
+     */
+    415: unknown;
+    /**
+     * Invalid or empty recording
+     */
+    422: unknown;
+    /**
+     * Transcription already in progress or provider rate limit
+     */
+    429: unknown;
+    /**
+     * Transcription unavailable
+     */
+    503: unknown;
+    /**
+     * Transcription timed out
+     */
+    504: unknown;
+};
+
+export type AudioTranscribeResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptionOut;
+};
+
+export type AudioTranscribeResponse = AudioTranscribeResponses[keyof AudioTranscribeResponses];
 
 export type CalendarGoogleConnectData = {
     body: GoogleConnectInput;

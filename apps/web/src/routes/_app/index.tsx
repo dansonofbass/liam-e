@@ -27,7 +27,7 @@ export const Route = createFileRoute('/_app/')({
 function Greeting() {
   const { texts, locale } = useI18n()
   const client = useQueryClient()
-  const { state, send, retry, retryWithoutPreferences, scope } = useChatSession()
+  const { state, send, retry, retryWithoutPreferences, scope, audioDraftLocked } = useChatSession()
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
   const calendarAbout = typeof search.calendarAbout === 'string' ? search.calendarAbout : undefined
@@ -41,7 +41,7 @@ function Greeting() {
   const [revision, setRevision] = useState<string | null>(null)
   const busy = state.phase === 'working' || state.phase === 'streaming'
   const quickSend = (text: string) => {
-    if (busy) return
+    if (busy || audioDraftLocked) return
     setStarted(true)
     void send({ text, account_id: scope, context_message_id: about, context_occurrence_id: calendarAbout, model, prompt_revision_id: revision })
   }
@@ -63,7 +63,7 @@ function Greeting() {
   const mail = reference.data
   const account = mail && data?.accounts.find(item => item.id === mail.account_id)
   return <div className={about ? 'le-chat-view le-chat-view--mail-question' : 'le-chat-view'}>
-    <ChatHeader modelMenu={<ModelMenu model={model} onChange={setModel} />}>
+    <ChatHeader modelMenu={<ModelMenu disabled={audioDraftLocked} model={model} onChange={setModel} />}>
       <TemplateMenu revision={revision} onChange={setRevision} />
     </ChatHeader>
     {about && <h1 className="le-sr">{texts.mail.askInChat}</h1>}

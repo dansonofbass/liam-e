@@ -1706,6 +1706,54 @@
         "title": "DependencyStatus",
         "type": "object"
       },
+      "DeviceRecordingOut": {
+        "properties": {
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "text"
+        ],
+        "title": "DeviceRecordingOut",
+        "type": "object"
+      },
+      "DeviceTestOut": {
+        "properties": {
+          "app_limits": {
+            "$ref": "#/components/schemas/TranscriptionLimitsOut"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "format": {
+            "const": "audio/webm;codecs=opus",
+            "title": "Format",
+            "type": "string"
+          },
+          "sample_text": {
+            "title": "Sample Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at",
+          "sample_text",
+          "format",
+          "app_limits"
+        ],
+        "title": "DeviceTestOut",
+        "type": "object"
+      },
       "DiscardInput": {
         "additionalProperties": false,
         "properties": {
@@ -6132,6 +6180,30 @@
         "title": "TranscriptionLimitsOut",
         "type": "object"
       },
+      "TranscriptionOut": {
+        "properties": {
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "text",
+          "model"
+        ],
+        "title": "TranscriptionOut",
+        "type": "object"
+      },
       "UiSettingsOut": {
         "properties": {
           "locale": {
@@ -7016,6 +7088,232 @@
           }
         },
         "summary": "Get audio capabilities"
+      }
+    },
+    "/api/v1/audio/device-test": {
+      "get": {
+        "operationId": "audio_device_test_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status"
+      }
+    },
+    "/api/v1/audio/device-test/recording": {
+      "post": {
+        "operationId": "audio_device_test_record",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "language": {
+                    "enum": [
+                      "de",
+                      "en"
+                    ],
+                    "type": "string"
+                  },
+                  "request_id": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "request_id"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRecordingOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Validate"
+      }
+    },
+    "/api/v1/audio/device-test/sample": {
+      "get": {
+        "operationId": "audio_device_test_sample",
+        "responses": {
+          "200": {
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sample"
+      }
+    },
+    "/api/v1/audio/speech": {
+      "post": {
+        "operationId": "audio_speech",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "conversation_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Conversation Id",
+                    "type": "string"
+                  },
+                  "message_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Message Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "conversation_id",
+                  "message_id"
+                ],
+                "title": "SpeechReference",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Owner access could not be verified"
+          },
+          "404": {
+            "description": "The reply is not available for speech"
+          },
+          "413": {
+            "description": "Speech reference too large"
+          },
+          "422": {
+            "description": "Invalid speech reference or reply text too long"
+          },
+          "429": {
+            "description": "Provider rate limit"
+          },
+          "503": {
+            "description": "Speech unavailable"
+          },
+          "504": {
+            "description": "Speech timed out"
+          }
+        },
+        "summary": "Read aloud a saved, complete assistant reply"
+      }
+    },
+    "/api/v1/audio/transcriptions": {
+      "post": {
+        "operationId": "audio_transcribe",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "language": {
+                    "enum": [
+                      "de",
+                      "en"
+                    ],
+                    "type": "string"
+                  },
+                  "request_id": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "request_id"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Owner access could not be verified"
+          },
+          "413": {
+            "description": "Recording too large"
+          },
+          "415": {
+            "description": "Unsupported recording format"
+          },
+          "422": {
+            "description": "Invalid or empty recording"
+          },
+          "429": {
+            "description": "Transcription already in progress or provider rate limit"
+          },
+          "503": {
+            "description": "Transcription unavailable"
+          },
+          "504": {
+            "description": "Transcription timed out"
+          }
+        },
+        "summary": "Transcribe a recording without submitting a chat turn"
       }
     },
     "/api/v1/calendar/connections/google": {

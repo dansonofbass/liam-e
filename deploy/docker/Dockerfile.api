@@ -32,6 +32,12 @@ ENV UV_PYTHON_PREFERENCE=only-system \
     XDG_CACHE_HOME=/tmp \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:${PATH}"
+# The recording validator reads a seekable file descriptor with both tools.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/* && \
+    ffmpeg -hide_banner -protocols | grep -qx '  fd' && \
+    ffprobe -hide_banner -protocols | grep -qx '  fd'
 RUN groupadd -g 1000 app && \
     useradd -u 1000 -g 1000 -m -s /usr/sbin/nologin app
 COPY --from=build --chown=1000:1000 /app /app

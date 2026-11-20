@@ -110,6 +110,11 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Agent read facade | GET | `/api/agent-read/v1/mail/messages/{message_id}` | `liam_mail_read` |
 | Agent read facade | GET | `/api/agent-read/v1/mail/summary` | `liam_mail_summary` |
 | Audio | GET | `/api/v1/audio/capabilities` | `audio_capabilities_get` |
+| Audio | POST | `/api/v1/audio/transcriptions` | `audio_transcribe` |
+| Audio | POST | `/api/v1/audio/speech` | `audio_speech` |
+| Audio device check | GET | `/api/v1/audio/device-test` | `audio_device_test_get` |
+| Audio device check | POST | `/api/v1/audio/device-test/recording` | `audio_device_test_record` |
+| Audio device check | GET | `/api/v1/audio/device-test/sample` | `audio_device_test_sample` |
 | Calendar | GET | `/api/v1/calendar/connections/google/calendars` | `calendar_google_calendars_list` |
 | Calendar | POST | `/api/v1/calendar/connections/google` | `calendar_google_connect` |
 | Calendar | POST | `/api/v1/calendar/feeds/validate` | `calendar_feed_validate` |
@@ -846,9 +851,21 @@ label, `send_email` takes `replyToMessageId`; the Outlook connector returned HTT
   `mail_message_original` fetches the mail from the provider read-only, without marking it read, and stores nothing.
   `settings_ui_get` creates the default assignment in `ui_settings` once on the very first read; it never changes an existing assignment.
   The calendar write routes (`calendar_event_create`, `calendar_event_update`, `calendar_event_delete`, `calendar_write_check`), `chat_proposal_check`, `calendar_occurrence_live` and `calendar_write_get` are deliberately not in this list: they write to Google, resolve a write or read private live event data.
-  `audio_capabilities_get` stays browser-only. The audio subtree requires a server-verified owner,
-  with a default of 401 until an owner verifier is installed. STT and TTS are gated independently
-  by matching release attestations. See the [audio probe](docs/superpowers/probes/2026-11-19-audio-capabilities.md).
+  `audio_capabilities_get` and the paid `audio_transcribe` and `audio_speech` operations stay browser-only. The audio subtree verifies the Studio gateway's
+  caller with the Mistral Users API against the API module's `AUDIO_STUDIO_OWNER` binding.
+  Workspace keys and missing identity are denied. Audio POSTs also require the configured
+  browser origin. STT and TTS are gated independently
+  by matching release attestations. STT validates the container, codec and duration before
+  contacting Mistral. A transient PostgreSQL lock limits transcription to one active request
+  per app database. The browser appends a successful transcript to the current draft.
+  Speech takes a conversation and message reference, reads a visible and complete assistant
+  reply from local history, and sends its normalized text to the fixed preset `voice_481`.
+  Speech attestations can set lower limits within 500 characters, 1,000,000 MP3 bytes and
+  20 seconds. All audio responses use `Cache-Control: no-store`.
+  The owner-only `audio_device_test_get`, `audio_device_test_record` and
+  `audio_device_test_sample` operations expire independently and remain browser-only.
+  They validate WebM and return a fixed test draft or bundled sample without calling an inference service.
+  See the [audio probe](docs/superpowers/probes/2026-11-19-audio-capabilities.md).
   Every OpenAPI import turns every operation into an MCP tool; otherwise a Studio agent could confirm proposals, perform actions or connect accounts without the owner seeing it — individual tools can be disabled in Studio after import.
   New mutating operations must deliberately be added to `MUTATING_OPERATIONS` in `apps/api/tests/test_mcp_exposure.py`, otherwise the inventory test fails.
 

@@ -16,6 +16,8 @@ from pydantic import (
     model_validator,
 )
 
+from api.audio.containers import MAX_BYTES, MAX_SECONDS
+
 MODEL_PATTERN = r"^voxtral-[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$"
 AudioModelId = Annotated[str, StringConstraints(pattern=MODEL_PATTERN)]
 TranscriptionFormat = Literal["audio/webm;codecs=opus", "audio/mp4;codecs=mp4a.40.2"]
@@ -38,8 +40,8 @@ class TranscriptionLimitsOut(BaseModel):
     max_concurrent_requests: int
 
 
-_TRANSCRIPTION_APP_LIMITS = TranscriptionLimitsOut(
-    max_upload_bytes=10 * 1024 * 1024, max_duration_seconds=120, max_concurrent_requests=1,
+TRANSCRIPTION_APP_LIMITS = TranscriptionLimitsOut(
+    max_upload_bytes=MAX_BYTES, max_duration_seconds=MAX_SECONDS, max_concurrent_requests=1,
 )
 
 
@@ -88,7 +90,7 @@ class _TranscriptionVerification(_Verification):
 
     @model_validator(mode="after")
     def require_format_and_limits(self):
-        if self.outcome == "verified" and (not self.formats or self.app_limits != _TRANSCRIPTION_APP_LIMITS):
+        if self.outcome == "verified" and (not self.formats or self.app_limits != TRANSCRIPTION_APP_LIMITS):
             raise ValueError("verified transcription requires checked formats and the current application limits")
         return self
 
@@ -99,8 +101,14 @@ class _SpeechVerification(_Verification):
 
     @model_validator(mode="after")
     def require_format_and_limits(self):
-        if self.outcome == "verified" and (not self.formats or self.app_limits is None):
-            raise ValueError("a verified speech capability requires a checked format and application limits")
+        if self.outcome != "verified":
+            return self
+        limits = self.app_limits
+        if (
+            not self.formats or limits is None or limits.max_input_characters > 500
+            or limits.max_response_bytes > 1_000_000 or limits.timeout_seconds > 20
+        ):
+            raise ValueError("verified speech limits must fit the application's bounded speech path")
         return self
 
 
@@ -137,7 +145,7 @@ def audio_capabilities() -> AudioCapabilitiesOut:
         stt=TranscriptionCapabilityOut(
             **stt.model_dump(),
             formats=stt_evidence.formats if stt_evidence else (),
-            app_limits=_TRANSCRIPTION_APP_LIMITS,
+            app_limits=TRANSCRIPTION_APP_LIMITS,
         ),
         tts=SpeechCapabilityOut(
             **tts.model_dump(),
