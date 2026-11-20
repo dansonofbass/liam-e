@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from db.accessors import chat_context, mail_account, mail_message
 from db.models.chat_message import ChatMessage
-from api.calendar.chat_target import CalendarChoice, appointment_part, appointment_parts
+from api.calendar.chat_target import CalendarChoice, appointment_part, appointment_parts, pending_for_request
 from api.locales import DEFAULT_LOCALE, Locale
 from api.mail import headers, insights, newsletters, proposals, send
 from api.mail.chat_events import StatusEvent
@@ -29,6 +29,7 @@ class TurnContext:
     calendar_request_part: str | None = field(default=None, init=False)
     calendar_targets: dict[str, CalendarChoice] = field(default_factory=dict, init=False)
     completed_calendar_requests: set[str] = field(default_factory=set, init=False)
+    calendar_sequence_id: str | None = field(default=None, init=False)
 
     @property
     def requested_calendar(self) -> CalendarChoice | None:
@@ -109,7 +110,26 @@ def _summary(m):
 
 
 async def _proposal(ctx, proposal):
-    row = await proposals.create_proposal(ctx.conversation_id, proposal, context_id=ctx.context_id)
+    from db.accessors import calendar_proposal_queue
+
+    create = proposal.kind == 'calendar' and proposal.calendar.action == 'create'
+    parts = appointment_parts(ctx.user_text) if create else []
+    if create and not ctx.calendar_sequence_id and ctx.calendar_choice and ctx.calendar_request_part == parts[0]:
+        inherited = pending_for_request(ctx.calendar_choice, parts[0], proposal.calendar.after.title)
+        if inherited:
+            ctx.calendar_sequence_id = inherited.sequence_id
+    if create and ctx.calendar_sequence_id:
+        row = await calendar_proposal_queue.append(ctx.calendar_sequence_id, conversation_id=ctx.conversation_id,
+            context_id=ctx.context_id, payload=proposal.model_dump(mode='json', context={'storage': True}))
+        if row is None:
+            return result({'status': 'queued', 'requires_confirmation': True,
+                           'note': 'This appointment will have its own confirmation card after the preceding card is resolved.'})
+    elif len(parts) > 1:
+        row = await proposals.create_proposal(ctx.conversation_id, proposal, context_id=ctx.context_id,
+                                              extras_json=calendar_proposal_queue.sequence_extras())
+        ctx.calendar_sequence_id = row.id
+    else:
+        row = await proposals.create_proposal(ctx.conversation_id, proposal, context_id=ctx.context_id)
     return result({'proposal_id': row.id, 'status': 'pending', 'note': 'Der Nutzer muss den Vorschlag bestätigen.'}, proposal_message=row)
 
 
@@ -138,11 +158,14 @@ def unsubscribe_subtitle(total: int, address: str, method: str, link: str | None
 async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutcome:
     if name == 'propose_calendar_change':
         from api.calendar import chat as calendar_chat, writes
+        from db.accessors.calendar_proposal_queue import SequenceReplaced
         try:
             command = await calendar_chat.prepare(arguments, ctx)
+            outcome = await _proposal(ctx, proposals.Proposal(kind='calendar', reason=str(arguments.get('reason', ''))[:500], items=[], calendar=command))
         except writes.WriteError as error:
             return result({'error': error.code})
-        outcome = await _proposal(ctx, proposals.Proposal(kind='calendar', reason=str(arguments.get('reason', ''))[:500], items=[], calendar=command))
+        except SequenceReplaced:
+            return result({'error': 'proposal_not_pending'})
         if command.action == 'create':
             part = ctx.calendar_request_part
         else:

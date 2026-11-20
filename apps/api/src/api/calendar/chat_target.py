@@ -23,6 +23,7 @@ class CalendarOption(BaseModel):
 class CalendarChoice(CalendarOption):
     offered: tuple[CalendarOption, ...] = ()
     appointment_subject: str = ""
+    sequence_id: str | None = None
     excluded_source_ids: tuple[str, ...] = ()
     exclude_default: bool = False
     error: Literal["calendar_name_required", "calendar_name_ambiguous", "calendar_name_unknown", "calendar_appointment_ambiguous"] | None = None
@@ -529,8 +530,10 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
     if any(choice != choices[0] for choice in choices[1:]):
         return CalendarChoice(error="calendar_appointment_ambiguous")
     choice = choices[0]
-    if choice and len(unfinished) == 1:
+    if len(unfinished) == 1:
         inherited = pending_for_request(ctx.calendar_choice, unfinished[0]) if unfinished[0] == parts[0] else None
         subject = (inherited.appointment_subject if inherited else "") or _appointment_subject(unfinished[0])
-        return choice.model_copy(update={"appointment_subject": subject})
+        sequence_id = ctx.calendar_sequence_id or (inherited.sequence_id if inherited else None)
+        if choice or sequence_id:
+            return (choice or CalendarChoice()).model_copy(update={"appointment_subject": subject, "sequence_id": sequence_id})
     return choice

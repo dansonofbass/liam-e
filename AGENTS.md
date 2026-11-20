@@ -485,6 +485,10 @@ Each create call identifies the corresponding request. A completed card leaves t
 of a separate unfinished appointment available for scheduling questions. Where the request
 or its target is ambiguous, the owner clarifies it before a card is created. A pending card can retry a failed lookup
 of either the mail grant or calendar access.
+When one request creates several appointments, only the first card appears initially. The API
+stores the other prepared commands with their chosen calendar and turn context. Confirming or
+cancelling a card makes the next one available for its own confirmation. An uncertain write
+keeps the next appointment waiting until the owner checks its outcome.
 An explicitly excluded calendar stays excluded through scheduling questions. If the default
 is excluded, the owner chooses a target. An edit or deletion carries its target only on its own card.
 When the owner rules out one of several offered calendars, the chat keeps the remaining

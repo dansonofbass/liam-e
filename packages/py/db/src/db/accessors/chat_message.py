@@ -9,7 +9,7 @@ import json
 from sqlalchemy import select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from db.accessors import calendar_source, chat_settings, mail_message, user_preference
+from db.accessors import calendar_proposal_queue, calendar_source, chat_settings, mail_message, user_preference
 from db.engine import get_session_maker
 from db.models.chat_message import ChatMessage
 from db.models.chat_context import ChatContext
@@ -119,6 +119,7 @@ async def cancel_proposal(message_id: str) -> ChatMessage | None:
             .returning(ChatMessage)
         )
         message = result.scalar_one_or_none()
+        await calendar_proposal_queue.release(session, message)
         await session.commit()
         return message
 
@@ -134,6 +135,7 @@ async def set_proposal(
             statement.values(proposal_json=proposal_json, proposal_status=proposal_status).returning(ChatMessage)
         )
         message = result.scalar_one_or_none()
+        await calendar_proposal_queue.release(session, message)
         await session.commit()
         return message
 

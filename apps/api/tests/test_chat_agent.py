@@ -735,42 +735,6 @@ async def test_default_calendar_remains_bound_during_clarification(store, monkey
         assert await cards(reply) == [expected]
 
 
-@pytest.mark.parametrize('dentist_first', [False, True])
-@pytest.mark.parametrize('shared_verb', [False, True])
-async def test_two_appointment_requests_bind_each_card_to_its_own_target(store, monkeypatch, dentist_first, shared_verb):
-    from db.accessors import calendar_settings, calendar_source
-    from db.models.calendar_source import CalendarSource
-
-    calendars = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic',
-        external_id=key, capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'personal')]
-    async def catalog(*, ids):
-        return [(row, None) for row in calendars if row.id in ids]
-    monkeypatch.setattr(calendar_source, 'catalog', catalog)
-    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
-    conversation = await store.create()
-    snapshot = store.snapshot('two-requests', calendar_scope_json='["work","personal"]')
-    def create(title, start, end, **fields):
-        return {'action': 'create', 'title': title, 'start_local': '2026-11-21T' + start,
-                'end_local': '2026-11-21T' + end, 'timezone': 'UTC', **fields}
-    calls = [create('Review', '09:00', '10:00', calendar_name='Work'), create('Dentist appointment', '15:00', '15:30')]
-    owner = 'Put the 09:00 review in the Work calendar. Separately, schedule a dentist appointment at 15:00.'
-    if shared_verb:
-        clauses = ['Schedule a 09:00 review in the Work calendar', 'a 15:00 dentist visit']
-        owner = ' and '.join(clauses) + '.'
-        calls[0]['appointment_request'], calls[1]['appointment_request'] = clauses
-        calls[1]['title'] = 'Dentist visit'
-    if dentist_first:
-        calls.reverse()
-    fake = FakeMistral(streams=[[chunk('propose_calendar_change', args, id=f'call{i}', index=i) for i, args in enumerate(calls)], ['Response']])
-    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
-    events = [e async for e in agent.run_turn_events(conversation_id=conversation.id, text=owner,
-              resolved_context=(conversation, snapshot, None))]
-    assert events[-1].event == 'done'
-    cards = [json.loads(row.proposal_json)['calendar'] for row in store.rows if row.role == 'proposal']
-    assert len(cards) == 2
-    assert {c['after']['title']: c['source_id'] for c in cards} == {'Review': 'work', ('Dentist visit' if shared_verb else 'Dentist appointment'): 'personal'}
-
-
 @pytest.mark.parametrize('attempt', ['question', 'tool', 'named_tool'])
 @pytest.mark.parametrize('owner_request, requested_name', [
     ('Schedule a review', None),
@@ -937,7 +901,7 @@ async def test_calendar_elimination_requires_a_single_verified_option(store, mon
 
 @pytest.mark.parametrize('attempt', ['plain_question', 'work_first', 'work_last'])
 async def test_unfinished_calendar_request_survives_a_completed_card(store, monkeypatch, attempt):
-    from db.accessors import calendar_settings, calendar_source
+    from db.accessors import calendar_proposal_queue, calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
 
     calendars = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic',
@@ -946,6 +910,8 @@ async def test_unfinished_calendar_request_survives_a_completed_card(store, monk
         return [(source, None) for source in calendars if source.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
     monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    queued = AsyncMock(return_value=None)
+    monkeypatch.setattr(calendar_proposal_queue, 'append', queued)
     conversation = await store.create()
     snapshot = store.snapshot('mixed-requests', calendar_scope_json='["work","personal"]')
     dentist = {'action': 'create', 'title': 'Dentist', 'start_local': '2026-11-21T09:00', 'end_local': '2026-11-21T10:00'}
@@ -962,7 +928,11 @@ async def test_unfinished_calendar_request_survives_a_completed_card(store, monk
         return [event.message.proposal.calendar async for event in agent.run_turn_events(
             conversation_id=conversation.id, text=text, resolved_context=(conversation, snapshot, None)) if event.event == 'proposal']
     assert [card.source_id for card in await turn('Schedule a dentist visit at 09:00. Create a review in the Work calendar.')] == ['personal']
-    assert [card.source_id for card in await turn('Tomorrow at 15:00')] == ['work']
+    assert await turn('Tomorrow at 15:00') == []
+    queued.assert_awaited_once()
+    assert queued.await_args.kwargs['payload']['calendar']['source_id'] == 'work'
+    first, = [row for row in store.rows if row.role == 'proposal']
+    assert first.id == queued.await_args.args[0] and first.proposal_status == 'pending'
 
 
 async def test_calendar_edit_does_not_set_a_target_for_the_next_create(store, monkeypatch):

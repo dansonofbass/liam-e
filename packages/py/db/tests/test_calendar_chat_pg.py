@@ -10,6 +10,99 @@ import pytest
 pytestmark = pytest.mark.skipif(not os.getenv('RUN_PG_CONTRACT'), reason='RUN_PG_CONTRACT is not set')
 
 
+@pytest.mark.parametrize('dentist_first', [False, True])
+@pytest.mark.parametrize('shared_verb,clarify,early', [(False, False, False), (True, False, False),
+                                                    (False, True, False), (False, True, True)])
+@pytest.mark.parametrize('cancel_first', [False, True])
+def test_two_appointment_requests_bind_each_card_to_its_own_target(pg_db, monkeypatch, dentist_first, shared_verb, clarify, early, cancel_first):
+    from pathlib import Path
+    monkeypatch.syspath_prepend(Path(__file__).resolve().parents[4] / 'apps/api/tests')
+    from support.fake_mistral import FakeMistral
+    from api.calendar import writes
+    from api.mail import agent, proposals
+    from api.mail.chat_schemas import to_message_out
+    from db.accessors import calendar_settings, chat_message
+    from db.engine import get_session_maker
+    from db.models.calendar_source import CalendarSource
+
+    async def run():
+        async with get_session_maker().begin() as session:
+            for key in ('work', 'personal'):
+                session.add(CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic-' + key,
+                    external_id=key, capabilities_json='["read","write"]', timezone='UTC'))
+        await calendar_settings.update(1, 'personal')
+        def create(title, start, end, **fields):
+            return {'action': 'create', 'title': title, 'start_local': '2026-11-21T' + start,
+                    'end_local': '2026-11-21T' + end, 'timezone': 'UTC', **fields}
+        calls = [create('Review', '09:00', '10:00', calendar_name='Work'), create('Dentist appointment', '15:00', '15:30')]
+        owner = 'Put the 09:00 review in the Work calendar. Separately, schedule a dentist appointment at 15:00.'
+        if shared_verb:
+            clauses = ['Schedule a 09:00 review in the Work calendar', 'a 15:00 dentist visit']
+            owner = ' and '.join(clauses) + '.'
+            calls[0]['appointment_request'], calls[1]['appointment_request'] = clauses
+            calls[1]['title'] = 'Dentist visit'
+        targets = ['work', 'personal']
+        if dentist_first:
+            calls.reverse()
+            targets.reverse()
+        def chunk(args, index):
+            tool = NS(id=f'call{index}', index=index, type='function',
+                      function=NS(name='propose_calendar_change', arguments=json.dumps(args)))
+            return NS(data=NS(choices=[NS(delta=NS(content=None, tool_calls=[tool]))]))
+        initial = calls.copy()
+        later = []
+        if clarify:
+            owner = owner.replace('09:00 ' if dentist_first else ' at 15:00', '')
+            initial[1] = {key: value for key, value in calls[1].items() if key not in ('start_local', 'end_local')}
+            final = {key: value for key, value in calls[1].items() if key != 'calendar_name'}
+            later = [[chunk(final, 0)], ['Ready.']]
+        fake = FakeMistral(streams=[[chunk(args, i) for i, args in enumerate(initial)],
+                                   ['What time for the other appointment?' if clarify else 'Ready for confirmation.'], *later])
+        monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+        dispatched = []
+        async def execute(request, *, write_id):
+            dispatched.append((request.title, request.source_id, write_id))
+            return writes.WriteOutcome(write_id=write_id, status='done')
+        monkeypatch.setattr(writes, 'execute', execute)
+        events = [e async for e in agent.run_turn_events(conversation_id=None, text=owner)]
+        assert events[-1].event == 'done'
+        conversation = events[-1].conversation_id
+        first, = [e.message for e in events if e.event == 'proposal']
+        assert (first.proposal.calendar.after.title, first.proposal.calendar.source_id) == (calls[0]['title'], targets[0])
+        assert first.proposal_status == 'pending' and dispatched == []
+        assert 'synthetic-' not in first.model_dump_json()
+        async def visible_cards():
+            return [to_message_out(row) for row in agent.visible_messages(await chat_message.list_messages(conversation)) if row.role == 'proposal']
+        assert [row.id for row in await visible_cards()] == [first.id]
+        await calendar_settings.update(2, 'work')
+        async def settle_first():
+            if cancel_first:
+                assert (await proposals.cancel(first.id)).proposal_status == 'cancelled'
+            else:
+                assert (await proposals.confirm(first.id, selected_ids=[])).proposal_status == 'done'
+        if early:
+            await settle_first()
+        if clarify:
+            answer = 'Tomorrow at 09:00 for an hour.' if dentist_first else 'Tomorrow at 15:00 for half an hour.'
+            followup = [e async for e in agent.run_turn_events(conversation_id=conversation, text=answer)]
+            assert followup[-1].event == 'done'
+            assert any(event.event == 'proposal' for event in followup) == early
+            if not early:
+                assert [(row.id, row.proposal_status) for row in await visible_cards()] == [(first.id, 'pending')]
+        if not early:
+            await settle_first()
+        second, = [row for row in await visible_cards() if row.proposal_status == 'pending']
+        assert second.id != first.id and (second.proposal.calendar.after.title, second.proposal.calendar.source_id) == (calls[1]['title'], targets[1])
+        assert len(dispatched) == int(not cancel_first)
+        with pytest.raises(proposals.ProposalStateError):
+            await proposals.confirm(first.id, selected_ids=[])
+        assert (await proposals.confirm(second.id, selected_ids=[])).proposal_status == 'done'
+        expected = [] if cancel_first else [(calls[0]['title'], targets[0], first.id)]
+        assert dispatched == [*expected, (calls[1]['title'], targets[1], second.id)]
+        assert all(row.proposal_status != 'pending' for row in await visible_cards())
+    asyncio.run(run())
+
+
 def test_calendar_scope_and_model_history_isolation(pg_db, monkeypatch):
     async def run():
         from db.engine import get_session_maker
