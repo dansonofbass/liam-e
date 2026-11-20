@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from db.accessors import chat_context
 from db.accessors.prompt_template import StaleVersion
 from api.errors import refuse
-from api.mail.models_catalog import list_chat_models
+from api.mail.models_catalog import list_chat_models, require_available_model
 
 from . import schemas
 
@@ -40,8 +40,8 @@ async def update_conversation(conversation_id: str, body: ChatConversationUpdate
     title = None
     if 'model' in body.model_fields_set:
         model = body.model if body.model is not None else ''
-        if body.model is not None and model not in {m.id for m in await list_chat_models()}:
-            raise refuse(422, 'model_unknown', 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.')
+        if body.model is not None:
+            require_available_model(model, await list_chat_models())
     if 'title' in body.model_fields_set and body.title is not None:
         title = body.title.strip()[:120]
         if not title:

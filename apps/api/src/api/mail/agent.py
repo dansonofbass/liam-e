@@ -99,7 +99,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         return row
 
     try:
-        yield StartEvent(conversation_id=conversation.id, user_message_id=user.id)
+        yield StartEvent(conversation_id=conversation.id, user_message_id=user.id, model=model)
         yield StatusEvent(code='thinking')
         account = await mail_account.get_account(account_id) if account_id else None
         ctx = TurnContext(conversation.id, account.id if account else None, datetime.now(ZoneInfo(calendar_timezone)).date(), account_ids=scope_ids, context_id=snapshot.id, source_message_id=user.id,

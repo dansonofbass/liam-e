@@ -1,3 +1,4 @@
+import { offline } from './offline'
 import { plural as formatPlural } from './numbers'
 
 const plural = (n: number, forms: Parameters<typeof formatPlural>[1]) => formatPlural(n, forms, 'de')
@@ -9,6 +10,7 @@ const noticeSubject = (subject: string) => {
 }
 
 export const de = {
+  offline: offline.de,
   preferences: {
     title: 'Präferenzen', empty: 'Noch keine Präferenzen gespeichert. Lege fest, wie liam-e für dich schreiben soll.',
     add: 'Präferenz hinzufügen', edit: 'Bearbeiten', pause: 'Pausieren', activate: 'Aktivieren', remove: 'Löschen',
@@ -132,7 +134,8 @@ export const de = {
     feedNotQueued: 'Kein neuer Abruf eingereiht. Ein Abruf läuft bereits oder der letzte liegt weniger als eine Minute zurück.',
     feedAddressError: 'Kalenderadresse prüfen. Der Anbieter erlaubt den Abruf nicht mehr oder findet den Kalender nicht.',
     feedSyncError: 'Der Kalender konnte nicht abgerufen werden. Der letzte gespeicherte Stand bleibt erhalten. Versuch es später erneut.',
-    chatScope: 'Kalender im Chat', noSelection: 'Keine Kalender ausgewählt', unavailableSource: 'Nicht mehr freigegebener Kalender',
+    chatScope: 'Kalender im Chat', addToChat: 'Kalender wählen', checkSelection: 'Kalenderauswahl prüfen',
+    scopeSelected: (n: number) => plural(n, { one: '# Kalender ausgewählt', other: '# Kalender ausgewählt' }), unavailableSource: 'Nicht mehr freigegebener Kalender',
     scopeHint: 'Nur ausgewählte Kalender werden gelesen. Eine andere Auswahl braucht eine neue Unterhaltung.',
     ask: 'Im Chat fragen', referenceLoading: 'Termin wird geladen …', removeReference: 'Terminbezug entfernen',
     title: 'Kalender', tip: 'Gespeicherte Termine ansehen', today: 'Heute', from: 'Von', to: 'Bis (ausschließlich)',
@@ -165,7 +168,7 @@ export const de = {
     loadCurrent: 'Aktuelle Fassung laden', unavailable: 'Diese Vorlage gibt es nicht mehr. Kehre zur Vorlagenliste zurück.',
     back: 'Zur Vorlagenliste', remove: 'Vorlage löschen', removeTitle: 'Vorlage löschen?',
     removeDescription: 'Sie wird mit allen gespeicherten Versionen aus deiner Bibliothek entfernt. Betroffene Unterhaltungen verwenden künftig Standard. Bisherige Nachrichten bleiben erhalten. Bereits übermittelte Inhalte lassen sich nicht zurückholen.',
-    removed: 'Vorlage entfernt', standard: 'Standard', chip: (name: string) => `Vorlage: ${name}`,
+    removed: 'Vorlage entfernt', standard: 'Standard', chooser: 'Vorlage', chip: (name: string) => `Vorlage: ${name}`,
     scopeUnavailable: 'Gespeichertes Konto nicht verfügbar',
     next: 'Gilt ab deiner nächsten Nachricht.', manage: 'Vorlagen verwalten', newer: 'Neue Version verfügbar', adopt: 'Version übernehmen',
     selectionError: 'Die Vorlage wurde nicht gewechselt. Prüfe die Auswahl und versuch es noch mal.',
@@ -264,6 +267,21 @@ export const de = {
     noAccounts: 'Verbinde ein Konto, dann kann ich deine Mails lesen.', removeReference: 'Bezug entfernen', toEnd: 'Zum Ende',
     loadingReference: 'Mail wird geladen …', referenceError: 'Die Mail konnte nicht geladen werden. Versuch es gleich noch mal.',
     modelTip: 'Modell für diese Unterhaltung wählen',
+    modelChoice: 'Modell wählen',
+    modelRecommended: (name: string) => `${name} · empfohlen`,
+    modelDetails: 'Preise und Details',
+    modelMailReason: 'Unterstützt Mailsuche und Zusammenfassungen.',
+    modelPrices: (input: string, output: string) => `Eingabe ${input} · Ausgabe ${output} je 1 Mio. Texttokens`,
+    modelPriceUnknown: 'Preis unbekannt',
+    modelAliasUnresolved: 'Preis unbekannt · Modellversion offen',
+    modelPriceSource: (date: string) => `Mistral-Preisliste · Stand ${date}`,
+    modelCardSource: (id: string, date: string) => `Mistral-Modellkarte für ${id} · Stand ${date}`,
+    modelPriceTerms: 'Öffentliche Listenpreise. Für deinen Workspace kann ein anderer Tarif gelten.',
+    modelUnlisted: 'In der aktuellen Modellliste nicht verfügbar.',
+    modelUnverified: 'Verfügbarkeit zurzeit unbekannt.',
+    modelOutsideMail: 'Dieses Modell ist für den Chat eingestellt.',
+    noMailModels: 'Zurzeit ist kein Allzweckmodell für Mail verfügbar.',
+    modelRefresh: 'Modellliste neu laden',
     modelConflict: 'Die Unterhaltung wurde inzwischen geändert. Der aktuelle Stand ist geladen. Prüfe das Modell und wähle bei Bedarf erneut.',
     modelConflictReloadError: 'Die Unterhaltung wurde inzwischen geändert, aber der aktuelle Stand konnte nicht geladen werden. Versuch es gleich noch mal.',
     modelError: 'Das Modell konnte nicht geändert werden. Versuch es gleich noch mal.', modelUnknown: 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.',
@@ -332,6 +350,7 @@ export const de = {
     request_failed: 'Die Anfrage hat nicht geklappt.',
     model_unavailable: 'Das Modell antwortet gerade nicht. Versuch es gleich noch mal.',
     model_unknown: 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.',
+    model_catalog_unavailable: 'Die Modellliste konnte nicht geladen werden. Versuch es noch einmal.',
     aborted: 'Die Antwort ist abgebrochen.',
     internal: 'Die Antwort konnte nicht erstellt werden. Versuch es gleich noch mal.',
     conversation_not_found: 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.',
@@ -451,6 +470,9 @@ export const de = {
     done: { archive: (subject: string) => `„${noticeSubject(subject)}“ archiviert.`, trash: (subject: string) => `„${noticeSubject(subject)}“ in den Papierkorb gelegt.`, spam: (subject: string) => `„${noticeSubject(subject)}“ als Spam markiert.`, mark_read: (subject: string) => `„${noticeSubject(subject)}“ als gelesen markiert.`, mark_unread: (subject: string) => `„${noticeSubject(subject)}“ als ungelesen markiert.` },
     doneShort: { archive: 'Mail archiviert.', trash: 'Mail in den Papierkorb gelegt.', spam: 'Mail als Spam markiert.', mark_read: 'Mail als gelesen markiert.', mark_unread: 'Mail als ungelesen markiert.' },
     recentActions: (n: number) => `Letzte Aktionen (${n})`, undoAction: (text: string) => `Rückgängig: ${String(text).replace(/\.$/, '')}`, undoRunning: 'Wird zurückgenommen …',
+    mailQuestionPlaceholder: 'Frag etwas zu dieser Mail …',
+    swipeUnavailable: 'Die Wischaktionen konnten nicht geladen werden.',
+    askAboutMail: (subject: string) => `Im Chat zu „${subjectText(subject)}“ fragen`,
     swipeRelease: { archive: 'Loslassen zum Archivieren', trash: 'Loslassen für den Papierkorb', mark_read: 'Loslassen: Als gelesen markieren', mark_unread: 'Loslassen: Als ungelesen markieren' },
     undoCapacity: 'Warte kurz, bis eine Rücknahme abgelaufen ist, oder mach eine Aktion rückgängig.',
     undoSkipped: 'Diese Aktion lässt sich nicht mehr rückgängig machen. Die Mail wurde inzwischen geändert.',

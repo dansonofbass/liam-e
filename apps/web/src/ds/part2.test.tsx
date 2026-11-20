@@ -119,14 +119,15 @@ test('selected mail row is current and keeps its selected styling', async () => 
   expect(row.hasAttribute('aria-current')).toBe(false)
 })
 
-test('mail row menu stays in the right-hand time column', async () => {
+test('touch chat and actions share the right-hand time column', async () => {
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   expect(css).toMatch(/\.le-mailrow-side \{[^}]*grid-column: 3;/u)
   expect(css).toMatch(/\.le-mailrow-more \{[^}]*align-self: flex-end;/u)
-  expect(css).toMatch(/@media \(max-width: 639px\), \(pointer: coarse\) \{[^\n]*\.le-mailrow-more \{ display: block; \}/u)
-  render(<MailRow mail={{ ...mail, internal_date: '2026-11-13T08:00:00Z' }} selected={false} coarse onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  expect(css).toMatch(/@media \(max-width: 639px\), \(pointer: coarse\) \{[^\n]*\.le-mailrow-more \{ display: flex; \}/u)
+  render(<MailRow mail={{ ...mail, internal_date: '2026-11-13T08:00:00Z' }} selected={false} coarse onAsk={() => {}} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
   const side = document.querySelector('.le-mailrow-side')!
   expect(side.querySelector('time')).toBeTruthy()
+  expect(side.contains(screen.getByRole('button', { name: /Im Chat zu/ }))).toBe(true)
   expect(side.querySelector('.le-mailrow-more')?.contains(screen.getByRole('button', { name: 'Weitere Aktionen zu Nebenkostenabrechnung 2025' }))).toBe(true)
 })
 

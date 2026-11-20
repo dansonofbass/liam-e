@@ -8,11 +8,17 @@ import { createTypewriter } from './typewriter'
 import { calendarSourcesQuery, conversationsQuery, historyQuery } from '../api/queries'
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | ChatRefusal
-type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; request?: ChatStreamRequest }
+type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; model?: string; request?: ChatStreamRequest }
 export type TaskScope = { source: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked'; account_id?: string }
 type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; calendarScopes: Record<string, string[]>; setCalendarScope: (id: string, ids: string[]) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string | ((previous: string) => string)) => void; audioDraftLocked: boolean; setAudioDraftLocked: (locked: boolean) => void; scopeOverrides: Record<string, string | null>; setConversationScope: (id: string, scope: string | null) => void; state: State; scope: string | null; setScope: (scope: string | null) => void; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void>; retryWithoutPreferences: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
+
+export type ComposerMail = Pick<MailRefOut, 'id' | 'account_id'>
+
+export function composerDraftKey(conversationId?: string | null, messageId?: string | null) {
+  return conversationId ?? (messageId ? 'mail:' + messageId : 'new')
+}
 
 // The account selection a conversation was saved with; undefined until its conversation is known.
 function savedSelection(saved?: ConversationOut): string | null | undefined {
@@ -65,9 +71,10 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => { const turn = active.current; active.current = null; turn?.controller.abort(); turn?.writer.cancel() }, [])
   const send = useCallback(async (request: ChatStreamRequest) => {
     if (active.current) return
-    const calendarIds = request.calendar_source_ids ?? calendarScopes[request.conversation_id ?? 'new'] ?? savedCalendarScope(request.conversation_id ? client.getQueryData(historyQuery(request.conversation_id).queryKey) : undefined)
+    const composerKey = composerDraftKey(request.conversation_id, request.context_message_id)
+    const calendarIds = request.calendar_source_ids ?? calendarScopes[composerKey] ?? savedCalendarScope(request.conversation_id ? client.getQueryData(historyQuery(request.conversation_id).queryKey) : undefined)
     const liveTasks = request.conversation_id && conversation.current === request.conversation_id ? last.current : undefined
-    const tasks = taskScopes[request.conversation_id ?? 'new'] ?? (liveTasks ? { source: liveTasks.task_source ?? 'none', account_id: liveTasks.task_source_account_id ?? undefined } : savedTaskScope(request.conversation_id ? client.getQueryData(historyQuery(request.conversation_id).queryKey) : undefined))
+    const tasks = taskScopes[composerKey] ?? (liveTasks ? { source: liveTasks.task_source ?? 'none', account_id: liveTasks.task_source_account_id ?? undefined } : savedTaskScope(request.conversation_id ? client.getQueryData(historyQuery(request.conversation_id).queryKey) : undefined))
     request = { ...request, locale: browserLocale, task_source: request.task_source ?? tasks.source, task_source_account_id: request.task_source !== undefined ? request.task_source_account_id : tasks.account_id, calendar_source_ids: calendarIds, calendar_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }
     last.current = request
     conversation.current = request.conversation_id ?? undefined
@@ -83,9 +90,11 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
         if (active.current !== turn) return
         switch (event.event) {
           case 'start':
-            setComposerTexts(previous => ({ ...previous, [request.conversation_id ?? 'new']: '' }))
+            setComposerTexts(previous => {
+              return previous[composerKey] === request.text ? { ...previous, [composerKey]: '' } : previous
+            })
             turn.conversationId = conversation.current = event.conversation_id
-            setState(s => ({ ...s, conversationId: event.conversation_id, userMessageId: event.user_message_id }))
+            setState(s => ({ ...s, conversationId: event.conversation_id, userMessageId: event.user_message_id, model: event.model }))
             void client.invalidateQueries({ queryKey: ['conversations'] }); break
           case 'status': setState(s => ({ ...s, status: event })); break
           case 'delta': writer.push(event.text); break
@@ -117,16 +126,20 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   return <Context.Provider value={{ state, scope, setScope, taskScopes, setTaskScope, calendarScopes, setCalendarScope, composerTexts, setComposerText, audioDraftLocked, setAudioDraftLocked, scopeOverrides, setConversationScope, send, stop, retry, retryWithoutPreferences }}>{children}</Context.Provider>
 }
 // Shared restoration for every entry point; explicit edits are isolated by conversation.
-export function useConversationScope(id?: string) {
+export function useConversationScope(id?: string, mail?: ComposerMail) {
   const session = useChatSession()
   const conversations = useQuery({ ...conversationsQuery(), enabled: !!id })
   const saved = conversations.data?.find(item => item.id === id)
-  const scope = resolveScope(session, id, saved)
+  // A question opened from a mail has its own draft and starts in that mail's account.
+  const key = composerDraftKey(id, mail?.id)
+  const scope = !id && mail
+    ? (Object.hasOwn(session.scopeOverrides, key) ? session.scopeOverrides[key] : mail.account_id)
+    : resolveScope(session, id, saved)
   return {
     saved,
     scope: scope ?? null,
     ready: scope !== undefined,
-    setScope: (value: string | null) => id ? session.setConversationScope(id, value) : session.setScope(value),
+    setScope: (value: string | null) => id || mail ? session.setConversationScope(key, value) : session.setScope(value),
   }
 }
 
@@ -185,11 +198,11 @@ function savedCalendarScope(messages?: ChatMessageOut[]): string[] {
   } catch { return [] }
 }
 
-export function useCalendarScope(id?: string) {
+export function useCalendarScope(id?: string, messageId?: string) {
   const session = useChatSession()
   const history = useQuery({ ...historyQuery(id ?? ''), enabled: !!id })
-  const key = id ?? 'new'
-  const live = session.state.conversationId === id ? session.state.request?.calendar_source_ids : undefined
+  const key = composerDraftKey(id, messageId)
+  const live = id && session.state.conversationId === id ? session.state.request?.calendar_source_ids : undefined
   return {
     ids: session.calendarScopes[key] ?? live ?? savedCalendarScope(history.data),
     ready: !id || session.calendarScopes[key] !== undefined || live !== undefined || history.isSuccess,
@@ -206,11 +219,11 @@ function savedTaskScope(messages?: ChatMessageOut[]): TaskScope {
   return { source: 'none' }
 }
 
-export function useTaskScope(id?: string) {
+export function useTaskScope(id?: string, messageId?: string) {
   const session = useChatSession()
   const history = useQuery({ ...historyQuery(id ?? ''), enabled: !!id })
-  const live = session.state.conversationId === id ? session.state.request : undefined
-  const key = id ?? 'new'
+  const live = id && session.state.conversationId === id ? session.state.request : undefined
+  const key = composerDraftKey(id, messageId)
   return {
     scope: session.taskScopes[key] ?? (live ? { source: live.task_source ?? 'none', account_id: live.task_source_account_id ?? undefined } : savedTaskScope(history.data)),
     ready: !id || session.taskScopes[key] !== undefined || live !== undefined || history.isSuccess,

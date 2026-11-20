@@ -285,6 +285,39 @@ async function testOwnerDeviceCheck(page, webOrigin, calls) {
   }
 }
 
+async function testMailDraftRecording(page, webOrigin, calls) {
+  const uploads = calls.upload;
+  const turns = calls.chat.length;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(webOrigin + "/mail");
+  await page.getByRole("button", { name: /^Im Chat zu / }).first().click();
+  const draft = page.getByPlaceholder("Frag etwas zu dieser Mail …");
+  const button = name => page.getByRole("button", { name, exact: true });
+  await draft.fill("Frage zur Mail.");
+
+  await button("Sprache aufnehmen").click();
+  await page.waitForFunction(() => window.audioFixture.recordings.at(-1)?.packets > 0);
+  await button("Beenden und übertragen").click();
+  const expectedDraft = "Frage zur Mail.\n\nEin synthetischer Satz.";
+  await page.waitForFunction(expected => document.querySelector(".le-composer textarea")?.value === expected, expectedDraft);
+
+  // Removing the mail while recording releases the microphone and restores the general draft.
+  await button("Sprache aufnehmen").click();
+  await button("Beenden und übertragen").waitFor();
+  await button("Bezug entfernen").click();
+  await draft.waitFor({ state: "hidden" });
+  await page.waitForFunction(() => window.audioFixture.tracks.every(track => track.readyState === "ended"));
+  const general = page.locator(".le-composer textarea");
+  assert.equal(await general.inputValue(), "");
+  await general.fill("Separate allgemeine Frage.");
+  await page.goBack();
+  await draft.waitFor();
+  assert.equal(await draft.inputValue(), expectedDraft);
+  assert.equal(calls.upload, uploads + 1);
+  assert.equal(calls.chat.length, turns);
+  console.log("Mobile mail chat e2e passed: dictation stays with its mail and removing the reference cancels recording.");
+}
+
 async function main() {
   if (!engine) throw new Error("Install the local pgvector image before running this test");
   let db;
@@ -338,6 +371,7 @@ async function main() {
     const calls = await testSpeechInput(page, webOrigin, conversation);
     await testSpeechOutput(page, calls, conversation);
     await testOwnerDeviceCheck(page, webOrigin, calls);
+    await testMailDraftRecording(page, webOrigin, calls);
   } catch (error) {
     if (api) console.error(api.logs());
     if (web) console.error(web.logs());

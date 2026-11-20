@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { mailSyncAll } from '../api/generated/sdk.gen'
 import type { MessageListItemOut, MessagePageOut, UiSettingsOut } from '../api/generated/types.gen'
 import { messagesInfiniteQuery, summaryQuery } from '../api/queries'
-import { Chip, Icon, IconButton, MailRow, Menu, Notice, TextField } from '../ds'
+import { Button, Chip, Icon, IconButton, MailRow, Menu, Notice, TextField, Tooltip } from '../ds'
 import { providerLabel } from '../ds/providerLabel'
 import { useI18n } from '../i18n/I18n'
 import { formatTime } from '../i18n/format'
@@ -136,10 +136,10 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
   useInboxKeys({
     onNext: () => select(items[Math.min(selectedIndex + 1, items.length - 1)]?.id),
     onPrev: () => select(items[Math.max(selectedIndex - 1, 0)]?.id),
-    onOpen: () => { if (current) onOpen(current.id) },
-    onArchive: () => { if (selection.size) bulk('archive'); else if (current) remove(current, 'archive') },
-    onToggleRead: () => { if (selection.size) bulk(bulkRead); else if (current) toggleRead(current) },
-    onTrash: () => { if (selection.size) bulk('trash'); else if (current) remove(current, 'trash') },
+    onOpen: () => { if (current) { if (selectionMode) toggleSelection(current.id); else onOpen(current.id) } },
+    onArchive: () => { if (selectionMode) bulk('archive'); else if (current) remove(current, 'archive') },
+    onToggleRead: () => { if (selectionMode) bulk(bulkRead); else if (current) toggleRead(current) },
+    onTrash: () => { if (selectionMode) bulk('trash'); else if (current) remove(current, 'trash') },
     onSelect: () => { if (current) toggleSelection(current.id) },
     // Only claim Escape while selecting; otherwise the browser keeps its own Escape behaviour.
     onEscape: selectionMode ? endSelection : undefined,
@@ -154,8 +154,24 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
     } catch { notify(texts.inbox.refreshError) } finally { setSyncing(false) }
   }
   const controlSize = breakpoint === 'mobile' || coarse ? 'lg' : 'md'
-  const selectionBar = <div className="le-inbox-selection"><IconButton icon="x" label={texts.inbox.endSelection} tip={texts.inbox.endSelectionTip} size={controlSize} onClick={endSelection} /><span className="le-inbox-selection-count">{texts.inbox.selectionCount(selection.size)}</span><Chip style={breakpoint === 'mobile' ? { minHeight: 'var(--control-height-lg)' } : undefined} onClick={() => { setSelection(new Set(items.slice(0, 100).map(item => item.id))); if (items.length > 100) notify(texts.inbox.selectLimit) }}>{texts.inbox.selectAll}</Chip><IconButton icon="archive" label={texts.controls.archive} tip={texts.inbox.bulkTips.archive} size={controlSize} disabled={!selection.size} onClick={() => bulk('archive')} /><IconButton icon="mail-open" label={bulkRead === 'mark_read' ? texts.controls.markRead : texts.controls.markUnread} tip={texts.inbox.bulkTips[bulkRead]} size={controlSize} disabled={!selection.size} onClick={() => bulk(bulkRead)} /><IconButton icon="trash-2" label={texts.controls.trash} tip={texts.inbox.bulkTips.trash} tone="danger" size={controlSize} disabled={!selection.size} onClick={() => bulk('trash')} /><IconButton icon="ban" label={texts.mail.spam} tip={texts.inbox.bulkTips.spam} size={controlSize} disabled={!selection.size} onClick={() => bulk('spam')} /></div>
-  const buttons = <><IconButton className="le-inbox-control" icon="list-checks" label={texts.inbox.startSelection} tip={texts.inbox.selectTip} size={controlSize} onClick={() => setSelectionMode(true)} /><IconButton className="le-inbox-control" icon="search" label={texts.inbox.search} tip={texts.inbox.searchTip} size={breakpoint === 'mobile' || coarse ? 'lg' : 'md'} onClick={() => { setSearchOpen(true); searchRef.current?.querySelector('input')?.focus() }} /><IconButton className="le-inbox-control" icon="refresh-cw" label={texts.inbox.refresh} tip={texts.inbox.refreshTip} size={breakpoint === 'mobile' || coarse ? 'lg' : 'md'} disabled={syncing} onClick={() => { void refresh() }} /></>
+  const selectionBar = <div className="le-inbox-selection">
+    <IconButton icon="x" label={texts.inbox.endSelection} tip={texts.inbox.endSelectionTip} size={controlSize} onClick={endSelection} />
+    <span className="le-inbox-selection-count" role="status">{texts.inbox.selectionCount(selection.size)}</span>
+    <Chip style={breakpoint === 'mobile' ? { minHeight: 'var(--control-height-lg)' } : undefined} onClick={() => { setSelection(new Set(items.slice(0, 100).map(item => item.id))); if (items.length > 100) notify(texts.inbox.selectLimit) }}>{texts.inbox.selectAll}</Chip>
+    <div className="le-inbox-selection-actions">
+      <IconButton icon="archive" label={texts.controls.archive} tip={texts.inbox.bulkTips.archive} size={controlSize} disabled={!selection.size} onClick={() => bulk('archive')} />
+      <IconButton icon="mail-open" label={bulkRead === 'mark_read' ? texts.controls.markRead : texts.controls.markUnread} tip={texts.inbox.bulkTips[bulkRead]} size={controlSize} disabled={!selection.size} onClick={() => bulk(bulkRead)} />
+      <IconButton icon="trash-2" label={texts.controls.trash} tip={texts.inbox.bulkTips.trash} tone="danger" size={controlSize} disabled={!selection.size} onClick={() => bulk('trash')} />
+      <IconButton icon="ban" label={texts.mail.spam} tip={texts.inbox.bulkTips.spam} size={controlSize} disabled={!selection.size} onClick={() => bulk('spam')} />
+    </div>
+  </div>
+  const buttons = <>
+    {breakpoint === 'mobile'
+      ? <Tooltip content={texts.inbox.selectTip}><Button className="le-inbox-control" variant="secondary" icon="list-checks" onClick={() => setSelectionMode(true)}>{texts.inbox.startSelection}</Button></Tooltip>
+      : <IconButton className="le-inbox-control" icon="list-checks" label={texts.inbox.startSelection} tip={texts.inbox.selectTip} size={controlSize} onClick={() => setSelectionMode(true)} />}
+    <IconButton className="le-inbox-control" icon="search" label={texts.inbox.search} tip={texts.inbox.searchTip} size={controlSize} onClick={() => { setSearchOpen(true); searchRef.current?.querySelector('input')?.focus() }} />
+    <IconButton className="le-inbox-control" icon="refresh-cw" label={texts.inbox.refresh} tip={texts.inbox.refreshTip} size={controlSize} disabled={syncing} onClick={() => { void refresh() }} />
+  </>
   const time = summary.data?.last_sync_at ? formatTime(new Date(summary.data.last_sync_at), undefined, locale) : undefined
   const accounts = summary.data?.accounts ?? []
   const selectedAccount = accounts.find(account => account.id === search.account?.[0])
@@ -168,12 +184,13 @@ export function MailList({ onOpen }: { onOpen(id: string): void }) {
       {(['unread', 'important', 'attachments'] as const).map(key => <Chip key={key} pressed={Boolean(search[key])} quiet={!search[key]} onClick={() => changeSearch({ [key]: search[key] ? undefined : true })}>{texts.inbox[key]}</Chip>)}
     </div>
     {breakpoint === 'mobile' && (selectionMode ? selectionBar : <div className="le-inbox-mobile-status"><small className="le-muted le-num">{texts.inbox.unreadStand(summary.data?.unread_total ?? 0, time)}</small><span className="le-grow" />{buttons}</div>)}
+    {swipeSettings.status === 'error' && (coarse || breakpoint === 'mobile') && <Notice tone="info" action={{ label: texts.chat.retry, onClick: swipeSettings.retry }}>{texts.inbox.swipeUnavailable}</Notice>}
     {searchOpen && <div className="le-inbox-search" ref={searchRef}><TextField label={texts.inbox.search} type="search" placeholder={texts.inbox.searchPlaceholder} value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setValue(''); setSearchOpen(false); changeSearch({ q: undefined }) } }} /></div>}
     <div className="le-inbox-scroll" ref={scrollRef} tabIndex={-1}>
       {messages.isPending && <><span className="le-sr" role="status">{texts.inbox.loading}</span><div aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <div key={i} className="le-mailrow le-mailrow--placeholder"><span /><span /></div>)}</div></>}
       {messages.isError && !messages.data && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void messages.refetch() } }}>{texts.inbox.loadError}</Notice>}
       {messages.data && !items.length && <p className="le-hint">{hasActiveFilters(search) ? texts.inbox.emptyFiltered : texts.inbox.empty}</p>}
-      {groups.map(group => <div key={group.label}><div className="le-side-label">{group.label}</div><ul className="le-maillist" aria-label={group.label}>{group.items.map(mail => <li key={mail.id} ref={node => { if (node) rowRefs.current.set(mail.id, node); else rowRefs.current.delete(mail.id) }}><MailRow mail={mail} selected={selected === mail.id} selectionMode={selectionMode} checked={selection.has(mail.id)} onSelect={shift => toggleSelection(mail.id, shift)} coarse={coarse} accountLabel={labels.get(mail.account_id)} onOpen={() => { setLocalSelected(mail.id); onOpen(mail.id) }} onArchive={() => remove(mail, 'archive')} onToggleRead={() => toggleRead(mail)} onTrash={() => remove(mail, 'trash')} swipe={{ basis: swipeSettings.assignment && swipeSettings.revision !== undefined ? { id: mail.id, isRead: mail.is_read, revision: swipeSettings.revision, ...swipeSettings.assignment } : undefined, enabled: !selectionMode && swipeSettings.status === 'ready' && (swipeSettings.assignment?.left !== 'none' || swipeSettings.assignment?.right !== 'none') && capacityAvailable && !isBusy(mail.id), navigation: location.href, valid: basis => { const settings = client.getQueryData<UiSettingsOut>(['ui-settings']); const data = client.getQueryData<InfiniteData<MessagePageOut>>(messagesInfiniteQuery(toMessageFilters(search)).queryKey); const currentMail = data?.pages.flatMap(page => page.items).find(item => item.id === basis.id); return client.getQueryState(['ui-settings'])?.status === 'success' && settings?.revision === basis.revision && settings.swipe_left === basis.left && settings.swipe_right === basis.right && currentMail?.is_read === basis.isRead && !isBusy(basis.id) && checkCapacity() }, run: action => { if (isBusy(mail.id) || !checkCapacity()) return; if (action === 'archive' || action === 'trash') remove(mail, action); else void run(mail.id, action) } }} /></li>)}</ul></div>)}
+      {groups.map(group => <div key={group.label}><div className="le-side-label">{group.label}</div><ul className="le-maillist" aria-label={group.label}>{group.items.map(mail => <li key={mail.id} ref={node => { if (node) rowRefs.current.set(mail.id, node); else rowRefs.current.delete(mail.id) }}><MailRow mail={mail} selected={selected === mail.id} selectionMode={selectionMode} checked={selection.has(mail.id)} onSelect={shift => toggleSelection(mail.id, shift)} coarse={coarse} onAsk={breakpoint === 'mobile' || coarse ? () => { void navigate({ to: '/', search: { about: mail.id } }) } : undefined} accountLabel={labels.get(mail.account_id)} onOpen={() => { setLocalSelected(mail.id); onOpen(mail.id) }} onArchive={() => remove(mail, 'archive')} onToggleRead={() => toggleRead(mail)} onTrash={() => remove(mail, 'trash')} swipe={{ basis: swipeSettings.assignment && swipeSettings.revision !== undefined ? { id: mail.id, isRead: mail.is_read, revision: swipeSettings.revision, ...swipeSettings.assignment } : undefined, enabled: !selectionMode && swipeSettings.status === 'ready' && (swipeSettings.assignment?.left !== 'none' || swipeSettings.assignment?.right !== 'none') && capacityAvailable && !isBusy(mail.id), navigation: location.href, valid: basis => { const settings = client.getQueryData<UiSettingsOut>(['ui-settings']); const data = client.getQueryData<InfiniteData<MessagePageOut>>(messagesInfiniteQuery(toMessageFilters(search)).queryKey); const currentMail = data?.pages.flatMap(page => page.items).find(item => item.id === basis.id); return client.getQueryState(['ui-settings'])?.status === 'success' && settings?.revision === basis.revision && settings.swipe_left === basis.left && settings.swipe_right === basis.right && currentMail?.is_read === basis.isRead && !isBusy(basis.id) && checkCapacity() }, run: action => { if (isBusy(mail.id) || !checkCapacity()) return; if (action === 'archive' || action === 'trash') remove(mail, action); else void run(mail.id, action) } }} /></li>)}</ul></div>)}
       <div ref={sentinel} />{messages.isFetchingNextPage && <p className="le-hint">{texts.inbox.loadingMore}</p>}
     </div>
     <ActionToast />

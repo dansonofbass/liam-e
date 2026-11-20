@@ -586,9 +586,17 @@ export type ChatMessageOut = {
  */
 export type ChatModelOut = {
     /**
+     * Availability
+     */
+    availability?: 'available' | 'unlisted' | 'unverified';
+    /**
      * Description
      */
     description: string;
+    /**
+     * Group
+     */
+    group?: 'general' | 'specialist' | 'third_party' | 'other';
     /**
      * Id
      */
@@ -601,6 +609,41 @@ export type ChatModelOut = {
      * Label
      */
     label: string;
+    price?: ChatModelPrice | null;
+    /**
+     * Recommended
+     */
+    recommended?: boolean;
+    /**
+     * Resolved Id
+     */
+    resolved_id?: string | null;
+};
+
+/**
+ * ChatModelPrice
+ */
+export type ChatModelPrice = {
+    /**
+     * Checked On
+     */
+    checked_on: string;
+    /**
+     * Currency
+     */
+    currency?: 'USD';
+    /**
+     * Input Per Million
+     */
+    input_per_million: number;
+    /**
+     * Output Per Million
+     */
+    output_per_million: number;
+    /**
+     * Source
+     */
+    source: string;
 };
 
 /**
@@ -2798,6 +2841,10 @@ export type StartEvent = {
      * Event
      */
     event: 'start';
+    /**
+     * Model
+     */
+    model: string;
     /**
      * User Message Id
      */

@@ -16,7 +16,7 @@ from api.locales import DEFAULT_LOCALE, Locale
 from api.mail.agent import run_turn_events
 from api.mail.context_resolver import resolve_context
 from api.mail.chat_events import ChatEvent as ChatEventUnion, ErrorEvent
-from api.mail.models_catalog import list_chat_models
+from api.mail.models_catalog import list_chat_models, require_available_model
 
 logger = logging.getLogger(__name__)
 router = APIRouter(route_class=quiet_validation_route('chat_invalid', 'Prüfe die Nachricht: 1–8.000 Zeichen.'))
@@ -83,8 +83,8 @@ async def sse_frames(events: AsyncIterator[ChatEventUnion], is_disconnected: Cal
 async def chat_stream(body: ChatStreamRequest, request: Request) -> StreamingResponse:
     if body.conversation_id is not None and await chat_conversation.get_conversation(body.conversation_id) is None:
         raise refuse(404, 'conversation_not_found', 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.')
-    if body.conversation_id is None and body.model is not None and body.model not in {m.id for m in await list_chat_models()}:
-        raise refuse(422, 'model_unknown', 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.')
+    if body.conversation_id is None and body.model is not None:
+        require_available_model(body.model, await list_chat_models())
     resolved = await resolve_context(**body.model_dump(exclude={'locale'}))
     events = run_turn_events(**body.model_dump(), resolved_context=resolved)
     return event_stream_response(sse_frames(events, request.is_disconnected))

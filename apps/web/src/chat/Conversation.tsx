@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef } from 'react'
 import { historyQuery, messageQuery, MessageNotFoundError, modelsQuery, summaryQuery } from '../api/queries'
 import { errorCode } from '../api/unwrap'
 import type { AccountSummaryOut, ChatMessageOut, MailRefOut } from '../api/generated/types.gen'
@@ -14,7 +14,7 @@ import { ProposalCard } from './ProposalCard'
 import { useFollowScroll } from './useFollowScroll'
 import { SafeMarkdown } from './SafeMarkdown'
 import { CalendarReference, CalendarScope } from './CalendarContext'
-import { useCalendarScope, useChatSession, useConversationScope, useRestartConversation, useTaskScope } from './session'
+import { composerDraftKey, useCalendarScope, useChatSession, useConversationScope, useRestartConversation, useTaskScope, type ComposerMail } from './session'
 import { TaskScopeSelector } from './TaskContext'
 import { PreferenceContext } from './PreferenceContext'
 import { AudioRecorder, supportedAudioFormat } from './AudioRecorder'
@@ -25,37 +25,39 @@ type Accounts = AccountSummaryOut[]
 // A retry would send the same request and be refused again.
 const NEEDS_NEW_CONVERSATION = new Set(['conversation_not_found', 'conversation_scope_change_requires_new', 'context_unavailable', 'context_revoked'])
 
-export function ChatComposer({ conversationId, contextMessageId, contextOccurrenceId, model, promptRevisionId, onSend, autoFocus, onRecordingStart }: { conversationId?: string; contextMessageId?: string; contextOccurrenceId?: string; model?: string; promptRevisionId?: string | null; onSend?: () => void; autoFocus?: boolean; onRecordingStart?: () => void }) {
+export function ChatComposer({ conversationId, contextMail, contextOccurrenceId, model, promptRevisionId, onSend, autoFocus, onRecordingStart }: { conversationId?: string; contextMail?: ComposerMail; contextOccurrenceId?: string; model?: string; promptRevisionId?: string | null; onSend?: () => void; autoFocus?: boolean; onRecordingStart?: () => void }) {
   const { texts } = useI18n()
   const { data: summary } = useQuery(summaryQuery())
   const { state, send, stop, composerTexts, setComposerText, audioDraftLocked, setAudioDraftLocked } = useChatSession()
-  const { scope, setScope, ready } = useConversationScope(conversationId)
-  const calendar = useCalendarScope(conversationId)
-  const tasks = useTaskScope(conversationId)
+  const contextMessageId = contextMail?.id
+  const { scope, setScope, ready } = useConversationScope(conversationId, contextMail)
+  const calendar = useCalendarScope(conversationId, contextMessageId)
+  const tasks = useTaskScope(conversationId, contextMessageId)
   const stt = useAudioCapabilities()?.stt
   const format = supportedAudioFormat(stt)
   const lockDraft = useCallback((locked: boolean) => {
     if (locked) onRecordingStart?.()
     setAudioDraftLocked(locked)
   }, [onRecordingStart, setAudioDraftLocked])
-  const accounts = (summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name || account.email_address }))
+  const accounts = (summary?.accounts ?? []).filter(account => !contextMail || account.id === contextMail.account_id).map(account => ({ id: account.id, label: account.display_name || account.email_address }))
   if (scope && !accounts.some(account => account.id === scope)) accounts.push({ id: scope, label: texts.prompts.scopeUnavailable })
-  const draftId = conversationId ?? 'new'
-  const value = composerTexts[draftId] ?? ''
-  const setValue = (text: string) => setComposerText(draftId, text)
-  const appendTranscript = (text: string) => setComposerText(draftId, previous =>
+  const draftKey = composerDraftKey(conversationId, contextMessageId)
+  const value = composerTexts[draftKey] ?? ''
+  const setValue = (text: string) => setComposerText(draftKey, text)
+  const appendTranscript = (text: string) => setComposerText(draftKey, previous =>
     previous ? previous + (previous.endsWith('\n\n') ? '' : previous.endsWith('\n') ? '\n' : '\n\n') + text : text)
-  const voiceContext = JSON.stringify([draftId, contextMessageId, contextOccurrenceId, scope, model,
-    promptRevisionId, calendar.ids, tasks.scope.source, tasks.scope.account_id, format])
+  const voiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, model, promptRevisionId,
+    calendar.ids, tasks.scope.source, tasks.scope.account_id, format])
   const busy = state.phase === 'working' || state.phase === 'streaming'
-  return <><CalendarScope conversationId={conversationId} disabled={busy || audioDraftLocked} /><Composer value={value} locked={audioDraftLocked} onChange={setValue} onSubmit={() => {
+  const calendars = <CalendarScope conversationId={conversationId} messageId={contextMessageId} disabled={busy || audioDraftLocked} />
+  return <>{!contextMessageId && calendars}<Composer value={value} locked={audioDraftLocked} onChange={setValue} onSubmit={() => {
     if (busy || audioDraftLocked || !ready || !calendar.ready || !tasks.ready || !value.trim()) return
     onSend?.()
     void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, context_occurrence_id: contextOccurrenceId, calendar_source_ids: calendar.ids, task_source: tasks.scope.source, task_source_account_id: tasks.scope.account_id, model, ...(!conversationId ? { prompt_revision_id: promptRevisionId } : {}) })
-  }} onStop={stop} busy={busy} scope={scope} accounts={accounts} onScopeChange={value => { setScope(value); if (value !== scope) tasks.set({ source: 'none' }) }} placeholder={texts.chat.placeholder} autoFocus={autoFocus} controls={<TaskScopeSelector conversationId={conversationId} disabled={busy || audioDraftLocked} />}
-      audioControls={stt && format && <AudioRecorder key={voiceContext} format={format}
-        limits={stt.app_limits} disabled={busy || !ready || !calendar.ready || !tasks.ready}
-        onLock={lockDraft} onTranscript={appendTranscript} />} /></>
+  }} onStop={stop} busy={busy} scope={scope} accounts={accounts} onScopeChange={value => { setScope(value); if (value !== scope) tasks.set({ source: 'none' }) }} placeholder={contextMessageId ? texts.inbox.mailQuestionPlaceholder : texts.chat.placeholder} autoFocus={autoFocus} controls={<TaskScopeSelector conversationId={conversationId} contextMail={contextMail} disabled={busy || audioDraftLocked} />}
+    audioControls={stt && format && <AudioRecorder key={voiceContext} format={format}
+      limits={stt.app_limits} disabled={busy || !ready || !calendar.ready || !tasks.ready}
+      onLock={lockDraft} onTranscript={appendTranscript} />} />{contextMessageId && calendars}</>
 }
 
 type Draft = { onDraft: (id: string) => void; disabled: boolean }
@@ -101,7 +103,6 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const { scope, ready } = useConversationScope(conversationId)
   const calendar = useCalendarScope(conversationId)
   const restart = useRestartConversation(conversationId)
-  const [selectedModel, setSelectedModel] = useState<{ conversationId: string; id: string }>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const { showEnd, scrollToEnd } = useFollowScroll(scrollRef, [history.data, state, conversationId])
   const accounts = summary?.accounts ?? []
@@ -130,14 +131,13 @@ export function Conversation({ conversationId }: { conversationId: string }) {
       {message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}{message.extras.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}</>
   }
   const status = state.status?.code === 'searching' ? texts.status.searching(state.status.count ?? 0) : state.status ? texts.status[state.status.code] : null
-  const liveModel = modelLabel(selectedModel?.conversationId === conversationId ? selectedModel.id : lastAssistant?.extras.model) ?? models.find(model => model.is_default)?.label
   const historyGone = errorCode(history.error instanceof Error ? history.error.cause : history.error) === 'conversation_not_found'
   const newConversation = { label: texts.shell.newConversation, onClick: restart }
-  return <div className="le-chat-view"><ChatHeader conversationId={conversationId}><ModelMenu disabled={audioDraftLocked} key={`${conversationId}:model`} conversationId={conversationId} model={lastAssistant?.extras.model} onChange={id => setSelectedModel({ conversationId, id })} /><TemplateMenu key={`${conversationId}:template`} conversationId={conversationId} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
+  return <div className="le-chat-view"><ChatHeader conversationId={conversationId} modelMenu={<ModelMenu disabled={audioDraftLocked} key={`${conversationId}:model`} conversationId={conversationId} />}><TemplateMenu key={`${conversationId}:template`} conversationId={conversationId} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
     {history.isPending && <p className="le-hint">{texts.chat.loadingHistory}</p>}
     {history.isError && <Notice tone="danger" action={historyGone ? newConversation : { label: texts.chat.retry, onClick: () => { void history.refetch() } }}>{historyGone ? texts.errors.conversation_not_found : texts.chat.historyError}</Notice>}
     {ordered.map((message, index) => <div className="le-chat-entry" id={`message-${message.id}`} key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={submitSuggestion} />}</div>)}
-    {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={liveModel} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
+    {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={modelLabel(state.model)} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{texts.chat.askAgain}</Button></div>}
       {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : state.errorCode && NEEDS_NEW_CONVERSATION.has(state.errorCode) ? newConversation : { label: texts.chat.retry, onClick: () => { void retry() } }}>{state.errorCode === 'conversation_scope_change_requires_new' ? texts.taskChat.scopeConflict : texts.errors[state.errorCode ?? 'internal']}</Notice>}
       {state.phase === 'done' && <>{state.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} />}<Suggestions items={state.suggestions} onSend={submitSuggestion} /></>}

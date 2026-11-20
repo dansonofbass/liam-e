@@ -23,6 +23,7 @@ from mistralai_capabilities.fastapi.hooks import FastAPIHooks
 from api.audio.access import get_audio_owner_verifier
 from api.audio.provider import get_audio_provider
 from api.mail.chat_events import DeltaEvent, DoneEvent, StartEvent
+from api.mail.chat_schemas import ChatExtrasOut
 from api.mail.dev_seed import seed, seed_id
 from api.mail.models_catalog import ChatModelOut
 from api.main import create_app
@@ -30,6 +31,7 @@ from api.routers.api.v1.chat import models, stream
 from env.audio import env as audio
 
 CONVERSATION = seed_id("conversation", "was-ist-heute-wichtig")
+CHAT_MODEL = "mistral-medium-latest"
 TRANSCRIPT = "Ein synthetischer Satz."
 ANSWER = "Hier ist die **synthetische Antwort**."
 
@@ -55,14 +57,15 @@ async def loopback_owner(request):
 
 
 async def fixture_models():
-    return [ChatModelOut(id="mistral-medium-latest", label="Mistral Medium", description="", is_default=True)]
+    return [ChatModelOut(id=CHAT_MODEL, label="Mistral Medium", description="", is_default=True)]
 
 
 async def fixture_chat_turn(*, conversation_id, text, **unused):
     user = await chat_message.add_message(conversation_id=conversation_id, role="user", content=text)
-    yield StartEvent(conversation_id=conversation_id, user_message_id=user.id)
+    yield StartEvent(conversation_id=conversation_id, user_message_id=user.id, model=CHAT_MODEL)
     yield DeltaEvent(text=ANSWER)
-    reply = await chat_message.add_message(conversation_id=conversation_id, role="assistant", content=ANSWER)
+    reply = await chat_message.add_message(conversation_id=conversation_id, role="assistant", content=ANSWER,
+                                          extras_json=ChatExtrasOut(model=CHAT_MODEL).model_dump_json())
     yield DoneEvent(conversation_id=conversation_id, message_id=reply.id, stopped=False)
 
 

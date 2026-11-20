@@ -10,7 +10,18 @@ type TriggerProps = ButtonHTMLAttributes<HTMLButtonElement> & { ref: Ref<HTMLBut
 // scrolls within the room it has, and no scroll area or stacking context around the trigger can cut it off or cover
 // it. Tab leaves it for the trigger, so the focus order stays that of the page.
 type Placement = 'down-start' | 'down-end' | 'up-start' | 'up-end'
-export function Menu({ trigger, items, placement = 'down-start' }: { trigger: (props: TriggerProps) => ReactNode; items: { label: string; icon?: IconName; onSelect: () => void; tone?: 'danger'; disabled?: boolean; hint?: string; checked?: boolean }[]; placement?: Placement }) {
+export type MenuItem = { label: string; icon?: IconName; tone?: 'danger'; disabled?: boolean; hint?: string; checked?: boolean } & (
+  { onSelect: () => void; href?: undefined } | { href: string; onSelect?: undefined }
+)
+type MenuProps = {
+  trigger: (props: TriggerProps) => ReactNode
+  items?: MenuItem[]
+  groups?: { label: string; items: MenuItem[] }[]
+  placement?: Placement
+  label?: string
+  onOpen?: () => void
+}
+export function Menu({ trigger, items = [], groups, placement = 'down-start', label, onOpen }: MenuProps) {
   const [open, setOpen] = useState(false)
   const anchorRef = useRef<HTMLSpanElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -27,9 +38,10 @@ export function Menu({ trigger, items, placement = 'down-start' }: { trigger: (p
   // The focus moves in once the menu is placed: an element still hidden cannot take it.
   useEffect(() => {
     if (!open || !placed) return
-    const first = menuRef.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? menuRef.current?.querySelector<HTMLButtonElement>('[role^="menuitem"]')
+    if (menuRef.current?.contains(document.activeElement)) return
+    const first = menuRef.current?.querySelector<HTMLElement>('[aria-checked="true"]') ?? menuRef.current?.querySelector<HTMLElement>('[role^="menuitem"]')
     first?.focus()
-  }, [open, placed])
+  }, [open, placed, groups, items])
   useEffect(() => {
     if (!open) return
     const onPointerDown = (event: PointerEvent) => {
@@ -44,15 +56,20 @@ export function Menu({ trigger, items, placement = 'down-start' }: { trigger: (p
       document.removeEventListener('liam-menu-open', onOtherMenuOpen)
     }
   }, [open])
-  return <span ref={anchorRef} className="le-menu-anchor">{trigger({ ref: triggerRef, 'aria-haspopup': 'menu', 'aria-expanded': open, 'aria-controls': open ? id : undefined, onClick: () => { if (!open) document.dispatchEvent(new Event('liam-menu-open')); setOpen(!open) } })}{open && createPortal(<div ref={menuRef} id={id} role="menu" className={`le-menu le-rise le-menu--${placement}`} style={position} onKeyDown={(event) => {
+  function renderItem(item: MenuItem, index: number) {
+    const content = <><span className="le-menu-title">{item.label}</span>{item.checked ? <Icon name="check" /> : item.icon && <Icon name={item.icon} />}{item.hint && <span className="le-menu-sub">{item.hint}</span>}</>
+    if (item.href !== undefined) return <a key={index} role="menuitem" className="le-menu-item" href={item.href} target="_blank" rel="noreferrer" onClick={close}>{content}</a>
+    return <button key={index} type="button" role={item.checked === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={item.checked} aria-disabled={item.disabled || undefined} className={`le-menu-item${item.tone === 'danger' ? ' le-menu-item--danger' : ''}`} onClick={() => { if (item.disabled) return; close(); item.onSelect() }}>{content}</button>
+  }
+  return <span ref={anchorRef} className="le-menu-anchor">{trigger({ ref: triggerRef, 'aria-haspopup': 'menu', 'aria-expanded': open, 'aria-controls': open ? id : undefined, onClick: () => { if (!open) { document.dispatchEvent(new Event('liam-menu-open')); onOpen?.() } setOpen(!open) } })}{open && createPortal(<div ref={menuRef} id={id} role="menu" aria-label={label} className={`le-menu le-rise le-menu--${placement}${groups ? ' le-menu--grouped' : ''}`} style={position} onKeyDown={(event) => {
     if (event.key === 'Escape') { event.preventDefault(); close() }
     // No preventDefault: the browser moves on from the trigger, as if the menu had never been open.
     if (event.key === 'Tab') close()
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
-      const nodes = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]') ?? [])
-      const index = nodes.indexOf(document.activeElement as HTMLButtonElement)
+      const nodes = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])
+      const index = nodes.indexOf(document.activeElement as HTMLElement)
       nodes[(index + (event.key === 'ArrowDown' ? 1 : -1) + nodes.length) % nodes.length]?.focus()
     }
-  }}>{items.map((item, index) => <button type="button" role={item.checked === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={item.checked} className={`le-menu-item${item.tone === 'danger' ? ' le-menu-item--danger' : ''}`} key={index} aria-disabled={item.disabled || undefined} onClick={() => { if (item.disabled) return; close(); item.onSelect() }}><span className="le-menu-title">{item.label}</span>{item.checked ? <Icon name="check" /> : item.icon && <Icon name={item.icon} />}{item.hint && <span className="le-menu-sub">{item.hint}</span>}</button>)}</div>, document.body)}</span>
+  }}>{groups?.map(group => <div key={group.label} role="group" aria-label={group.label}><div className="le-menu-group-label" aria-hidden="true">{group.label}</div>{group.items.map(renderItem)}</div>)}{items.map(renderItem)}</div>, document.body)}</span>
 }
