@@ -351,3 +351,27 @@ def test_calendar_appointment_excerpts_cannot_reassign_an_explicit_title_or_trim
     assert appointment_part(parts, 'Different wording', None) is None
     one = 'Schedule a review. Put it in the Work calendar.'
     assert appointment_parts(one) == [one]
+    assert appointment_part([one], 'Review', 'a request the owner never made') is None
+    assert appointment_part([first], 'Review', 'Put the review in the Work calendar') is None
+    shared = 'Schedule a review in the Work calendar and a dentist visit at 15:00'
+    assert appointment_parts(shared) == ['Schedule a review in the Work calendar', 'a dentist visit at 15:00']
+    with_guests = 'Schedule a meeting with Jane and a colleague at 15:00 in the Work calendar'
+    assert appointment_parts(with_guests) == [with_guests]
+
+
+@pytest.mark.parametrize('named', [None, 'Work'])
+async def test_non_calendar_alternative_does_not_change_explicit_destination(monkeypatch, named):
+    from db.accessors import calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    sources = [CalendarSource(id=name.lower(), name=name, provider='google', connection_ref='synthetic',
+        external_id=name, capabilities_json='["read","write"]', timezone='UTC') for name in ('Work', 'Home')]
+    async def catalog(*, ids):
+        return [(source, None) for source in sources if source.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    ctx = TurnContext('synthetic', None, date(2026, 11, 20), calendar_source_ids=[s.id for s in sources],
+        user_text='Schedule a home inspection in the Work calendar tomorrow at 10, rain or shine')
+    fields = {'action': 'create', 'title': 'Home inspection', 'start_local': '2026-11-21T10:00', 'end_local': '2026-11-21T11:00'}
+    if named:
+        fields['calendar_name'] = named
+    assert (await chat.prepare(fields, ctx)).source_id == 'work'

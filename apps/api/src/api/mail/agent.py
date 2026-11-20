@@ -105,7 +105,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         nonlocal saved
         if saved: return None
         extras = ChatExtrasOut(mails=mails, suggestions=suggestions, model=model, calendars=calendars).model_dump()
-        if ctx and not stopped and not proposal_id:
+        if ctx and not stopped:
             choice = await choice_for_clarification(ctx, all_text)
             if choice:
                 extras['calendar_clarification'] = choice.model_dump()

@@ -480,8 +480,9 @@ identify duplicate names with the local source ID. The owner can use that ID to 
 shared name or explicitly switch back to the default when answering a scheduling question. Each proposal binds the resolved source and
 connection before confirmation. A later settings change only affects new proposals.
 For multiple appointments in one owner message, a calendar choice belongs to its appointment.
-Each create call identifies the corresponding request. Ambiguous associations and alternatives
-require clarification before a card can be created. A pending card can retry a failed lookup
+Each create call identifies the corresponding request. A completed card leaves the target
+of a separate unfinished appointment available for scheduling questions. Where the request
+or its target is ambiguous, the owner clarifies it before a card is created. A pending card can retry a failed lookup
 of either the mail grant or calendar access.
 
 The API persists the full set of readable IDs in `chat_context.calendar_scope_json`. For ICS

@@ -14,7 +14,7 @@ class CalendarChoice(BaseModel):
     use_default: bool = False
     source_id: str | None = None
     connection_ref: str | None = None
-    error: Literal["calendar_name_ambiguous", "calendar_name_unknown"] | None = None
+    error: Literal["calendar_name_ambiguous", "calendar_name_unknown", "calendar_appointment_ambiguous"] | None = None
 
 
 _QUOTED = re.compile(r""""[^"]*"|“[^”]*”|„[^“]*“|‘[^’]*’|‚[^‘]*‘|«[^»]*»|»[^«]*«|(?<!\w)'[^']*'(?!\w)""")
@@ -56,10 +56,14 @@ def owner_selection(text: str, title: str | None = None) -> OwnerSelection:
     return OwnerSelection(text, tuple(names))
 
 
+_ACTION = r"(?:put|schedule|create|book|add|arrange|make|set|plan[e]?|erstell[e]?|trag[e]?|leg[e]?|buch[e]?)"
+_ARTICLE = r"(?:a|an|another|ein(?:e[nmr]?)?)"
+_CLOCK = r"(?:[0-2]?\d[:.][0-5]\d|\d{1,2}\s*(?:am|pm|uhr))"
 _NEXT_REQUEST = re.compile(
     r"(?:[.!?;]\s+|\n+|,\s*(?=separately|außerdem|separat)|\s+(?:and|und)\s+)"
-    r"(?=(?:(?:separately|also|then|außerdem|danach|separat)[, ]+)*"
-    r"(?:put|schedule|create|book|add|arrange|make|set|plan|erstelle|plane|trage|lege|buche)\b)", re.I)
+    rf"(?=(?:(?:separately|also|then|außerdem|danach|separat)[, ]+)*{_ACTION}\b)"
+    # A shared scheduling verb can introduce another timed appointment.
+    rf"|(?P<shared>\s+(?:and|und)\s+)(?={_ARTICLE}\s+(?:{_CLOCK}\b|[^,;.!?\n]+?\s+(?:at|um)\s+{_CLOCK}\b))", re.I)
 
 
 def appointment_parts(text: str) -> list[str]:
@@ -68,6 +72,9 @@ def appointment_parts(text: str) -> list[str]:
     parts = []
     offset = 0
     for boundary in _NEXT_REQUEST.finditer(masked):
+        if boundary["shared"] and not (re.match(rf"{_ARTICLE}\s+{_CLOCK}\b", masked[boundary.end():], re.I)
+                or re.search(rf"(?:\b{_CALENDAR}|\b{_CLOCK})$", masked[offset:boundary.start()], re.I)):
+            continue
         # "Put it in Work" after a sentence about the review still describes that review.
         if re.match(r"(?:put|schedule|book|set|plane|buche|trage)\s+(?:it|this one|that one|ihn|diesen Termin)\b",
                     masked[boundary.end():], re.I):
@@ -79,13 +86,13 @@ def appointment_parts(text: str) -> list[str]:
 
 
 def appointment_part(parts: list[str], title, excerpt) -> str | None:
-    if len(parts) == 1:
-        return parts[0]
     title_matches = []
     if isinstance(title, str) and title.strip():
         pattern = r"(?<!\w)" + re.escape(title.strip().casefold()) + r"(?!\w)"
         title_matches = [part for part in parts if re.search(pattern, part.casefold())]
     if excerpt is None:
+        if len(parts) == 1:
+            return parts[0]
         return title_matches[0] if len(title_matches) == 1 else None
     if not isinstance(excerpt, str):
         return None
@@ -132,23 +139,38 @@ def named_choice(name, entries, selection: OwnerSelection):
     return CalendarChoice(name=matches[0].name, source_id=matches[0].id, connection_ref=matches[0].connection_ref)
 
 
+def _calendar_alternatives(text: str, entries) -> bool:
+    disjunctions = list(re.finditer(r"\b(?:or|oder)\b", text, re.I))
+    if not disjunctions:
+        return False
+    names = {source.name.strip() for source, _ in entries if source.name.strip()}
+    names.update(("default calendar", "Standardkalender"))
+    names_pattern = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
+    determiner = r"(?:(?:the|my|den|dem|meinen|meinem)\s+)?"
+    operand = rf"(?:{_PREFIX}|{determiner})(?:{_CALENDAR}\s+)?(?P<name>{names_pattern})(?:\s+{_CALENDAR})?"
+    for join in disjunctions:
+        left = text[:join.start()].rstrip()
+        right = text[join.end():].lstrip()
+        first = re.search(rf"(?<![\w-]){operand}$", left, re.I)
+        second = re.match(rf"{operand}(?![\w-])", right, re.I)
+        if first and second and first["name"].casefold() != second["name"].casefold():
+            words = first[0] + " " + second[0]
+            if (re.search(rf"\b{_CALENDAR}\b|\bstandardkalender\b", words, re.I)
+                    or re.match(_PREFIX, first[0], re.I)
+                    or (first.start() == 0 and not right[second.end():].strip(" .?!"))):
+                return True
+    return False
+
+
 def stated_destination(selection: OwnerSelection, entries, previous: CalendarChoice | None) -> CalendarChoice | None:
     # A direct reference such as "in the Work calendar" also works when the assistant
     # asks for a time in plain text or leaves calendar_name out of its later tool call.
     text = selection.text
-    use_default = bool(_DEFAULT.search(text))
-    if re.search(r"\b(?:or|oder)\b", text, re.I):
-        alternatives = {source.name.casefold() for source, _ in entries if selection.mentions(source.name)}
-        if len(alternatives) + int(use_default) > 1:
-            return CalendarChoice(error="calendar_name_ambiguous")
-    identified = [source for source, _ in entries if selection.includes_id(source.id)
-                  and (selection.mentions(source.name) or previous and previous.name.casefold() == source.name.casefold())]
-    if identified:
-        if len(identified) != 1 or use_default:
-            return CalendarChoice(error="calendar_name_ambiguous")
-        return named_choice(identified[0].name, entries, selection)
-    if not use_default and not selection.quoted_names and not re.search(r"\b(?:calendar|kalender)\b", text, re.I):
+    if not text.strip() and not selection.quoted_names:
         return None
+    use_default = bool(_DEFAULT.search(text))
+    if _calendar_alternatives(text, entries):
+        return CalendarChoice(error="calendar_name_ambiguous")
     folded = text.casefold()
     names = set(selection.quoted_names)
     for source, _ in entries:
@@ -161,21 +183,33 @@ def stated_destination(selection: OwnerSelection, entries, previous: CalendarCho
         return named_choice(names.pop(), entries, selection)
     if names:
         return CalendarChoice(name="", error="calendar_name_ambiguous")
+    identified = {source.name for source, _ in entries if selection.includes_id(source.id)
+                  and (selection.mentions(source.name) or previous and previous.name.casefold() == source.name.casefold())}
+    if len(identified) == 1:
+        return named_choice(identified.pop(), entries, selection)
+    if identified:
+        return CalendarChoice(error="calendar_name_ambiguous")
     return None
 
 
 async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
-    if len(appointment_parts(ctx.user_text)) != 1:
-        return CalendarChoice(error="calendar_name_ambiguous") if ctx.requested_calendar else None
-    if ctx.requested_calendar:
-        return ctx.requested_calendar
-    # A completed unrelated answer ends the pending request. A further scheduling
-    # question may carry the same source through another clarification.
-    details = re.search(r"\b(?:when|what time|date|duration|title|location|where|how long|wann|zeit|uhrzeit|datum|dauer|titel|ort|wie lange)\b", answer, re.I)
-    if not details and "?" not in answer:
+    parts = appointment_parts(ctx.user_text)
+    unfinished = [part for part in parts if part not in ctx.completed_calendar_requests]
+    if not unfinished:
         return None
-    creating = re.search(r"\b(?:create|schedule|book|arrange|add|put|set|erstelle\w*|plane\w*|trag\w*|anlegen|eintragen)\b", ctx.user_text, re.I)
-    if ctx.calendar_choice or creating:
-        entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
-        return stated_destination(owner_selection(ctx.user_text), entries, ctx.calendar_choice) or ctx.calendar_choice
-    return None
+    details = re.search(r"\b(?:when|what time|date|duration|title|location|where|how long|wann|zeit|uhrzeit|datum|dauer|titel|ort|wie lange)\b", answer, re.I)
+    if not ctx.calendar_targets and not details and "?" not in answer:
+        return None
+    if not (ctx.calendar_targets or ctx.calendar_choice or re.search(rf"\b{_ACTION}\b|\b(?:anlegen|eintragen)\b", ctx.user_text, re.I)):
+        return None
+    entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
+    choices = []
+    for part in unfinished:
+        inherited = ctx.calendar_choice if part == parts[0] else None
+        choice = ctx.calendar_targets.get(part) or stated_destination(owner_selection(part), entries, inherited) or inherited
+        choices.append(choice)
+    # A follow-up containing only a time cannot choose between unfinished
+    # appointments with different targets. Ask the owner to specify the target.
+    if any(choice != choices[0] for choice in choices[1:]):
+        return CalendarChoice(error="calendar_appointment_ambiguous")
+    return choices[0]

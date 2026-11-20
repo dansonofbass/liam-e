@@ -26,9 +26,13 @@ class TurnContext:
     browser_locale: Locale = DEFAULT_LOCALE
     user_text: str = ""
     calendar_choice: CalendarChoice | None = None
-    requested_calendar: CalendarChoice | None = None
-    calendar_request_part: str | None = None
-    completed_calendar_requests: set[str] = field(default_factory=set)
+    calendar_request_part: str | None = field(default=None, init=False)
+    calendar_targets: dict[str, CalendarChoice] = field(default_factory=dict, init=False)
+    completed_calendar_requests: set[str] = field(default_factory=set, init=False)
+
+    @property
+    def requested_calendar(self) -> CalendarChoice | None:
+        return self.calendar_targets.get(self.calendar_request_part) if self.calendar_request_part is not None else None
 
 
 @dataclass

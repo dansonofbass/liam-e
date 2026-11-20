@@ -20,16 +20,15 @@ async def _create_source(arguments, ctx):
     part = appointment_part(parts, arguments.get("title"), arguments.get("appointment_request"))
     if part is None or part in ctx.completed_calendar_requests:
         raise writes.WriteError("calendar_appointment_ambiguous", 422)
-    if part != ctx.calendar_request_part:
-        ctx.requested_calendar = None
-        ctx.calendar_request_part = part
+    ctx.calendar_request_part = part
     selection = owner_selection(part, arguments.get("title"))
     entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
     previous = ctx.requested_calendar or (ctx.calendar_choice if part == parts[0] else None)
     target = stated_destination(selection, entries, previous)
-    if target and target.error:
-        ctx.requested_calendar = target
-        raise writes.WriteError(target.error, 422)
+    if target:
+        ctx.calendar_targets[part] = target
+        if target.error:
+            raise writes.WriteError(target.error, 422)
     pending = target or previous
     if not target and previous and previous.error and named is None:
         names = {source.name for source, _ in entries if selection.mentions(source.name)}
@@ -45,7 +44,8 @@ async def _create_source(arguments, ctx):
             pending = named_choice(named, entries, selection)
         elif not matches_pending:
             raise writes.WriteError("calendar_name_required", 422)
-    ctx.requested_calendar = pending
+    if pending:
+        ctx.calendar_targets[part] = pending
     if pending and not pending.use_default:
         if pending.error:
             raise writes.WriteError(pending.error, 422)

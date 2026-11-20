@@ -655,7 +655,8 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
 
 
 @pytest.mark.parametrize('dentist_first', [False, True])
-async def test_two_appointment_requests_bind_each_card_to_its_own_target(store, monkeypatch, dentist_first):
+@pytest.mark.parametrize('shared_verb', [False, True])
+async def test_two_appointment_requests_bind_each_card_to_its_own_target(store, monkeypatch, dentist_first, shared_verb):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
 
@@ -671,20 +672,26 @@ async def test_two_appointment_requests_bind_each_card_to_its_own_target(store, 
         return {'action': 'create', 'title': title, 'start_local': '2026-11-21T' + start,
                 'end_local': '2026-11-21T' + end, 'timezone': 'UTC', **fields}
     calls = [create('Review', '09:00', '10:00', calendar_name='Work'), create('Dentist appointment', '15:00', '15:30')]
+    owner = 'Put the 09:00 review in the Work calendar. Separately, schedule a dentist appointment at 15:00.'
+    if shared_verb:
+        clauses = ['Schedule a 09:00 review in the Work calendar', 'a 15:00 dentist visit']
+        owner = ' and '.join(clauses) + '.'
+        calls[0]['appointment_request'], calls[1]['appointment_request'] = clauses
+        calls[1]['title'] = 'Dentist visit'
     if dentist_first:
         calls.reverse()
     fake = FakeMistral(streams=[[chunk('propose_calendar_change', args, id=f'call{i}', index=i) for i, args in enumerate(calls)], ['Response']])
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
-    owner = 'Put the 09:00 review in the Work calendar. Separately, schedule a dentist appointment at 15:00.'
     events = [e async for e in agent.run_turn_events(conversation_id=conversation.id, text=owner,
               resolved_context=(conversation, snapshot, None))]
     assert events[-1].event == 'done'
     cards = [json.loads(row.proposal_json)['calendar'] for row in store.rows if row.role == 'proposal']
     assert len(cards) == 2
-    assert {c['after']['title']: c['source_id'] for c in cards} == {'Review': 'work', 'Dentist appointment': 'personal'}
+    assert {c['after']['title']: c['source_id'] for c in cards} == {'Review': 'work', ('Dentist visit' if shared_verb else 'Dentist appointment'): 'personal'}
 
 
-async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(store, monkeypatch):
+@pytest.mark.parametrize('destinations', ['in the Work calendar or in the Home calendar', 'in the Work or Home calendar'])
+async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(store, monkeypatch, destinations):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
 
@@ -706,8 +713,38 @@ async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(s
     async def turn(text):
         return [e async for e in agent.run_turn_events(conversation_id=conversation.id, text=text,
                 resolved_context=(conversation, snapshot, None))]
-    first = await turn('Put the review in the Work calendar or in the Home calendar.')
+    first = await turn('Put the review ' + destinations + '.')
     assert first[-1].event == 'done' and all(e.event != 'proposal' for e in first)
     assert [json.loads(row.content)['error'] for row in store.rows if row.role == 'tool'] == ['calendar_name_ambiguous'] * 2
     second = await turn('Home, please.')
     assert [e.message.proposal.calendar.source_id for e in second if e.event == 'proposal'] == ['home']
+
+
+@pytest.mark.parametrize('attempt', ['plain_question', 'work_first', 'work_last'])
+async def test_unfinished_calendar_request_survives_a_completed_card(store, monkeypatch, attempt):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    calendars = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic',
+        external_id=key, capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'personal')]
+    async def catalog(*, ids):
+        return [(source, None) for source in calendars if source.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    conversation = await store.create()
+    snapshot = store.snapshot('mixed-requests', calendar_scope_json='["work","personal"]')
+    dentist = {'action': 'create', 'title': 'Dentist', 'start_local': '2026-11-21T09:00', 'end_local': '2026-11-21T10:00'}
+    review = {'action': 'create', 'title': 'Review', 'calendar_name': 'Work'}
+    calls = {'plain_question': [dentist], 'work_first': [review, dentist], 'work_last': [dentist, review]}[attempt]
+    fake = FakeMistral(streams=[
+        [chunk('propose_calendar_change', args, id=f'call{i}', index=i) for i, args in enumerate(calls)],
+        ['When should the review start?'],
+        [chunk('propose_calendar_change', {'action': 'create', 'title': 'Review', 'start_local': '2026-11-21T15:00',
+                                          'end_local': '2026-11-21T16:00'})], ['Response'],
+    ])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def turn(text):
+        return [event.message.proposal.calendar async for event in agent.run_turn_events(
+            conversation_id=conversation.id, text=text, resolved_context=(conversation, snapshot, None)) if event.event == 'proposal']
+    assert [card.source_id for card in await turn('Schedule a dentist visit at 09:00. Create a review in the Work calendar.')] == ['personal']
+    assert [card.source_id for card in await turn('Tomorrow at 15:00')] == ['work']
