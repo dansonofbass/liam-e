@@ -489,6 +489,8 @@ When one request creates several appointments, only the first card appears initi
 stores the other prepared commands with their chosen calendar and turn context. Confirming or
 cancelling a card makes the next one available for its own confirmation. An uncertain write
 keeps the next appointment waiting until the owner checks its outcome.
+Time questions keep each unfinished appointment's calendar and place in the same sequence,
+including when a confirmation publishes another card between the question and the owner's reply.
 An explicitly excluded calendar stays excluded through scheduling questions. If the default
 is excluded, the owner chooses a target. An edit or deletion carries its target only on its own card.
 When the owner rules out one of several offered calendars, the chat keeps the remaining

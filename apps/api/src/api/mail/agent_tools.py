@@ -114,17 +114,17 @@ async def _proposal(ctx, proposal):
 
     create = proposal.kind == 'calendar' and proposal.calendar.action == 'create'
     parts = appointment_parts(ctx.user_text) if create else []
-    if create and not ctx.calendar_sequence_id and ctx.calendar_choice and ctx.calendar_request_part == parts[0]:
-        inherited = pending_for_request(ctx.calendar_choice, parts[0], proposal.calendar.after.title)
-        if inherited:
-            ctx.calendar_sequence_id = inherited.sequence_id
+    continuing = ctx.calendar_choice and any(pending_for_request(ctx.calendar_choice, part, first=index == 0)
+                                             for index, part in enumerate(parts))
+    if continuing and not ctx.calendar_sequence_id:
+        ctx.calendar_sequence_id = ctx.calendar_choice.sequence_id
     if create and ctx.calendar_sequence_id:
         row = await calendar_proposal_queue.append(ctx.calendar_sequence_id, conversation_id=ctx.conversation_id,
             context_id=ctx.context_id, payload=proposal.model_dump(mode='json', context={'storage': True}))
         if row is None:
             return result({'status': 'queued', 'requires_confirmation': True,
                            'note': 'This appointment will have its own confirmation card after the preceding card is resolved.'})
-    elif len(parts) > 1:
+    elif len(parts) > 1 or (continuing and ctx.calendar_choice.appointments):
         row = await proposals.create_proposal(ctx.conversation_id, proposal, context_id=ctx.context_id,
                                               extras_json=calendar_proposal_queue.sequence_extras())
         ctx.calendar_sequence_id = row.id

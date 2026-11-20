@@ -10,31 +10,69 @@ import pytest
 pytestmark = pytest.mark.skipif(not os.getenv('RUN_PG_CONTRACT'), reason='RUN_PG_CONTRACT is not set')
 
 
-@pytest.mark.parametrize('dentist_first', [False, True])
-@pytest.mark.parametrize('shared_verb,clarify,early', [(False, False, False), (True, False, False),
-                                                    (False, True, False), (False, True, True)])
-@pytest.mark.parametrize('cancel_first', [False, True])
-def test_two_appointment_requests_bind_each_card_to_its_own_target(pg_db, monkeypatch, dentist_first, shared_verb, clarify, early, cancel_first):
+@pytest.fixture
+def appointment_stream(pg_db, monkeypatch):
     from pathlib import Path
     monkeypatch.syspath_prepend(Path(__file__).resolve().parents[4] / 'apps/api/tests')
     from support.fake_mistral import FakeMistral
     from api.calendar import writes
-    from api.mail import agent, proposals
-    from api.mail.chat_schemas import to_message_out
-    from db.accessors import calendar_settings, chat_message
+    from api.mail import agent
+
+    fake = FakeMistral()
+    dispatched = []
+    async def execute(request, *, write_id):
+        dispatched.append((request.title, request.source_id, write_id))
+        return writes.WriteOutcome(write_id=write_id, status='done')
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    monkeypatch.setattr(writes, 'execute', execute)
+    return fake.streams, dispatched
+
+
+async def _seed_appointment_calendars():
+    from db.accessors import calendar_settings
     from db.engine import get_session_maker
     from db.models.calendar_source import CalendarSource
+    async with get_session_maker().begin() as session:
+        for key in ('work', 'personal'):
+            session.add(CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic-' + key,
+                external_id=key, capabilities_json='["read","write"]', timezone='UTC'))
+    await calendar_settings.update(1, 'personal')
+
+
+def _create_args(title, start=None, end=None, **fields):
+    args = {'action': 'create', 'title': title, 'timezone': 'UTC', **fields}
+    if start and end:
+        args.update(start_local='2026-11-21T' + start, end_local='2026-11-21T' + end)
+    return args
+
+
+def _calendar_calls(*arguments):
+    def chunk(args, index):
+        tool = NS(id=f'call{index}', index=index, type='function',
+                  function=NS(name='propose_calendar_change', arguments=json.dumps(args)))
+        return NS(data=NS(choices=[NS(delta=NS(content=None, tool_calls=[tool]))]))
+    return [chunk(args, i) for i, args in enumerate(arguments)]
+
+
+async def _visible_cards(conversation):
+    from api.mail import agent
+    from api.mail.chat_schemas import to_message_out
+    from db.accessors import chat_message
+    return [to_message_out(row) for row in agent.visible_messages(await chat_message.list_messages(conversation)) if row.role == 'proposal']
+
+
+@pytest.mark.parametrize('dentist_first', [False, True])
+@pytest.mark.parametrize('shared_verb,clarify,early', [(False, False, False), (True, False, False),
+                                                    (False, True, False), (False, True, True)])
+@pytest.mark.parametrize('cancel_first', [False, True])
+def test_two_appointment_requests_bind_each_card_to_its_own_target(appointment_stream, dentist_first, shared_verb, clarify, early, cancel_first):
+    from api.mail import agent, proposals
+    from db.accessors import calendar_settings
+    streams, dispatched = appointment_stream
 
     async def run():
-        async with get_session_maker().begin() as session:
-            for key in ('work', 'personal'):
-                session.add(CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic-' + key,
-                    external_id=key, capabilities_json='["read","write"]', timezone='UTC'))
-        await calendar_settings.update(1, 'personal')
-        def create(title, start, end, **fields):
-            return {'action': 'create', 'title': title, 'start_local': '2026-11-21T' + start,
-                    'end_local': '2026-11-21T' + end, 'timezone': 'UTC', **fields}
-        calls = [create('Review', '09:00', '10:00', calendar_name='Work'), create('Dentist appointment', '15:00', '15:30')]
+        await _seed_appointment_calendars()
+        calls = [_create_args('Review', '09:00', '10:00', calendar_name='Work'), _create_args('Dentist appointment', '15:00', '15:30')]
         owner = 'Put the 09:00 review in the Work calendar. Separately, schedule a dentist appointment at 15:00.'
         if shared_verb:
             clauses = ['Schedule a 09:00 review in the Work calendar', 'a 15:00 dentist visit']
@@ -45,25 +83,14 @@ def test_two_appointment_requests_bind_each_card_to_its_own_target(pg_db, monkey
         if dentist_first:
             calls.reverse()
             targets.reverse()
-        def chunk(args, index):
-            tool = NS(id=f'call{index}', index=index, type='function',
-                      function=NS(name='propose_calendar_change', arguments=json.dumps(args)))
-            return NS(data=NS(choices=[NS(delta=NS(content=None, tool_calls=[tool]))]))
         initial = calls.copy()
         later = []
         if clarify:
             owner = owner.replace('09:00 ' if dentist_first else ' at 15:00', '')
             initial[1] = {key: value for key, value in calls[1].items() if key not in ('start_local', 'end_local')}
             final = {key: value for key, value in calls[1].items() if key != 'calendar_name'}
-            later = [[chunk(final, 0)], ['Ready.']]
-        fake = FakeMistral(streams=[[chunk(args, i) for i, args in enumerate(initial)],
-                                   ['What time for the other appointment?' if clarify else 'Ready for confirmation.'], *later])
-        monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
-        dispatched = []
-        async def execute(request, *, write_id):
-            dispatched.append((request.title, request.source_id, write_id))
-            return writes.WriteOutcome(write_id=write_id, status='done')
-        monkeypatch.setattr(writes, 'execute', execute)
+            later = [_calendar_calls(final), ['Ready.']]
+        streams.extend([_calendar_calls(*initial), ['What time for the other appointment?' if clarify else 'Ready for confirmation.'], *later])
         events = [e async for e in agent.run_turn_events(conversation_id=None, text=owner)]
         assert events[-1].event == 'done'
         conversation = events[-1].conversation_id
@@ -71,9 +98,7 @@ def test_two_appointment_requests_bind_each_card_to_its_own_target(pg_db, monkey
         assert (first.proposal.calendar.after.title, first.proposal.calendar.source_id) == (calls[0]['title'], targets[0])
         assert first.proposal_status == 'pending' and dispatched == []
         assert 'synthetic-' not in first.model_dump_json()
-        async def visible_cards():
-            return [to_message_out(row) for row in agent.visible_messages(await chat_message.list_messages(conversation)) if row.role == 'proposal']
-        assert [row.id for row in await visible_cards()] == [first.id]
+        assert [row.id for row in await _visible_cards(conversation)] == [first.id]
         await calendar_settings.update(2, 'work')
         async def settle_first():
             if cancel_first:
@@ -88,10 +113,10 @@ def test_two_appointment_requests_bind_each_card_to_its_own_target(pg_db, monkey
             assert followup[-1].event == 'done'
             assert any(event.event == 'proposal' for event in followup) == early
             if not early:
-                assert [(row.id, row.proposal_status) for row in await visible_cards()] == [(first.id, 'pending')]
+                assert [(row.id, row.proposal_status) for row in await _visible_cards(conversation)] == [(first.id, 'pending')]
         if not early:
             await settle_first()
-        second, = [row for row in await visible_cards() if row.proposal_status == 'pending']
+        second, = [row for row in await _visible_cards(conversation) if row.proposal_status == 'pending']
         assert second.id != first.id and (second.proposal.calendar.after.title, second.proposal.calendar.source_id) == (calls[1]['title'], targets[1])
         assert len(dispatched) == int(not cancel_first)
         with pytest.raises(proposals.ProposalStateError):
@@ -99,7 +124,92 @@ def test_two_appointment_requests_bind_each_card_to_its_own_target(pg_db, monkey
         assert (await proposals.confirm(second.id, selected_ids=[])).proposal_status == 'done'
         expected = [] if cancel_first else [(calls[0]['title'], targets[0], first.id)]
         assert dispatched == [*expected, (calls[1]['title'], targets[1], second.id)]
-        assert all(row.proposal_status != 'pending' for row in await visible_cards())
+        assert all(row.proposal_status != 'pending' for row in await _visible_cards(conversation))
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('lunch_ready,dinner_calendar', [(True, 'Work'), (False, 'Work'), (False, 'Personal')])
+def test_confirm_three_appointments_across_time_clarifications(appointment_stream, lunch_ready, dinner_calendar):
+    from api.mail import agent, proposals
+    from db.accessors import chat_message
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars()
+        conversation = None
+        async def turn(text, calls, answer):
+            nonlocal conversation
+            streams.extend([_calendar_calls(*calls), [answer]])
+            events = [event async for event in agent.run_turn_events(conversation_id=conversation, text=text)]
+            assert events[-1].event == 'done'
+            conversation = events[-1].conversation_id
+            return [event.message.id for event in events if event.event == 'proposal']
+
+        async def pending(title, calendar):
+            card, = [row for row in await _visible_cards(conversation) if row.proposal_status == 'pending']
+            assert (card.proposal.calendar.after.title, card.proposal.calendar.source_id) == (title, calendar)
+            return card.id
+
+        async def confirm(card_id):
+            assert (await proposals.confirm(card_id, selected_ids=[])).proposal_status == 'done'
+
+        breakfast = _create_args('Breakfast', '08:00', '09:00')
+        lunch = _create_args('Lunch', '12:00', '13:00')
+        dinner = _create_args('Dinner', '18:00', '19:00')
+        lunch_to = 'personal' if lunch_ready else 'work'
+        lunch_text = 'Schedule lunch at 12:00.' if lunch_ready else 'Schedule lunch in the Work calendar.'
+        owner = f'Schedule breakfast at 08:00. {lunch_text} Schedule dinner in the {dinner_calendar} calendar.'
+        first, = await turn(owner, [breakfast, lunch if lunch_ready else _create_args('Lunch'), _create_args('Dinner')],
+                            'What time should dinner start?' if lunch_ready else 'What times for lunch and dinner?')
+        assert first == await pending('Breakfast', 'personal') and dispatched == []
+        if not lunch_ready:
+            if dinner_calendar == 'Personal':
+                assert await turn('Tomorrow at noon for one hour.', [lunch], 'Which appointment is that for?') == []
+                history = await chat_message.list_messages(conversation)
+                assert json.loads([row for row in history if row.role == 'tool'][-1].content)['error'] == 'calendar_appointment_ambiguous'
+            assert await turn('Lunch at noon for one hour.', [lunch], 'What time for dinner?') == []
+            assert await pending('Breakfast', 'personal') == first and dispatched == []
+        await confirm(first)
+        second = await pending('Lunch', lunch_to)
+        assert await turn('Tomorrow at 18:00 for one hour.', [dinner], 'Ready for confirmation.') == []
+        assert await pending('Lunch', lunch_to) == second
+        assert dispatched == [('Breakfast', 'personal', first)]
+        await confirm(second)
+        third = await pending('Dinner', dinner_calendar.casefold())
+        assert dispatched[-1] == ('Lunch', lunch_to, second)
+        await confirm(third)
+        assert dispatched == [('Breakfast', 'personal', first), ('Lunch', lunch_to, second), ('Dinner', dinner_calendar.casefold(), third)]
+        assert [row.proposal_status for row in await _visible_cards(conversation)] == ['done', 'done', 'done']
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('dinner_first', [False, True])
+def test_clarify_both_times_in_one_reply(appointment_stream, dinner_first):
+    from api.mail import agent, proposals
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars()
+        streams.append(['What times for lunch and dinner?'])
+        opening = 'Schedule lunch in the Work calendar. Schedule dinner in the Personal calendar.'
+        events = [e async for e in agent.run_turn_events(conversation_id=None, text=opening)]
+        conversation = events[-1].conversation_id
+        assert not await _visible_cards(conversation)
+        calls = [_create_args('Lunch', '12:00', '13:00'), _create_args('Dinner', '18:00', '19:00')]
+        expected = [('Lunch', 'work'), ('Dinner', 'personal')]
+        if dinner_first:
+            calls.reverse()
+            expected.reverse()
+        streams.extend([_calendar_calls(*calls), ['Ready for confirmation.']])
+        reply = 'Schedule lunch at noon. Schedule dinner at 18:00.'
+        events = [e async for e in agent.run_turn_events(conversation_id=conversation, text=reply)]
+        assert [e.event for e in events].count('proposal') == 1 and dispatched == []
+        for title, source_id in expected:
+            card, = [row for row in await _visible_cards(conversation) if row.proposal_status == 'pending']
+            assert (card.proposal.calendar.after.title, card.proposal.calendar.source_id) == (title, source_id)
+            assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
+            assert dispatched[-1] == (title, source_id, card.id)
+        assert len(dispatched) == 2
     asyncio.run(run())
 
 

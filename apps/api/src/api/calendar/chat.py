@@ -24,8 +24,10 @@ async def _create_source(arguments, ctx):
     entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
     selection = owner_selection(part, arguments.get("title"), entries=entries, location=arguments.get("location"))
     previous = ctx.requested_calendar
-    if previous is None and part == parts[0]:
-        previous = pending_for_request(ctx.calendar_choice, part, arguments.get("title"))
+    if previous is None:
+        previous = pending_for_request(ctx.calendar_choice, part, arguments.get("title"), first=part == parts[0])
+    if previous and previous.appointments:
+        raise writes.WriteError("calendar_appointment_ambiguous", 422)
     target = await stated_destination(selection, entries, previous)
     current = ctx.requested_calendar
     if target and current and current.source_id and (

@@ -20,10 +20,9 @@ class CalendarOption(BaseModel):
         return cls(name=source.name, source_id=source.id, connection_ref=source.connection_ref)
 
 
-class CalendarChoice(CalendarOption):
+class AppointmentCalendar(CalendarOption):
     offered: tuple[CalendarOption, ...] = ()
     appointment_subject: str = ""
-    sequence_id: str | None = None
     excluded_source_ids: tuple[str, ...] = ()
     exclude_default: bool = False
     error: Literal["calendar_name_required", "calendar_name_ambiguous", "calendar_name_unknown", "calendar_appointment_ambiguous"] | None = None
@@ -32,6 +31,11 @@ class CalendarChoice(CalendarOption):
         if self.exclude_default or source.id in self.excluded_source_ids:
             return self.model_copy(update={"error": "calendar_name_required"})
         return self.model_copy(update={"source_id": source.id, "connection_ref": source.connection_ref})
+
+
+class CalendarChoice(AppointmentCalendar):
+    sequence_id: str | None = None
+    appointments: tuple[AppointmentCalendar, ...] = ()
 
 
 _QUOTED = re.compile(r""""[^"]*"|“[^”]*”|„[^“]*“|‘[^’]*’|‚[^‘]*‘|«[^»]*»|»[^«]*«|(?<!\w)'[^']*'(?!\w)""")
@@ -279,12 +283,34 @@ def _appointment_subject(text: str) -> str:
     return " ".join(subject.casefold().split())
 
 
-def pending_for_request(previous: CalendarChoice | None, text: str, title=None) -> CalendarChoice | None:
+def _mentioned_appointments(appointments, text):
+    folded = text.casefold()
+    return [item for item in appointments if item.appointment_subject and
+            re.search(r"(?<!\w)" + re.escape(item.appointment_subject) + r"(?!\w)", folded)]
+
+
+def pending_for_request(previous: CalendarChoice | None, text: str, title=None, *, first=True) -> CalendarChoice | None:
     if not previous:
         return None
     subject = _appointment_subject(text)
-    if subject and subject == previous.appointment_subject:
+    proposed = " ".join(title.casefold().split()) if isinstance(title, str) else ""
+    if previous.appointments:
+        if subject:
+            matches = [item for item in previous.appointments if item.appointment_subject == subject]
+        else:
+            matches = _mentioned_appointments(previous.appointments, text)
+            if not matches and first and previous.appointment_subject:
+                matches = [item for item in previous.appointments if item.appointment_subject == previous.appointment_subject]
+        if len(matches) == 1:
+            if any(item.appointment_subject == proposed and item != matches[0] for item in previous.appointments):
+                return previous
+            return CalendarChoice(**matches[0].model_dump(), sequence_id=previous.sequence_id)
+        if matches:
+            return previous
+    elif subject and subject == previous.appointment_subject:
         return previous
+    if not first:
+        return None
     explicit = r"\b(?:another|different|new|weiteren?|andere[nmrs]?|neue[nmrs]?)\s+(?:appointment|event|meeting|termin)\b"
     words = owner_selection(text).text
     if re.search(explicit, words, re.I):
@@ -295,17 +321,19 @@ def pending_for_request(previous: CalendarChoice | None, text: str, title=None) 
         return previous
     command = re.search(rf"\b{_ACTION}\b", words, re.I)
     create = command and command[0].casefold() in {"schedule", "create", "book", "arrange", "add", "set up", "erstelle", "plane", "buche"}
-    proposed = " ".join(title.casefold().split()) if isinstance(title, str) else ""
     return None if create or (proposed and proposed == subject) else previous
 
 
 def previous_choice(history, user_id: str, contexts) -> CalendarChoice | None:
-    if len(history) < 2 or history[-1].id != user_id:
+    # A confirmation in another tab can publish a card after the assistant's
+    # question, or even after this turn's user message was inserted.
+    turn = (row for row in reversed(history) if row.role != "proposal")
+    user, reply = next(turn, None), next(turn, None)
+    if user is None or user.id != user_id or reply is None:
         return None
-    reply = history[-2]
     if reply.role != "assistant" or reply.tool_payload_json or reply.stopped or not reply.extras_json:
         return None
-    previous_user = next((row for row in reversed(history[:-2]) if row.role == "user"), None)
+    previous_user = next((row for row in turn if row.role == "user"), None)
     context = contexts.get(reply.context_id)
     if not previous_user or previous_user.context_id != reply.context_id or not context or context.revoked:
         return None
@@ -314,6 +342,8 @@ def previous_choice(history, user_id: str, contexts) -> CalendarChoice | None:
         if not data:
             return None
         choice = CalendarChoice.model_validate(data)
+        if choice.appointments:
+            return choice
         subject = choice.appointment_subject or _appointment_subject(previous_user.content)
         return choice.model_copy(update={"appointment_subject": subject})
     except (AttributeError, TypeError, ValueError):
@@ -500,11 +530,32 @@ async def stated_destination(selection: OwnerSelection, entries, previous: Calen
     return choice.model_copy(update={"excluded_source_ids": tuple(sorted(blocked)), "exclude_default": default_blocked})
 
 
+def _clarification(appointments: list[AppointmentCalendar], sequence_id: str | None, answer: str) -> CalendarChoice | None:
+    if not appointments:
+        return None
+    if len(appointments) == 1:
+        return CalendarChoice(**appointments[0].model_dump(), sequence_id=sequence_id)
+    questions = " ".join(re.findall(r"[^.!?]*\?", answer))
+    focused = _mentioned_appointments(appointments, questions)
+    return CalendarChoice(appointments=tuple(appointments), sequence_id=sequence_id, error="calendar_appointment_ambiguous",
+                          appointment_subject=focused[0].appointment_subject if len(focused) == 1 else "")
+
+
 async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
     parts = appointment_parts(ctx.user_text)
     unfinished = [part for part in parts if part not in ctx.completed_calendar_requests]
+    previous = ctx.calendar_choice
+    continuations = {part: pending_for_request(previous, part, first=index == 0) for index, part in enumerate(parts)}
+    sequence_id = ctx.calendar_sequence_id
+    # Updating one previously unfinished appointment leaves its siblings bound
+    # to their own targets, even when the assistant has just prepared its card.
+    appointments = []
+    if previous and any(continuations.values()):
+        sequence_id = sequence_id or previous.sequence_id
+        subjects = {choice.appointment_subject for choice in continuations.values() if choice and not choice.appointments}
+        appointments.extend(item for item in previous.appointments if item.appointment_subject not in subjects)
     if not unfinished:
-        return None
+        return _clarification(appointments, sequence_id, answer)
     details = re.search(r"\b(?:when|what time|date|duration|title|location|where|how long|wann|zeit|uhrzeit|datum|dauer|titel|ort|wie lange)\b", answer, re.I)
     asking = "?" in answer or (details and re.search(r"\b(?:please|tell me|i need|bitte|nenne|ich brauche)\b", answer, re.I))
     if not any(part in ctx.calendar_targets for part in unfinished) and not asking:
@@ -514,9 +565,10 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
     if not (ctx.calendar_targets or ctx.calendar_choice or creating):
         return None
     entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
-    choices = []
     for part in unfinished:
-        inherited = pending_for_request(ctx.calendar_choice, part) if part == parts[0] else None
+        inherited = continuations[part]
+        if inherited and inherited.appointments:
+            continue
         choice = ctx.calendar_targets.get(part) or await stated_destination(owner_selection(part, entries=entries), entries, inherited) or inherited
         if entries and (choice is None or (not choice.source_id and not choice.error)):
             default_id = (await calendar_settings.get()).default_source_id
@@ -524,16 +576,8 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
                             and calendar_source.chat_access(source, state) == "writable"), None)
             if default:
                 choice = (choice or CalendarChoice()).bind_default(default)
-        choices.append(choice)
-    # A follow-up containing only a time cannot choose between unfinished
-    # appointments with different targets. Ask the owner to specify the target.
-    if any(choice != choices[0] for choice in choices[1:]):
-        return CalendarChoice(error="calendar_appointment_ambiguous")
-    choice = choices[0]
-    if len(unfinished) == 1:
-        inherited = pending_for_request(ctx.calendar_choice, unfinished[0]) if unfinished[0] == parts[0] else None
-        subject = (inherited.appointment_subject if inherited else "") or _appointment_subject(unfinished[0])
-        sequence_id = ctx.calendar_sequence_id or (inherited.sequence_id if inherited else None)
-        if choice or sequence_id:
-            return (choice or CalendarChoice()).model_copy(update={"appointment_subject": subject, "sequence_id": sequence_id})
-    return choice
+        if choice or sequence_id or len(unfinished) > 1:
+            binding = choice.model_dump(include=set(AppointmentCalendar.model_fields)) if choice else {}
+            binding["appointment_subject"] = (inherited.appointment_subject if inherited else "") or _appointment_subject(part)
+            appointments.append(AppointmentCalendar(**binding))
+    return _clarification(appointments, sequence_id, answer)
