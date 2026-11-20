@@ -533,6 +533,50 @@ def test_full_content_refusal_after_successful_listing_marks_sync_expired(pg_db,
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("deferred", [False, True])
+def test_listing_labels_survive_reverification_and_schedule_unread_insights(pg_db, monkeypatch, deferred):
+    from sqlalchemy import select
+    from api.mail import connector_mailbox, connectors, sync
+    from db.accessors import mail_job, mail_message, mail_sync_state
+    from db.models.mail_job import MailJob
+    from db.models.mail_sync_state import MailSyncState
+
+    async def run():
+        account = await service.upsert_account(provider="gmail", auth_type=connectors.CONNECTOR, email_address="flags@example.test")
+        message = MailMessage(account_id=account.id, folder="INBOX", provider_uid="target", unverified_connector=True)
+        async with get_session_maker().begin() as session:
+            session.add(message)
+        labels = ["INBOX", "UNREAD", "STARRED"]
+        anchor = {"id": "sent", "messages": [{"id": "proof", "sender": account.email_address, "labelIds": ["SENT"]}]}
+        if deferred:
+            bound = connector_mailbox.encode(("named", "sent", "proof"), "15")
+            state = await mail_sync_state.save_state(account_id=account.id, cursor="15", connector_cursor=bound, connector_verified=True)
+            async with get_session_maker().begin() as session:
+                stored = await session.get(MailSyncState, state.id)
+                stored.connector_deferred_threads = ["held"]
+
+        async def provider(_, tool, args):
+            if args.get("query") == "in:sent from:me":
+                return {"threads": [anchor]}
+            if args.get("threadId") == "sent":
+                return anchor
+            if tool == "search_threads":
+                matched = args["query"] == "in:inbox" or "before:" in args["query"]
+                return {"threads": [{"id": "held", "messages": [{"id": "target", "labelIds": labels}]}] if matched else []}
+            return {"id": "held", "messages": [{"id": "target", "date": "2026-10-01T10:00:00Z"}]}
+
+        monkeypatch.setattr(connector_mailbox, "_credential", AsyncMock(return_value="named"))
+        monkeypatch.setattr(connectors, "call_read_tool_json", provider)
+        assert (await sync.sync_account(account.id)).status == "ok"
+        indexed = await mail_message.get_message(message.id)
+        assert not indexed.unverified_connector and not indexed.is_read and indexed.is_flagged
+        assert json.loads(indexed.labels_json) == labels
+        async with get_session_maker()() as session:
+            job = (await session.scalars(select(MailJob).where(MailJob.kind == mail_job.VERIFIED_INSIGHTS))).one()
+            assert json.loads(job.payload_json)["message_ids"] == [message.id]
+    asyncio.run(run())
+
+
 def test_base_worker_cannot_claim_targeted_refreshes_even_after_expiry_or_retry(pg_db):
     from datetime import UTC, datetime, timedelta
     from sqlalchemy import and_, or_, select

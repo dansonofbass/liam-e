@@ -78,15 +78,29 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
         logger.warning("Connector history page deferred: %s", type(error).__name__)
         current.cursor = "initial:" + json.dumps([current.cursor, previous_token])
         return current
-    rows = {item["provider_uid"]: item for item in history.upserts}
-    rows.update((item["provider_uid"], item) for item in current.upserts)
-    current.unconfirmed_uids.update(history.unconfirmed_uids)
-    current.upserts = [row for uid, row in rows.items() if uid not in current.unconfirmed_uids]
-    current.deferred_threads.extend(history.deferred_threads)
+    merge_observations(current, history)
     if history.cursor.startswith("initial:"):
         _, token = json.loads(history.cursor.removeprefix("initial:"))
         current.cursor = "initial:" + json.dumps([current.cursor, token])
     return current
+
+
+def merge_observations(current: SyncChanges, later: SyncChanges) -> None:
+    """Combine successive reads of the same mailbox. The caller owns pagination."""
+    excluded = set(later.moved_out) | later.unconfirmed_uids
+    returned = {row["provider_uid"]: row for row in later.upserts if row["provider_uid"] not in excluded}
+    rows = {row["provider_uid"]: row for row in current.upserts if row["provider_uid"] not in excluded}
+    rows.update(returned)
+    current.upserts = list(rows.values())
+    current.moved_out = list(dict.fromkeys([uid for uid in current.moved_out if uid not in returned] + later.moved_out))
+    current.unconfirmed_uids.difference_update(returned)
+    current.unconfirmed_uids.update(later.unconfirmed_uids)
+    # Earlier reconciliation must not overwrite flags on a subsequently fetched message.
+    for updates, new_updates in ((current.read_updates, later.read_updates), (current.flag_updates, later.flag_updates)):
+        for uid in returned:
+            updates.pop(uid, None)
+        updates.update(new_updates)
+    current.deferred_threads.extend(later.deferred_threads)
 
 
 async def _thread_messages(provider: str, thread_id: str):
@@ -162,14 +176,14 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
                         continue
                     latest = stamp if latest is None else max(latest, stamp)
                     uid = parsed["provider_uid"]
-                    belongs = _listed_inbox(uid, message.get("labelIds"), len(messages), members)
+                    belongs = _apply_inbox_evidence(parsed, message.get("labelIds"), len(messages), members)
                     if belongs is None:
                         changes.deferred_threads.append(thread_id)
                         changes.unconfirmed_uids.add(uid)
                     elif belongs and uid not in seen:
                         changes.upserts.append(parsed)
                         seen.add(uid)
-                    elif not belongs and uid in known:
+                    elif not belongs:
                         changes.moved_out.append(uid)
                 if thread_latest is not None:
                     frontier = min(thread_latest, upper) if upper is not None else thread_latest
@@ -252,13 +266,20 @@ def _member_labels(thread: dict) -> dict[str, Any] | None:
     return {row["id"]: row.get("labelIds") for row in rows}
 
 
-def _listed_inbox(uid, labels, thread_size, members) -> bool | None:
+def _label_fields(labels: list) -> dict[str, Any]:
+    return {"is_read": "UNREAD" not in labels, "is_flagged": "STARRED" in labels, "labels_json": json.dumps(labels)}
+
+
+def _apply_inbox_evidence(message, labels, thread_size, members) -> bool | None:
     if isinstance(labels, list):
         return "INBOX" in labels
     if members is None:
         return None
-    if isinstance(members.get(uid), list):
-        return "INBOX" in members[uid]
+    uid = message["provider_uid"]
+    matched_labels = members.get(uid)
+    if isinstance(matched_labels, list):
+        message.update(_label_fields(matched_labels))
+        return "INBOX" in matched_labels
     if thread_size == 1 and (not members or set(members) == {uid}):
         return True
     # The search matched the thread, but a sibling may be its only inbox message.
@@ -299,7 +320,7 @@ async def _message_in_inbox(provider, thread_id, message, labels, thread_size, e
     listed, members = evidence[stamp]
     if listed is not True:
         return listed
-    return _listed_inbox(message["provider_uid"], labels, thread_size, members)
+    return _apply_inbox_evidence(message, labels, thread_size, members)
 
 
 async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_chars: int) -> SyncChanges:
@@ -363,5 +384,4 @@ def parse_message(message: dict[str, Any], *, thread_id: str, folder: str, max_b
             'recipients_json': json.dumps(message.get('toRecipients') or []), 'cc_json': json.dumps(message.get('ccRecipients') or []),
             'snippet': ' '.join((message.get('snippet') or body).split())[:500], 'body_text': body,
             'internal_date': date, 'has_attachments': bool(message.get('attachmentIds') or files),
-            'attachments_json': json.dumps(files), 'is_read': 'UNREAD' not in labels,
-            'is_flagged': 'STARRED' in labels, 'labels_json': json.dumps(labels)}
+            'attachments_json': json.dumps(files), **_label_fields(labels)}

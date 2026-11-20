@@ -1,6 +1,7 @@
 """Incremental inbox sync contracts; all providers are faked."""
 
 import imaplib
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -483,12 +484,39 @@ async def test_connector_scan_uses_per_message_listing_when_full_labels_are_miss
                 {"id": "none", "date": "1970-01-01T00:03:20+00:00", "labelIds": None},
             ]}
         return {"threads": [{"id": "t", "messages": [
-            {"id": "missing", "labelIds": ["INBOX"]}, {"id": "none", "labelIds": ["INBOX"]},
+            {"id": "missing", "labelIds": ["INBOX", "UNREAD", "STARRED"]}, {"id": "none", "labelIds": ["INBOX"]},
         ]}]}
     monkeypatch.setattr(sync_connector.message_access, "known_uids", known)
     monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
     result = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="", folders=["INBOX"], limit=10, max_body_chars=100)
     assert [m["provider_uid"] for m in result.upserts] == ["missing", "none"]
+    assert [(row["is_read"], row["is_flagged"], json.loads(row["labels_json"])) for row in result.upserts] == [
+        (False, True, ["INBOX", "UNREAD", "STARRED"]), (True, False, ["INBOX"]),
+    ]
+
+
+@pytest.mark.anyio
+async def test_connector_history_archives_an_old_indexed_sibling(monkeypatch):
+    stamp = datetime(2024, 1, 1, tzinfo=UTC)
+    options = {"folders": ["INBOX"], "limit": 10, "max_body_chars": 100}
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", AsyncMock(return_value={"archived": "local"}))
+    monkeypatch.setattr(sync_connector.message_access, "get_message", AsyncMock(return_value=SimpleNamespace(
+        thread_id="historic", internal_date=stamp)))
+
+    async def provider(_, tool, args):
+        if tool == "search_threads":
+            return {"threads": [{"id": "historic"}] if args.get("pageToken") == "older" else []}
+        return {"id": "historic", "messages": [
+            {"id": "archived", "date": stamp.isoformat(), "labelIds": ["STARRED"]},
+            {"id": "still-here", "date": stamp.isoformat(), "labelIds": ["INBOX"]},
+        ]}
+
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", provider)
+    changes = await sync_connector.fetch_changes(account("gmail", "connector"),
+        cursor='initial:["1800000000", "older"]', **options)
+    assert changes.cursor == "1800000000"
+    assert changes.moved_out == ["archived"]
+    assert [row["provider_uid"] for row in changes.upserts] == ["still-here"]
 
 
 async def connector_reconciliation(monkeypatch, threads, unread_threads):
