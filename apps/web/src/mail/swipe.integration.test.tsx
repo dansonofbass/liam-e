@@ -18,7 +18,7 @@ function setup(settings = assignment, count = 1) {
   spyOn(sdk, 'settingsUiGet').mockImplementation((async () => ({ data: client.getQueryData(['ui-settings']) ?? settings, response: { ok: true } })) as never)
   const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => ({ data: { action_id: 'a1', message: rows.find(item => item.id === options.path.message_id) ?? row }, response: { status: 200 } })) as never)
   const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['a1'], skipped: [], expired: [], failed: [] }, response: { status: 200 } })) as never)
-  const open = mock(() => {})
+  const open = mock<(id: string) => void>(() => {})
   let triggerUndo: (() => Promise<void>) | undefined
   function Harness() {
     const { data } = useQuery<InfiniteData<MessagePageOut>>({ queryKey: key, queryFn: async () => client.getQueryData<InfiniteData<MessagePageOut>>(key)!, enabled: false })
@@ -33,7 +33,7 @@ function setup(settings = assignment, count = 1) {
   const scroller = view.container.querySelector<HTMLElement>('.le-inbox-scroll')!
   const elements = Array.from(view.container.querySelectorAll<HTMLElement>('.le-mailrow'))
   for (const el of elements) el.getBoundingClientRect = () => ({ width: 300, height: 100, left: 0, right: 300, top: 0, bottom: 100, x: 0, y: 0, toJSON() {} })
-  return { client, action, undo, triggerUndo: () => triggerUndo?.(), open, element: elements[0]!, elements, scroller }
+  return { client, action, undo, triggerUndo: () => triggerUndo?.(), open, element: elements[0]!, elements, scroller, unmount: view.unmount }
 }
 function pointer(element: Element, type: string, x: number, y = 100, id = 1, pointerType = 'touch') {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })
@@ -223,8 +223,8 @@ test('a right swipe after minor scroll momentum settle locks scroll and runs onc
   expect(action.mock.calls[0]?.[0]).toEqual({ path: { message_id: 'm1' }, body: { kind: 'mark_read' } })
 })
 
-test('active list scrolling before horizontal intent locks out swiping without preventing scroll', () => {
-  const { element, scroller, action } = setup()
+test('active list scrolling before horizontal intent locks out swiping, suppresses drag click, and allows a fresh tap', () => {
+  const { element, scroller, action, open } = setup()
   scroller.scrollTop = 100
   down(element)
   scroller.scrollTop = 116
@@ -234,6 +234,34 @@ test('active list scrolling before horizontal intent locks out swiping without p
   expect(screen.getByRole('status').textContent).toBe('')
   up(element, 90)
   expect(action).not.toHaveBeenCalled()
+  fireEvent.click(element)
+  expect(open).not.toHaveBeenCalled()
+
+  down(element); up(element, 200); fireEvent.click(element)
+  expect(open).toHaveBeenCalledTimes(1)
+  expect(open).toHaveBeenCalledWith('m1')
+})
+
+test('undecided touch locks at the inclusive 12 px scroll boundary while a stationary tap still opens', () => {
+  const { element, scroller, action, open } = setup()
+  scroller.scrollTop = 100
+  down(element)
+  scroller.scrollTop = 112
+  fireEvent.scroll(scroller)
+  expect(touchMove(element, 100)).toBe(false)
+  up(element, 100)
+  expect(action).not.toHaveBeenCalled()
+  fireEvent.click(element)
+  expect(open).not.toHaveBeenCalled()
+
+  scroller.scrollTop = 100
+  down(element)
+  scroller.scrollTop = 116
+  fireEvent.scroll(scroller)
+  up(element, 200)
+  expect(action).not.toHaveBeenCalled()
+  fireEvent.click(element)
+  expect(open).toHaveBeenCalledTimes(1)
 })
 
 test('continued list scrolling after preview cancels the swipe before release', () => {
@@ -242,11 +270,30 @@ test('continued list scrolling after preview cancels the swipe before release', 
   down(element)
   expect(touchMove(element, 160)).toBe(true)
   expect(screen.getByRole('status').textContent).toBe('Archivieren')
-  scroller.scrollTop = 110
+  scroller.scrollTop = 102.5
   fireEvent.scroll(scroller)
   expect(screen.getByRole('status').textContent).toBe('')
   up(element, 80)
   expect(action).not.toHaveBeenCalled()
+})
+
+test('fractional scroll settle beyond 2 px cancels an armed swipe on release while exact 2 px commits', async () => {
+  const { element, scroller, action } = setup()
+  scroller.scrollTop = 100
+  down(element)
+  expect(touchMove(element, 100)).toBe(true)
+  expect(screen.getByRole('status').textContent).toBe('Loslassen zum Archivieren')
+  scroller.scrollTop = 102.5
+  up(element, 100)
+  expect(screen.getByRole('status').textContent).toBe('')
+  expect(action).not.toHaveBeenCalled()
+
+  scroller.scrollTop = 100
+  down(element)
+  expect(touchMove(element, 100)).toBe(true)
+  scroller.scrollTop = 102
+  up(element, 100)
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
 })
 
 test('non-cancelable touchmove from active browser scrolling cancels without showing a preview', () => {
@@ -307,4 +354,40 @@ test('a fresh primary touch on another row with the same pointerId clears a stal
   up(second, 300)
   await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
   expect(action.mock.calls[0]?.[0]).toEqual({ path: { message_id: 'm2' }, body: { kind: 'mark_read' } })
+})
+
+test('document scroll listener is registered only while a swipe gesture is active', () => {
+  const add = spyOn(window.EventTarget.prototype, 'addEventListener')
+  const remove = spyOn(window.EventTarget.prototype, 'removeEventListener')
+  const docCalls = (spy: typeof add, eventType: string, capture?: boolean) =>
+    spy.mock.calls.filter(([type, , options], index) =>
+      spy.mock.contexts[index] === document &&
+      type === eventType &&
+      (capture === undefined || (typeof options === 'boolean' ? options === capture : options?.capture === capture)),
+    ).length
+  const scrollAdds = () => docCalls(add, 'scroll')
+  const scrollRemoves = () => docCalls(remove, 'scroll')
+  const pointerAdds = () => docCalls(add, 'pointerdown', true)
+  const pointerRemoves = () => docCalls(remove, 'pointerdown', true)
+
+  const { elements, scroller, unmount } = setup(assignment, 5)
+  const [first, second] = elements as [HTMLElement, HTMLElement]
+  scroller.scrollTop = 40
+  fireEvent.scroll(scroller)
+  expect(scrollAdds()).toBe(0)
+  expect(pointerAdds()).toBe(0)
+
+  down(first)
+  expect(scrollAdds()).toBe(1)
+  expect(pointerAdds()).toBe(1)
+  up(first, 200)
+  expect(scrollRemoves()).toBe(1)
+  expect(pointerRemoves()).toBe(1)
+
+  down(second)
+  expect(scrollAdds()).toBe(2)
+  expect(pointerAdds()).toBe(2)
+  unmount()
+  expect(scrollRemoves()).toBe(2)
+  expect(pointerRemoves()).toBe(2)
 })

@@ -24,17 +24,25 @@ function captureCurrentScroll(origins: ScrollSnapshot): ScrollSnapshot {
   return snapshot
 }
 
-function scrollDeltaExceeded(snapshot: ScrollSnapshot, target: Element, limit: number): boolean {
-  const origin = snapshot.get(target)
-  return Boolean(origin && (Math.abs(target.scrollTop - origin.top) >= limit || Math.abs(target.scrollLeft - origin.left) >= limit))
+function exceeds(delta: number, limit: number, strict: boolean): boolean {
+  return strict ? delta > limit : delta >= limit
 }
 
-function anyScrollExceeded(snapshot: ScrollSnapshot | null, limit: number): boolean {
+function scrollDeltaExceeded(snapshot: ScrollSnapshot, target: Element, limit: number, strict = false): boolean {
+  const origin = snapshot.get(target)
+  return Boolean(origin && (exceeds(Math.abs(target.scrollTop - origin.top), limit, strict) || exceeds(Math.abs(target.scrollLeft - origin.left), limit, strict)))
+}
+
+function anyScrollExceeded(snapshot: ScrollSnapshot | null, limit: number, strict = false): boolean {
   if (!snapshot) return false
   for (const target of snapshot.keys()) {
-    if (scrollDeltaExceeded(snapshot, target, limit)) return true
+    if (scrollDeltaExceeded(snapshot, target, limit, strict)) return true
   }
   return false
+}
+
+function markDragged(gesture: Active, x: number, y: number) {
+  if (!gesture.dragged && Math.hypot(x - gesture.state.x, y - gesture.state.y) >= SWIPE_INTENT_PX) gesture.dragged = true
 }
 
 /** One row owns its pointer, animation and preview; movement never updates the list. */
@@ -43,6 +51,7 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
   const active = useRef<Active | null>(null)
   const frame = useRef<number | null>(null)
   const suppressClick = useRef(0)
+  const unobserve = useRef<(() => void) | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const current = useRef({ basis, enabled, navigation, valid, run })
   current.current = { basis, enabled, navigation, valid, run }
@@ -53,7 +62,12 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
       if (row.current) row.current.style.transform = dx ? `translateX(${dx}px)` : ''
     })
   }
+  const detachDocument = () => {
+    unobserve.current?.()
+    unobserve.current = null
+  }
   const stop = (suppress = true) => {
+    detachDocument()
     const gesture = active.current
     active.current = null
     // Only the click the browser synthesizes right after this drag is swallowed; a later tap, mouse click or keyboard activation is not.
@@ -62,15 +76,42 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     paint(0)
     setPreview(null)
   }
+  const observeDocument = (doc: Document) => {
+    detachDocument()
+    const interrupt = (event: globalThis.PointerEvent) => {
+      if (active.current && event.pointerType === 'touch' && (event.isPrimary || event.pointerId !== active.current.pointer)) {
+        stop(!event.isPrimary)
+      }
+    }
+    const onScroll = (event: Event) => {
+      const gesture = active.current, node = row.current
+      if (!gesture || !node) return
+      const target = event.target === doc ? doc.scrollingElement : event.target instanceof Element ? event.target : null
+      if (!target || !target.contains(node)) return
+      if (blocksScroll(gesture.state)) {
+        if (!gesture.lockedScroll || scrollDeltaExceeded(gesture.lockedScroll, target, SCROLL_LOCK_TOLERANCE_PX, true)) stop()
+        return
+      }
+      if (gesture.state.phase === 'undecided' && scrollDeltaExceeded(gesture.scrollOrigins, target, SWIPE_INTENT_PX)) {
+        gesture.state = scrollSwipe(gesture.state)
+      }
+    }
+    doc.addEventListener('pointerdown', interrupt, true)
+    doc.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    unobserve.current = () => {
+      doc.removeEventListener('pointerdown', interrupt, true)
+      doc.removeEventListener('scroll', onScroll, true)
+    }
+  }
   const updatePosition = (gesture: Active, x: number, y: number) => {
     const value = current.current
     if (!value.enabled || !value.basis || !value.valid(gesture.state.basis) || value.navigation !== gesture.navigation) { stop(); return }
     const wasBlocked = blocksScroll(gesture.state)
-    if (wasBlocked && anyScrollExceeded(gesture.lockedScroll, SCROLL_LOCK_TOLERANCE_PX + 1)) { stop(); return }
+    if (wasBlocked && anyScrollExceeded(gesture.lockedScroll, SCROLL_LOCK_TOLERANCE_PX, true)) { stop(); return }
     if (gesture.state.phase === 'undecided' && anyScrollExceeded(gesture.scrollOrigins, SWIPE_INTENT_PX)) {
       gesture.state = scrollSwipe(gesture.state)
-      return
     }
+    markDragged(gesture, x, y)
     // Browsers can deliver both events for the same physical movement.
     if (gesture.state.phase === 'scrolling' || (wasBlocked && x - gesture.state.x === gesture.state.dx)) return
     gesture.state = moveSwipe(gesture.state, x, y, value.basis)
@@ -90,36 +131,18 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     if (!value.enabled || !value.basis || !value.valid(gesture.state.basis) || value.navigation !== gesture.navigation || moveSwipe(gesture.state, gesture.state.x + gesture.state.dx, gesture.state.y, value.basis).phase === 'cancelled') stop()
   })
   useLayoutEffect(() => {
-    const interrupt = (event: globalThis.PointerEvent) => {
-      if (active.current && event.pointerType === 'touch' && (event.isPrimary || event.pointerId !== active.current.pointer)) {
-        stop(!event.isPrimary)
-      }
-    }
     const cancel = () => { if (active.current) stop() }
-    const onScroll = (event: Event) => {
-      const gesture = active.current, node = row.current
-      if (!gesture || !node) return
-      const target = event.target === document ? document.scrollingElement : event.target instanceof Element ? event.target : null
-      if (!target || !target.contains(node)) return
-      if (blocksScroll(gesture.state)) {
-        if (!gesture.lockedScroll || scrollDeltaExceeded(gesture.lockedScroll, target, SCROLL_LOCK_TOLERANCE_PX + 1)) stop()
-        return
-      }
-      if (gesture.state.phase === 'undecided' && scrollDeltaExceeded(gesture.scrollOrigins, target, SWIPE_INTENT_PX)) {
-        gesture.state = scrollSwipe(gesture.state)
-      }
-    }
     // touch-action: pan-y is not enough on iOS: without a prevented touchmove WebKit hands a decided swipe to scrolling and
     // cancels the pointer. React registers touchmove as passive, so the row listens natively. Two fingers stay free to pinch.
     const hold = (event: TouchEvent) => {
       const gesture = active.current
       if (!gesture) return
       if (event.touches.length !== 1) { stop(); return }
+      const touch = event.touches[0]!
       // If scrolling already owns the touch before the row ever prevented it, do not start a doomed swipe preview.
-      if (!event.cancelable && !gesture.scrollHeld) { stop(); return }
+      if (!event.cancelable && !gesture.scrollHeld) { markDragged(gesture, touch.clientX, touch.clientY); stop(); return }
       // A native touchmove may precede the corresponding pointermove. Decide from
       // this sample while the browser can still yield the gesture to the row.
-      const touch = event.touches[0]!
       updatePosition(gesture, touch.clientX, touch.clientY)
       if (active.current === gesture && blocksScroll(gesture.state)) {
         if (event.cancelable) { event.preventDefault(); gesture.scrollHeld = true }
@@ -127,13 +150,10 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
       }
     }
     const node = row.current
-    document.addEventListener('pointerdown', interrupt, true)
-    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
     node?.addEventListener('touchmove', hold, { passive: false })
     node?.addEventListener('touchcancel', cancel)
     return () => {
-      document.removeEventListener('pointerdown', interrupt, true)
-      document.removeEventListener('scroll', onScroll, true)
+      detachDocument()
       node?.removeEventListener('touchmove', hold)
       node?.removeEventListener('touchcancel', cancel)
       active.current = null
@@ -147,6 +167,7 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     const control = (event.target as Element).closest('button, a, input, select, textarea, [role="menu"], [role="menuitem"]')
     if (event.clientX < 24 || event.clientX > window.innerWidth - 24 || (control && !control.hasAttribute('data-swipe-start'))) return
     active.current = { pointer: event.pointerId, state: beginSwipe(current.current.basis, event.clientX, event.clientY, event.currentTarget.getBoundingClientRect().width), dragged: false, scrollHeld: false, navigation: current.current.navigation, scrollOrigins: captureScrollOrigins(event.currentTarget), lockedScroll: null }
+    observeDocument(event.currentTarget.ownerDocument)
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -156,9 +177,10 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
     const gesture = active.current, value = current.current
     if (!gesture || gesture.pointer !== event.pointerId) return
+    markDragged(gesture, event.clientX, event.clientY)
     const basis = value.basis
     const scrolled = blocksScroll(gesture.state)
-      ? anyScrollExceeded(gesture.lockedScroll, SCROLL_LOCK_TOLERANCE_PX + 1)
+      ? anyScrollExceeded(gesture.lockedScroll, SCROLL_LOCK_TOLERANCE_PX, true)
       : anyScrollExceeded(gesture.scrollOrigins, SWIPE_INTENT_PX)
     const armed = !scrolled && basis && endSwipe(gesture.state, basis)
     // A release can carry a newer position. Commit only the action already
