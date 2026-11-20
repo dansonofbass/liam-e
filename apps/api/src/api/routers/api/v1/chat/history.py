@@ -34,11 +34,13 @@ async def history(
         raise refuse(404, "conversation_not_found", "Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.")
     messages = visible_messages(await message_access.list_messages(conversation_id))
     contexts = await context_access.get_contexts({m.context_id for m in messages if m.context_id})
+    replaced = await context_access.replaced_feed_contexts(contexts)
     result = []
     for message in messages:
         output = to_message_out(message)
         context = contexts.get(message.context_id)
         if context:
             output.context = ContextOut.model_validate(context, from_attributes=True)
+            output.context.calendar_sources_replaced = context.id in replaced
         result.append(output)
     return result

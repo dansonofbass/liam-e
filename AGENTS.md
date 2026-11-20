@@ -476,10 +476,15 @@ Updates require the displayed settings version. A removed or paused default rema
 as unavailable until the owner changes it. The owner can name another writable calendar in a
 request. A scheduling clarification keeps the chosen source with the pending appointment and
 checks its current write permission. Ambiguous names require clarification. Settings and cards
-identify duplicate names with the local source ID. Each proposal binds the resolved source and
+identify duplicate names with the local source ID. The owner can use that ID to resolve a
+shared name or explicitly switch back to the default when answering a scheduling question. Each proposal binds the resolved source and
 connection before confirmation. A later settings change only affects new proposals.
 
-The API persists the full set of readable IDs in `chat_context.calendar_scope_json`. A caller
+The API persists the full set of readable IDs in `chat_context.calendar_scope_json`. For ICS
+subscriptions it also records a private fingerprint of each encrypted feed configuration.
+An ordinary retry keeps that binding. Replacing a feed under the same source ID requires a
+new conversation. Legacy turns without proof of the current feed also require a fresh chat.
+A caller
 supplying `calendar_source_ids` explicitly can still narrow that turn, including to an empty
 set. Older contexts retain their original scope. A changed set of sources requires a new
 conversation after history exists (409 `conversation_scope_change_requires_new`). Model requests

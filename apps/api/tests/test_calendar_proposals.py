@@ -138,7 +138,7 @@ def test_card_output_has_no_connection_ref(card):
 def test_prompt_version_and_calendar_rules_present():
     from api.mail.agent_prompt import APP_PROMPT_VERSION, system_prompt
     text = system_prompt(today=date(2026, 12, 5), account_scope=None)
-    assert APP_PROMPT_VERSION == "12" and "propose_calendar_change" in text
+    assert APP_PROMPT_VERSION == "13" and "propose_calendar_change" in text
     assert "ICS bleibt nur lesbar" in text
 
 
@@ -287,3 +287,53 @@ async def test_unknown_card_of_a_removed_source_stays_unknown(card, monkeypatch)
     monkeypatch.setattr(calendar_write, "get", record)
     monkeypatch.setattr(writes, "get", kept)
     assert (await proposals.recheck_calendar_card(card.message.id)).proposal_status == "unknown"
+
+
+async def test_title_text_is_not_a_calendar_destination(monkeypatch):
+    from dataclasses import replace
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+    from unittest.mock import AsyncMock
+
+    calendars = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='test', external_id=key,
+                                capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'personal')]
+    async def catalog(*, ids):
+        return [(row, None) for row in calendars if row.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=SimpleNamespace(default_source_id='personal')))
+    ctx = TurnContext('synthetic', None, date(2026, 11, 20), calendar_source_ids=['work', 'personal'])
+    args = {'action': 'create', 'title': 'Look in the Work calendar', 'start_date': '2026-11-21', 'end_date': '2026-11-22'}
+    for title in ('‘Look in the Work calendar’', '"Look in the Work calendar"', '„Look in the Work calendar“', 'Look in the Work calendar'):
+        turn = replace(ctx, user_text=f'Create a reminder titled {title} for tomorrow at ten')
+        assert (await chat.prepare(args, turn)).source_id == 'personal'
+        with pytest.raises(writes.WriteError, match='calendar_name_required'):
+            await chat.prepare({**args, 'calendar_name': 'Work'}, turn)
+    explicit = replace(ctx, user_text='Create “Review” tomorrow in the “Work” calendar')
+    assert (await chat.prepare({**args, 'title': 'Review'}, explicit)).source_id == 'work'
+
+
+async def test_duplicate_calendar_needs_an_identifier_in_the_owner_request(monkeypatch):
+    from dataclasses import replace
+    from db.accessors import calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    calendars = [CalendarSource(id=key, name='Team', provider='google', connection_ref='test', external_id=key,
+                                capabilities_json='["read","write"]', timezone='UTC') for key in ('first-team', 'second-team')]
+    async def catalog(*, ids):
+        return [(row, None) for row in calendars if row.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    ctx = TurnContext('test', None, date(2026, 11, 20), calendar_source_ids=[row.id for row in calendars])
+    args = {'action': 'create', 'calendar_name': 'Team', 'title': 'Review', 'start_date': '2026-11-21', 'end_date': '2026-11-22'}
+    first = replace(ctx, user_text='Create a review in the Team calendar')
+    for tool_args in (args, {**args, 'source_id': 'second-team'}):
+        with pytest.raises(writes.WriteError, match='calendar_name_ambiguous'):
+            await chat.prepare(tool_args, first)
+    for text in ('Team · second-team', 'second-team'):
+        reply = replace(ctx, calendar_choice=first.requested_calendar, user_text=text)
+        assert (await chat.prepare({**args, 'source_id': 'second-team'}, reply)).source_id == 'second-team'
+        implicit = replace(ctx, calendar_choice=first.requested_calendar, user_text=text)
+        assert (await chat.prepare({k: v for k, v in args.items() if k != 'calendar_name'}, implicit)).source_id == 'second-team'
+    calendars[1].capabilities_json = '["read"]'
+    reply = replace(ctx, user_text='Team · second-team', calendar_choice=first.requested_calendar)
+    with pytest.raises(writes.WriteError, match='calendar_not_writable'):
+        await chat.prepare({**args, 'source_id': 'second-team'}, reply)

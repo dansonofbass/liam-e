@@ -907,6 +907,10 @@ export type ContextOut = {
      */
     calendar_scope_json?: string;
     /**
+     * Calendar Sources Replaced
+     */
+    calendar_sources_replaced?: boolean;
+    /**
      * Id
      */
     id: string;

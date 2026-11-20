@@ -7,7 +7,7 @@ from db.accessors import calendar_occurrence, calendar_settings, calendar_source
 from pydantic import ValidationError
 
 from api.calendar import writes
-from api.calendar.chat_target import mentions, named_choice, stated_destination
+from api.calendar.chat_target import named_choice, owner_selection, stated_destination
 from api.calendar.proposals import CalendarCommand, CalendarValues, values
 
 
@@ -16,19 +16,23 @@ async def _create_source(arguments, ctx):
     source_id = arguments.get("source_id")
     if source_id and source_id not in ctx.calendar_source_ids:
         raise writes.WriteError("calendar_out_of_scope", 403)
-    target = await stated_destination(ctx.user_text, ctx.calendar_source_ids)
-    pending = target or ctx.requested_calendar or ctx.calendar_choice
-    if named is not None:
+    selection = owner_selection(ctx.user_text, arguments.get("title"))
+    entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
+    previous = ctx.requested_calendar or ctx.calendar_choice
+    target = stated_destination(selection, entries, previous)
+    pending = target or previous
+    if named is not None and not (target and target.use_default):
         if not isinstance(named, str) or not named.strip():
             raise writes.WriteError("calendar_name_required", 422)
-        if mentions(ctx.user_text, named):
-            if target and target.name and target.name.strip().casefold() != named.strip().casefold():
-                raise writes.WriteError("calendar_name_required", 422)
-            pending = named_choice(named, await calendar_source.catalog(ids=ctx.calendar_source_ids))
-        elif not pending or pending.name.strip().casefold() != named.strip().casefold():
+        matches_pending = pending and pending.name.strip().casefold() == named.strip().casefold()
+        if target and target.name and not matches_pending:
             raise writes.WriteError("calendar_name_required", 422)
-    if pending:
-        ctx.requested_calendar = pending
+        if selection.mentions(named):
+            pending = named_choice(named, entries, selection)
+        elif not matches_pending:
+            raise writes.WriteError("calendar_name_required", 422)
+    ctx.requested_calendar = pending
+    if pending and not pending.use_default:
         if pending.error:
             raise writes.WriteError(pending.error, 422)
         if pending.source_id not in ctx.calendar_source_ids or (source_id and source_id != pending.source_id):

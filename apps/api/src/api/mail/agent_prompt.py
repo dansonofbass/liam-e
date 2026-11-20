@@ -5,7 +5,7 @@ from datetime import date
 from api.locales import DEFAULT_LOCALE, Locale
 
 
-APP_PROMPT_VERSION = "12"
+APP_PROMPT_VERSION = "13"
 
 TASK_INSTRUCTIONS = (
     "\nAufgaben: search_tasks und get_task lesen nur gespeicherte Aufgaben. Nenne den konkreten Zeitraum "
@@ -73,6 +73,8 @@ def system_prompt(*, today: date, account_scope: str | None, locale: Locale = DE
         "Bei neuen Terminen verwendet die App den gespeicherten Standard. Nennt der Nutzer einen anderen Kalender, "
         "übergib seinen ausdrücklich genannten Namen als calendar_name. Bei fehlendem, mehrdeutigem oder nicht beschreibbarem Ziel frage nach. "
         "Übergib die ausdrückliche Kalenderwahl schon vor der Rückfrage an propose_calendar_change. Lass fehlende Zeiten offen. Behalte diese Quelle für denselben Termin. "
+        "Wünscht der Nutzer ausdrücklich wieder den Standardkalender, lass Kalendername und ID weg. "
+        "Bei gleichen Namen nutze die vom Nutzer genannte lokale Kalender-ID. Titel und Zitate wählen kein Ziel. "
         "Wähle keinen Ersatz. Der Standard steht unter Einstellungen → Standardkalender. "
         "Änderungen an eigenen einzelnen Google-Terminen ohne Gäste schlägst du ausschließlich mit propose_calendar_change vor. "
         "Lies vor Änderungen oder Löschen den Termin mit get_calendar_occurrence. Erfinde niemals IDs. "

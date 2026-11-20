@@ -29,6 +29,7 @@ class ContextOut(BaseModel):
     account_scope_json: str
     mail_scope_version: int | None = None
     calendar_scope_json: str = '[]'
+    calendar_sources_replaced: bool = False
     task_scope_json: str = '{"source":"none"}'
     preference_revision_id: str | None
     preference_revision_ids_json: str = '[]'

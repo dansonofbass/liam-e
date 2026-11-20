@@ -132,6 +132,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                     or previous.mail_scope_version != snapshot.mail_scope_version
                     or json.loads(previous.account_scope_json) != account_scope
                     or set(json.loads(previous.calendar_scope_json)) != set(ctx.calendar_source_ids)
+                    or previous.calendar_feed_bindings_json != snapshot.calendar_feed_bindings_json
                     or json.loads(previous.task_scope_json) != ctx.task_scope):
                 yield ErrorEvent(code='context_revoked')
                 return

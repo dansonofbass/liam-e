@@ -599,7 +599,7 @@ async def test_insight_batch_stops_and_discards_prior_results_after_revocation(s
     cached.assert_awaited_once_with(rows[0].id, locale=ctx.browser_locale, context_id='turn')
 
 
-@pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'switch', 'reschedule'])
+@pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'switch', 'reschedule', 'default', 'default_de'])
 async def test_calendar_create_keeps_owner_target_through_scheduling_question(store, monkeypatch, case):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
@@ -638,6 +638,8 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         'fresh_request': 'Create another appointment tomorrow at ten',
         'switch': 'Tomorrow at ten, in the Personal calendar instead',
         'reschedule': 'Schedule the review tomorrow at ten',
+        'default': 'Tomorrow at ten, use my default calendar instead',
+        'default_de': 'Morgen um zehn, nimm doch meinen Standardkalender',
     }.get(case, 'Tomorrow at ten')
     finished = await turn(second)
     assert finished[-1].event == 'done'
@@ -647,6 +649,6 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         assert any('calendar_not_writable' in row.content for row in store.rows if row.role == 'tool')
     else:
         assert len(cards) == 1 and cards[0].proposal_status == 'pending'
-        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'switch') else work.id)
+        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'switch', 'default', 'default_de') else work.id)
         assert cards[0].context.calendar_scope_json == snapshot.calendar_scope_json
     assert 'calendar_clarification' not in json.dumps(fake.requests, default=str)

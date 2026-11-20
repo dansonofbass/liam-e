@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from datetime import datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from db.engine import get_session_maker
@@ -56,6 +56,22 @@ async def readable_ids(session, ids=None) -> list[str]:
     if ids is not None and not ids:
         return []
     return [source.id for source, state in await catalog(session, ids) if chat_access(source, state) in READABLE]
+
+
+async def feed_bindings(session, ids) -> dict[str, str]:
+    """Fingerprint the stored encrypted configuration, which ordinary syncs never rewrite."""
+    if not ids:
+        return {}
+    fingerprint = func.encode(func.sha256(func.convert_to(CalendarFeedConfig.encrypted_payload, "UTF8")), "hex")
+    query = select(CalendarFeedConfig.source_id, fingerprint).where(CalendarFeedConfig.source_id.in_(ids))
+    async with (nullcontext(session) if session is not None else get_session_maker()()) as reader:
+        return dict((await reader.execute(query)).all())
+
+
+async def permits_context(session, context) -> bool:
+    ids = json.loads(context.calendar_scope_json)
+    return (set(await readable_ids(session, ids)) == set(ids)
+            and await feed_bindings(session, ids) == json.loads(context.calendar_feed_bindings_json))
 
 
 async def get(source_id: str) -> CalendarSource | None:

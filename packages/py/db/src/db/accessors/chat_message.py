@@ -82,8 +82,7 @@ async def claim_proposal_in_session(session: AsyncSession, message_id: str) -> C
     ).where(ChatMessage.id == message_id, ChatMessage.proposal_status == "pending"))).scalar_one_or_none()
     if not await chat_settings.permits_context(session, context):
         return None
-    ids = json.loads(context.calendar_scope_json)
-    if ids and set(await calendar_source.readable_ids(session, ids)) != set(ids):
+    if not await calendar_source.permits_context(session, context):
         return None
     result = await session.execute(
         update(ChatMessage).where(

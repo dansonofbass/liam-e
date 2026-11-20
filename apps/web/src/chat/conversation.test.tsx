@@ -755,3 +755,29 @@ test('adding another readable calendar still allows confirmation of the original
   await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
   expect(confirm.mock.calls[0]?.[0]).toEqual({ path: { proposal_id: 'bound' }, body: { selected_ids: [] } })
 })
+
+test('an unavailable calendar list can be retried before confirming the pending card', async () => {
+  const { client } = setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  const card: ChatMessageOut = {
+    ...historyRow('pending', 'proposal'), context: { ...currentContext, calendar_scope_json: '["work"]' },
+    proposal: { kind: 'calendar', reason: 'Test', items: [], calendar: { action: 'create', source_id: 'work', timezone: 'UTC' } },
+  }
+  const sources = [{ id: 'work', name: 'Work', is_active: true, chat_access: 'writable' }]
+  const list = spyOn(sdk, 'calendarSourcesList').mockRejectedValue(new Error('synthetic failure'))
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: { ...card, proposal_status: 'done' }, response: { status: 200 } } as never)
+  history = [card]
+  act(() => {
+    client.setQueryData(['calendar', 'sources'], sources)
+    client.setQueryData(['history', 'c'], history)
+  })
+  await act(() => client.refetchQueries({ queryKey: ['calendar', 'sources'] }))
+  await screen.findByText(de.calendar.error)
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: de.calendar.cardConfirm }).disabled).toBe(true)
+  expect(screen.queryByText(de.calendarSettings.cancelOnly)).toBeNull()
+  list.mockResolvedValue({ data: sources } as never)
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.retry }))
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: de.calendar.cardConfirm }).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.cardConfirm }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+})

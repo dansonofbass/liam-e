@@ -125,6 +125,7 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             & (ChatMessage.conversation_id == ChatContext.conversation_id)
         ).where(ChatMessage.conversation_id == conversation.id).distinct())).scalars().all() if existing else []
         calendar_ids = await calendar_source.readable_ids(session, calendar_source_ids)
+        bindings = await calendar_source.feed_bindings(session, calendar_ids)
         if context_occurrence_id is not None:
             source_id = await session.scalar(select(CalendarOccurrence.source_id).where(CalendarOccurrence.id == context_occurrence_id))
             if source_id not in calendar_ids:
@@ -152,13 +153,15 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             if (prior is None or prior.mail_scope_version != grants.version
                     or json.loads(prior.account_scope_json) != account_scope
                     or sorted(json.loads(prior.calendar_scope_json)) != calendar_ids
+                    or json.loads(prior.calendar_feed_bindings_json) != bindings
                     or json.loads(prior.task_scope_json) != task_scope):
                 raise ScopeChange
         conversation.account_scope_json = provenance
         snapshot = ChatContext(conversation_id=conversation.id, prompt_revision_id=selected,
                                prompt_hash=revision.content_hash if revision else None,
                                app_prompt_version=app_prompt_version, account_scope_json=provenance, mail_scope_version=grants.version,
-                               calendar_scope_json=json.dumps(calendar_ids), task_scope_json=json.dumps(task_scope),
+                               calendar_scope_json=json.dumps(calendar_ids), calendar_feed_bindings_json=json.dumps(bindings, sort_keys=True),
+                               task_scope_json=json.dumps(task_scope),
                                preferences_enabled=enabled, preference_revision_ids_json=json.dumps(preference_ids))
         session.add(snapshot)
         await session.commit()
@@ -183,12 +186,16 @@ async def get_contexts(context_ids: set[str]) -> dict[str, ChatContext]:
         return {row.id: row for row in rows}
 
 
+async def replaced_feed_contexts(contexts) -> set[str]:
+    scopes = {context.id: json.loads(context.calendar_scope_json) for context in contexts.values()}
+    bindings = await calendar_source.feed_bindings(None, {source for ids in scopes.values() for source in ids})
+    return {key for key, ids in scopes.items() if
+            {source: bindings[source] for source in ids if source in bindings} != json.loads(contexts[key].calendar_feed_bindings_json)}
+
+
 async def is_live(context_id: str) -> bool:
     async with get_session_maker()() as session:
         row = await session.get(ChatContext, context_id)
         if row is None or row.revoked or not await chat_settings.permits_context(session, row):
             return False
-        ids = json.loads(row.calendar_scope_json)
-        if not ids:
-            return True
-        return set(await calendar_source.readable_ids(session, ids)) == set(ids)
+        return await calendar_source.permits_context(session, row)

@@ -1651,6 +1651,11 @@
             "title": "Calendar Scope Json",
             "type": "string"
           },
+          "calendar_sources_replaced": {
+            "default": false,
+            "title": "Calendar Sources Replaced",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
