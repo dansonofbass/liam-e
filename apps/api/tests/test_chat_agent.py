@@ -769,6 +769,7 @@ async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(s
     async def catalog(*, ids):
         return [(row, None) for row in calendars if row.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_source, 'configured_names', AsyncMock(return_value={s.name.casefold() for s in calendars}))
     monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
     conversation = await store.create()
     snapshot = store.snapshot('calendar-options', calendar_scope_json=json.dumps([s.id for s in calendars]))
@@ -805,6 +806,9 @@ async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(s
     ('For the calendar, use the Work calendar, Research or Home', {'research'}, 'home'),
     ('For the calendar, use the Work calendar, Research or Home', {'research', 'home'}, 'work'),
     ('Use the Work calendar, Research or Home', {'research', 'home'}, 'work'),
+    ('in the Work calendar, Research, or Home', {'research', 'home'}, 'work'),
+    ('in the Work calendar, research or home', {'research', 'home'}, 'work'),
+    ('in the Work calendar, Removed One or Removed Two', {'research', 'home'}, 'work'),
 ])
 async def test_calendar_offer_with_a_paused_source_waits_for_owner_choice(store, monkeypatch, selection, paused, chosen):
     from db.accessors import calendar_settings, calendar_source
@@ -816,6 +820,7 @@ async def test_calendar_offer_with_a_paused_source_waits_for_owner_choice(store,
     async def catalog(*, ids):
         return [(source, None) for source in sources if source.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_source, 'configured_names', AsyncMock(return_value={s.name.casefold() for s in sources}))
     monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
     conversation = await store.create()
     snapshot = store.snapshot('unavailable-option', calendar_scope_json=json.dumps([source.id for source in sources if source.is_active]))
@@ -828,7 +833,8 @@ async def test_calendar_offer_with_a_paused_source_waits_for_owner_choice(store,
     async def cards(text):
         return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(conversation_id=conversation.id,
                 text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
-    assert await cards(f'Schedule lunch tomorrow at noon. {selection}.') == []
+    lead = 'Schedule lunch tomorrow at noon' if selection.startswith('in ') else 'Schedule lunch tomorrow at noon.'
+    assert await cards(f'{lead} {selection}.') == []
     assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_name_ambiguous'
     if unavailable_reply:
         assert await cards('Research, please.') == []
@@ -847,6 +853,7 @@ async def test_calendar_elimination_requires_a_single_verified_option(store, mon
     async def catalog(*, ids):
         return [(s, None) for s in sources if s.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_source, 'configured_names', AsyncMock(return_value={s.name.casefold() for s in sources}))
     monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
     conversation = await store.create()
     snapshot = store.snapshot('alternatives', calendar_scope_json=json.dumps([s.id for s in sources]))

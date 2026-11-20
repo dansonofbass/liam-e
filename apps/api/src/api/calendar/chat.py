@@ -26,7 +26,7 @@ async def _create_source(arguments, ctx):
     previous = ctx.requested_calendar
     if previous is None and part == parts[0]:
         previous = pending_for_request(ctx.calendar_choice, part, arguments.get("title"))
-    target = stated_destination(selection, entries, previous)
+    target = await stated_destination(selection, entries, previous)
     if target:
         ctx.calendar_targets[part] = target
         if target.error:

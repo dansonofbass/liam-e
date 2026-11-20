@@ -58,6 +58,13 @@ async def readable_ids(session, ids=None) -> list[str]:
     return [source.id for source, state in await catalog(session, ids) if chat_access(source, state) in READABLE]
 
 
+async def configured_names() -> set[str]:
+    """Display names for recognizing owner-supplied calendar options, including paused sources."""
+    async with get_session_maker()() as session:
+        names = await session.scalars(select(CalendarSource.name).distinct())
+        return {name.strip().casefold() for name in names if name.strip()}
+
+
 async def feed_bindings(session, ids) -> dict[str, str]:
     """Fingerprint the stored encrypted configuration, which ordinary syncs never rewrite."""
     if not ids:

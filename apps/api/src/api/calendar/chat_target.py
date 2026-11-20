@@ -339,22 +339,37 @@ def _calendar_list_end(text: str, members, names) -> int:
         member = members[index]
         if _CALENDAR_NOUN.search(member[0]):
             if index + 1 < len(members) and text[member.end():members[index + 1].start()].strip() == ",":
+                tail = members[index + 1:]
+                # Explicitly enumerated or individually capitalized labels
+                # can also be choices that are no longer configured.
+                if len(tail) > 1 and (all(item["name"][:1].isupper() for item in tail)
+                        or any(re.fullmatch(r",\s*(?:or|oder)", text[a.end():b.start()].strip(), re.I)
+                               for a, b in zip(tail, tail[1:]))):
+                    break
                 return index + 1
             break
         # A later named, quoted or explicitly selected option keeps the list
         # together, including any unavailable options before it.
-        if member["name"].casefold() in names or member["name"] == "\ufffc" or re.match(_SELECT + r"\b", member[0], re.I):
+        raw_name = member["name"]
+        if (raw_name.casefold() in names or raw_name == "\ufffc"
+                or re.match(_SELECT + r"\b", member[0], re.I)):
             break
     return len(members)
 
 
-def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
+async def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
     """Read each contiguous list as a whole. An unknown member prevents elimination."""
     alternatives = set()
     if not _OR.search(text):
         return alternatives, True
     names = _DEFAULT_NAMES.union(source.name.strip().casefold() for source, _ in entries if source.name.strip())
-    names_pattern = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
+    vocabulary = names
+    if "," in text and _CALENDAR_NOUN.search(text):
+        # A paused calendar can still be an option the owner named. Only its
+        # label helps identify the list; access and bindings come from entries.
+        folded = text.casefold()
+        vocabulary = names.union(name for name in await calendar_source.configured_names() if name in folded)
+    names_pattern = "|".join(re.escape(name) for name in sorted(vocabulary, key=len, reverse=True))
     # An unavailable name still occupies its position in the owner's list.
     # Preserve literal catalog names with punctuation and opaque quoted members.
     word = rf"(?!{_SELECT}\b){_NAME_WORD}"
@@ -374,9 +389,7 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
         before = text[:first.start()]
         calendar_field = re.search(rf"\b(?:for|für)\s+{_DETERMINER}{_CALENDAR}\s*[:,]?\s*$", before, re.I)
         selection_verb = re.match(_SELECT + r"\b", first[0], re.I)
-        # An explicit selection governs its whole list. Scope determines which
-        # choices can be used, never which alternatives the owner offered.
-        end = len(members) if calendar_field or selection_verb else _calendar_list_end(text, members, names)
+        end = _calendar_list_end(text, members, vocabulary)
         group = members[:end]
         last = group[-1]
         after = text[last.end():]
@@ -400,7 +413,7 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
     return alternatives, complete
 
 
-def _affirmative_destination(selection: OwnerSelection, entries, previous: CalendarChoice | None) -> CalendarChoice | None:
+async def _affirmative_destination(selection: OwnerSelection, entries, previous: CalendarChoice | None) -> CalendarChoice | None:
     # A direct reference such as "in the Work calendar" also works when the assistant
     # asks for a time in plain text or leaves calendar_name out of its later tool call.
     text = selection.text
@@ -408,7 +421,7 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
         return None
     use_default = bool(_DEFAULT.search(text))
     folded = text.casefold()
-    alternatives, complete = _calendar_alternatives(selection.alternatives_text, entries)
+    alternatives, complete = await _calendar_alternatives(selection.alternatives_text, entries)
     if not complete:
         return CalendarChoice(error="calendar_name_ambiguous")
     use_default |= bool(alternatives & _DEFAULT_NAMES)
@@ -454,8 +467,8 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
     return None
 
 
-def stated_destination(selection: OwnerSelection, entries, previous: CalendarChoice | None) -> CalendarChoice | None:
-    target = _affirmative_destination(selection, entries, previous)
+async def stated_destination(selection: OwnerSelection, entries, previous: CalendarChoice | None) -> CalendarChoice | None:
+    target = await _affirmative_destination(selection, entries, previous)
     excluded = selection.excluded_targets
     if not excluded:
         return target
@@ -498,7 +511,7 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
     choices = []
     for part in unfinished:
         inherited = pending_for_request(ctx.calendar_choice, part) if part == parts[0] else None
-        choice = ctx.calendar_targets.get(part) or stated_destination(owner_selection(part, entries=entries), entries, inherited) or inherited
+        choice = ctx.calendar_targets.get(part) or await stated_destination(owner_selection(part, entries=entries), entries, inherited) or inherited
         choices.append(choice)
     # A follow-up containing only a time cannot choose between unfinished
     # appointments with different targets. Ask the owner to specify the target.

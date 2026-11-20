@@ -216,6 +216,14 @@ def test_calendar_default_revision_and_proposal_target(pg_db, monkeypatch):
             assert pending and pending.name.casefold() == unavailable.name.casefold()
             with pytest.raises(writes.WriteError, match='calendar_name_unknown'):
                 await chat.prepare(values, replace(ctx, calendar_choice=pending, user_text='Morgen um neun.'))
+        for instruction in ('Use the Privat calendar', 'in the Privat calendar'):
+            selection = replace(ctx, user_text=f'Schedule lunch tomorrow at ten {instruction}, research or team west.')
+            with pytest.raises(writes.WriteError, match='calendar_name_ambiguous'):
+                await chat.prepare(values, selection)
+            reply = replace(ctx, calendar_choice=selection.requested_calendar, user_text='Privat, bitte.')
+            assert (await chat.prepare(values, reply)).source_id == second.id
+            condition = replace(ctx, user_text=f'Schedule lunch tomorrow at ten {instruction}, rain or shine.')
+            assert (await chat.prepare(values, condition)).source_id == second.id
         dispatched = []
         async def execute(request, *, write_id):
             dispatched.append((request.source_id, write_id))

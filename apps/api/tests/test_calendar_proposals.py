@@ -360,16 +360,19 @@ def test_calendar_appointment_excerpts_cannot_reassign_an_explicit_title_or_trim
 
 
 @pytest.mark.parametrize('named', [None, 'Work'])
-@pytest.mark.parametrize('details', ['in the Work calendar tomorrow at 10', 'tomorrow at 10 in the Work calendar'])
+@pytest.mark.parametrize('details', ['in the Work calendar tomorrow at 10', 'tomorrow at 10 in the Work calendar',
+                                    'tomorrow at 10. Use the Work calendar'])
 async def test_non_calendar_alternative_does_not_change_explicit_destination(monkeypatch, named, details):
     from db.accessors import calendar_source
     from db.models.calendar_source import CalendarSource
+    from unittest.mock import AsyncMock
 
     sources = [CalendarSource(id=name.lower(), name=name, provider='google', connection_ref='synthetic',
         external_id=name, capabilities_json='["read","write"]', timezone='UTC') for name in ('Work', 'Home')]
     async def catalog(*, ids):
         return [(source, None) for source in sources if source.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_source, 'configured_names', AsyncMock(return_value={s.name.casefold() for s in sources}))
     ctx = TurnContext('synthetic', None, date(2026, 11, 20), calendar_source_ids=[s.id for s in sources],
         user_text=f'Schedule a home inspection {details}, rain or shine')
     fields = {'action': 'create', 'title': 'Home inspection', 'start_local': '2026-11-21T10:00', 'end_local': '2026-11-21T11:00'}
