@@ -112,6 +112,8 @@ def merge_observations(current: SyncChanges, later: SyncChanges) -> None:
     current.read_updates.update(later.read_updates)
     current.flag_updates.update(later.flag_updates)
     current.deferred_threads.extend(later.deferred_threads)
+    for thread, labels in later.restored_members.items():
+        current.restored_members.setdefault(thread, {}).update(labels)
 
 
 async def _thread_messages(provider: str, thread_id: str):
@@ -231,10 +233,21 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
     if valid:
         threads = await _search(account.provider, "in:inbox newer_than:14d")
         present = {thread["id"] for thread in threads}
-        labels_by_uid = {uid: labels for thread in threads
-                         for uid, labels in (_member_labels(thread) or {}).items() if isinstance(labels, list)}
-        fallback = {}
+        members_by_thread = {thread["id"]: _member_labels(thread) for thread in threads}
+        listed_members = {uid: (thread_id, labels) for thread_id, members in members_by_thread.items()
+                          for uid, labels in (members or {}).items()}
+        indexed = set(known) | {row["provider_uid"] for row in changes.upserts}
+        candidates = [uid for uid, (_, labels) in listed_members.items()
+                      if uid not in indexed and (not isinstance(labels, list) or "INBOX" in labels)]
+        bare_threads = [thread_id for thread_id, members in members_by_thread.items() if members == {}]
         cutoff = datetime.now(UTC) - timedelta(days=14)
+        for uid, stored_thread in await message_access.archived_connector_members(account.id, candidates, bare_threads, cutoff):
+            thread_id, labels = listed_members.get(uid, (stored_thread, None))
+            if uid not in indexed:
+                evidence = changes.restored_members.setdefault(thread_id, {})
+                if isinstance(labels, list) and "INBOX" in labels:
+                    evidence[uid] = labels
+        fallback = {}
         for uid, local_id in known.items():
             message = await message_access.get_message(local_id)
             if message is None:
@@ -242,8 +255,8 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
             date = message.internal_date
             if date is not None and (date.replace(tzinfo=UTC) if date.tzinfo is None else date) < cutoff:
                 continue
-            if uid in labels_by_uid:
-                labels = labels_by_uid[uid]
+            if uid in listed_members and isinstance(listed_members[uid][1], list):
+                _, labels = listed_members[uid]
                 if "INBOX" not in labels:
                     changes.moved_out.append(uid)
                 else:
@@ -317,7 +330,7 @@ async def _inbox_evidence(provider: str, thread_id: str, stamp: int):
     return None, {}
 
 
-async def _message_in_inbox(provider, thread_id, message, labels, thread_size, evidence) -> bool | None:
+async def _message_in_inbox(provider, thread_id, message, labels, thread_size, evidence, restored) -> bool | None:
     if isinstance(labels, list):
         return "INBOX" in labels
     stamp = int(message["internal_date"].timestamp())
@@ -333,23 +346,28 @@ async def _message_in_inbox(provider, thread_id, message, labels, thread_size, e
     listed, members = evidence[stamp]
     if listed is not True:
         return listed
-    return _apply_inbox_evidence(message, labels, thread_size, members)
+    uid = message["provider_uid"]
+    belongs = _apply_inbox_evidence(message, labels, thread_size, members)
+    if belongs is True and message["labels_json"] is None and uid in restored:
+        message.update(_label_fields(restored[uid]))
+    return belongs
 
 
-async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_chars: int) -> SyncChanges:
+async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_chars: int, *, restored_members=None) -> SyncChanges:
     """Direct reads by thread ID need current inbox evidence before restoring messages."""
     recovered = SyncChanges()
     for thread_id in thread_ids:
         messages = await _thread_messages(account.provider, thread_id)
         pending = messages is None
         evidence = {}
+        restored = (restored_members or {}).get(thread_id, {})
         for row in messages or []:
             parsed = _indexed_message(row, thread_id, max_body_chars)
             if parsed is None:
                 pending = True
                 continue
             uid = parsed["provider_uid"]
-            in_inbox = await _message_in_inbox(account.provider, thread_id, parsed, row.get("labelIds"), len(messages), evidence)
+            in_inbox = await _message_in_inbox(account.provider, thread_id, parsed, row.get("labelIds"), len(messages), evidence, restored)
             if in_inbox is None:
                 recovered.unconfirmed_uids.add(uid)
                 pending = True

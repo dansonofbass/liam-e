@@ -5,7 +5,7 @@ from typing import Literal
 from sqlalchemy import select, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.accessors import user_preference
+from db.accessors import mail_message, user_preference
 from db.models._common import utcnow
 from db.accessors.prompt_template import StaleVersion
 from db.engine import get_session_maker
@@ -117,7 +117,7 @@ async def mail_preview(message_id: str, version: int | None, context_id: str | N
                 return None
             ids = json.loads(context.account_scope_json)['account_ids']
         query = select(MailMessage, MailInsight).outerjoin(MailInsight, MailInsight.message_id == MailMessage.id).where(
-            MailMessage.id == message_id, MailMessage.account_id.in_(ids), MailMessage.unverified_connector.is_(False))
+            mail_message.matches_ids([message_id]), MailMessage.account_id.in_(ids), MailMessage.unverified_connector.is_(False))
         return (await session.execute(query)).tuples().one_or_none()
 
 
@@ -141,6 +141,7 @@ async def invalidate_connector(account_id: str, generation: int | None = None, *
             state.connector_verified = False
             state.status, state.last_error = "error", "auth_expired"
             state.last_sync_at = state.updated_at = utcnow()
-            await session.execute(sql_update(MailMessage).where(MailMessage.account_id == account_id).values(unverified_connector=True))
+            await session.execute(sql_update(MailMessage).where(MailMessage.account_id == account_id).values(
+                unverified_connector=True, connector_alias_ids=[]))
         await remove_account(session, account_id)
         await session.commit()

@@ -14,6 +14,11 @@ from support.fake_imap import FakeIMAP
 from utils.mistral import MistralNotConfiguredError
 
 
+@pytest.fixture(autouse=True)
+def empty_connector_archive(monkeypatch):
+    monkeypatch.setattr(sync_connector.message_access, "archived_connector_members", AsyncMock(return_value=[]))
+
+
 def account(provider="imap", auth_type="imap_password"):
     return SimpleNamespace(id="a", provider=provider, auth_type=auth_type, email_address="a@example.org")
 

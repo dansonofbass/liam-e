@@ -7,7 +7,7 @@ Task sources must also fit the central mail grant and any focused account.
 import json
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from db.accessors import chat_settings, user_preference
+from db.accessors import chat_settings, mail_message, user_preference
 from db.engine import get_session_maker
 from db.models._common import utcnow
 from db.models.chat_context import ChatContext
@@ -84,7 +84,7 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             raise chat_settings.AccountNotGranted
         if context_message_id is not None:
             source_account = (await session.execute(select(MailMessage.account_id).where(
-                MailMessage.id == context_message_id, MailMessage.account_id.in_(accounts), MailMessage.unverified_connector.is_(False)
+                mail_message.matches_ids([context_message_id]), MailMessage.account_id.in_(accounts), MailMessage.unverified_connector.is_(False)
             ))).scalar_one_or_none()
             if source_account is None or (account_id is not None and account_id != source_account):
                 raise chat_settings.AccountNotGranted

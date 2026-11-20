@@ -143,6 +143,10 @@ async def get_or_compute(message_id: str, *, locale: Locale = DEFAULT_LOCALE, co
                 return existing
         else:
             message = await _message(message_id)
+            if message.id != message_id:
+                existing = await mail_insight.get(message.id)
+                if existing is not None:
+                    return existing
         try:
             stored = await compute_insight(message, today=datetime.now(BERLIN).date(), locale=locale, context_id=context_id)
             if context_id is None:

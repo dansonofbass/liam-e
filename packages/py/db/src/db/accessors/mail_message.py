@@ -6,10 +6,12 @@ from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, exists, func, or_, select, tuple_
+from sqlalchemy import String, and_, any_, bindparam, delete, exists, func, or_, select, tuple_, update
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.models.mail_insight import MailInsight
+from db.models.mail_action import MailAction
 
 from db.engine import get_session_maker
 from db.models.mail_message import MailMessage
@@ -144,17 +146,22 @@ async def search_messages(
         return list(result.scalars().all())
 
 
+def matches_ids(message_ids: Collection[str]):
+    """Match public local IDs, including links retained on a proven connector message."""
+    ids = list(message_ids)
+    return or_(MailMessage.id.in_(ids), and_(MailMessage.unverified_connector.is_(False),
+        func.cardinality(MailMessage.connector_alias_ids) > 0, MailMessage.connector_alias_ids.overlap(ids)))
+
+
 async def get_message(message_id: str, session: AsyncSession | None = None) -> MailMessage | None:
-    if session is not None:
-        return await session.get(MailMessage, message_id)
-    async with get_session_maker()() as session:
-        return await session.get(MailMessage, message_id)
+    async with (nullcontext(session) if session is not None else get_session_maker()()) as reader:
+        return (await reader.execute(select(MailMessage).where(matches_ids([message_id])))).scalar_one_or_none()
 
 
 async def get_scoped_message(message_id: str, account_ids: list[str], *, folder: str) -> MailMessage | None:
     """Read a single indexed row of one folder without probing outside the authorized scope."""
     stmt = select(MailMessage).where(
-        MailMessage.id == message_id, MailMessage.account_id.in_(account_ids), MailMessage.folder == folder
+        matches_ids([message_id]), MailMessage.account_id.in_(account_ids), MailMessage.folder == folder
     )
     async with get_session_maker()() as session:
         return (await session.execute(stmt)).scalar_one_or_none()
@@ -239,7 +246,7 @@ async def count_unread(*, chat_only: bool = False, folder: str = "INBOX", accoun
 
 async def set_state(message_id: str, *, session: AsyncSession | None = None, folder: str | None = None, is_read: bool | None = None, is_flagged: bool | None = None, provider_uid: str | None = None, labels_json: str | None = None, connector_labels: bool = False) -> MailMessage | None:
     async with _writer(session) as session:
-        row = await session.get(MailMessage, message_id)
+        row = await get_message(message_id, session)
         if row is None:
             return None
         if connector_labels and labels_json is None:
@@ -298,7 +305,7 @@ async def unread_without_insight(*, since: datetime, limit: int, exclude_account
     if account_id is not None:
         stmt = stmt.where(MailMessage.account_id == account_id)
     if verified_ids is not None:
-        stmt = stmt.where(MailMessage.id.in_(verified_ids), MailMessage.unverified_connector.is_(False))
+        stmt = stmt.where(matches_ids(verified_ids), MailMessage.unverified_connector.is_(False))
     if exclude_account_ids:
         stmt = stmt.where(MailMessage.account_id.not_in(list(exclude_account_ids)))
     stmt = stmt.order_by(MailMessage.internal_date.desc()).limit(limit)
@@ -314,7 +321,7 @@ async def known_uids(account_id: str, folder: str, *, verified_only: bool = Fals
         return dict((await session.execute(query)).all())
 
 
-async def reconcile_connector_folders(session: AsyncSession, account_id: str, inbox: set[str], archived: set[str]) -> None:
+async def reconcile_connector_folders(session: AsyncSession, account_id: str, inbox: set[str], archived: set[str], *, verified: bool) -> None:
     """The Studio provider UID follows a message between INBOX and ARCHIVE."""
     if not inbox and not archived:
         return
@@ -334,8 +341,12 @@ async def reconcile_connector_folders(session: AsyncSession, account_id: str, in
         if active is not None and stored is not None:
             # Retain the active inbox identity. An unverified copy cannot displace a
             # verified archive when the only new evidence is that the UID left the inbox.
-            keep_archive = target == "ARCHIVE" and active.unverified_connector and not stored.unverified_connector
+            keep_archive = active.unverified_connector and not stored.unverified_connector
             keep, duplicate = (stored, active) if keep_archive else (active, stored)
+            if verified and not keep.unverified_connector and not duplicate.unverified_connector:
+                keep.connector_alias_ids = sorted(set(keep.connector_alias_ids + duplicate.connector_alias_ids + [duplicate.id]))
+                await session.execute(update(MailAction).where(MailAction.account_id == account_id,
+                    MailAction.message_id == duplicate.id).values(message_id=keep.id))
             duplicate_ids.append(duplicate.id)
             await session.delete(duplicate)
         else:
@@ -349,6 +360,18 @@ async def reconcile_connector_folders(session: AsyncSession, account_id: str, in
         row.folder = target
         row.labels_json = _connector_labels(row.labels_json, folder=target)
     await session.flush()
+
+
+async def archived_connector_members(account_id: str, listed: Collection[str], threads: Collection[str], since: datetime):
+    """Find scoped archive candidates when a provider lists message IDs or just thread IDs."""
+    if not listed and not threads:
+        return []
+    async with get_session_maker()() as session:
+        stmt = select(MailMessage.provider_uid, MailMessage.thread_id).where(MailMessage.account_id == account_id,
+            MailMessage.folder == "ARCHIVE", or_(MailMessage.provider_uid == any_(bindparam("listed", type_=ARRAY(String))),
+            and_(MailMessage.thread_id == any_(bindparam("threads", type_=ARRAY(String))),
+                 or_(MailMessage.internal_date >= since, MailMessage.internal_date.is_(None))))).order_by(MailMessage.id)
+        return (await session.execute(stmt, {"listed": list(listed), "threads": list(threads)})).all()
 
 
 async def stale_body_texts(account_id: str, folder: str, version: int, uids: list[str], *, session: AsyncSession | None = None) -> dict[str, str]:
@@ -384,7 +407,7 @@ async def set_body(message_id: str, *, session: AsyncSession | None = None, body
     """Store a re-read body; without text only the version moves on (the provider no longer has the mail).
     `drop_insight` removes its insight in the same transaction."""
     async with _writer(session) as session:
-        row = await session.get(MailMessage, message_id)
+        row = await get_message(message_id, session)
         if row is None:
             return
         row.body_version = body_version

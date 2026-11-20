@@ -25,6 +25,7 @@ class SyncChanges:
     full_rebuild: bool = False
     deferred_threads: list[str] = field(default_factory=list)
     unconfirmed_uids: set[str] = field(default_factory=set)
+    restored_members: dict[str, dict[str, list[str]]] = field(default_factory=dict)
 
 
 @dataclass

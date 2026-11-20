@@ -9,7 +9,7 @@ import json
 from sqlalchemy import select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from db.accessors import chat_settings, user_preference
+from db.accessors import chat_settings, mail_message, user_preference
 from db.engine import get_session_maker
 from db.models.chat_message import ChatMessage
 from db.models.chat_context import ChatContext
@@ -59,7 +59,7 @@ async def claim_proposal(message_id: str, *, required_accounts: Collection[str] 
             targets = set(required_accounts)
             if mail_ids:
                 rows = (await session.execute(select(MailMessage.account_id, MailMessage.unverified_connector).where(
-                    MailMessage.id.in_(mail_ids)).distinct())).all()
+                    mail_message.matches_ids(mail_ids)).distinct())).all()
                 if any(unverified for _, unverified in rows):
                     raise chat_settings.AccountNotGranted
                 targets.update(account for account, _ in rows)

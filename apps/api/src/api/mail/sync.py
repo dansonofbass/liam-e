@@ -127,13 +127,15 @@ async def sync_account(account_id: str) -> SyncResult:
 
 async def _connector_changes(account, progress, deferred, options):
     changes = await sync_connector.fetch_changes(account, cursor=progress, **options)
-    retry_count = min(5, len(deferred))
+    pending = list(dict.fromkeys([*deferred, *changes.restored_members]))
+    retry_count = min(5, len(pending))
     if retry_count:
-        recovered = await sync_connector.retry_threads(account, deferred[:retry_count], options["max_body_chars"])
+        recovered = await sync_connector.retry_threads(account, pending[:retry_count], options["max_body_chars"],
+                                                       restored_members=changes.restored_members)
         sync_connector.merge_observations(changes, recovered)
     excluded = set(changes.moved_out) | changes.unconfirmed_uids
     changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in excluded]
-    return changes, list(dict.fromkeys([*deferred[retry_count:], *changes.deferred_threads]))
+    return changes, list(dict.fromkeys([*pending[retry_count:], *changes.deferred_threads]))
 
 
 async def _apply_changes(account_id, changes, *, unverified, connector_session=None):
@@ -143,7 +145,7 @@ async def _apply_changes(account_id, changes, *, unverified, connector_session=N
     moved = set(changes.moved_out)
     if connector_session is not None:
         await message_access.reconcile_connector_folders(
-            connector_session, account_id, {row["provider_uid"] for row in changes.upserts}, moved)
+            connector_session, account_id, {row["provider_uid"] for row in changes.upserts}, moved, verified=not unverified)
     # Rows this run rewrites that still hold text from an older extraction.
     old_texts = {} if changes.full_rebuild else await message_access.stale_body_texts(account_id, "INBOX", BODY_VERSION, [parsed["provider_uid"] for parsed in changes.upserts], **transaction)
     if changes.full_rebuild:

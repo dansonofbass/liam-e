@@ -9,8 +9,8 @@ are JSON arrays of strings.
 
 from datetime import datetime
 
-from sqlalchemy import Column, Computed, Index, UniqueConstraint
-from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy import Column, Computed, Index, String, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlmodel import Field, SQLModel
 
 from db.models._common import new_id, utc_datetime_column, utcnow
@@ -28,6 +28,8 @@ class MailMessage(SQLModel, table=True):
         Index("ix_mail_message_account_date", "account_id", "internal_date"),
         Index("ix_mail_message_folder_date", "folder", "internal_date", "id"),
         Index("ix_mail_message_search_tsv", "search_tsv", postgresql_using="gin"),
+        Index("ix_mail_message_connector_alias_ids", "connector_alias_ids", postgresql_using="gin",
+              postgresql_where=text("cardinality(connector_alias_ids) > 0")),
     )
 
     id: str = Field(default_factory=new_id, primary_key=True)
@@ -55,6 +57,9 @@ class MailMessage(SQLModel, table=True):
     # sync re-reads older bodies from the provider. 0 marks rows from before versioning.
     # Legacy Studio rows keep their ordinary inbox identity until a bound provider read verifies them.
     unverified_connector: bool = Field(default=False, sa_column_kwargs={"server_default": "false"})
+    # Previous local UUIDs of verified copies of this same provider message and mailbox.
+    connector_alias_ids: list[str] = Field(default_factory=list, sa_column=Column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")))
     body_version: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     internal_date: datetime | None = Field(
         default=None, sa_column=utc_datetime_column(nullable=True)
