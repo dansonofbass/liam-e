@@ -139,6 +139,8 @@ async def move_trash_labels(account, message, added: list[str], removed: list[st
 
     if message.account_id != account.id:
         raise ToolNotAllowedError("Mail does not belong to this account")
+    if not message.thread_id or not message.provider_uid:
+        raise ToolNotAllowedError("Confirming a connector move requires both thread and message IDs")
     present: set[str] = set()
     absent: set[str] = set()
     binding = None

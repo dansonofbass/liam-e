@@ -261,7 +261,7 @@ async def test_connector_retry_repeats_idempotent_labels(monkeypatch):
     monkeypatch.setattr(connectors, "_call_tool", call)
     monkeypatch.setattr(connectors, "thread_labels", AsyncMock(return_value={"12": ["TRASH"]}))
     backend = backends.backend_for(account("gmail", connectors.CONNECTOR))
-    row = message(labels_json='["INBOX"]')
+    row = message(thread_id="thread", labels_json='["INBOX"]')
     with pytest.raises(RuntimeError):
         await backend.apply(row, "trash")
     await backend.apply(row, "trash")
@@ -360,7 +360,7 @@ async def test_connector_trash_uses_label_or_reports_unsupported(monkeypatch):
     monkeypatch.setattr(connectors, "_call_tool", call)
     monkeypatch.setattr(connectors, "thread_labels", AsyncMock(return_value={"12": ["TRASH"]}))
     sender = account("gmail", connectors.CONNECTOR)
-    result = await backends.backend_for(sender).apply(message(labels_json='["INBOX", "TRASH"]'), "trash")
+    result = await backends.backend_for(sender).apply(message(thread_id="thread", labels_json='["INBOX", "TRASH"]'), "trash")
     call.assert_any_await(sender.provider, "label_message", {"messageId": "12", "labelIds": ["TRASH"]})
     call.assert_any_await(sender.provider, "unlabel_message", {"messageId": "12", "labelIds": ["INBOX"]})
     assert json.loads(result["labels_json"]) == ["TRASH"]

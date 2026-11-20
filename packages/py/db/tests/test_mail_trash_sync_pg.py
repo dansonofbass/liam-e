@@ -29,8 +29,8 @@ def client():
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
 
 
-async def listed(browser, folder):
-    response = await browser.get(MAIL + "/messages", params={"folder": folder})
+async def listed(browser, folder, *, query=""):
+    response = await browser.get(MAIL + "/messages", params={"folder": folder, "q": query})
     assert response.status_code == 200
     return {item["id"] for item in response.json()["items"]}
 
@@ -174,6 +174,29 @@ def test_refused_trash_never_hides_mail_or_records_success(pg_db, monkeypatch, r
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("verified", [True, False], ids=["bound", "inbox-only"])
+def test_bulk_trash_needs_target_thread_before_any_connector_write(pg_db, monkeypatch, verified):
+    async def run():
+        provider = StudioMailbox()
+        ids = await provider.connect(monkeypatch, verified=verified)
+        target, sibling = ids["target"], ids["sibling"]
+        async with get_session_maker().begin() as session:
+            row = await session.get(MailMessage, target)
+            row.thread_id = ""
+        async with client() as browser:
+            response = await browser.post(MAIL + "/messages/actions", json={"message_ids": [target, sibling], "kind": "trash"})
+            assert response.status_code == 200
+            failed, done = response.json()["results"]
+            assert (failed["message_id"], failed["status"], failed["action_id"]) == (target, "failed", None)
+            assert (done["message_id"], done["status"]) == (sibling, "done")
+            assert [uid for _, uid, _ in provider.writes] == ["sibling", "sibling"]
+            assert provider.labels == {"target": {"INBOX"}, "sibling": {"TRASH"}}
+            assert await mail_action.latest_open(target) is None
+            assert await listed(browser, "INBOX") == {target}
+            assert await listed(browser, "TRASH") == {sibling}
+    asyncio.run(run())
+
+
 def test_trash_coalesces_existing_folder_copies_without_losing_links(pg_db, monkeypatch):
     async def run():
         provider = StudioMailbox()
@@ -310,7 +333,7 @@ def test_native_provider_move_overlapping_rebuild_keeps_action_id(pg_db, monkeyp
     async def run():
         account = await service.upsert_account(provider="microsoft", auth_type="oauth2", email_address="overlap@example.test")
         target = await mail_message.upsert_message(account_id=account.id, folder="INBOX", provider_uid="first",
-                                                  rfc_message_id="<item@example.test>", body_version=BODY_VERSION)
+            rfc_message_id="<item@example.test>", body_text="Kieselstein", body_version=BODY_VERSION)
         browser = client()
         real_client = httpx.AsyncClient
         async def dispatch(req):
@@ -333,10 +356,12 @@ def test_native_provider_move_overlapping_rebuild_keeps_action_id(pg_db, monkeyp
         async with browser:
             result = await browser.post(f"{MAIL}/messages/{target.id}/actions", json={"kind": "trash"})
             assert result.status_code == 200 and await listed(browser, "TRASH") == {target.id}
+            assert await listed(browser, "TRASH", query="Kieselstein") == {target.id}
             action_id = result.json()["action_id"]
             undone = await browser.post(MAIL + "/actions/undo", json={"action_ids": [action_id]})
             assert undone.json()["restored"] == [action_id]
             assert (await mail_message.known_uids(account.id, "INBOX")) == {"back": target.id}
+            assert await listed(browser, "INBOX", query="Kieselstein") == {target.id}
             assert await listed(browser, "TRASH") == set()
     asyncio.run(run())
 
