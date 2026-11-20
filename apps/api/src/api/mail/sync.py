@@ -78,16 +78,22 @@ async def sync_account(account_id: str) -> SyncResult:
             verified_cursor = previous.connector_cursor if previous and previous.connector_verified else ""
             generation = previous.connector_generation if previous else 0
             async with connector_mailbox.bound_mailbox(account, cursor=verified_cursor, generation=generation, observed=previous, bootstrap=True, check_after=True) as (binding, progress):
-                changes = await provider.fetch_changes(account, cursor=progress, **options)
+                changes, deferred = await _connector_changes(account, progress,
+                    previous.connector_deferred_threads if previous.connector_verified else [], options)
             stored_progress = connector_mailbox.encode(binding, changes.cursor)
+        elif is_connector:
+            changes, deferred = await _connector_changes(account, previous.connector_cursor or cursor,
+                previous.connector_deferred_threads, options)
+            stored_progress = changes.cursor
         else:
-            progress = (previous.connector_cursor or cursor) if previous and is_connector else cursor
-            changes = await provider.fetch_changes(account, cursor=progress, **options)
+            changes = await provider.fetch_changes(account, cursor=cursor, **options)
             stored_progress = changes.cursor
         if is_connector:
             async with sync_state_access.connector_transaction(account_id, previous, verified=verified) as (session, state):
                 new_ids, invalidated = await _apply_changes(account_id, changes, unverified=not verified, session=session)
+                state.connector_deferred_threads = deferred
                 if verified:
+                    state.connector_proof_revision += 1
                     mail_job.queue_verified_insights(session, account_id, invalidated, mail_env.mail_insight_batch_limit)
                 if verified and not state.connector_verified:
                     state.connector_generation += 1
@@ -117,6 +123,18 @@ async def sync_account(account_id: str) -> SyncResult:
         else:
             await sync_state_access.save_state(account_id=account_id, cursor=cursor, status="error", last_error=code)
         return SyncResult("error", 0, cursor, code)
+
+
+async def _connector_changes(account, progress, deferred, options):
+    changes = await sync_connector.fetch_changes(account, cursor=progress, **options)
+    retry_count = min(5, len(deferred))
+    if retry_count:
+        recovered = await sync_connector.retry_threads(account, deferred[:retry_count], options["max_body_chars"])
+        by_uid = {item["provider_uid"]: item for item in changes.upserts}
+        by_uid.update((item["provider_uid"], item) for item in recovered.upserts)
+        changes.upserts = list(by_uid.values())
+        changes.deferred_threads.extend(recovered.deferred_threads)
+    return changes, list(dict.fromkeys([*deferred[retry_count:], *changes.deferred_threads]))
 
 
 async def _apply_changes(account_id, changes, *, unverified, session=None):

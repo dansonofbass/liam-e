@@ -6,7 +6,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, UniqueConstraint, false
+from sqlalchemy import JSON, Boolean, Column, UniqueConstraint, false, text
 from sqlmodel import Field, SQLModel
 
 from db.models._common import new_id, utc_datetime_column, utcnow
@@ -26,6 +26,8 @@ class MailSyncState(SQLModel, table=True):
     cursor: str = ""
     connector_cursor: str = Field(default="", sa_column_kwargs={"server_default": ""})
     connector_generation: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    connector_proof_revision: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    connector_deferred_threads: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'")))
     connector_verified: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default=false()))
     status: str = "idle"  # idle | syncing | ok | error
     last_error: str = ""

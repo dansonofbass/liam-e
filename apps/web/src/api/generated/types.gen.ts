@@ -75,6 +75,10 @@ export type AccountOut = {
      */
     auth_type: string;
     /**
+     * Chat Eligibility
+     */
+    chat_eligibility?: 'eligible' | 'inactive' | 'inbox_only' | 'awaiting_verification' | null;
+    /**
      * Color Index
      */
     color_index: number;

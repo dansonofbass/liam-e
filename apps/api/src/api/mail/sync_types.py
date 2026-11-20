@@ -23,6 +23,7 @@ class SyncChanges:
     moved_out: list[str] = field(default_factory=list)
     cursor: str = ""
     full_rebuild: bool = False
+    deferred_threads: list[str] = field(default_factory=list)
 
 
 @dataclass

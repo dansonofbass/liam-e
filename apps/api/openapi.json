@@ -89,6 +89,23 @@
             "title": "Auth Type",
             "type": "string"
           },
+          "chat_eligibility": {
+            "anyOf": [
+              {
+                "enum": [
+                  "eligible",
+                  "inactive",
+                  "inbox_only",
+                  "awaiting_verification"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Eligibility"
+          },
           "color_index": {
             "title": "Color Index",
             "type": "integer"

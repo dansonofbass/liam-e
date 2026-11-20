@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 
 import httpx
+from db.accessors import chat_settings
 from db.accessors import mail_insight as insight_access
 from db.accessors import mail_action as action_access
 from db.accessors import mail_account as account_access
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 class AccountOut(AccountSummaryOut):
+    chat_eligibility: chat_settings.ChatEligibility | None = None
     auth_type: str
     is_active: bool
     created_at: datetime
@@ -45,8 +47,9 @@ class AccountOut(AccountSummaryOut):
 
 
 async def account_out(account: MailAccount, accounts: list[MailAccount], unread: dict[str, int]) -> AccountOut:
-    summary = await account_summary(account, color_indexes(accounts), unread)
-    return AccountOut(**summary.model_dump(), auth_type=account.auth_type, is_active=account.is_active,
+    sync_state = await sync_state_access.get_state(account.id)
+    summary = await account_summary(account, color_indexes(accounts), unread, sync_state)
+    return AccountOut(**summary.model_dump(), chat_eligibility=chat_settings.eligibility(account, sync_state), auth_type=account.auth_type, is_active=account.is_active,
                       created_at=account.created_at, updated_at=account.updated_at,
                       message_count=await message_access.count_for_account(account.id))
 
@@ -401,4 +404,4 @@ async def sync_account(account_id: str) -> AccountSummaryOut:
     await jobs.enqueue_sync(account_id)
     accounts = await account_access.list_accounts()
     unread = await message_access.count_unread(folder="INBOX")
-    return await account_summary(account, color_indexes(accounts), unread)
+    return await account_summary(account, color_indexes(accounts), unread, await sync_state_access.get_state(account.id))

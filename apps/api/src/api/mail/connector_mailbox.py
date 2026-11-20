@@ -7,12 +7,9 @@ from urllib.parse import quote
 
 import httpx
 from db.accessors import chat_settings, mail_sync_state
+from db.models.mail_account import inbox_only
 from db.models.mail_sync_state import CONNECTOR_CURSOR_PREFIX
 from api.mail import connectors
-
-
-def inbox_only(account) -> bool:
-    return not account.email_address or account.email_address.casefold().endswith('@connector.mistral')
 
 
 class MailboxUnproven(ValueError):

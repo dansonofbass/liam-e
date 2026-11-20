@@ -178,6 +178,9 @@ export const de = {
     count: (count: number, max = 8000) => `${count.toLocaleString('de-DE')} / ${max.toLocaleString('de-DE')} Zeichen`,
   },
   chatAccounts: {
+    eligibilityUnavailable: 'Die Freigabemöglichkeiten konnten noch nicht geladen werden. Lade die Kontoauswahl erneut.',
+    inboxOnly: 'Dieses Studio-Konto ist nur im Posteingang verfügbar. Für den Chat braucht es eine bestätigte Postfachidentität.',
+    awaitingVerification: 'Die Postfachidentität ist noch offen. Synchronisiere das Konto und lade die Auswahl neu.',
     restart: 'Die Kontofreigabe dieser Unterhaltung ist nicht mehr aktuell. Du kannst den Verlauf hier lesen und mit der aktuellen Freigabe einen neuen Chat starten.',
     cancelOnly: 'Dieser Vorschlag stammt aus einer früheren Kontofreigabe. Du kannst ihn verwerfen.',
     section: 'Mailkonten im Chat', title: 'Mailkonten für den Chat freigeben',

@@ -48,7 +48,29 @@ async def _insights(payload: dict[str, Any]) -> None:
                                account_id=payload.get("account_id"), verified_ids=verified_ids)
 
 
-register_handler("sync", _sync)
+async def _sync_with_lease(payload: dict, job_id: str, attempt: int) -> None:
+    async def heartbeat():
+        interval = max(0.01, min(60.0, mail_env.mail_sync_stale_minutes * 20.0))
+        while True:
+            await asyncio.sleep(interval)
+            if not await mail_job.renew(job_id, attempt):
+                raise RuntimeError("Mail sync claim lost")
+
+    work = asyncio.create_task(_sync(payload))
+    lease = asyncio.create_task(heartbeat())
+    try:
+        done, _ = await asyncio.wait((work, lease), return_when=asyncio.FIRST_COMPLETED)
+        if lease in done:
+            await lease
+        await work
+    finally:
+        work.cancel()
+        lease.cancel()
+        await asyncio.gather(work, lease, return_exceptions=True)
+
+
+register_claim_handler("sync", _sync_with_lease)
+register_handler(mail_job.VERIFIED_INSIGHTS, _insights)
 register_handler("insights", _insights)
 
 

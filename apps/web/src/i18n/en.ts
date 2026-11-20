@@ -188,6 +188,9 @@ export const en = {
     count: (count, max = 8000) => numberFormat.format(count) + ' / ' + numberFormat.format(max) + ' characters',
   },
   chatAccounts: {
+    eligibilityUnavailable: 'The sharing options are not available yet. Reload the account list.',
+    inboxOnly: 'This Studio account is available in the inbox only. Chat requires a verified mailbox identity.',
+    awaitingVerification: 'The mailbox identity is pending. Sync the account and reload the selection.',
     restart: 'This conversation uses an earlier account selection. You can read its history here and start a new chat with your current selection.',
     cancelOnly: 'This proposal uses an earlier account selection. You can discard it.',
     section: 'Chat mail accounts', title: 'Allow mail accounts in chat',

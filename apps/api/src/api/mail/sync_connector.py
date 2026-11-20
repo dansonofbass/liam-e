@@ -64,6 +64,7 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
     rows = {item["provider_uid"]: item for item in history.upserts}
     rows.update((item["provider_uid"], item) for item in current.upserts)
     current.upserts = list(rows.values())
+    current.deferred_threads.extend(history.deferred_threads)
     if history.cursor.startswith("initial:"):
         _, token = json.loads(history.cursor.removeprefix("initial:"))
         current.cursor = "initial:" + json.dumps([current.cursor, token])
@@ -113,11 +114,12 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
                 thread_id = full.get("id") or thread.get("id", "")
                 thread_latest = None
                 for message in full.get("messages", []):
-                    parsed = parse_message(message, thread_id=thread_id, folder="INBOX", max_body_chars=max_body_chars)
-                    date = parsed["internal_date"]
-                    if date is None:
-                        raise ValueError("Connector message has no valid date")
-                    stamp = int(date.timestamp())
+                    parsed = _indexed_message(message, thread_id, max_body_chars)
+                    if parsed is None:
+                        if thread_id not in changes.deferred_threads:
+                            changes.deferred_threads.append(thread_id)
+                        continue
+                    stamp = int(parsed["internal_date"].timestamp())
                     thread_latest = stamp if thread_latest is None else max(thread_latest, stamp)
                     if (lower is not None and stamp <= lower) or (upper is not None and stamp >= upper):
                         continue
@@ -187,6 +189,42 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
             unread = {thread["id"] for thread in await _search(account.provider, "is:unread in:inbox newer_than:14d")}
             changes.read_updates.update({uid: thread_id not in unread for uid, thread_id in fallback.items()})
     return changes
+
+
+def _indexed_message(row, thread_id, max_body_chars):
+    if not isinstance(row, dict) or not row.get("id"):
+        return None
+    try:
+        parsed = parse_message(row, thread_id=thread_id, folder="INBOX", max_body_chars=max_body_chars)
+    except (KeyError, TypeError, ValueError):
+        return None
+    return parsed if parsed["internal_date"] is not None else None
+
+
+async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_chars: int) -> SyncChanges:
+    """Retry a bounded part of the verified mailbox's deferred list without moving its cursors."""
+    recovered = SyncChanges()
+    for thread_id in thread_ids:
+        try:
+            thread = await connectors.call_read_tool_json(account.provider, "get_thread",
+                {"threadId": thread_id, "messageFormat": "FULL_CONTENT"})
+            if thread.get("id") != thread_id or not isinstance(thread.get("messages"), list):
+                raise ValueError("Incomplete connector thread")
+            for row in thread["messages"]:
+                parsed = _indexed_message(row, thread_id, max_body_chars)
+                if parsed is None:
+                    if thread_id not in recovered.deferred_threads:
+                        recovered.deferred_threads.append(thread_id)
+                elif row.get("labelIds") is None or "INBOX" in row["labelIds"]:
+                    recovered.upserts.append(parsed)
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code in (401, 403):
+                raise
+            if error.response.status_code != 404:
+                recovered.deferred_threads.append(thread_id)
+        except (ValueError, KeyError, TypeError, httpx.TransportError):
+            recovered.deferred_threads.append(thread_id)
+    return recovered
 
 
 async def fetch_bodies(account: MailAccount, messages: list[MailMessage], *, max_body_chars: int) -> Reread:

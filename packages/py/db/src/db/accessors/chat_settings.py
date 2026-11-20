@@ -1,16 +1,17 @@
 """The installed owner's chat grants, serialized with turn creation and proposal claims."""
 import json
+from typing import Literal
 
 from sqlalchemy import select, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.accessors import mail_sync_state, user_preference
+from db.accessors import user_preference
 from db.models._common import utcnow
 from db.accessors.prompt_template import StaleVersion
 from db.engine import get_session_maker
 from db.models.chat_context import ChatContext
 from db.models.chat_settings import ChatSettings
-from db.models.mail_account import MailAccount
+from db.models.mail_account import MailAccount, inbox_only
 from db.models.mail_message import MailMessage
 from db.models.mail_insight import MailInsight
 from db.models.mail_sync_state import CONNECTOR_CURSOR_PREFIX, MailSyncState
@@ -34,15 +35,26 @@ async def get() -> ChatSettings:
         return await in_session(session)
 
 
+ChatEligibility = Literal["eligible", "inactive", "inbox_only", "awaiting_verification"]
+
+
+def eligibility(account: MailAccount, state: MailSyncState | None) -> ChatEligibility:
+    if not account.is_active:
+        return "inactive"
+    if account.auth_type == "mistral_connector":
+        if inbox_only(account):
+            return "inbox_only"
+        if not state or not state.connector_verified or not state.connector_cursor.startswith(CONNECTOR_CURSOR_PREFIX):
+            return "awaiting_verification"
+    return "eligible"
+
+
 async def active_ids(session: AsyncSession, account_ids: list[str]) -> list[str]:
     if not account_ids:
         return []
-    # Pre-binding connector indexes may contain mail fetched from a different default mailbox.
-    verified_index = select(MailSyncState.id).where(MailSyncState.account_id == MailAccount.id,
-        MailSyncState.connector_verified.is_(True), MailSyncState.connector_cursor.startswith(CONNECTOR_CURSOR_PREFIX)).exists()
-    query = select(MailAccount.id).where(MailAccount.id.in_(account_ids), MailAccount.is_active.is_(True),
-        (MailAccount.auth_type != 'mistral_connector') | verified_index)
-    return sorted((await session.execute(query)).scalars())
+    rows = await session.execute(select(MailAccount, MailSyncState).outerjoin(
+        MailSyncState, MailSyncState.account_id == MailAccount.id).where(MailAccount.id.in_(account_ids)))
+    return sorted(account.id for account, state in rows if eligibility(account, state) == "eligible")
 
 
 async def update(expected_version: int, account_ids: list[str]) -> ChatSettings:
@@ -115,12 +127,17 @@ async def invalidate_connector(account_id: str, generation: int | None = None, *
         await user_preference.lock(session)
         state = (await session.execute(select(MailSyncState).where(
             MailSyncState.account_id == account_id).with_for_update())).scalar_one_or_none()
-        if observed is not None and (state is None or not mail_sync_state.same_connector_attempt(state, observed)):
+        # A new poll is not positive identity evidence. Only a newer proof (or an already
+        # applied revocation) supersedes an observed, definite mismatch.
+        if observed is not None:
+            if state is None or state.connector_proof_revision != observed.connector_proof_revision:
+                return
+        elif state is not None and generation is not None and state.connector_generation != generation:
             return
         if state is not None:
-            if generation is not None and state.connector_generation != generation:
-                return
             state.connector_generation += 1
+            state.connector_proof_revision += 1
+            state.connector_deferred_threads = []
             state.connector_verified = False
             state.status, state.last_error = "error", "auth_expired"
             state.last_sync_at = state.updated_at = utcnow()

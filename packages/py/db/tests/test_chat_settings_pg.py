@@ -193,6 +193,7 @@ def test_connector_upgrade_verifies_pages_in_place_and_keeps_ordinary_inbox_only
     from db.accessors import mail_job, mail_message, mail_sync_state
     from api.mail import connector_mailbox, connectors, sync
     from api.mail.sync_types import BODY_VERSION
+    from api.routers.api.v1.mail.accounts import current_account_out
 
     async def run():
         a = await service.upsert_account(provider='gmail', auth_type=connectors.CONNECTOR, email_address='a@example.test')
@@ -226,12 +227,13 @@ def test_connector_upgrade_verifies_pages_in_place_and_keeps_ordinary_inbox_only
                 return {'threads': [{'id': 'one'}], 'nextPageToken': 'opaque-next'}
             uid = args['threadId']
             if uid == 'two' and pages.count('opaque-next') == 1:
-                return {'id': uid, 'messages': [{'id': uid, 'date': 'invalid'}]}
+                raise ValueError("Incomplete historical provider response")
             return {'id': uid, 'messages': [{'id': uid, 'labelIds': ['INBOX', 'UNREAD'], 'date': '2026-01-01T10:00:00+00:00', 'subject': 'Checked'}]}
         monkeypatch.setattr(connectors, 'call_read_tool_json', provider)
+        assert (await current_account_out(a)).chat_eligibility == "awaiting_verification"
         first = await sync.sync_account(a.id)
         assert first.status == 'ok' and first.new_message_ids == []
-        refresh = await mail_job.latest_for_account(a.id, kind='insights', open_only=True)
+        refresh = await mail_job.latest_for_account(a.id, kind=mail_job.VERIFIED_INSIGHTS, open_only=True)
         assert json.loads(refresh.payload_json)['message_ids'] == [legacy[0].id]
         assert listing.await_args_list[1].args[0].endswith('/user/credentials')
         assert connector_mailbox.decode(first.cursor)[1].startswith('initial:')
@@ -246,7 +248,9 @@ def test_connector_upgrade_verifies_pages_in_place_and_keeps_ordinary_inbox_only
         assert (await mail_message.get_message(legacy[2].id)).folder == 'INBOX'
         await chat_settings.update(1, [a.id])
         assert await chat_settings.mail_preview(legacy[2].id, 2, None) is None
+        assert (await current_account_out(a)).chat_eligibility == "eligible"
         assert (await sync.sync_account(placeholder.id)).status == 'ok'
+        assert (await current_account_out(placeholder)).chat_eligibility == "inbox_only"
         rows = await mail_message.list_page(account_ids=[placeholder.id])
         assert len(rows) == 1 and rows[0].unverified_connector
         assert not (await mail_sync_state.get_state(placeholder.id)).connector_verified
@@ -356,7 +360,7 @@ def test_verification_restores_every_eligible_insight_in_bounded_jobs(pg_db, mon
     from sqlalchemy import select
     from api.mail import connector_mailbox, connectors, insights, jobs, sync_connector
     from api.mail.sync_types import SyncChanges
-    from db.accessors import mail_insight
+    from db.accessors import mail_insight, mail_job
     from db.models.mail_insight import MailInsight
     from db.models.mail_job import MailJob
 
@@ -379,7 +383,7 @@ def test_verification_restores_every_eligible_insight_in_bounded_jobs(pg_db, mon
         ids = [row.id for row in rows]
         assert not await mail_insight.get_for_messages(ids)
         async with get_session_maker()() as session:
-            payloads = [json.loads(job.payload_json) for job in (await session.scalars(select(MailJob).where(MailJob.kind == "insights"))).all()]
+            payloads = [json.loads(job.payload_json) for job in (await session.scalars(select(MailJob).where(MailJob.kind == mail_job.VERIFIED_INSIGHTS))).all()]
         assert sorted(len(payload["message_ids"]) for payload in payloads) == [10, 50]
         assert {id for payload in payloads for id in payload["message_ids"]} == set(ids)
 
@@ -401,4 +405,155 @@ def test_verification_restores_every_eligible_insight_in_bounded_jobs(pg_db, mon
         for _ in payloads:
             assert await jobs.run_once()
         assert set(await mail_insight.get_for_messages(ids)) == set(ids)
+    asyncio.run(run())
+
+
+def test_confirmed_mismatch_revokes_grant_while_newer_poll_has_no_proof(pg_db, monkeypatch):
+    from api.mail import connector_mailbox, connectors, sync
+    from db.accessors import mail_sync_state
+
+    async def run():
+        account = await service.upsert_account(provider="gmail", auth_type=connectors.CONNECTOR, email_address="proof@example.test")
+        cursor = connector_mailbox.encode(("named", "anchor", "proof"), "15")
+        await mail_sync_state.save_state(account_id=account.id, connector_cursor=cursor, connector_verified=True)
+        await chat_settings.update(1, [account.id])
+        first_read, poll_read, mismatch, timeout = (asyncio.Event() for _ in range(4))
+
+        async def read(*args):
+            if asyncio.current_task() is label:
+                first_read.set()
+                await mismatch.wait()
+                return {"id": "anchor", "messages": []}
+            poll_read.set()
+            await timeout.wait()
+            raise httpx.ReadTimeout("synthetic timeout")
+
+        monkeypatch.setattr(connectors, "call_read_tool_json", read)
+        write = AsyncMock()
+        monkeypatch.setattr(connectors, "_call_tool", write)
+        label = asyncio.create_task(connectors.call_write_tool(account, "label_message", {}))
+        await asyncio.wait_for(first_read.wait(), 5)
+        poll = asyncio.create_task(sync.sync_account(account.id))
+        try:
+            await asyncio.wait_for(poll_read.wait(), 5)
+            mismatch.set()
+            with pytest.raises(connector_mailbox.MailboxUnavailable):
+                await label
+            assert (await chat_settings.get()).account_ids == []
+            assert not (await mail_sync_state.get_state(account.id)).connector_verified
+        finally:
+            mismatch.set()
+            timeout.set()
+        assert (await poll).status == "error"
+        assert (await mail_sync_state.get_state(account.id)).last_error == "auth_expired"
+        write.assert_not_awaited()
+    asyncio.run(run())
+
+
+def test_first_verified_page_commits_valid_mail_and_retries_only_the_malformed_thread(pg_db, monkeypatch):
+    from api.mail import connector_mailbox, connectors, sync
+    from db.accessors import mail_message, mail_sync_state
+
+    async def run():
+        account = await service.upsert_account(provider="gmail", auth_type=connectors.CONNECTOR, email_address="upgrade@example.test")
+        await mail_sync_state.save_state(account_id=account.id, cursor="15")
+        anchor = {"id": "anchor", "messages": [{"id": "proof", "sender": account.email_address, "labelIds": ["SENT"]}]}
+        fixed = False
+        stamp = "2026-10-01T10:00:00+00:00"
+        def mail(uid, date):
+            return {"id": uid, "date": date, "labelIds": ["INBOX"]}
+
+        async def read(_, tool, args):
+            if args.get("query") == "in:sent from:me":
+                return {"threads": [anchor]}
+            if args.get("threadId") == "anchor":
+                return anchor
+            if tool == "search_threads":
+                if args["query"] != "in:inbox":
+                    return {"threads": []}
+                if args.get("pageToken") == "next":
+                    return {"threads": [{"id": "last"}]}
+                return {"threads": [{"id": "mixed"}], "nextPageToken": "next"}
+            if args["threadId"] == "mixed":
+                return {"id": "mixed", "messages": [mail("bad", stamp if fixed else None), mail("good", stamp)]}
+            return {"id": "last", "messages": [mail("tail", stamp)]}
+
+        monkeypatch.setattr(connector_mailbox, "_credential", AsyncMock(return_value="named"))
+        monkeypatch.setattr(connectors, "call_read_tool_json", read)
+        monkeypatch.setattr(sync.mail_env, "mail_sync_page_size", 1)
+        assert (await sync.sync_account(account.id)).status == "ok"
+        state = await mail_sync_state.get_state(account.id)
+        assert state.connector_verified and state.connector_deferred_threads == ["mixed"]
+        assert set(await mail_message.known_uids(account.id, "INBOX", verified_only=True)) == {"good"}
+        await chat_settings.update(1, [account.id])
+        assert (await sync.sync_account(account.id)).status == "ok"
+        assert (await mail_sync_state.get_state(account.id)).connector_deferred_threads == ["mixed"]
+        fixed = True
+        assert (await sync.sync_account(account.id)).status == "ok"
+        assert (await mail_sync_state.get_state(account.id)).connector_deferred_threads == []
+        assert set(await mail_message.known_uids(account.id, "INBOX", verified_only=True)) == {"bad", "good", "tail"}
+    asyncio.run(run())
+
+
+def test_base_worker_cannot_claim_targeted_refreshes_even_after_expiry_or_retry(pg_db):
+    from datetime import UTC, datetime, timedelta
+    from sqlalchemy import and_, or_, select
+    from db.accessors import mail_job
+    from db.models.mail_job import MailJob
+
+    async def legacy_candidates(now):
+        async with get_session_maker()() as session:
+            return list(await session.scalars(select(MailJob.id).where(or_(
+                and_(MailJob.status == "queued", MailJob.run_after <= now),
+                and_(MailJob.status == "running", MailJob.locked_at < now - timedelta(minutes=10))))))
+    async def run():
+        start = datetime.now(UTC) + timedelta(seconds=1)
+        async with get_session_maker().begin() as session:
+            mail_job.queue_verified_insights(session, "synthetic", ["one"], 50)
+        assert await legacy_candidates(start) == []
+        job = await mail_job.claim_next(start, stale_after=timedelta(minutes=10))
+        assert job.kind == mail_job.VERIFIED_INSIGHTS and job.attempts == 1
+        later = start + timedelta(minutes=12)
+        assert await legacy_candidates(later) == []
+        assert await mail_job.fail(job.id, 1, "temporary", retry_at=later)
+        assert await legacy_candidates(later) == []
+        retry = await mail_job.claim_next(later, stale_after=timedelta(minutes=10))
+        assert retry.id == job.id and retry.attempts == 2
+        assert await mail_job.finish(retry.id, retry.attempts)
+    asyncio.run(run())
+
+
+def test_long_sync_renews_its_claim_before_a_competing_poll(pg_db, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+    from api.mail import jobs
+    from db.accessors import mail_job
+
+    async def run():
+        now = datetime.now(UTC)
+        start = now - timedelta(minutes=12)
+        await mail_job.enqueue("sync", {"account_id": "synthetic"}, dedupe_key="sync:synthetic", run_after=start)
+        job = await mail_job.claim_next(start, stale_after=timedelta(minutes=10))
+        renewed, finish = asyncio.Event(), asyncio.Event()
+        original = mail_job.renew
+        async def observe_renew(id, attempt):
+            held = await original(id, attempt)
+            if held:
+                renewed.set()
+            return held
+        async def work(payload):
+            await finish.wait()
+        # Make the heartbeat observable without waiting a real ten-minute lease.
+        monkeypatch.setattr(jobs.mail_env, "mail_sync_stale_minutes", 0.001)
+        monkeypatch.setattr(jobs, "_sync", work)
+        monkeypatch.setattr(mail_job, "renew", observe_renew)
+        active = asyncio.create_task(jobs._sync_with_lease({"account_id": "synthetic"}, job.id, job.attempts))
+        try:
+            await asyncio.wait_for(renewed.wait(), 5)
+            assert await mail_job.claim_next(now, stale_after=timedelta(minutes=10)) is None
+            assert not await original(job.id, job.attempts + 1)
+        finally:
+            finish.set()
+            await active
+        assert await mail_job.finish(job.id, job.attempts)
+        assert not await original(job.id, job.attempts)
     asyncio.run(run())

@@ -20,6 +20,10 @@ export function ChatAccountSettings() {
   const saving = useRef(false)
   const choices = accounts.data?.filter(account => account.is_active) ?? []
   const shown = edit ?? settings.data
+  const eligible = new Set(choices.filter(account => account.chat_eligibility === 'eligible').map(account => account.id))
+  const savedSelection = shown?.account_ids.filter(id => eligible.has(id)) ?? []
+  const eligibilityReady = accounts.isSuccess && choices.every(account => account.chat_eligibility != null)
+  const canSave = eligibilityReady && (!!edit || (!!shown && savedSelection.length !== shown.account_ids.length))
 
   function toggle(id: string, checked: boolean) {
     if (!shown) return
@@ -37,11 +41,11 @@ export function ChatAccountSettings() {
   }
 
   async function save() {
-    if (!edit || saving.current) return
+    if (!shown || !canSave || saving.current) return
     saving.current = true
     setStatus('saving')
     try {
-      const result = await chatSettingsUpdate({ body: { expected_version: edit.version, account_ids: edit.account_ids } })
+      const result = await chatSettingsUpdate({ body: { expected_version: shown.version, account_ids: savedSelection } })
       if (!result.data) {
         const code = errorCode(result.error)
         if (code === 'chat_settings_invalid') setStatus('invalid')
@@ -74,15 +78,16 @@ export function ChatAccountSettings() {
         {choices.length ? <fieldset className="le-chat-account-list" disabled={status === 'saving' || status === 'conflict'}>
           <legend className="le-sr">{texts.chatAccounts.title}</legend>
           {choices.map(account => <label key={account.id}>
-            <input type="checkbox" checked={shown.account_ids.includes(account.id)} onChange={event => toggle(account.id, event.target.checked)} />
-            <span>{account.display_name || account.email_address}{account.display_name && account.display_name !== account.email_address && <small>{account.email_address}</small>}</span>
+            <input type="checkbox" disabled={!eligible.has(account.id)} checked={savedSelection.includes(account.id)} onChange={event => toggle(account.id, event.target.checked)} />
+            <span>{account.display_name || account.email_address}{account.display_name && account.display_name !== account.email_address && <small>{account.email_address}</small>}{!eligible.has(account.id) && <small>{account.chat_eligibility === 'inbox_only' ? texts.chatAccounts.inboxOnly : texts.chatAccounts.awaitingVerification}</small>}</span>
           </label>)}
         </fieldset> : <Link to="/accounts">{texts.accounts.connect}</Link>}
+        {!eligibilityReady && <Notice tone="info" action={{ label: texts.settingsUi.reload, onClick: () => { void reload() } }}>{texts.chatAccounts.eligibilityUnavailable}</Notice>}
         {status === 'saved' && <Notice tone="success">{texts.settingsUi.saved}</Notice>}
         {status === 'invalid' && <Notice tone="danger" action={{ label: texts.settingsUi.reload, onClick: () => { void reload() } }}>{texts.errors.chat_settings_invalid}</Notice>}
         {status === 'error' && <Notice tone="danger">{texts.settingsUi.saveError}</Notice>}
         {status === 'conflict' && <Notice tone="danger" action={{ label: texts.settingsUi.reload, onClick: () => { void reload() } }}>{texts.chatAccounts.conflict}</Notice>}
-        <div className="le-swipe-actions"><Button type="submit" variant="primary" disabled={!edit || status === 'saving' || status === 'conflict'}>{texts.settingsUi.save}</Button></div>
+        <div className="le-swipe-actions"><Button type="submit" variant="primary" disabled={!canSave || status === 'saving' || status === 'conflict'}>{texts.settingsUi.save}</Button></div>
       </form>}
   </section>
 }

@@ -280,9 +280,11 @@ test('a delayed swipe save cannot replace a newer language already read from the
 
 
 const chatAccounts = [
-  { id: 'work', display_name: 'Work', email_address: 'work@example.test', is_active: true },
-  { id: 'home', display_name: '', email_address: 'home@example.test', is_active: true },
+  { id: 'work', display_name: 'Work', email_address: 'work@example.test', is_active: true, chat_eligibility: 'eligible' },
+  { id: 'home', display_name: '', email_address: 'home@example.test', is_active: true, chat_eligibility: 'eligible' },
   { id: 'inactive', display_name: 'Inactive', email_address: 'inactive@example.test', is_active: false },
+  { id: 'studio', display_name: 'Studio inbox', email_address: 'gmail@connector.mistral', is_active: true, chat_eligibility: 'inbox_only' },
+  { id: 'pending', display_name: 'Pending', email_address: 'pending@example.test', is_active: true, chat_eligibility: 'awaiting_verification' },
 ]
 
 test('chat grants persist across page loads and the last checkbox can be cleared', async () => {
@@ -298,6 +300,10 @@ test('chat grants persist across page loads and the last checkbox can be cleared
   }
   setup('/settings/chat', respond)
   expect((await screen.findByRole('checkbox', { name: /Work/ }) as HTMLInputElement).checked).toBe(false)
+  expect((screen.getByRole('checkbox', { name: /Studio inbox/ }) as HTMLInputElement).disabled).toBe(true)
+  expect(screen.getByText(de.chatAccounts.inboxOnly)).toBeTruthy()
+  expect((screen.getByRole('checkbox', { name: /Pending/ }) as HTMLInputElement).disabled).toBe(true)
+  expect(screen.getByText(de.chatAccounts.awaitingVerification)).toBeTruthy()
   expect(screen.queryByRole('checkbox', { name: /Inactive/ })).toBeNull()
   fireEvent.click(screen.getByRole('checkbox', { name: /Work/ }))
   fireEvent.click(screen.getByRole('checkbox', { name: /home@example/ }))
@@ -334,4 +340,13 @@ test('a stale chat grant reloads the other device’s selection before allowing 
   await waitFor(() => expect((screen.getByRole('checkbox', { name: /home@example/ }) as HTMLInputElement).checked).toBe(true))
   expect((screen.getByRole('checkbox', { name: /Work/ }) as HTMLInputElement).checked).toBe(false)
   expect(requests.filter(item => item.method === 'PATCH')).toHaveLength(1)
+})
+
+test('a previous API response without eligibility cannot clear a stored chat grant', async () => {
+  setup('/settings/chat', async request => new URL(request.url).pathname.endsWith('/mail/accounts')
+    ? Response.json([{ id: 'work', display_name: 'Work', is_active: true }])
+    : Response.json({ version: 3, account_ids: ['work'] }))
+  expect(await screen.findByText(de.chatAccounts.eligibilityUnavailable)).toBeTruthy()
+  expect((screen.getByRole('button', { name: de.settingsUi.save }) as HTMLButtonElement).disabled).toBe(true)
+  expect(requests.filter(item => item.method === 'PATCH')).toHaveLength(0)
 })

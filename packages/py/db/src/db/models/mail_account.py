@@ -12,6 +12,10 @@ from sqlmodel import Field, SQLModel
 from db.models._common import new_id, utc_datetime_column, utcnow
 
 
+def inbox_only(account) -> bool:
+    return not account.email_address or account.email_address.casefold().endswith("@connector.mistral")
+
+
 class MailAccount(SQLModel, table=True):
     __tablename__ = "mail_account"
 

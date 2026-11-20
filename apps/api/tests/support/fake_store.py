@@ -213,7 +213,7 @@ class FakeStore:
     async def save_state(self, *, account_id, **kwargs):
         claim_connector = kwargs.pop("claim_connector", False)
         previous = self.states.get(account_id)
-        for key in ("connector_verified", "connector_cursor", "connector_generation", "cursor"):
+        for key in ("connector_verified", "connector_cursor", "connector_generation", "connector_proof_revision", "connector_deferred_threads", "cursor"):
             if kwargs.get(key) is None:
                 kwargs.pop(key, None)
                 if previous:
