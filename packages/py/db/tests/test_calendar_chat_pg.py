@@ -223,8 +223,18 @@ def test_clarify_both_times_in_one_reply(appointment_stream, dinner_first, reply
     asyncio.run(run())
 
 
-@pytest.mark.parametrize('named_tool_argument', [False, True])
-def test_clarify_same_title_by_original_calendar(appointment_stream, named_tool_argument):
+@pytest.mark.parametrize('reply,named_tool_argument,switch_default,ask_duration', [
+    ('Schedule the review in the Work calendar at 09:00 for one hour.', False, False, False),
+    ('Schedule the review in the Work calendar at 09:00 for one hour.', True, False, False),
+    ('Use the Work calendar.', False, False, False),
+    ('Use the Work calendar.', True, False, False),
+    ('Work.', False, False, False),
+    ('Schedule the review in my default calendar at 09:00 for one hour.', False, True, False),
+    ('Use my default calendar.', False, True, False),
+    ('Use the Work calendar.', False, False, True),
+    ('Use my default calendar.', False, True, True),
+])
+def test_clarify_same_title_by_original_calendar(appointment_stream, monkeypatch, reply, named_tool_argument, switch_default, ask_duration):
     from api.mail import agent, proposals
     from db.accessors import calendar_settings, chat_message
     streams, dispatched = appointment_stream
@@ -248,13 +258,36 @@ def test_clarify_same_title_by_original_calendar(appointment_stream, named_tool_
         assert json.loads([row for row in history if row.role == 'tool'][-1].content)['error'] == 'calendar_appointment_ambiguous'
         if named_tool_argument:
             morning['calendar_name'] = 'Work'
-        first, = await turn('Schedule the review in the Work calendar at 09:00 for one hour.', morning, 'What time is the other review?')
+        read_settings = calendar_settings.get
+        reads = []
+        if switch_default:
+            await calendar_settings.update(2, 'work')
+            async def change_after_read():
+                setting = await read_settings()
+                reads.append(setting.default_source_id)
+                if len(reads) == 1:
+                    await calendar_settings.update(setting.version, 'personal')
+                return setting
+            monkeypatch.setattr(calendar_settings, 'get', change_after_read)
+        if ask_duration:
+            streams.append(['How long should this review last?'])
+            answer = [e async for e in agent.run_turn_events(conversation_id=conversation, text=reply)]
+            assert answer[-1].event == 'done' and not await _visible_cards(conversation)
+            first, = await turn('One hour.', morning, 'What time is the other review?')
+        else:
+            first, = await turn(reply, morning, 'What time is the other review?')
         assert first.proposal.calendar.source_id == 'work' and first.proposal.calendar.after.start_local == '2026-11-21T09:00'
+        stored = json.loads((await chat_message.get_message(first.id)).proposal_json)['calendar']
+        assert stored['connection_ref'] == 'synthetic-work'
+        if switch_default:
+            assert reads == ['work'] and (await read_settings()).default_source_id == 'personal'
         assert dispatched == []
         assert (await proposals.confirm(first.id, selected_ids=[])).proposal_status == 'done'
-        await calendar_settings.update(2, 'work')
+        await calendar_settings.update((await read_settings()).version, 'work')
         other, = await turn('Tomorrow at 15:00 for one hour.', _create_args('Review', '15:00', '16:00'), 'Ready for confirmation.')
         assert other.proposal.calendar.source_id == 'personal' and other.proposal.calendar.after.start_local == '2026-11-21T15:00'
+        stored = json.loads((await chat_message.get_message(other.id)).proposal_json)['calendar']
+        assert stored['connection_ref'] == 'synthetic-personal'
         assert (await proposals.confirm(other.id, selected_ids=[])).proposal_status == 'done'
         assert dispatched == [('Review', 'work', first.id), ('Review', 'personal', other.id)]
     asyncio.run(run())

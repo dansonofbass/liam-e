@@ -36,6 +36,7 @@ class AppointmentCalendar(CalendarOption):
 class CalendarChoice(AppointmentCalendar):
     sequence_id: str | None = None
     appointments: tuple[AppointmentCalendar, ...] = ()
+    focused_index: int | None = None
 
     def appointment(self) -> AppointmentCalendar:
         return AppointmentCalendar(**self.model_dump(include=set(AppointmentCalendar.model_fields)))
@@ -316,7 +317,8 @@ def _mentioned_appointments(appointments, text):
             re.search(r"(?<!\w)" + re.escape(item.appointment_subject) + r"(?!\w)", folded)]
 
 
-def pending_for_request(previous: CalendarChoice | None, text: str, title=None, *, first=True, selected_source_id=None) -> CalendarChoice | None:
+def pending_for_request(previous: CalendarChoice | None, text: str, title=None, *, first=True, selected_source_id=None,
+                        use_focus=True) -> CalendarChoice | None:
     if not previous:
         return None
     subject = _appointment_subject(text)
@@ -326,10 +328,17 @@ def pending_for_request(previous: CalendarChoice | None, text: str, title=None, 
             matches = [item for item in previous.appointments if item.appointment_subject == subject]
         else:
             matches = _mentioned_appointments(previous.appointments, text)
-            if not matches and first and previous.appointment_subject:
+            if not matches and first and previous.appointment_subject and (use_focus or selected_source_id):
                 matches = [item for item in previous.appointments if item.appointment_subject == previous.appointment_subject]
-        if selected_source_id and len(matches) > 1 and len({item.appointment_subject for item in matches}) == 1:
-            matches = [item for item in matches if item.source_id == selected_source_id] or matches
+        if selected_source_id:
+            candidates = matches or (previous.appointments if not subject else ())
+            if len({item.appointment_subject for item in candidates}) == 1:
+                matches = [item for item in candidates if item.source_id == selected_source_id] or matches
+        index = previous.focused_index
+        if use_focus and first and index is not None and 0 <= index < len(previous.appointments):
+            focused = previous.appointments[index]
+            if (not subject and not matches) or (len(matches) > 1 and focused in matches):
+                matches = [focused]
         if len(matches) == 1:
             if proposed != matches[0].appointment_subject and any(item.appointment_subject == proposed for item in previous.appointments):
                 return previous
@@ -353,18 +362,26 @@ def pending_for_request(previous: CalendarChoice | None, text: str, title=None, 
     return None if create or (proposed and proposed == subject) else previous
 
 
-async def appointment_continuation(previous, part, title=None, *, first, selection, entries):
-    choice = pending_for_request(previous, part, title, first=first)
+async def appointment_destination(previous, part, title=None, *, first, selection, entries):
+    """Resolve the unfinished appointment and the owner's destination from the same evidence."""
+    choice = pending_for_request(previous, part, title, first=first, use_focus=False)
+    target = await stated_destination(selection, entries, None if choice and choice.appointments else choice)
     if not choice or not choice.appointments:
-        return choice
-    # Two appointments can have the same title. Only a calendar selected by
-    # the owner can distinguish those original bindings.
-    target = await stated_destination(selection, entries, None)
-    if target and not target.error:
-        selected_id = (await calendar_settings.get()).default_source_id if target.use_default else target.source_id
-        if selected_id:
-            return pending_for_request(previous, part, title, first=first, selected_source_id=selected_id)
-    return choice
+        return choice, target
+    if target is None:
+        names = {source.name for source, _ in entries if selection.names_target(source.name)}
+        if len(names) == 1:
+            target = named_choice(names.pop(), entries, selection)
+    if target and target.use_default and not target.error:
+        default_id = (await calendar_settings.get()).default_source_id
+        source = next((source for source, _ in entries if source.id == default_id), None)
+        if source:
+            target = target.bind_default(source)
+    if target and target.source_id and not target.error:
+        choice = pending_for_request(previous, part, title, first=first, selected_source_id=target.source_id, use_focus=False)
+    elif target is None:
+        choice = pending_for_request(previous, part, title, first=first)
+    return choice, target
 
 
 def previous_choice(history, user_id: str, contexts) -> CalendarChoice | None:
@@ -573,15 +590,25 @@ async def stated_destination(selection: OwnerSelection, entries, previous: Calen
     return choice.model_copy(update={"excluded_source_ids": tuple(sorted(blocked)), "exclude_default": default_blocked})
 
 
-def _clarification(appointments: list[AppointmentCalendar], sequence_id: str | None, answer: str) -> CalendarChoice | None:
+def _clarification(appointments: list[AppointmentCalendar], sequence_id: str | None, answer: str,
+                   selected: AppointmentCalendar | None = None) -> CalendarChoice | None:
     if not appointments:
         return None
     if len(appointments) == 1:
         return CalendarChoice(**appointments[0].model_dump(), sequence_id=sequence_id)
     questions = " ".join(re.findall(r"[^.!?]*\?", answer))
-    focused = _mentioned_appointments(appointments, questions)
+    mentioned = _mentioned_appointments(appointments, questions)
+    if len(mentioned) == 1:
+        selected = mentioned[0]
+    elif mentioned and selected not in mentioned:
+        selected = None
+    index = appointments.index(selected) if selected is not None else None
+    subjects = {item.appointment_subject for item in mentioned}
+    subject = selected.appointment_subject if selected else ""
+    if not subject and len(subjects) == 1:
+        subject = subjects.pop()
     return CalendarChoice(appointments=tuple(appointments), sequence_id=sequence_id, error="calendar_appointment_ambiguous",
-                          appointment_subject=focused[0].appointment_subject if len(focused) == 1 else "")
+                          focused_index=index, appointment_subject=subject)
 
 
 async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
@@ -590,13 +617,14 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
     previous = ctx.calendar_choice
     entries = None
     continuations = dict(ctx.calendar_continuations)
+    targets = dict(ctx.calendar_targets)
     for index, part in enumerate(parts):
         if part in continuations:
             continue
         if previous and previous.appointments:
             if entries is None:
                 entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
-            continuations[part] = await appointment_continuation(previous, part, first=index == 0,
+            continuations[part], targets[part] = await appointment_destination(previous, part, first=index == 0,
                 selection=owner_selection(part, entries=entries), entries=entries)
         else:
             continuations[part] = pending_for_request(previous, part, first=index == 0)
@@ -620,11 +648,14 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
         return None
     if entries is None:
         entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
+    selected = None
     for part in unfinished:
         inherited = continuations[part]
         if inherited and inherited.appointments:
             continue
-        choice = ctx.calendar_targets.get(part) or await stated_destination(owner_selection(part, entries=entries), entries, inherited) or inherited
+        if part not in targets:
+            targets[part] = await stated_destination(owner_selection(part, entries=entries), entries, inherited)
+        choice = targets[part] or inherited
         if entries and (choice is None or (not choice.source_id and not choice.error)):
             default_id = (await calendar_settings.get()).default_source_id
             default = next((source for source, state in entries if source.id == default_id
@@ -635,4 +666,6 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
             binding = choice.appointment() if choice else AppointmentCalendar()
             binding.appointment_subject = (inherited.appointment_subject if inherited else "") or _appointment_subject(part)
             appointments.append(binding)
-    return _clarification(appointments, sequence_id, answer)
+            if inherited and len(unfinished) == 1:
+                selected = binding
+    return _clarification(appointments, sequence_id, answer, selected)

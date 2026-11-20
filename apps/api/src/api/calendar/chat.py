@@ -7,7 +7,7 @@ from db.accessors import calendar_occurrence, calendar_settings, calendar_source
 from pydantic import ValidationError
 
 from api.calendar import writes
-from api.calendar.chat_target import CalendarChoice, appointment_continuation, appointment_part, appointment_parts, named_choice, owner_selection, stated_destination
+from api.calendar.chat_target import CalendarChoice, appointment_destination, appointment_part, appointment_parts, named_choice, owner_selection, stated_destination
 from api.calendar.proposals import CalendarCommand, CalendarValues, values
 
 
@@ -25,13 +25,14 @@ async def _create_source(arguments, ctx):
     selection = owner_selection(part, arguments.get("title"), entries=entries, location=arguments.get("location"))
     previous = ctx.requested_calendar
     if previous is None:
-        previous = await appointment_continuation(ctx.calendar_choice, part, arguments.get("title"),
+        previous, target = await appointment_destination(ctx.calendar_choice, part, arguments.get("title"),
             first=part == parts[0], selection=selection, entries=entries)
         if ctx.calendar_choice and ctx.calendar_choice.appointments:
             ctx.calendar_continuations[part] = previous
+    else:
+        target = await stated_destination(selection, entries, previous)
     if previous and previous.appointments:
         raise writes.WriteError("calendar_appointment_ambiguous", 422)
-    target = await stated_destination(selection, entries, previous)
     if (previous and target and previous.source_id and previous.source_id == target.source_id
             and previous.connection_ref != target.connection_ref):
         raise writes.WriteError("calendar_not_writable", 403)
