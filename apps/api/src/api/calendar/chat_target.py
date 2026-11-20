@@ -34,8 +34,8 @@ _PREFIX = rf"(?:in|into|to|on|im|für)\s+{_DETERMINER}"
 _SELECT = r"(?:use|choose|pick|select|nutze|verwende|nimm|wähle)"
 _DESTINATION_PREFIX = rf"(?:{_PREFIX}|{_SELECT}\s+{_DETERMINER})"
 _CALENDAR = r"(?:calendar|kalender)"
-_NAME_WORD = (r"(?!(?:the|a|my|den|dem|der|das|in|im|into|on|for|at|from|to|am|um|für|with|mit|"
-              r"today|tomorrow|heute|morgen|instead|statt|please|bitte|ein|eintragen|anlegen|"
+_NAME_WORD = (r"(?!(?:the|an?|my|den|dem|der|die|das|ein(?:e[nrms]?)?|in|im|into|on|for|at|from|to|am|um|für|with|mit|"
+              r"today|tomorrow|heute|morgen|instead|statt|please|bitte|eintragen|anlegen|"
               r"and|und|or|oder|calendar|kalender)\b)\w+(?:[-&/'’]\w+)*")
 _NAME_FIRST = re.compile(rf"(?<!\w){_DESTINATION_PREFIX}(?P<name>{_NAME_WORD}(?:\s+(?:(?:&|and|und)\s+)?{_NAME_WORD})*)\s+{_CALENDAR}\b", re.I)
 _CALENDAR_LEAD = rf"(?<!\w){_DESTINATION_PREFIX}{_CALENDAR}\b"
@@ -337,13 +337,18 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
     alternatives = set()
     if not _OR.search(text):
         return alternatives, True
-    names = _DEFAULT_NAMES.union(source.name.strip() for source, _ in entries if source.name.strip())
+    names = _DEFAULT_NAMES.union(source.name.strip().casefold() for source, _ in entries if source.name.strip())
     names_pattern = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
-    determiner = r"(?:(?:the|my|den|dem|meinen|meinem)\s+)?"
-    operand = rf"(?:{_DESTINATION_PREFIX}|{determiner})(?:{_CALENDAR}\s+)?(?P<name>{names_pattern})(?:\s+{_CALENDAR})?"
+    # An unavailable name still occupies its position in the owner's list.
+    # Preserve literal catalog names with punctuation and opaque quoted members.
+    word = rf"(?!{_SELECT}\b){_NAME_WORD}"
+    member_name = rf"(?:(?:{names_pattern})(?!{_NAME_CONTINUATION})|{word}(?:\s+{word})*|\ufffc)"
+    operand = rf"(?:{_DESTINATION_PREFIX}|{_DETERMINER})(?:{_CALENDAR}\s+)?(?P<name>{member_name})(?:\s+{_CALENDAR})?"
     groups = []
     for member in re.finditer(rf"(?<![\w-]){operand}(?![\w-])", text, re.I):
-        if not groups or not re.fullmatch(rf"\s*{_LIST_SEPARATOR}\s*", text[groups[-1][-1].end():member.start()], re.I):
+        separator = text[groups[-1][-1].end():member.start()].strip() if groups else ""
+        if (not re.fullmatch(_LIST_SEPARATOR, separator, re.I)
+                or (separator == "," and re.match(_SELECT + r"\b", member[0], re.I))):
             groups.append([])
         groups[-1].append(member)
 
@@ -358,11 +363,16 @@ def _calendar_alternatives(text: str, entries) -> tuple[set[str], bool]:
             continue
         qualified = re.match(_DESTINATION_PREFIX, first[0], re.I)
         phrase = text[first.start():last.end()]
-        if not (qualified or re.search(rf"\b{_CALENDAR}\b|\bstandardkalender\b", phrase, re.I)
-                or (not before.strip() and not after.strip(" .?!"))):
+        offered = {member["name"].casefold() for member in group}
+        recognized = offered & names
+        entire_reply = not before.strip() and not after.strip(" .?!")
+        calendar_noun = re.search(rf"\b{_CALENDAR}\b|\bstandardkalender\b", phrase, re.I)
+        calendar_field = re.search(rf"\b(?:for|für)\s+{_DETERMINER}{_CALENDAR}\s*[:,]?\s*$", before, re.I)
+        if not (calendar_noun or calendar_field or (recognized and (qualified or entire_reply))
+                or (entire_reply and re.match(_SELECT + r"\b", first[0], re.I))):
             continue
-        alternatives.update(member["name"].casefold() for member in group)
-        if right or (left and not (qualified and left[0].strip() == ",")):
+        alternatives.update(recognized)
+        if not offered <= names or right or (left and not (qualified and left[0].strip() == ",")):
             complete = False
     return alternatives, complete
 

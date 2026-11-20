@@ -412,7 +412,7 @@ async def test_location_correction_does_not_choose_or_exclude_a_calendar(monkeyp
 
 
 @pytest.mark.parametrize('named', [False, True])
-async def test_named_calendar_starting_with_a_date_word(monkeypatch, named):
+async def test_calendar_name_is_distinct_from_the_appointment_time_and_title(monkeypatch, named):
     from dataclasses import replace
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
@@ -420,7 +420,7 @@ async def test_named_calendar_starting_with_a_date_word(monkeypatch, named):
 
     calendars = [CalendarSource(id=key, name=name, provider='google', connection_ref='synthetic',
         external_id=key, capabilities_json='["read","write"]', timezone='UTC')
-        for key, name in [('short-name', 'On'), ('on-call', 'On Call'), ('personal', 'Personal')]]
+        for key, name in [('short-name', 'On'), ('on-call', 'On Call'), ('work', 'Arbeit'), ('personal', 'Personal')]]
     async def catalog(*, ids):
         return [(row, None) for row in calendars if row.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
@@ -431,6 +431,12 @@ async def test_named_calendar_starting_with_a_date_word(monkeypatch, named):
     if named:
         args['calendar_name'] = 'On Call'
     assert (await chat.prepare(args, ctx)).source_id == 'on-call'
+    work_request = replace(ctx, user_text='Kannst du im Kalender Arbeit eine Projektbesprechung für morgen von neun bis zehn eintragen?')
+    meeting = {**args, 'title': 'Projektbesprechung'}
+    if named:
+        meeting['calendar_name'] = 'Arbeit'
+    card = await chat.prepare(meeting, work_request)
+    assert (card.source_id, card.after.title) == ('work', 'Projektbesprechung')
     lunch = {'action': 'create', 'title': 'Lunch', 'start_local': '2026-11-23T12:00', 'end_local': '2026-11-23T13:00'}
     for when in ('next Monday', 'on Thursday'):
         generic = replace(ctx, user_text=f'Put lunch in my calendar {when} at noon')
