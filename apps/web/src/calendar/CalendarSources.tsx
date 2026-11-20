@@ -12,7 +12,7 @@ import { useI18n } from '../i18n/I18n'
 import { SourceStatus } from './CalendarPage'
 import { CalendarSetup, FeedSetup } from './FeedSetup'
 
-function RemoveSource({ source, close, removed }: { source: SourceOut; close: () => void; removed: () => void }) {
+function RemoveSource({ source, close, removed }: { source: SourceOut; close: () => void; removed: () => Promise<void> }) {
   const { texts } = useI18n()
   const [pending, setPending] = useState(false), [error, setError] = useState(false)
   const busy = useRef(false), title = useId()
@@ -24,7 +24,7 @@ function RemoveSource({ source, close, removed }: { source: SourceOut; close: ()
     try {
       const result = await calendarSourceDelete({ path: { source_id: source.id } })
       if (result.error || !result.response?.ok) throw new Error()
-      removed()
+      await removed()
     } catch { setError(true) } finally { busy.current = false; setPending(false) }
   }
   return createPortal(<div className="le-scrim"><div className="le-dialog" role="dialog" aria-modal="true" aria-labelledby={title} ref={ref} tabIndex={-1}>
@@ -42,12 +42,20 @@ export function CalendarSources() {
   const [removing, setRemoving] = useState<SourceOut>(), [replacing, setReplacing] = useState<SourceOut>()
   const heading = useRef<HTMLHeadingElement>(null)
   const invalidate = () => { void client.invalidateQueries({ queryKey: ['calendar'] }) }
+  const cacheChange = async (id: string, saved?: SourceOut) => {
+    const { queryKey } = calendarSourcesQuery()
+    await client.cancelQueries({ queryKey, exact: true })
+    client.setQueryData<SourceOut[]>(queryKey, rows => saved
+      ? rows?.map(row => row.id === id ? saved : row)
+      : rows?.filter(row => row.id !== id))
+  }
   const action = async (source: SourceOut, refresh: boolean) => {
     setPending(current => [...current, source.id])
     try {
       const result = refresh ? await calendarSourceSync({ path: { source_id: source.id } }) : await calendarSourceUpdate({ path: { source_id: source.id }, body: { is_active: !source.is_active } })
       if (result.error || !result.response?.ok) throw new Error()
       setMessages(current => ({ ...current, [source.id]: refresh ? (result.data && 'queued' in result.data && result.data.queued ? texts.calendar.queued : ['ics', 'google'].includes(source.provider) ? texts.calendar.feedNotQueued : texts.calendar.notQueued) : '' }))
+      if (result.data && 'is_active' in result.data) await cacheChange(source.id, result.data)
       invalidate()
     } catch { setMessages(current => ({ ...current, [source.id]: refresh ? texts.calendar.refreshError : texts.calendar.actionError })) }
     finally { setPending(current => current.filter(id => id !== source.id)) }
@@ -69,6 +77,6 @@ export function CalendarSources() {
       {messages[source.id] && <Notice tone="info">{messages[source.id]}</Notice>}
     </section>)}</div>}
     {replacing && <FeedSetup source={replacing} close={() => setReplacing(undefined)} saved={() => { setReplacing(undefined); invalidate() }} />}
-    {removing && <RemoveSource source={removing} close={() => setRemoving(undefined)} removed={() => { setRemoving(undefined); invalidate(); heading.current?.focus() }} />}
+    {removing && <RemoveSource source={removing} close={() => setRemoving(undefined)} removed={async () => { await cacheChange(removing.id); setRemoving(undefined); invalidate(); heading.current?.focus() }} />}
   </section>
 }

@@ -454,9 +454,13 @@ whole UTC dates, the query window is rounded outward and also includes all-day d
 windows exceeding 90 UTC days are split into adjacent subwindows, which like cursor pages are
 loaded only explicitly; the grid views never exceed six weeks. Boundary results outside selected local start days are hidden and duplicate occurrence
 IDs from adjacent windows merged. An empty partial page does not claim “Keine Termine” while more
-pages or subwindows are missing. A state older than 24 hours gets an age notice; on opening, one
-sync per source is requested via the explicit management endpoint. This does not promise provider
-freshness. `seed_calendars` adds five synthetic sources for Google/ICS display, all-day, long title,
+pages or subwindows are missing. A state older than 24 hours gets an age notice. Grid and agenda
+reuse index reads in the tab for five minutes and discard inactive entries after ten minutes.
+An open calendar reads source metadata every minute while visible. A new `data_revision`
+refreshes the affected index queries, and a changed source selection or configuration has its own
+query key. A transient read failure keeps the last permitted rows visible with a retry. Live
+event details stay separate, with `gcTime: 0`. Automatic due checks are shared across mounts for
+five minutes per source revision. A queued job does not prove provider freshness. `seed_calendars` adds five synthetic sources for Google/ICS display, all-day, long title,
 old state, missing coverage and pause. Their fixed IDs are skipped before enqueueing and before
 adapter execution.
 

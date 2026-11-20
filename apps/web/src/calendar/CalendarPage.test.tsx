@@ -50,7 +50,7 @@ test('pausing a source hides its cached agenda rows without waiting for a refetc
   await waitFor(() => expect(screen.queryByRole('link', { name: /Termin Planung/ })).toBeNull())
   expect(screen.getByRole('link', { name: /Termin Verein/ })).toBeTruthy()
   expect(screen.getByText(de.calendar.paused)).toBeTruthy()
-  expect(occurrences).toHaveBeenCalledTimes(1)
+  expect(occurrences).toHaveBeenCalledTimes(2)
 })
 
 function coveredSource(): SourceOut {
@@ -108,10 +108,11 @@ test('mount requests one due-only sync per active Google source, including fresh
   }) as typeof fetch })
   try {
     const { client, list } = renderAgenda(sources)
-    await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(requests).toHaveLength(3))
+    expect(list).toHaveBeenCalledTimes(1)
     expect(screen.queryByText(de.calendar.queued)).toBeNull()
     await act(async () => { await client.refetchQueries({ queryKey: ['calendar', 'sources'] }) })
-    expect(list).toHaveBeenCalledTimes(3)
+    expect(list).toHaveBeenCalledTimes(2)
     expect(requests.map(request => [request.method, new URL(request.url).pathname])).toEqual([
       ['POST', `/api/v1/calendar/sources/${old.id}/sync`],
       ['POST', '/api/v1/calendar/sources/other-old/sync'],
@@ -127,7 +128,8 @@ test.each(['not-due', 'queued', 'error'])('automatic catch-up stays silent (%s);
     ? { error: { detail: 'test-only' }, response: { ok: false } } as never
     : { data: { queued: outcome === 'queued' }, response: { ok: true } } as never)
   const { list } = renderAgenda([{ ...coveredSource(), provider: 'ics' }])
-  await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(sync).toHaveBeenCalledTimes(1))
+  expect(list).toHaveBeenCalledTimes(1)
   expect(sync).toHaveBeenCalledWith({ path: { source_id: source.id }, query: { due_only: true } })
   for (const message of [de.calendar.feedNotQueued, de.calendar.queued, de.calendar.refreshError]) {
     expect(screen.queryByText(message)).toBeNull()

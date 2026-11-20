@@ -1,7 +1,8 @@
 import { infiniteQueryOptions, queryOptions, type QueryClient } from '@tanstack/react-query'
 import { promptsList, promptGet, mailSummary, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
 import { REFERENCE_LOCALE, type Locale } from '../i18n/locales'
-import type { MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData, UiSettingsOut } from './generated/types.gen'
+import type { SourceOut, MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData, UiSettingsOut } from './generated/types.gen'
+import { calendarIndexCache, readCalendarIndex, refreshChangedIndexes, sourceScope } from '../calendar/cache'
 import { dataOr404, unwrap } from './unwrap'
 
 export class MessageNotFoundError extends Error {}
@@ -41,20 +42,41 @@ export const taskOccurrencesQuery = (query: Omit<NonNullable<TasksOccurrencesLis
 export const taskDetailQuery = (id: string, query: Omit<TasksGetData['query'], 'cursor'>) => infiniteQueryOptions({ queryKey: ['tasks', 'detail', id, query], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(tasksGet({ path: { series_id: id }, query: { ...query, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.occurrences.next_cursor ?? undefined })
 
 // Calendar reads use the index only; refreshes are explicit management operations.
-export const calendarSourcesQuery = () => queryOptions({ queryKey: ['calendar', 'sources'], queryFn: () => unwrap(calendarSourcesList({ throwOnError: true })) })
+export const calendarSourcesQuery = () => queryOptions({
+  queryKey: ['calendar', 'sources'],
+  gcTime: calendarIndexCache.gcTime,
+  queryFn: async context => {
+    const { client, queryKey, signal } = context
+    const sources = await readCalendarIndex(context, calendarSourcesList({ signal }))
+    const previous = client.getQueryData<SourceOut[]>(queryKey)
+    if (previous && !signal.aborted) await refreshChangedIndexes(client, previous, sources)
+    return sources
+  },
+})
 export const calendarPageQuery = (from: string, to: string, source?: string, cursor?: string) => queryOptions({ queryKey: ['calendar', 'occurrences', from, to, source, cursor], queryFn: () => unwrap(calendarOccurrencesList({ query: { from, to, source_ids: source ? [source] : undefined, cursor, limit: 50 }, throwOnError: true })) })
 export const calendarDetailQuery = (id: string) => queryOptions({ queryKey: ['calendar', 'occurrence', id], queryFn: () => unwrap(calendarOccurrenceGet({ path: { occurrence_id: id }, throwOnError: true })) })
 import { queryWindows } from '../calendar/state'
-export const calendarAgendaQuery = (from: string, to: string, timeZone: string, source?: string) => {
+export const calendarAgendaQuery = (from: string, to: string, timeZone: string, sources: SourceOut[], source?: string) => {
   const windows = queryWindows(from, to, timeZone)
+  const scope = sourceScope(sources)
   return infiniteQueryOptions({
-    queryKey: ['calendar', 'agenda', from, to, timeZone, source],
+    queryKey: ['calendar', 'agenda', from, to, timeZone, source, scope] as const,
+    ...calendarIndexCache,
+    meta: { calendarSourceIds: sources.map(s => s.id) },
     initialPageParam: { window: 0, cursor: undefined as string | undefined },
-    queryFn: async ({ pageParam }) => {
+    queryFn: async context => {
+      const { pageParam, signal } = context
       const window = windows[pageParam.window]
       if (!window) throw new Error('invalid calendar window')
-      const page = await unwrap(calendarOccurrencesList({ query: { ...window, source_ids: source ? [source] : undefined, cursor: pageParam.cursor, limit: 50 }, throwOnError: true }))
+      const page = await readCalendarIndex(context, calendarOccurrencesList({ signal, query: { ...window, source_ids: source ? [source] : undefined, cursor: pageParam.cursor, limit: 50 } }))
       return { ...page, window: pageParam.window }
+    },
+    placeholderData: (previous, query) => {
+      const key = query?.queryKey
+      if (!key || key[2] !== from || key[3] !== to || key[4] !== timeZone || key[5] !== source) return
+      const prior = new Map(key[6])
+      // While a narrower selection loads, the agenda can still show its permitted rows.
+      if (scope.every(([id, revision]) => prior.get(id) === revision)) return previous
     },
     getNextPageParam: page => page.next_cursor ? { window: page.window, cursor: page.next_cursor } : page.window + 1 < windows.length ? { window: page.window + 1, cursor: undefined } : undefined,
   })
