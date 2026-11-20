@@ -139,14 +139,13 @@ test('mail row shows a missing subject', () => {
 
 test('composer submits on Enter and stops while busy', () => {
   const submit = mock(() => {}), stop = mock(() => {})
-  const props = { value: 'Hallo', onChange: () => {}, onSubmit: submit, onStop: stop, scope: null, accounts: [{ id: '1', label: 'Privat' }], onScopeChange: () => {}, placeholder: 'Frage' }
+  const props = { value: 'Hallo', onChange: () => {}, onSubmit: submit, onStop: stop, placeholder: 'Frage' }
   const { rerender } = render(<Composer {...props} busy={false} />)
   fireEvent.keyDown(screen.getByPlaceholderText('Frage'), { key: 'Enter', shiftKey: true })
   expect(submit).toHaveBeenCalledTimes(0)
   fireEvent.keyDown(screen.getByPlaceholderText('Frage'), { key: 'Enter' })
   expect(submit).toHaveBeenCalledTimes(1)
-  fireEvent.click(screen.getByRole('button', { name: 'Alle Konten' }))
-  expect(screen.getByRole('menuitem', { name: 'Privat' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Alle Konten' })).toBeNull()
   rerender(<Composer {...props} busy />)
   const button = screen.getByRole('button', { name: 'Anhalten' })
   expect(button.className).toContain('le-send--stop')

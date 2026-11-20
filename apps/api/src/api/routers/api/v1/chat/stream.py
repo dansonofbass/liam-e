@@ -29,6 +29,7 @@ class ChatEvent(RootModel[ChatEventUnion]):
 class ChatStreamRequest(BaseModel):
     conversation_id: str | None = None
     text: str = Field(min_length=1, max_length=8000)
+    expected_mail_scope_version: int | None = Field(default=None, ge=1)
     account_id: str | None = None
     prompt_revision_id: str | None = None
     without_preferences: bool = False

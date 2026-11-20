@@ -27,6 +27,7 @@ class ContextOut(BaseModel):
     prompt_hash: str | None
     app_prompt_version: str
     account_scope_json: str
+    mail_scope_version: int | None = None
     calendar_scope_json: str = '[]'
     task_scope_json: str = '{"source":"none"}'
     preference_revision_id: str | None

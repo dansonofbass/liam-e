@@ -146,6 +146,8 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Preferences | GET | `/api/v1/preferences/contexts/{context_id}` | `preference_context_get` |
 | Settings | GET | `/api/v1/settings` | `settings_get` |
 | Settings / independent preference opt-ins | PATCH | `/api/v1/settings` | `settings_update` |
+| Settings | GET | `/api/v1/settings/chat` | `chat_settings_get` |
+| Settings | PATCH | `/api/v1/settings/chat` | `chat_settings_update` |
 | Settings | GET | `/api/v1/settings/ui` | `settings_ui_get` |
 | Settings | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
@@ -618,8 +620,7 @@ POST accepts `name` and `text`, PATCH additionally `expected_version`, DELETE `e
 as query parameter. GET of a template also returns `revisions` (newest first), so older revisions
 can be explicitly selected. New turns store revision reference/hash, app prompt version and the
 resolved account scope in `chat_context`; `chat_message.context_id` links history to it. The JSON
-account scope contains `account_ids`, `selection` (account ID or `null` for all) and, for
-unproven legacy history, `legacy_mixed: true`. `preference_revision_id` remains empty for old
+account scope contains the sorted granted `account_ids` and a `selection` (a focused account or `null` for the full grant). `preference_revision_id` remains empty for old
 clients; actually used preference revisions are now in `preference_revision_ids_json` with
 `preference_resolver_version` and `preferences_enabled`. Text is given to the model only as user
 content, never stored as an app rule or chat extra. Deletion removes template and revision content,
@@ -630,8 +631,24 @@ thereafter does not undo an already accepted confirmation. The agent checks revo
 before each model call and tool and every ten deltas during streaming; a revoked stream is closed
 and reports `context_revoked`. For a history, associated contexts are loaded in one database query.
 Inbox undo requests are aborted after 15 seconds; if the result is unclear, the action remains
-available for another attempt for ten more seconds. Account switching with history requires a new
-conversation; “Alle Konten” (UI text) remains the same selection even when accounts are added or removed.
+available for another attempt for ten more seconds. A conversation with messages can continue only with its original grant revision, effective accounts and focus.
+
+## Chat mail access (#80)
+
+The single owner selects active mail accounts at `/settings/chat`. The initial grant is empty,
+including for existing installations. Saving the complete selection requires its current
+`expected_version`. Changing its membership increments the revision. Adding an account gives it
+no chat access. Reconnecting the same stored account keeps its grant. Removing the account also
+removes its grant in the deletion transaction. A replacement account needs explicit selection.
+
+Each turn records the grant revision and its effective accounts. A mail reference can narrow this
+set. A changed revision, missing historical context or pre-migration history requires a new
+conversation. The owner can still read the original messages and cancel an old pending proposal.
+The claim for confirmation rechecks the grant under the same lock as a settings update. A claim
+that already succeeded can finish. The browser sends the revision seen in its scoped inbox
+summary (or the settings API) with every chat request. History shows the restart action when a grant has changed. An old reply is ineligible for speech synthesis. Quick actions, draft entry points and task account choices use
+the same grant. General task access includes eligible personal tasks and tasks belonging to the
+granted accounts. Ordinary inbox access is independent of these chat settings.
 
 ## Explicit preferences (#38)
 
@@ -639,8 +656,7 @@ Fixed app rules and authorized access take precedence over the current request, 
 precedence over the selected template, which takes precedence over matching active preferences.
 Values reach the model exclusively as user content, not as app rules or in chat extras or traces.
 Answer length may apply globally or to one account; an account value overrides the global default
-for this field. Salutation and signature require exactly one existing account. With “Alle Konten”
-(UI text), only global values are resolved; account signatures are never mixed. Existing mail,
+for this field. Salutation and signature require exactly one existing account. A conversation without a focused account resolves only global values; account signatures are never mixed. Existing mail,
 calendar and task scope checks and confirmation mechanics remain unchanged.
 
 `GET /settings` returns only

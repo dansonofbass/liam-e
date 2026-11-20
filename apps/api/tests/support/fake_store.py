@@ -121,8 +121,8 @@ class FakeStore:
     async def count_for_account(self, account_id):
         return sum(row.account_id == account_id for row in self.messages.values())
 
-    async def count_unread(self, *, folder="INBOX"):
-        return self.unread
+    async def count_unread(self, *, folder="INBOX", account_ids=None):
+        return {id: count for id, count in self.unread.items() if account_ids is None or id in account_ids}
 
     async def job_enqueue(self, kind, payload, *, dedupe_key, run_after=None):
         if any(j.dedupe_key == dedupe_key and j.status in ("queued", "running") for j in self.jobs.values()):

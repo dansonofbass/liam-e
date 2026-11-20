@@ -184,9 +184,12 @@ async def list_page(*, folder: str = "INBOX", account_ids: list[str] | None = No
         return list((await session.execute(stmt)).scalars().all())
 
 
-async def count_unread(*, folder: str = "INBOX") -> dict[str, int]:
+async def count_unread(*, folder: str = "INBOX", account_ids: list[str] | None = None) -> dict[str, int]:
     async with get_session_maker()() as session:
-        rows = await session.execute(select(MailMessage.account_id, func.count()).where(MailMessage.folder == folder, MailMessage.is_read.is_(False)).group_by(MailMessage.account_id))
+        query = select(MailMessage.account_id, func.count()).where(MailMessage.folder == folder, MailMessage.is_read.is_(False))
+        if account_ids is not None:
+            query = query.where(MailMessage.account_id.in_(account_ids))
+        rows = await session.execute(query.group_by(MailMessage.account_id))
         return dict(rows.all())
 
 

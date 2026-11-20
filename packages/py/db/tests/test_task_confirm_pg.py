@@ -10,15 +10,17 @@ import pytest
 pytestmark = pytest.mark.skipif(not os.getenv('RUN_PG_CONTRACT'), reason='RUN_PG_CONTRACT is not set')
 
 
-async def proposal(*, source='all', revoked=False):
+async def proposal(*, source='all', revoked=False, account_ids=()):
+    from db.accessors import chat_settings
     from db.engine import get_session_maker
     from db.models.chat_context import ChatContext
     from api.mail.proposals import Proposal, create_proposal
     from api.tasks.proposals import TaskCreateCommand
 
+    settings = await chat_settings.update((await chat_settings.get()).version, list(account_ids))
     async with get_session_maker()() as session:
         context = ChatContext(conversation_id='synthetic', app_prompt_version='test-only',
-            account_scope_json='{"selection":null,"account_ids":[]}',
+            mail_scope_version=settings.version, account_scope_json=json.dumps({'selection': None, 'account_ids': settings.account_ids}),
             task_scope_json=json.dumps({'source': source}), revoked=revoked)
         session.add(context)
         await session.commit()
@@ -82,13 +84,13 @@ def test_deleted_source_is_not_replaced_and_can_still_be_cancelled(pg_db):
         from db.models.mail_account import MailAccount
         from db.models.mail_message import MailMessage
         from fastapi import HTTPException
-        initial = await proposal()
         account = MailAccount(provider='imap', auth_type='imap_password', email_address='person@example.org')
         mail = MailMessage(account_id=account.id, provider_uid='synthetic')
         async with get_session_maker()() as session:
             session.add(account)
             session.add(mail)
             await session.commit()
+        initial = await proposal(account_ids=[account.id])
         message = await proposals.create_proposal('synthetic', proposals.Proposal(kind='task', reason='Example', items=[],
             task=TaskCreateCommand(action='create', title='Example', start=datetime.now(UTC).date().isoformat(), timezone='UTC',
                 source_account_id=account.id, source_message_id=mail.id)), context_id=initial.context_id)
@@ -115,13 +117,13 @@ def test_existing_task_can_be_changed_after_source_mail_is_removed(pg_db, action
         from db.engine import get_session_maker
         from db.models.mail_account import MailAccount
         from db.models.mail_message import MailMessage
-        initial = await proposal()
         account = MailAccount(provider='imap', auth_type='imap_password', email_address='person@example.org')
         mail = MailMessage(account_id=account.id, provider_uid='synthetic')
         async with get_session_maker()() as session:
             session.add(account)
             session.add(mail)
             await session.commit()
+        initial = await proposal(account_ids=[account.id])
         card = await proposals.create_proposal('synthetic', proposals.Proposal(kind='task', reason='Example', items=[],
             task=TaskCreateCommand(action='create', title='Example', start=datetime.now(UTC).date().isoformat(), timezone='UTC',
                 source_account_id=account.id, source_message_id=mail.id)), context_id=initial.context_id)
@@ -136,7 +138,7 @@ def test_existing_task_can_be_changed_after_source_mail_is_removed(pg_db, action
         args = {'action': action, 'series_id': series_id, 'expected_version': 1}
         if action == 'complete':
             args.update(occurrence_id=occurrences[0].id, expected_occurrence_version=occurrences[0].version)
-        command = await chat.prepare(args, TurnContext('synthetic', None, datetime.now(UTC).date(), task_scope={'source': 'all'}))
+        command = await chat.prepare(args, TurnContext('synthetic', None, datetime.now(UTC).date(), account_ids=[account.id], task_scope={'source': 'all'}))
         card = await proposals.create_proposal('synthetic', proposals.Proposal(kind='task', reason='Example', items=[], task=command), context_id=initial.context_id)
         assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
         async with get_session_maker()() as session:

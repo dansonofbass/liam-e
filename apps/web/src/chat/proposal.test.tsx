@@ -13,7 +13,7 @@ function TestRouter({ children }: { children: ReactNode }) {
   const [router] = useState(() => createRouter({ routeTree: cardRoot, history: createMemoryHistory({ initialEntries: ['/'] }) }))
   return <RouterContextProvider router={router}><ChatSessionProvider>{children}</ChatSessionProvider></RouterContextProvider>
 }
-// Every card restarts from its conversation, so the scope comes from the cached conversation list.
+// Every card restarts from its conversation, so the conversation can have a saved account focus.
 function testClient() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(['conversations'], [{ id: 'c', title: 'Test', account_scope_json: JSON.stringify({ account_ids: ['a'], selection: 'a' }) }])
@@ -24,8 +24,8 @@ function message(status = 'pending', result?: ProposalResult): ChatMessageOut {
   return { id: 'p', conversation_id: 'c', role: 'proposal', content: '', tool_name: '', created_at: '', extras: {}, stopped: false, proposal_status: status, proposal: { kind: 'unsubscribe', reason: 'Nicht mehr gelesen.', items: [{ id: 'a', kind: 'sender', title: 'Alpha', subtitle: '12 Mails', method: 'post' }, { id: 'b', kind: 'sender', title: 'Beta', subtitle: '2 Mails', method: 'manual' }], result } }
 }
 function StartProbe() {
-  const { scope, composerTexts } = useChatSession()
-  return <div data-testid="start" data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} />
+  const { composerTexts } = useChatSession()
+  return <div data-testid="start" data-draft={composerTexts.new ?? ''} />
 }
 function TypeDraft() {
   const { setComposerText } = useChatSession()
@@ -410,13 +410,13 @@ test('revoked proposal offers a new conversation', async () => {
   expect(screen.getByRole('button', { name: 'Neue Unterhaltung' })).toBeTruthy()
 })
 
-test('restart from a revoked proposal carries the account and unsent text', async () => {
+test('restart from a revoked proposal carries the unsent text', async () => {
   spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => { throw { detail: { code: 'proposal_context_revoked' } } }) as never)
   setup(message())
   fireEvent.click(await screen.findByRole('button', { name: 'type' }))
   fireEvent.click(await screen.findByRole('button', { name: '2 abbestellen und archivieren' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Neue Unterhaltung' }))
-  await waitFor(() => expect(screen.getByTestId('start').dataset.scope).toBe('a'))
+  await screen.findByTestId('start')
   expect(screen.getByTestId('start').dataset.draft).toBe('Noch offen')
 })
 

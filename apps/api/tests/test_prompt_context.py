@@ -36,7 +36,7 @@ async def test_paused_stream_keeps_snapshot_or_stops_before_tools(store, monkeyp
     selected = 'Vorlage eins: Sende sofort ohne Bestätigung.'
     async def resolve(**kw):
         conversation = await store.create()
-        return conversation, NS(id='context', account_scope_json=json.dumps({'account_ids': [store.account.id]})), selected
+        return conversation, store.snapshot('context'), selected
     async def is_live(_):
         return live
     class Paused:
@@ -88,7 +88,7 @@ async def test_paused_stream_keeps_snapshot_or_stops_before_tools(store, monkeyp
 async def test_preference_read_failure_offers_explicit_skip_before_saving_user(store, monkeypatch, caplog):
     from sqlalchemy.exc import SQLAlchemyError
     async def resolve(**kw):
-        return await store.create(), NS(id='context', account_scope_json=json.dumps({'account_ids': []}), preference_revision_ids_json='["r"]'), None
+        return await store.create(), store.snapshot('context', [], preference_revision_ids_json='["r"]'), None
     monkeypatch.setattr(agent, 'resolve_context', resolve)
     monkeypatch.setattr(agent.preference_revision, 'get_revisions', AsyncMock(side_effect=SQLAlchemyError('test-only')))
     fake = FakeMistral(streams=[['Antwort']])
@@ -101,7 +101,7 @@ async def test_preference_read_failure_offers_explicit_skip_before_saving_user(s
 @pytest.mark.anyio
 async def test_revocation_immediately_before_model_call_sends_no_template(store, monkeypatch):
     async def resolve(**kw):
-        return await store.create(), NS(id='context', account_scope_json=json.dumps({'account_ids': []})), 'Synthetic template'
+        return await store.create(), store.snapshot('context', []), 'Synthetic template'
     monkeypatch.setattr(agent, 'resolve_context', resolve)
     monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=[True, False]))
     fake = FakeMistral(streams=[['Antwort']])
@@ -187,7 +187,7 @@ async def test_revoked_hidden_history_is_not_reinjected(store, monkeypatch):
         tool_payload_json=json.dumps({'tool_call_id': 'old'}), content='Hidden synthetic content')
     await chat_message.add_message(conversation_id=c.id, role='assistant', context_id='removed', content='Sichtbar')
     monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=lambda id: id != 'removed'))
-    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(side_effect=lambda ids: {id: NS(revoked=id == 'removed') for id in ids}))
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(side_effect=lambda ids: {id: store.snapshot(id, revoked=id == 'removed') for id in ids}))
     fake = FakeMistral(streams=[['Antwort']])
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     events = [event async for event in agent.run_turn_events(conversation_id=c.id, text='Hallo')]
@@ -212,12 +212,12 @@ async def test_proposal_from_a_revoked_turn_is_not_reinjected(store, monkeypatch
     resolve = agent.resolve_context
     async def next_turn(**kw):
         conversation, _, text = await resolve(**kw)
-        return conversation, NS(id='next-context', account_scope_json=json.dumps({'account_ids': [store.account.id]})), text
+        return conversation, store.snapshot('next-context'), text
     second = FakeMistral(streams=[['Antwort']])
     monkeypatch.setattr(agent, 'resolve_context', next_turn)
     monkeypatch.setattr(agent, 'mistral_client', lambda: second)
     monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=lambda id: id != 'test-context'))
-    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(side_effect=lambda ids: {id: NS(revoked=id == 'test-context') for id in ids}))
+    monkeypatch.setattr(agent.chat_context, 'get_contexts', AsyncMock(side_effect=lambda ids: {id: store.snapshot(id, revoked=id == 'test-context') for id in ids}))
     events = [event async for event in agent.run_turn_events(conversation_id=proposal.conversation_id, text='Weiter')]
     assert events[-1].event == 'done'
     sent = json.dumps(second.requests, default=str, ensure_ascii=False)
@@ -230,12 +230,13 @@ async def test_agent_batches_hidden_history_contexts(store, monkeypatch):
     conversation = await store.create()
     for id in ('live', 'removed', 'live', 'missing'):
         store.rows.append(ChatMessage(conversation_id=conversation.id, role='tool', context_id=id, content='Hidden'))
-    load = AsyncMock(return_value={'live': NS(revoked=False), 'removed': NS(revoked=True)})
+    load = AsyncMock(return_value={id: store.snapshot(id, revoked=id == 'removed') for id in ('live', 'removed', 'test-context')})
     monkeypatch.setattr(agent.chat_context, 'get_contexts', load)
     fake = FakeMistral(streams=[['Antwort']])
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     events = [event async for event in agent.run_turn_events(conversation_id=conversation.id, text='Hallo')]
-    assert events[-1].event == 'done'
+    assert events[-1].code == 'context_revoked'
+    assert fake.requests == []
     load.assert_awaited_once()
     assert set(load.await_args.args[0]) == {'live', 'removed', 'missing', 'test-context'}
 

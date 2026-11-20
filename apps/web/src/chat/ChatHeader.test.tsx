@@ -8,8 +8,8 @@ import { ChatSessionProvider, useChatSession } from './session'
 const originalMatchMedia = window.matchMedia
 afterEach(() => { cleanup(); window.matchMedia = originalMatchMedia })
 function StartProbe() {
-  const { scope, composerTexts } = useChatSession()
-  return <div data-testid="start" data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} />
+  const { composerTexts } = useChatSession()
+  return <div data-testid="start" data-draft={composerTexts.new ?? ''} />
 }
 function TypeDraft() {
   const { setComposerText } = useChatSession()
@@ -43,7 +43,6 @@ test('desktop restart carries the conversation account and unsent text to the st
   fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('a')
   expect(start.dataset.draft).toBe('Noch offen')
 })
 test('start header shows chat; mobile does not render its crumb or button', async () => {

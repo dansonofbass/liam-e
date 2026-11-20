@@ -18,7 +18,7 @@ def test_account_and_unlinked_scope_reads_prepares_and_confirms_only_its_union(p
         from api.tasks.proposals import TaskCreateCommand
         from api.mail import proposals
         from api.mail.agent_tools import TurnContext
-        from db.accessors import chat_context, chat_message
+        from db.accessors import chat_context, chat_message, chat_settings
         from db.engine import get_session_maker
         from db.models.mail_account import MailAccount
         from db.models.mail_message import MailMessage
@@ -37,18 +37,24 @@ def test_account_and_unlinked_scope_reads_prepares_and_confirms_only_its_union(p
             # Bound to another account without a source mail: not personal, so still excluded.
             foreign_bare, _ = await create(session, creation_key='y-bare', title='Excluded bare example', start=today, zone='UTC', source_account_id=y.id)
             await session.commit()
+        await chat_settings.update(1, [x.id, y.id])
         args = dict(conversation_id=None, title='Example', model=None, revision_id=None, account_id=x.id,
                     app_prompt_version='test-only', task_source='account_and_unlinked', task_source_account_id=x.id)
         conversation, snapshot, _ = await chat_context.resolve(**args)
         scope = json.loads(snapshot.task_scope_json)
         assert scope == {'source': 'account_and_unlinked', 'account_id': x.id}
         window = {'from': today.isoformat(), 'to': today.isoformat()}
-        result = await chat.read('search_tasks', window, scope)
+        for selection, expected in [('all', {linked.id, personal.id}), ('unlinked', {personal.id})]:
+            result = await chat.read('search_tasks', window, {'source': selection}, [x.id])
+            assert {row['series_id'] for row in result['untrusted_task_data']['series']} == expected
+        empty = await chat.read('search_tasks', window, {'source': 'all'}, [])
+        assert [row['series_id'] for row in empty['untrusted_task_data']['series']] == [personal.id]
+        result = await chat.read('search_tasks', window, scope, [x.id])
         assert {r['series_id'] for r in result['untrusted_task_data']['series']} == {linked.id, personal.id}
         for row in (foreign, foreign_bare):
-            assert await chat.read('get_task', {**window, 'series_id': row.id}, scope) == {'error': 'task_not_found'}
+            assert await chat.read('get_task', {**window, 'series_id': row.id}, scope, [x.id]) == {'error': 'task_not_found'}
         for row in (linked, personal):
-            assert (await chat.read('get_task', {**window, 'series_id': row.id}, scope))['untrusted_task_data']['series'][0]['series_id'] == row.id
+            assert (await chat.read('get_task', {**window, 'series_id': row.id}, scope, [x.id]))['untrusted_task_data']['series'][0]['series_id'] == row.id
         ctx = TurnContext(conversation.id, x.id, today, account_ids=[x.id], task_scope=scope)
         for row in (linked, personal):
             command = await chat.prepare({'action': 'archive', 'series_id': row.id, 'expected_version': 1}, ctx)

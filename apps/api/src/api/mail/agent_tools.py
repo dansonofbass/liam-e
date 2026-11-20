@@ -15,7 +15,7 @@ class TurnContext:
     conversation_id: str
     account_id: str | None
     today: date
-    account_ids: list[str] | None = None
+    account_ids: list[str] = field(default_factory=list)
     context_id: str | None = None
     source_message_id: str | None = None
     calendar_source_ids: list[str] = field(default_factory=list)
@@ -86,7 +86,9 @@ async def tool_status(name, arguments, ctx):
         return None
     count = None
     if name == 'search_messages':
-        count = 1 if arguments.get('account_id') or ctx.account_id else sum(a.is_active for a in await mail_account.list_accounts())
+        ids = ctx.account_ids
+        target = arguments.get('account_id') or ctx.account_id
+        count = int(target in ids) if target else len(ids)
     elif name == 'get_insights':
         count = min(len(arguments.get('message_ids', [])), 20)
     return StatusEvent(code=codes[name], count=count)
@@ -144,7 +146,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
     if name in ('search_tasks', 'get_task', 'propose_task'):
         from api.tasks import chat as task_chat
         if name != 'propose_task':
-            return result(await task_chat.read(name, arguments, ctx.task_scope))
+            return result(await task_chat.read(name, arguments, ctx.task_scope, ctx.account_ids))
         try:
             command = await task_chat.prepare(arguments, ctx)
         except (ValueError, TypeError):
@@ -154,22 +156,21 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         from api.mail.calendar_tools import read_calendar
         value, refs = await read_calendar(name, arguments, ctx.calendar_source_ids, ctx.calendar_timezone)
         return result(value, calendars=refs)
-    scope = ctx.account_ids if ctx.account_ids is not None else ([ctx.account_id] if ctx.account_id else None)
-    if scope is not None:
-        if arguments.get('account_id') and arguments['account_id'] not in scope:
-            return result({'error': 'account_out_of_scope'})
-        ids = arguments.get('message_ids', []) + [arguments.get('message_id'), arguments.get('reply_to_message_id')]
-        for id in ids:
-            if id:
-                row = await mail_message.get_message(id)
-                if row is None or row.account_id not in scope:
-                    return result({'error': 'message_not_found'})
-        if arguments.get('sender_ids'):
-            allowed = {s.sender_id for s in await newsletters.find_newsletters(account_ids=scope)} if scope else set()
-            if any(id not in allowed for id in arguments['sender_ids']):
-                return result({'error': 'sender_not_found'})
+    scope = ctx.account_ids
+    if any(id is not None and id not in scope for id in (ctx.account_id, arguments.get('account_id'))):
+        return result({'error': 'account_out_of_scope'})
+    ids = arguments.get('message_ids', []) + [arguments.get('message_id'), arguments.get('reply_to_message_id')]
+    for id in ids:
+        if id:
+            row = await mail_message.get_message(id)
+            if row is None or row.account_id not in scope:
+                return result({'error': 'message_not_found'})
+    if arguments.get('sender_ids'):
+        allowed = {s.sender_id for s in await newsletters.find_newsletters(account_ids=scope)} if scope else set()
+        if any(id not in allowed for id in arguments['sender_ids']):
+            return result({'error': 'sender_not_found'})
     if name == 'list_accounts':
-        return result([{'id': a.id, 'provider': a.provider, 'email_address': a.email_address, 'is_active': a.is_active} for a in await mail_account.list_accounts() if scope is None or a.id in scope])
+        return result([{'id': a.id, 'provider': a.provider, 'email_address': a.email_address, 'is_active': a.is_active} for a in await mail_account.list_accounts() if a.id in scope])
     if name == 'search_messages':
         account_id = arguments.get('account_id') or ctx.account_id
         if scope == []:
@@ -229,7 +230,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         if original:
             account = await mail_account.get_account(original.account_id)
         else:
-            account = await mail_account.get_account(ctx.account_id) if ctx.account_id else next((a for a in await mail_account.list_accounts() if a.is_active and (scope is None or a.id in scope)), None)
+            account = await mail_account.get_account(ctx.account_id) if ctx.account_id else next((a for a in await mail_account.list_accounts() if a.is_active and a.id in scope), None)
         if not account: return result({'error':'no_account'})
         if mode in ('reply','reply_all'):
             to, base_cc = send.reply_recipients(original, account, reply_all=mode == 'reply_all')

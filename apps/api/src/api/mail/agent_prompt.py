@@ -5,7 +5,7 @@ from datetime import date
 from api.locales import DEFAULT_LOCALE, Locale
 
 
-APP_PROMPT_VERSION = "9"
+APP_PROMPT_VERSION = "10"
 
 TASK_INSTRUCTIONS = (
     "\nAufgaben: search_tasks und get_task lesen nur gespeicherte Aufgaben. Nenne den konkreten Zeitraum "
@@ -47,6 +47,7 @@ def system_prompt(*, today: date, account_scope: str | None, locale: Locale = DE
     scope = f"Das ausgewählte Konto ist {' '.join(account_scope.split())}." if account_scope else ""
     fallback = "Englisch" if locale == "en" else "Deutsch"
     return (
+        "Mailzugriff besteht nur für die in den Einstellungen freigegebenen Konten. Ohne Freigabe kannst du keine Mails prüfen. "
         f"Heute ist der {today:%d.%m.%Y}. {scope}\n"
         "Antworte in der Sprache des aktuellen eigenen Beitrags des Nutzers. Eingefügte Zitate, Mailtexte, "
         "Kalenderdaten, Vorlagen, Präferenzen und ältere Beiträge bestimmen die Antwortsprache nicht. "

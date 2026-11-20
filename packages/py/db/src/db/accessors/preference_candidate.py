@@ -7,7 +7,7 @@ explicit request but never replay of an old source. Cards hold only candidate ID
 import json
 from sqlalchemy import select, and_, or_
 from sqlalchemy.exc import IntegrityError
-from db.accessors import user_preference as preferences
+from db.accessors import chat_settings, user_preference as preferences
 from db.models.preference_candidate import PreferenceCandidate
 from db.models.preference_revision import PreferenceRevision
 from db.models.user_preference import UserPreference
@@ -32,16 +32,17 @@ async def get(session, id):
     return row
 
 
-async def source(session, conversation_id, source_message_id):
+async def source(session, conversation_id, source_message_id, *, scope="*"):
     message = await session.get(ChatMessage, source_message_id)
     conversation = await session.get(ChatConversation, conversation_id)
     if (message is None or message.role != 'user' or message.conversation_id != conversation_id
             or conversation is None):
         raise CandidateGone
-    if message.context_id:
-        context = await session.get(ChatContext, message.context_id)
-        if context is None or context.revoked or context.conversation_id != conversation_id:
-            raise CandidateGone
+    context = await session.get(ChatContext, message.context_id) if message.context_id else None
+    if (context is None or context.revoked or context.conversation_id != conversation_id
+            or not await chat_settings.permits_context(session, context)
+            or (scope != "*" and scope not in json.loads(context.account_scope_json)["account_ids"])):
+        raise CandidateGone
     return message
 
 
@@ -60,7 +61,7 @@ async def snapshot(session, row):
 
 
 async def validate(session, row):
-    message = await source(session, row.conversation_id, row.source_message_id)
+    message = await source(session, row.conversation_id, row.source_message_id, scope=row.scope)
     if row.status not in {'pending', 'accepted'} or row.value is None:
         raise CandidateGone
     await preferences.validate(session, row.key, row.scope, row.value, 'active')
@@ -115,7 +116,7 @@ async def expire_scope(session, key=None, scope=None, preference_id=None):
 
 async def create(session, *, conversation_id, source_message_id, key, scope, value, origin='explicit'):
     """Idempotent per source and field. A replay never changes a rejected candidate."""
-    await source(session, conversation_id, source_message_id)
+    await source(session, conversation_id, source_message_id, scope=scope)
     await preferences.validate(session, key, scope, value, 'active')
     previous = (await session.execute(select(PreferenceCandidate).where(
         PreferenceCandidate.owner_scope == OWNER_SCOPE,
@@ -158,7 +159,7 @@ async def open_card(session, row, *, refresh=False):
     ))).scalars().first()
     if existing:
         return None
-    message = await source(session, row.conversation_id, row.source_message_id)
+    message = await source(session, row.conversation_id, row.source_message_id, scope=row.scope)
     card = ChatMessage(conversation_id=row.conversation_id, context_id=message.context_id,
         role='proposal', proposal_status='pending', proposal_json=json.dumps({
             'kind': 'preference', 'reason': '', 'items': [], 'preference': {'candidate_id': row.id}}))

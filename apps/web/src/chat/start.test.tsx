@@ -17,7 +17,8 @@ function setup(accounts = true, path = '/', unread = 3, lastSync: string | null 
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { request = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start() {} }))) }) as typeof fetch
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
-  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: accounts ? [{ id: 'a', display_name: displayName, provider: 'gmail', email_address: 'a@example.com', color_index: 0, state: 'ok' }] : [], unread_total: unread, newsletter_senders: 2, last_sync_at: lastSync } })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { mail_scope_version: 7, accounts: accounts ? [{ id: 'a', display_name: displayName, provider: 'gmail', email_address: 'a@example.com', color_index: 0, state: 'ok' }] : [], unread_total: unread, newsletter_senders: 2, last_sync_at: lastSync } })) as never)
+  spyOn(sdk, 'chatSettingsGet').mockResolvedValue({ data: { version: 7, account_ids: accounts ? ['a'] : [] } } as never)
   spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: models })) as never)
   spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail1', account_id: 'a', color_index: 0, sender_name: 'Anna', subject: 'Termin', internal_date: null, deadline: null } })) as never)
@@ -25,8 +26,9 @@ function setup(accounts = true, path = '/', unread = 3, lastSync: string | null 
   const root = createRootRoute({ component: () => <I18nProvider locale={locale}><QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider></I18nProvider> })
   const index = createRoute({ getParentRoute: () => root, path: '/', validateSearch: Route.options.validateSearch, component: Route.options.component })
   const accountsRoute = createRoute({ getParentRoute: () => root, path: '/accounts', component: () => <p>Konten</p> })
+  const settingsRoute = createRoute({ getParentRoute: () => root, path: '/settings/chat', component: () => <p>Chat</p> })
   const mailRoute = createRoute({ getParentRoute: () => root, path: '/mail/$messageId', component: () => <p>Mail</p> })
-  const router = createRouter({ routeTree: root.addChildren([index, accountsRoute, mailRoute]), history: createMemoryHistory({ initialEntries: [path] }) })
+  const router = createRouter({ routeTree: root.addChildren([index, accountsRoute, settingsRoute, mailRoute]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
   return Object.assign(router, { testClient: client })
 }
@@ -47,13 +49,13 @@ test('status uses singular and includes the sync time when available', async () 
   expect(screen.getByText('1 Mail')).toBeTruthy()
 })
 
-test('without accounts offers connection instead of actions and composer', async () => {
+test('empty grants offer settings and keep general chat available', async () => {
   const router = setup(false)
-  expect(await screen.findByText('Verbinde ein Konto, dann kann ich deine Mails lesen.')).toBeTruthy()
+  expect(await screen.findByText(de.chatAccounts.empty)).toBeTruthy()
   expect(screen.queryByText('Priorisieren')).toBeNull()
-  expect(screen.queryByPlaceholderText(de.chat.placeholder)).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: 'Konto verbinden' }))
-  await waitFor(() => expect(router.state.location.pathname).toBe('/accounts'))
+  expect(screen.getByPlaceholderText(de.chat.placeholder)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: de.chatAccounts.section }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/chat'))
 })
 
 test('a calendar reference and composer remain available when the mail summary fails', async () => {
@@ -68,7 +70,7 @@ test('a calendar reference and composer remain available when the mail summary f
   fireEvent.click(screen.getByRole('button', { name: 'Arbeit' }))
   fireEvent.change(screen.getByPlaceholderText(de.chat.placeholder), { target: { value: 'Was steht an?' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
-  expect(request.context_occurrence_id).toBe('occurrence-test')
+  await waitFor(() => expect(request?.context_occurrence_id).toBe('occurrence-test'))
   expect(request.calendar_source_ids).toEqual(['work'])
 })
 
@@ -104,13 +106,12 @@ test('a collapsed calendar selection calls out a source that was paused', async 
   expect(screen.queryByRole('region', { name: de.calendar.chatScope })).toBeNull()
 })
 
-test('priority sends its fixed prompt and selected account', async () => {
+test('priority sends its fixed prompt and central grant revision', async () => {
   setup()
-  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
-  fireEvent.click(screen.getByRole('button', { name: /Priorisieren/ }))
+  fireEvent.click(await screen.findByRole('button', { name: /Priorisieren/ }))
   expect(request.text).toBe(de.quickActions.priority.prompt)
-  expect(request.account_id).toBe('a')
+  expect(request.expected_mail_scope_version).toBe(7)
+  expect(request.account_id).toBeUndefined()
 })
 
 test('a failed start shows a retry that sends the same text', async () => {
@@ -322,7 +323,7 @@ test('opening a mail keeps its question separate from an unsent general question
   fireEvent.click(screen.getByRole('button', { name: 'Bezug entfernen' }))
   const general = await screen.findByPlaceholderText(de.chat.placeholder) as HTMLTextAreaElement
   expect(general.value).toBe('Offene Frage')
-  expect(screen.getByRole('button', { name: de.controls.allAccounts })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: de.controls.allAccounts })).toBeNull()
 })
 
 test('a filtered default is identified without offering a specialist as a new choice', async () => {
@@ -331,4 +332,13 @@ test('a filtered default is identified without offering a specialist as a new ch
   expect(screen.getByRole('menuitemradio', { checked: true }).getAttribute('aria-disabled')).toBe('true')
   expect(screen.getByText(de.chat.noMailModels)).toBeTruthy()
   expect(screen.queryByRole('menuitemradio', { checked: false })).toBeNull()
+})
+
+
+test('an excluded mail reference shows its grant error and offers no contextual composer', async () => {
+  setup(false, '/?about=mail1')
+  expect(await screen.findByText(de.errors.chat_account_not_granted)).toBeTruthy()
+  expect(screen.queryByText('Termin')).toBeNull()
+  expect(screen.queryByPlaceholderText(de.inbox.mailQuestionPlaceholder)).toBeNull()
+  expect(screen.getByRole('button', { name: de.chat.removeReference })).toBeTruthy()
 })

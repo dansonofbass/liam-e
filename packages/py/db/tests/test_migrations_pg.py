@@ -110,3 +110,18 @@ def test_migrating_leaves_the_process_loggers_enabled(scratch: tuple[Config, str
     command.upgrade(config, "heads")
 
     assert not existing.disabled
+
+
+def test_grant_migration_keeps_existing_turns_unverified(scratch: tuple[Config, str]) -> None:
+    config, url = scratch
+    command.upgrade(config, "f491e66e47d3")
+    asyncio.run(_admin_on(url, """
+        INSERT INTO chat_context (id, conversation_id, app_prompt_version, account_scope_json, revoked)
+        VALUES ('previous-turn', 'previous-chat', '9', '{"account_ids": ["previous-account"], "selection": null}', false)
+    """))
+    command.upgrade(config, "heads")
+    preserved = asyncio.run(_scalar(url, """
+        SELECT count(*) FROM chat_context WHERE id = 'previous-turn' AND mail_scope_version IS NULL
+    """))
+    assert preserved == 1
+    assert asyncio.run(_scalar(url, "SELECT count(*) FROM chat_settings")) == 0

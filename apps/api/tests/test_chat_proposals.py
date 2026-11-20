@@ -29,7 +29,7 @@ async def store(fake_store, monkeypatch):
     async def get(id):
         return rows.get(id)
 
-    async def claim(id):
+    async def claim(id, **targets):
         row = rows.get(id)
         if row and row.proposal_status == "pending":
             row.proposal_status = "running"

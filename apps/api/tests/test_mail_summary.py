@@ -59,3 +59,23 @@ def test_sync_all_respects_staleness(client, fake_store):
     response = client.post('/api/v1/mail/sync', json={'only_if_older_than_minutes': 10})
     assert response.status_code == 202
     assert response.json()['queued'] == [b.id]
+
+
+def test_chat_summary_uses_only_granted_active_accounts(client, fake_store, monkeypatch):
+    from unittest.mock import AsyncMock
+    from db.accessors import chat_settings
+    from db.models.chat_settings import ChatSettings
+    from api.mail import newsletters
+    a, b, hidden = (make_account(fake_store, name) for name in ('a', 'b', 'hidden'))
+    fake_store.unread = {a.id: 2, b.id: 3, hidden.id: 10}
+    senders = AsyncMock(return_value=[])
+    monkeypatch.setattr(newsletters, 'find_newsletters', senders)
+    for ids, count in [([a.id, b.id], 5), ([], 0)]:
+        monkeypatch.setattr(chat_settings, 'get', AsyncMock(return_value=ChatSettings(account_ids=ids, version=3)))
+        response = client.get('/api/v1/mail/summary', params={'chat_scope': True})
+        assert response.status_code == 200
+        summary = response.json()
+        assert summary['mail_scope_version'] == 3 and summary['unread_total'] == count
+        assert [item['id'] for item in summary['accounts']] == ids
+        senders.assert_awaited_with(account_ids=ids)
+    assert client.get('/api/v1/mail/summary').json()['unread_total'] == 15

@@ -3,12 +3,17 @@
 Proposals are confirmed via ``POST /api/v1/chat/proposals/{proposal_id}/confirm``.
 """
 
+from collections.abc import Collection
+import json
+
 from sqlalchemy import select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from db.accessors import chat_settings, user_preference
 from db.engine import get_session_maker
 from db.models.chat_message import ChatMessage
 from db.models.chat_context import ChatContext
+from db.models.mail_message import MailMessage
 
 
 async def add_message(
@@ -44,18 +49,19 @@ async def add_message(
         return message
 
 
-async def claim_proposal(message_id: str) -> ChatMessage | None:
+async def claim_proposal(message_id: str, *, required_accounts: Collection[str] = (),
+                         mail_ids: Collection[str] = ()) -> ChatMessage | None:
     async with get_session_maker()() as session:
-        result = await session.execute(
-            update(ChatMessage).where(
-                ChatMessage.id == message_id, ChatMessage.proposal_status == "pending",
-                (ChatMessage.context_id.is_(None) | select(ChatContext.id).where(
-                    ChatContext.id == ChatMessage.context_id, ChatContext.revoked.is_(False)
-                ).exists()),
-            )
-            .values(proposal_status="running").returning(ChatMessage)
-        )
-        message = result.scalar_one_or_none()
+        message = await claim_proposal_in_session(session, message_id)
+        if message is not None and (required_accounts or mail_ids):
+            context = await session.get(ChatContext, message.context_id)
+            permitted = set(json.loads(context.account_scope_json)['account_ids'])
+            targets = set(required_accounts)
+            if mail_ids:
+                targets.update((await session.execute(select(MailMessage.account_id).where(
+                    MailMessage.id.in_(mail_ids)).distinct())).scalars())
+            if not targets.issubset(permitted):
+                raise chat_settings.AccountNotGranted
         await session.commit()
         return message
 
@@ -67,13 +73,19 @@ async def claim_proposal_in_session(session: AsyncSession, message_id: str) -> C
     A rollback restores pending. Provider actions must keep using claim_proposal.
     The context predicate deliberately matches the existing claim boundary.
     """
+    await user_preference.lock(session)
+    context = (await session.execute(select(ChatContext).join(ChatMessage,
+        (ChatMessage.context_id == ChatContext.id) & (ChatMessage.conversation_id == ChatContext.conversation_id)
+    ).where(ChatMessage.id == message_id, ChatMessage.proposal_status == "pending"))).scalar_one_or_none()
+    if not await chat_settings.permits_context(session, context):
+        return None
     result = await session.execute(
         update(ChatMessage).where(
             ChatMessage.id == message_id, ChatMessage.role == "proposal",
             ChatMessage.proposal_status == "pending",
-            (ChatMessage.context_id.is_(None) | select(ChatContext.id).where(
+            select(ChatContext.id).where(
                 ChatContext.id == ChatMessage.context_id, ChatContext.revoked.is_(False)
-            ).exists()),
+            ).exists(),
         ).values(proposal_status="running").returning(ChatMessage)
     )
     return result.scalar_one_or_none()

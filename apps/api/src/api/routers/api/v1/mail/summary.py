@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from db.accessors import mail_account, mail_job, mail_message, mail_sync_state
+from db.accessors import chat_settings, mail_account, mail_job, mail_message, mail_sync_state
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -26,6 +26,7 @@ class AccountSummaryOut(BaseModel):
 
 
 class MailSummaryOut(BaseModel):
+    mail_scope_version: int | None = None
     unread_total: int
     accounts: list[AccountSummaryOut]
     last_sync_at: datetime | None
@@ -40,11 +41,19 @@ async def account_summary(account, colors: dict[str, int], unread: dict[str, int
 
 
 @router.get("", operation_id="mail_summary")
-async def mail_summary() -> MailSummaryOut:
-    """Return unread inbox counts and sync status for all connected accounts."""
+async def mail_summary(chat_scope: bool = False) -> MailSummaryOut:
+    """Return inbox counts and sync status, optionally limited to the current chat grant."""
     accounts = await mail_account.list_accounts()
     colors = state.color_indexes(accounts)
-    unread = await mail_message.count_unread(folder="INBOX")
+    version = None
+    ids = None
+    if chat_scope:
+        grants = await chat_settings.get()
+        version = grants.version
+        accounts = [a for a in accounts if a.is_active and a.id in grants.account_ids]
+        ids = [a.id for a in accounts]
+    unread = await mail_message.count_unread(folder="INBOX", account_ids=ids)
     summaries = [await account_summary(a, colors, unread) for a in accounts]
     dates = [a.last_sync_at for a in summaries if a.last_sync_at is not None]
-    return MailSummaryOut(unread_total=sum(a.unread for a in summaries), accounts=summaries, last_sync_at=max(dates, default=None), newsletter_senders=len(await newsletters.find_newsletters()))
+    senders = await newsletters.find_newsletters(account_ids=ids)
+    return MailSummaryOut(mail_scope_version=version, unread_total=sum(a.unread for a in summaries), accounts=summaries, last_sync_at=max(dates, default=None), newsletter_senders=len(senders))

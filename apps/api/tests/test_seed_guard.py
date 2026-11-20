@@ -40,7 +40,7 @@ async def seeded(fake_store, monkeypatch):
         chats[row.id] = row
         return row
 
-    async def claim(id):
+    async def claim(id, **targets):
         row = chats[id]
         if row.proposal_status != "pending":
             return None

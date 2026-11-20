@@ -5,6 +5,8 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { client as api } from '../api/generated/client.gen'
 import { Settings } from '../prompts/Settings'
+import { de } from '../i18n/de'
+import { ChatAccountSettings } from './ChatAccountSettings'
 import { SwipeSettings } from './SwipeSettings'
 import { useSwipeSettings } from './useSwipeSettings'
 
@@ -26,8 +28,9 @@ function setup(path: string, respond?: (request: Request) => Promise<Response | 
   const query = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={query}><Outlet /></QueryClientProvider> })
   const settings = createRoute({ getParentRoute: () => root, path: '/settings', component: Settings })
+  const chat = createRoute({ getParentRoute: () => settings, path: '/chat', component: ChatAccountSettings })
   const controls = createRoute({ getParentRoute: () => settings, path: '/controls', component: SwipeSettings })
-  const router = createRouter({ routeTree: root.addChildren([settings.addChildren([controls])]), history: createMemoryHistory({ initialEntries: [path] }) })
+  const router = createRouter({ routeTree: root.addChildren([settings.addChildren([controls, chat])]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
   return { query, router }
 }
@@ -273,4 +276,62 @@ test('a delayed swipe save cannot replace a newer language already read from the
 
   expect(await screen.findByText('Gespeichert.')).toBeTruthy()
   expect(query.getQueryData(['ui-settings'])).toEqual(stored)
+})
+
+
+const chatAccounts = [
+  { id: 'work', display_name: 'Work', email_address: 'work@example.test', is_active: true },
+  { id: 'home', display_name: '', email_address: 'home@example.test', is_active: true },
+  { id: 'inactive', display_name: 'Inactive', email_address: 'inactive@example.test', is_active: false },
+]
+
+test('chat grants persist across page loads and the last checkbox can be cleared', async () => {
+  let grant = { version: 1, account_ids: [] as string[] }
+  async function respond(request: Request) {
+    if (new URL(request.url).pathname.endsWith('/mail/accounts')) return Response.json(chatAccounts)
+    if (request.method === 'PATCH') {
+      const body = await request.json() as { expected_version: number; account_ids: string[] }
+      expect(body.expected_version).toBe(grant.version)
+      grant = { version: grant.version + 1, account_ids: body.account_ids }
+    }
+    return Response.json(grant)
+  }
+  setup('/settings/chat', respond)
+  expect((await screen.findByRole('checkbox', { name: /Work/ }) as HTMLInputElement).checked).toBe(false)
+  expect(screen.queryByRole('checkbox', { name: /Inactive/ })).toBeNull()
+  fireEvent.click(screen.getByRole('checkbox', { name: /Work/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /home@example/ }))
+  fireEvent.click(screen.getByRole('button', { name: de.settingsUi.save }))
+  await screen.findByText(de.settingsUi.saved)
+  expect(grant.account_ids).toEqual(['work', 'home'])
+  cleanup()
+  setup('/settings/chat', respond)
+  for (const name of [/Work/, /home@example/]) {
+    const checkbox = await screen.findByRole('checkbox', { name }) as HTMLInputElement
+    expect(checkbox.checked).toBe(true)
+    fireEvent.click(checkbox)
+  }
+  fireEvent.click(screen.getByRole('button', { name: de.settingsUi.save }))
+  await screen.findByText(de.settingsUi.saved)
+  expect(grant).toEqual({ version: 3, account_ids: [] })
+})
+
+test('a stale chat grant reloads the other device’s selection before allowing another edit', async () => {
+  let changed = false
+  setup('/settings/chat', async request => {
+    if (new URL(request.url).pathname.endsWith('/mail/accounts')) return Response.json(chatAccounts)
+    if (request.method === 'PATCH') {
+      changed = true
+      return Response.json({ detail: { code: 'version_conflict' } }, { status: 409 })
+    }
+    return Response.json(changed ? { version: 2, account_ids: ['home'] } : { version: 1, account_ids: [] })
+  })
+  fireEvent.click(await screen.findByRole('checkbox', { name: /Work/ }))
+  fireEvent.click(screen.getByRole('button', { name: de.settingsUi.save }))
+  await screen.findByText(de.chatAccounts.conflict)
+  expect((screen.getByRole('button', { name: de.settingsUi.save }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: de.settingsUi.reload }))
+  await waitFor(() => expect((screen.getByRole('checkbox', { name: /home@example/ }) as HTMLInputElement).checked).toBe(true))
+  expect((screen.getByRole('checkbox', { name: /Work/ }) as HTMLInputElement).checked).toBe(false)
+  expect(requests.filter(item => item.method === 'PATCH')).toHaveLength(1)
 })

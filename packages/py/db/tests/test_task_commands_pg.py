@@ -21,7 +21,7 @@ def test_revision_collision_keeps_card_pending_with_specific_error(pg_db):
         start = datetime.now(UTC).date() + timedelta(days=7)
         async with get_session_maker()() as session:
             context = ChatContext(conversation_id='synthetic', app_prompt_version='test-only',
-                account_scope_json='{"selection":null}', task_scope_json='{"source":"all"}')
+                mail_scope_version=1, account_scope_json='{"selection":null,"account_ids":[]}', task_scope_json='{"source":"all"}')
             session.add(context)
             await session.commit()
         async def propose(command):
@@ -64,7 +64,7 @@ def test_bound_commands_execute_once(pg_db, action, conflict):
 
         async with get_session_maker()() as session:
             context = ChatContext(conversation_id='synthetic', app_prompt_version='test-only',
-                account_scope_json='{"selection":null}', task_scope_json='{"source":"all"}')
+                mail_scope_version=1, account_scope_json='{"selection":null,"account_ids":[]}', task_scope_json='{"source":"all"}')
             session.add(context)
             await session.commit()
         async def propose(command):

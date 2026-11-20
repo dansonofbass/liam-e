@@ -5,9 +5,14 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import * as sdk from '../api/generated/sdk.gen'
 import type { ChatMessageOut, ConversationOut, MailSummaryOut } from '../api/generated/types.gen'
 import { Route as StartRoute } from '../routes/_app/index'
+import { de } from '../i18n/de'
 import { Conversation, turnOrder } from './Conversation'
 import { ChatSessionProvider } from './session'
 
+const currentContext = {
+  id: 'context', app_prompt_version: '10', mail_scope_version: 4, account_scope_json: '{"selection":null,"account_ids":["a"]}',
+  prompt_revision_id: null, prompt_hash: null, preference_revision_id: null, revoked: false,
+}
 const originalFetch = globalThis.fetch
 const originalMatchMedia = window.matchMedia
 let stream: ReadableStreamDefaultController<Uint8Array>
@@ -19,7 +24,7 @@ let summary: MailSummaryOut = { accounts: [], unread_total: 0, newsletter_sender
 let summaryGate: Promise<void> | null = null
 function setup(path = '/', historyGone = false, selection: string | null = null) {
   history = []
-  summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
+  summary = { mail_scope_version: 4, accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' } as MailSummaryOut['accounts'][number]], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; requestBody = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start(c) { stream = c } }))) }) as typeof fetch
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
@@ -70,23 +75,15 @@ test('account chat explicitly includes personal tasks without granting other acc
   expect(requestBody.task_source_account_id).toBe('a')
 })
 
-for (const choice of ['Aufgaben dieses Kontos', 'Alle Aufgaben']) test(`changing the mail account clears the explicit task choice: ${choice}`, async () => {
+test('a general chat offers only granted task accounts and has no mail account selector', async () => {
   setup()
-  summary.accounts.push({ ...summary.accounts[0]!, id: 'b', display_name: 'Arbeit', email_address: 'work@example.org' })
-  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
-  await taskChoice('Keine Aufgaben', choice)
-  expect(await screen.findByRole('button', { name: choice })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Privat' }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Arbeit' }))
+  summary.accounts.push({ ...summary.accounts[0]!, id: 'b', display_name: 'Arbeit' })
   fireEvent.click(await screen.findByRole('button', { name: 'Keine Aufgaben' }))
-  expect((await screen.findByRole('menuitemradio', { name: /^Keine Aufgaben/ })).getAttribute('aria-checked')).toBe('true')
-  expect(screen.getByRole('menuitemradio', { name: /^Aufgaben dieses Kontos/ }).getAttribute('aria-checked')).toBe('false')
-  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+  expect(screen.queryByRole('button', { name: 'Alle Konten' })).toBeNull()
+  const choice = await screen.findByRole('menuitemradio', { name: /Arbeit/ })
+  fireEvent.click(choice)
   await send()
-  expect(requestBody.account_id).toBe('b')
-  expect(requestBody.task_source).toBe('none')
-  expect(requestBody.task_source_account_id).toBeUndefined()
+  expect(requestBody).toMatchObject({ account_id: null, task_source: 'account', task_source_account_id: 'b', expected_mail_scope_version: 4 })
 })
 
 test('shows status, streams text and stops the answer', async () => {
@@ -107,7 +104,7 @@ for (const phase of ['stopped', 'error'] as const) test(`saved partial answer is
   const { client } = setup('/chat/c'); await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'delta', text: 'Teilantwort' }) })
   expect(await screen.findByText('Teilantwort')).toBeTruthy()
-  const row = (id: string, role: 'user' | 'assistant', content: string): ChatMessageOut => ({ id, conversation_id: 'c', role, content, created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: role === 'assistant', tool_name: '' })
+  const row = (id: string, role: 'user' | 'assistant', content: string): ChatMessageOut => ({ id, conversation_id: 'c', role, content, created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: role === 'assistant', context: currentContext, tool_name: '' })
   history = [row('u', 'user', 'Meine Frage'), row('a', 'assistant', 'Teilantwort')]
   if (phase === 'stopped') fireEvent.click(screen.getByRole('button', { name: 'Anhalten' }))
   else await act(async () => { frame({ event: 'error', code: 'aborted' }) })
@@ -142,10 +139,9 @@ test('navigation after start preserves the stream through done', async () => {
 
 test('account scope and composer focus survive navigation to the conversation', async () => {
   const { router } = setup()
-  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
   await send()
-  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.account_id).toBeNull()
+  expect(requestBody.expected_mail_scope_version).toBe(4)
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }) })
   await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c'))
   const input = await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
@@ -155,29 +151,29 @@ test('account scope and composer focus survive navigation to the conversation', 
   fireEvent.change(input, { target: { value: 'Noch eine Frage' } })
   fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
   expect(requestBody.text).toBe('Noch eine Frage')
-  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.account_id).toBeNull()
+  expect(requestBody.expected_mail_scope_version).toBe(4)
   expect(requestBody.conversation_id).toBe('c')
 })
 
-test('a live follow-up keeps the selected account and calendars after navigation', async () => {
+test('a live follow-up keeps the central mail grant and calendars after navigation', async () => {
   setup()
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
   fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
   await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
   expect(requestBody.text).toBe('Weiter fragen')
   expect(requestBody.calendar_source_ids).toEqual(['work'])
-  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.account_id).toBeNull()
+  expect(requestBody.expected_mail_scope_version).toBe(4)
   expect(requestBody.conversation_id).toBe('c')
 })
 
 test('a history suggestion after reload uses the saved account', async () => {
   const { client } = setup('/chat/c', false, 'a')
-  await screen.findByRole('button', { name: 'Privat' })
+  await screen.findByRole('button', { name: 'Senden' })
   act(() => { client.setQueryData(['history', 'c'], [historyRow('answer', 'assistant', { suggestions: ['Weiter fragen'] })]) })
   fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
   expect(requestBody.account_id).toBe('a')
@@ -185,7 +181,7 @@ test('a history suggestion after reload uses the saved account', async () => {
 
 test('reload restores the saved account for the composer', async () => {
   setup('/chat/c', false, 'a')
-  await screen.findByRole('button', { name: 'Privat' })
+  await screen.findByRole('button', { name: 'Senden' })
   await send()
   expect(requestBody.account_id).toBe('a')
 })
@@ -195,15 +191,13 @@ test('the pencil on a mail card keeps the live calendar scope after navigation',
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [{ id: 'work', name: 'Arbeit', is_active: true }] } as never)
   fireEvent.click(await screen.findByRole('button', { name: 'Kalender wählen' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Arbeit' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Alle Konten' }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
   await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'mails', mails: [{ id: 'mail1', account_id: 'a', color_index: 0, subject: 'Frist', sender_name: 'Anna', snippet: 'Einwände bis Freitag möglich', internal_date: null, deadline: null, is_flagged: true }] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   expect(await screen.findByRole('img', { name: 'Dringend' })).toBeTruthy()
   expect(screen.getByText('Einwände bis Freitag möglich').classList.contains('le-mailref-snippet')).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Antwort entwerfen' }))
   expect(requestBody).toMatchObject({ text: 'Entwirf eine Antwort auf diese Mail.', conversation_id: 'c', context_message_id: 'mail1', calendar_source_ids: ['work'] })
-  expect(requestBody.account_id).toBe('a')
+  expect(requestBody.expected_mail_scope_version).toBe(4)
 })
 
 test('an answer shows at most three follow-up suggestions', async () => {
@@ -214,7 +208,7 @@ test('an answer shows at most three follow-up suggestions', async () => {
   expect(document.querySelectorAll('.le-chat-suggestions .le-chip')).toHaveLength(3)
 })
 
-test('a follow-up suggestion without a selected account searches all accounts', async () => {
+test('a follow-up suggestion without a selected account uses the central grant', async () => {
   setup('/chat/c'); await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'suggestions', items: ['Weiter fragen'] }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   fireEvent.click(await screen.findByRole('button', { name: 'Weiter fragen' }))
@@ -224,7 +218,7 @@ test('a follow-up suggestion without a selected account searches all accounts', 
 
 test('history user message is not duplicated while streaming after navigation', async () => {
   const { client, router } = setup(); await send()
-  history = [{ id: 'u', conversation_id: 'c', role: 'user', content: 'Meine Frage', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, tool_name: '' }]
+  history = [{ id: 'u', conversation_id: 'c', role: 'user', content: 'Meine Frage', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, context: currentContext, tool_name: '' }]
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'delta', text: 'Antwort' }) })
   await waitFor(() => expect(router.state.location.pathname).toBe('/chat/c'))
   expect(await screen.findByText('Antwort')).toBeTruthy()
@@ -236,7 +230,7 @@ test('history replaces the live turn when the answer is persisted', async () => 
   const { client } = setup('/chat/c'); await send()
   await act(async () => { frame({ event: 'start', conversation_id: 'c', user_message_id: 'u' }); frame({ event: 'delta', text: 'Gespeichert' }); frame({ event: 'done', conversation_id: 'c', message_id: 'm', stopped: false }) })
   expect(await screen.findByText('Gespeichert', { selector: 'p' })).toBeTruthy()
-  const message: ChatMessageOut = { id: 'm', conversation_id: 'c', role: 'assistant', content: 'Gespeichert', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, tool_name: '' }
+  const message: ChatMessageOut = { id: 'm', conversation_id: 'c', role: 'assistant', content: 'Gespeichert', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, context: currentContext, tool_name: '' }
   history = [message]
   act(() => { client.setQueryData(['history', 'c'], history) })
   await waitFor(() => expect(screen.queryByText('Meine Frage')).toBeNull())
@@ -244,8 +238,8 @@ test('history replaces the live turn when the answer is persisted', async () => 
 })
 
 test('selection survives the live proposal being replaced by history', async () => {
-  const proposal: ChatMessageOut = { id: 'p', conversation_id: 'c', role: 'proposal', content: '', created_at: '', extras: {}, proposal_status: 'pending', stopped: false, tool_name: '', proposal: { kind: 'unsubscribe', reason: 'Nicht mehr gelesen.', items: [{ id: 'a', kind: 'sender', title: 'Alpha', subtitle: '', method: 'post' }, { id: 'b', kind: 'sender', title: 'Beta', subtitle: '', method: 'post' }] } }
-  const answer: ChatMessageOut = { id: 'm', conversation_id: 'c', role: 'assistant', content: 'Fertig', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, tool_name: '' }
+  const proposal: ChatMessageOut = { id: 'p', conversation_id: 'c', role: 'proposal', content: '', created_at: '', extras: {}, proposal_status: 'pending', stopped: false, context: currentContext, tool_name: '', proposal: { kind: 'unsubscribe', reason: 'Nicht mehr gelesen.', items: [{ id: 'a', kind: 'sender', title: 'Alpha', subtitle: '', method: 'post' }, { id: 'b', kind: 'sender', title: 'Beta', subtitle: '', method: 'post' }] } }
+  const answer: ChatMessageOut = { id: 'm', conversation_id: 'c', role: 'assistant', content: 'Fertig', created_at: '', extras: {}, proposal: null, proposal_status: '', stopped: false, context: currentContext, tool_name: '' }
   const confirm = spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => ({ data: { ...proposal, proposal_status: 'done' } })) as never)
   const { client } = setup('/chat/c')
   await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([]))
@@ -265,20 +259,8 @@ test('selection survives the live proposal being replaced by history', async () 
   await waitFor(() => expect(screen.queryByRole('button', { name: '1 abbestellen und archivieren' })).toBeNull())
 })
 
-test('composer account menu falls back to the address', async () => {
-  const { client } = setup('/chat/c')
-  await waitFor(() => expect(client.getQueryData(['summary'])).toBeTruthy())
-  act(() => { client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail' }] }) })
-  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
-  fireEvent.click(await screen.findByRole('menuitem', { name: 'ich@example.com' }))
-  expect(screen.getByRole('button', { name: 'ich@example.com' })).toBeTruthy()
-})
-
-test('composer scopes a request and clears the field only after acceptance', async () => {
-  const { client } = setup('/chat/c')
-  act(() => { client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: 'Privat' }] }) })
-  fireEvent.click(await screen.findByRole('button', { name: 'Alle Konten' }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Privat' }))
+test('composer sends the focused account and grant revision and keeps text until acceptance', async () => {
+  setup('/chat/c', false, 'a')
   await send()
   expect(requestBody.account_id).toBe('a')
   expect(requestBody.conversation_id).toBe('c')
@@ -331,8 +313,6 @@ for (const path of ['/', '/chat/c']) test(`invalid context names both account an
 
 test('account change in a conversation offers a new conversation instead of a retry', async () => {
   const { router } = setup('/chat/c', false, 'a')
-  fireEvent.click(await screen.findByRole('button', { name: 'Privat' }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Alle Konten' }))
   globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ detail: { code: 'conversation_scope_change_requires_new' } }), { status: 409 }))) as unknown as typeof fetch
   await send()
   const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
@@ -340,7 +320,7 @@ test('account change in a conversation offers a new conversation instead of a re
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   expect((await screen.findByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Meine Frage')
-  expect(screen.getByRole('button', { name: 'Alle Konten' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Alle Konten' })).toBeNull()
 })
 
 test('in a conversation the other task choices say they need a new conversation', async () => {
@@ -357,13 +337,13 @@ test('a restored task choice the list cannot offer still names itself', async ()
   const { client } = setup('/chat/c')
   const trigger = await screen.findByRole('button', { name: 'Keine Aufgaben' })
   await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false))
-  const context = { id: 'ctx', account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: false, task_scope_json: JSON.stringify({ source: 'account', account_id: 'gone' }) } as ChatMessageOut['context']
+  const context = { id: 'ctx', mail_scope_version: 4, account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: false, task_scope_json: JSON.stringify({ source: 'account', account_id: 'gone' }) } as ChatMessageOut['context']
   act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('a1', 'assistant'), context }]) })
   expect(await screen.findByRole('button', { name: 'Aufgaben: Gespeichertes Konto nicht verfügbar' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Keine Aufgaben' })).toBeNull()
 })
 
-const restoredContext = (scope: object) => ({ id: 'ctx', account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: false, task_scope_json: JSON.stringify(scope) }) as ChatMessageOut['context']
+const restoredContext = (scope: object) => ({ id: 'ctx', mail_scope_version: 4, account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: false, task_scope_json: JSON.stringify(scope) }) as ChatMessageOut['context']
 
 test('a restored task choice never repeats an offered label', async () => {
   const { client } = setup('/chat/c', false, 'a')
@@ -429,7 +409,7 @@ test('task selection conflict restarts visibly without the old conversation', as
 
 test('calendar selection is separate from mail and survives a scope-conflict restart', async () => {
   const { client, router } = setup('/chat/c', false, 'a')
-  await screen.findByRole('button', { name: 'Privat' })
+  await screen.findByRole('button', { name: 'Senden' })
   const sources = [{ id: 'work', name: 'Arbeitskalender', provider: 'google', is_active: true }]
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
   act(() => client.setQueryData(['calendar', 'sources'], sources))
@@ -449,7 +429,7 @@ test('calendar selection is separate from mail and survives a scope-conflict res
   expect(scope.getAttribute('aria-expanded')).toBe('false')
   fireEvent.click(scope)
   expect(screen.getByRole('button', { name: 'Arbeitskalender' }).getAttribute('aria-pressed')).toBe('true')
-  expect(screen.getByRole('button', { name: 'Privat' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Privat' })).toBeNull()
 })
 
 test('revoked context during an answer offers a fresh conversation', async () => {
@@ -495,28 +475,28 @@ test('template selection errors do not follow a conversation switch', async () =
   expect(screen.queryByRole('button', { name: 'Aktuelle Fassung laden' })).toBeNull()
 })
 
-test('restart after template removal preserves account and unsent text', async () => {
+test('restart after template removal keeps the unsent text', async () => {
   const { client, router } = setup('/chat/c', false, 'a')
-  await screen.findByRole('button', { name: 'Privat' })
+  await screen.findByRole('button', { name: 'Senden' })
   const saved = client.getQueryData<Record<string, unknown>[]>(['conversations'])![0]!
   act(() => { client.setQueryData(['conversations'], [{ ...saved, prompt_revision_id: 'removed' }]) })
   const input = screen.getByPlaceholderText('Frag etwas zu deinen Mails …')
   fireEvent.change(input, { target: { value: 'Noch offen' } })
   fireEvent.click(await screen.findByRole('button', { name: 'Neue Unterhaltung ohne bisherigen Kontext' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-  expect(await screen.findByRole('button', { name: 'Privat' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Privat' })).toBeNull()
   expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Noch offen')
 })
 
-test('restart from a revoked answer preserves account and unsent text', async () => {
+test('restart from a revoked answer keeps the unsent text', async () => {
   const { client, router } = setup('/chat/c', false, 'a')
-  await screen.findByRole('button', { name: 'Privat' })
+  await screen.findByRole('button', { name: 'Senden' })
   await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([]))
-  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('revoked', 'assistant'), context: { id: 'ctx', account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: true } }]) })
+  act(() => { client.setQueryData(['history', 'c'], [{ ...historyRow('revoked', 'assistant'), context: { id: 'ctx', mail_scope_version: 4, account_scope_json: '{}', app_prompt_version: '1', preference_revision_id: null, prompt_hash: null, prompt_revision_id: null, revoked: true } }]) })
   fireEvent.change(screen.getByPlaceholderText('Frag etwas zu deinen Mails …'), { target: { value: 'Noch offen' } })
   fireEvent.click(await screen.findByRole('button', { name: 'Neue Unterhaltung ohne bisherigen Kontext' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-  expect(await screen.findByRole('button', { name: 'Privat' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Privat' })).toBeNull()
   expect((screen.getByPlaceholderText('Frag etwas zu deinen Mails …') as HTMLTextAreaElement).value).toBe('Noch offen')
 })
 
@@ -629,7 +609,7 @@ test('a missing history mail reference is requested only once', async () => {
   const get = spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ response: new Response(null, { status: 404 }) })) as never)
   const { client } = setup('/chat/c')
   await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([]))
-  const row: ChatMessageOut = { id: 'm', conversation_id: 'c', role: 'assistant', content: 'Antwort', created_at: '', extras: { mails: ['missing'] }, proposal: null, proposal_status: '', stopped: false, tool_name: '' }
+  const row: ChatMessageOut = { id: 'm', conversation_id: 'c', role: 'assistant', content: 'Antwort', created_at: '', extras: { mails: ['missing'] }, proposal: null, proposal_status: '', stopped: false, context: currentContext, tool_name: '' }
   act(() => { client.setQueryData(['history', 'c'], [row]) })
   await waitFor(() => expect(client.getQueryState(['message', 'missing'])?.status).toBe('error'))
   expect(client.getQueryState(['message', 'missing'])?.fetchFailureCount).toBe(1)
@@ -639,11 +619,11 @@ test('a missing history mail reference is requested only once', async () => {
 test('history renders safe text, model, mail account and only the latest suggestions', async () => {
   const { client, router } = setup('/chat/c')
   spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail', account_id: 'a', color_index: 0, sender_name: 'Absender', subject: '<b>Betreff</b>', internal_date: null, deadline: null, is_flagged: true } })) as never)
-  const row =(id: string, content: string, extras: ChatMessageOut['extras']): ChatMessageOut => ({ id, conversation_id: 'c', role: 'assistant', content, created_at: '', extras, proposal: null, proposal_status: '', stopped: false, tool_name: '' })
+  const row =(id: string, content: string, extras: ChatMessageOut['extras']): ChatMessageOut => ({ id, conversation_id: 'c', role: 'assistant', content, created_at: '', extras, proposal: null, proposal_status: '', stopped: false, context: currentContext, tool_name: '' })
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
   await waitFor(() => expect(screen.queryByText('Unterhaltung wird geladen …')).toBeNull())
   act(() => {
-    client.setQueryData(['summary'], { ...summary, accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail' }] })
+    client.setQueryData(['summary', 'chat'], { ...summary, accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail' }] })
     client.setQueryData(['models'], [{ id: 'model', label: 'Modellname', group: 'general', description: '', is_default: true }])
     client.setQueryData(['history', 'c'], [row('old', 'Alt', { suggestions: ['Alte Frage'] }), row('new', 'Neu', { model: 'model', mails: ['mail'], suggestions: ['Weiter fragen'] })])
   })
@@ -661,7 +641,7 @@ test('history renders safe text, model, mail account and only the latest suggest
   await waitFor(() => expect(router.state.location.pathname).toBe('/mail/mail'))
 })
 
-const historyRow = (id: string, role: string, extras: ChatMessageOut['extras'] = {}): ChatMessageOut => ({ id, conversation_id: 'c', role, content: role === 'assistant' ? `Antwort ${id}` : role === 'user' ? `Frage ${id}` : '', created_at: '', extras, proposal: role === 'proposal' ? { kind: 'archive', reason: 'Erledigt.', items: [{ id: 'm', kind: 'mail', title: 'Rechnung', subtitle: 'Anna' }] } : null, proposal_status: role === 'proposal' ? 'pending' : '', stopped: false, tool_name: '' })
+const historyRow = (id: string, role: string, extras: ChatMessageOut['extras'] = {}): ChatMessageOut => ({ id, conversation_id: 'c', role, content: role === 'assistant' ? `Antwort ${id}` : role === 'user' ? `Frage ${id}` : '', created_at: '', extras, proposal: role === 'proposal' ? { kind: 'archive', reason: 'Erledigt.', items: [{ id: 'm', kind: 'mail', title: 'Rechnung', subtitle: 'Anna' }] } : null, proposal_status: role === 'proposal' ? 'pending' : '', stopped: false, context: currentContext, tool_name: '' })
 
 test('turn order puts a proposal after the answer of its turn', () => {
   const rows = ['u1:user', 'p1:proposal', 'a1:assistant', 'u2:user', 'a2:assistant', 'u3:user', 'p3:proposal'].map(entry => { const [id, role] = entry.split(':') as [string, string]; return historyRow(id, role) })
@@ -680,4 +660,21 @@ test('history shows answer, card and follow-ups in the same order as live', asyn
   expect(answer.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(card.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(screen.getAllByRole('button', { name: 'Weiter fragen' })).toHaveLength(1)
+})
+
+
+test.each([null, { ...currentContext, mail_scope_version: 3 }])('an earlier or unverified conversation is readable and offers a fresh start', async stale => {
+  const { client, router } = setup('/chat/c')
+  await screen.findByPlaceholderText(de.chat.placeholder)
+  const rows = [historyRow('old', 'assistant', { suggestions: ['Old suggestion'] }), historyRow('card', 'proposal')]
+  act(() => { client.setQueryData(['history', 'c'], rows.map(row => ({ ...row, context: stale }))) })
+  expect(await screen.findByText('Antwort old')).toBeTruthy()
+  expect(await screen.findByText(de.chatAccounts.restart)).toBeTruthy()
+  expect(screen.getByText(de.chatAccounts.cancelOnly)).toBeTruthy()
+  expect(screen.getByRole('button', { name: de.controls.cancel })).toBeTruthy()
+  expect(screen.queryByPlaceholderText(de.chat.placeholder)).toBeNull()
+  expect(screen.queryByText('Old suggestion')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: de.prompts.restart }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect((await screen.findByPlaceholderText(de.chat.placeholder) as HTMLTextAreaElement).value).toBe('')
 })

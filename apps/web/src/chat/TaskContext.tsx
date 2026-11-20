@@ -7,13 +7,12 @@ import { useConversationScope, useTaskScope, type ComposerMail, type TaskScope }
 
 type Choice = { label: string; scope: TaskScope; hint?: string }
 
-// One chip in the composer bar, like the account chip beside it: a block of choice chips above the composer pushed the
-// composer itself off a small phone screen.
+// Keep task scope reachable on narrow screens.
 export function TaskScopeSelector({ conversationId, contextMail, disabled }: { conversationId?: string; contextMail?: ComposerMail; disabled: boolean }) {
   const { texts } = useI18n()
   const tasks = useTaskScope(conversationId, contextMail?.id)
   const mail = useConversationScope(conversationId, contextMail)
-  const summary = useQuery(summaryQuery())
+  const summary = useQuery(summaryQuery(true))
   const blocked = disabled || !tasks.ready || !mail.ready
   const choices: Choice[] = [{ label: texts.taskChat.none, scope: { source: 'none' } }]
   if (mail.scope) {

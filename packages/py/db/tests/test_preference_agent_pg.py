@@ -4,6 +4,7 @@ import json
 import os
 from types import SimpleNamespace as NS
 import pytest
+from db.accessors import chat_settings
 
 pytestmark = pytest.mark.skipif(not os.getenv('RUN_PG_CONTRACT'), reason='RUN_PG_CONTRACT is not set')
 
@@ -27,6 +28,7 @@ def test_real_model_payload_scope_and_history(pg_db, monkeypatch, caplog):
         from api.routers.api.v1.preferences.route import get_preference_context
         one = await a.create_account(provider='imap', auth_type='imap_password', email_address='one@example.test')
         two = await a.create_account(provider='imap', auth_type='imap_password', email_address='two@example.test')
+        await chat_settings.update(1, [one.id, two.id])
         global_pref = await p.create(key='answer_length', value='test-only kurz')
         await p.create(key='signature', scope=one.id, value='test-only one')
         await p.create(key='signature', scope=two.id, value='test-only two')
@@ -77,6 +79,7 @@ def test_revocation_reaches_only_turns_that_used_the_preference(pg_db):
         from db.accessors import user_preference as p, mail_account as a, chat_context as c
         one = await a.create_account(provider='imap', auth_type='imap_password', email_address='one@example.test')
         two = await a.create_account(provider='imap', auth_type='imap_password', email_address='two@example.test')
+        await chat_settings.update(1, [one.id, two.id])
         await p.update_settings(1, use_preferences=True)
         signature = await p.create(key='signature', scope=one.id, value='test-only one')
         await p.create(key='answer_length', value='test-only paused', status='paused')
@@ -101,6 +104,7 @@ def test_pause_and_delete_revoke_turns_of_every_revision(pg_db, action):
     async def run():
         from db.accessors import user_preference as p, mail_account as a, chat_context as c
         one = await a.create_account(provider='imap', auth_type='imap_password', email_address='one@example.test')
+        await chat_settings.update(1, [one.id])
         await p.update_settings(1, use_preferences=True)
         await p.create(key='signature', scope=one.id, value='test-only one')
         async def turn(account):
@@ -126,6 +130,7 @@ def test_account_value_overrides_global_per_key(pg_db):
         from db.accessors import user_preference as p, mail_account as a, chat_context as c
         one = await a.create_account(provider='imap', auth_type='imap_password', email_address='one@example.test')
         two = await a.create_account(provider='imap', auth_type='imap_password', email_address='two@example.test')
+        await chat_settings.update(1, [one.id, two.id])
         await p.update_settings(1, use_preferences=True)
         general = await p.create(key='answer_length', value='test-only global')
         specific = await p.create(key='answer_length', scope=one.id, value='test-only one')

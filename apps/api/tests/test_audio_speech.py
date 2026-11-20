@@ -43,8 +43,12 @@ def speech_client(monkeypatch) -> TestClient:
     monkeypatch.setattr(mistral, "mistral_api_key", "test-only")
     monkeypatch.setattr(chat_conversation, "get_conversation", AsyncMock(return_value=ChatConversation(id=CONVERSATION)))
     monkeypatch.setattr(chat_message, "get_message", AsyncMock(return_value=ChatMessage(
-        id=MESSAGE, conversation_id=CONVERSATION, role="assistant", content=REPLY,
+        id=MESSAGE, conversation_id=CONVERSATION, role="assistant", context_id="test-context", content=REPLY,
     )))
+    monkeypatch.setattr(chat_context, "get_context", AsyncMock(return_value=ChatContext(
+        id="test-context", conversation_id=CONVERSATION, revoked=False, mail_scope_version=1,
+    )))
+    monkeypatch.setattr(chat_context, "is_live", AsyncMock(return_value=True))
     app = build_app()
     app.dependency_overrides[get_audio_owner_verifier] = lambda: owner
     return TestClient(app)
@@ -87,7 +91,7 @@ def test_speech_sends_visible_markdown_as_text_and_serves_mp3(speech_client):
 
 @pytest.mark.parametrize("changes", [
     {"role": "user"}, {"role": "proposal"}, {"stopped": True}, {"tool_payload_json": "[]"},
-    {"conversation_id": "another-conversation"}, {"content": ""},
+    {"conversation_id": "another-conversation"}, {"content": ""}, {"context_id": None},
 ])
 def test_ineligible_replies_never_reach_the_provider(speech_client, changes):
     lookup = chat_message.get_message
