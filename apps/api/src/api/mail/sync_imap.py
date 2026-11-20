@@ -53,8 +53,7 @@ def _inbox_flags(connection, uid_set: str) -> dict[str, list[bytes]]:
             if not match:
                 raise RuntimeError("IMAP flags missing")
             flags = match[1].lower().split()
-            if b"\\deleted" not in flags:
-                result[uid[1].decode()] = flags
+            result[uid[1].decode()] = flags
     return result
 
 
@@ -66,8 +65,20 @@ def _fetch(host: str, port: int, email_address: str, password: str, cursor: str,
         validity = values[0].decode() if values and values[0] else ""
         if not validity:
             raise RuntimeError("IMAP UIDVALIDITY missing")
-        previous_validity, separator, previous_uid = cursor.partition(":")
+        previous_validity, separator, position = cursor.partition(":")
+        previous_uid, _, pending_json = position.partition(":")
         rebuild = not separator or previous_validity != validity or not previous_uid.isdigit()
+        # A still-present \\Deleted UID may be unflagged below the high-water mark.
+        # Its previous local ID restores the same archived row; an unseen UID has no ID yet.
+        pending = {}
+        if pending_json and not rebuild:
+            try:
+                pending = json.loads(pending_json)
+                if not isinstance(pending, dict) or not all(uid.isascii() and uid.isdigit() and isinstance(local_id, str)
+                                                           for uid, local_id in pending.items()):
+                    raise ValueError("Invalid deferred IMAP UIDs")
+            except ValueError:
+                rebuild, pending = True, {}
         last = 0 if rebuild else int(previous_uid)
         status, data = connection.uid("search", None, "ALL" if rebuild else "UID", *(() if rebuild else (f"{last + 1}:*",)))
         if status != "OK":
@@ -75,15 +86,20 @@ def _fetch(host: str, port: int, email_address: str, password: str, cursor: str,
         uids = sorted(int(uid) for uid in (data[0].split() if data and data[0] else []) if int(uid) > last)
         selected = uids[-limit:] if rebuild else uids[:limit]
         changes = SyncChanges(full_rebuild=rebuild, cursor=f"{validity}:{selected[-1] if selected else last}")
-        if not rebuild and known:
-            numeric = [int(uid) for uid in known if uid.isdigit()]
-            if numeric:
-                flags_by_uid = _inbox_flags(connection, f"{min(numeric)}:{max(numeric)}")
-                for uid in known.keys() & flags_by_uid.keys():
-                    changes.read_updates[uid] = b"\\seen" in flags_by_uid[uid]
-                    changes.flag_updates[uid] = b"\\flagged" in flags_by_uid[uid]
-                changes.moved_out = [uid for uid in known if uid.isdigit() and uid not in flags_by_uid]
-        for uid in selected:
+        numeric = [int(uid) for uid in known.keys() | pending.keys() if uid.isdigit()] if not rebuild else []
+        recheck = []
+        if numeric:
+            flags_by_uid = _inbox_flags(connection, f"{min(numeric)}:{max(numeric)}")
+            present = {uid for uid, flags in flags_by_uid.items() if b"\\deleted" not in flags}
+            for uid in known.keys() & present:
+                changes.read_updates[uid] = b"\\seen" in flags_by_uid[uid]
+                changes.flag_updates[uid] = b"\\flagged" in flags_by_uid[uid]
+            changes.moved_out = [uid for uid in known if uid.isdigit() and uid not in present]
+            pending = {uid: local_id for uid, local_id in pending.items() if uid in flags_by_uid}
+            for uid in known.keys() & (flags_by_uid.keys() - present):
+                pending[uid] = known[uid]
+            recheck = sorted(map(int, pending.keys() & present))[:limit]
+        for uid in dict.fromkeys([*selected, *recheck]):
             status, data = connection.uid("fetch", str(uid), "(UID FLAGS RFC822.SIZE BODY.PEEK[])")
             if status != "OK":
                 raise RuntimeError("IMAP message fetch failed")
@@ -94,10 +110,15 @@ def _fetch(host: str, port: int, email_address: str, password: str, cursor: str,
             flags = flags_match.group(1).lower().split() if flags_match else []
             if b"\\deleted" in flags:
                 changes.moved_out.append(str(uid))
+                pending.setdefault(str(uid), "" if rebuild else known.get(str(uid), ""))
                 continue
             parsed = parse_rfc822(part[1], max_body_chars=max_body_chars)
             parsed.update(folder="INBOX", provider_uid=str(uid), is_read=b"\\seen" in flags, is_flagged=b"\\flagged" in flags)
             changes.upserts.append(parsed)
+            if local_id := pending.pop(str(uid), None):
+                changes.imap_undeleted[str(uid)] = local_id
+        if pending:
+            changes.cursor += ":" + json.dumps(pending, separators=(",", ":"), sort_keys=True)
         return changes
     finally:
         _logout(connection)
@@ -149,7 +170,8 @@ async def confirm_inbox(account: MailAccount, uids, cursor: str) -> set[str]:
             _, values = connection.response("UIDVALIDITY")
             if not values or values[0] != cursor.partition(":")[0].encode():
                 raise RuntimeError("IMAP UIDVALIDITY changed during poll")
-            return set(_inbox_flags(connection, ",".join(uids))).intersection(uids)
+            flags = _inbox_flags(connection, ",".join(uids))
+            return {uid for uid in uids if uid in flags and b"\\deleted" not in flags[uid]}
         finally:
             _logout(connection)
     return await asyncio.to_thread(read)

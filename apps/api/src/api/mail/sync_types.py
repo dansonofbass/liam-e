@@ -28,6 +28,7 @@ class SyncChanges:
     restored_members: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     confirmed_inbox: set[str] = field(default_factory=set)
     trashed: set[str] = field(default_factory=set)
+    imap_undeleted: dict[str, str] = field(default_factory=dict)
 
     def moved_from_inbox(self, uid: str, labels) -> None:
         self.moved_out.append(uid)

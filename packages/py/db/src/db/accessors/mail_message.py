@@ -405,18 +405,19 @@ async def _legacy_conflicts(session, account_id: str, stmt):
     return (await session.execute(stmt.offset(page * size).limit(size))).all() if page else rows[:size]
 
 
-async def trash_conflicts(account_id: str, inbox: Collection[str], moved_out: Collection[str]) -> dict[str, str]:
+async def trash_conflicts(account_id: str, inbox: Collection[str], moved_out: Collection[str], *, check_unlisted: bool = False) -> dict[str, str]:
     """Also repair existing duplicates that no longer occur in search or history."""
     other = aliased(MailMessage)
-    duplicates = select(MailMessage.provider_uid, MailMessage.thread_id).join(other, and_(
-        MailMessage.account_id == other.account_id, MailMessage.provider_uid == other.provider_uid,
-        MailMessage.folder == "TRASH")).where(other.account_id == account_id, other.folder == "INBOX"
-    ).order_by(other.provider_uid)
+    candidates_query = select(MailMessage.provider_uid, MailMessage.thread_id).where(
+        MailMessage.account_id == account_id, MailMessage.folder == "TRASH").order_by(MailMessage.provider_uid)
+    if not check_unlisted:
+        candidates_query = candidates_query.where(exists(select(other.id).where(other.account_id == account_id,
+            other.folder == "INBOX", other.provider_uid == MailMessage.provider_uid)))
     trash_action = exists(select(MailAction.id).where(MailAction.message_id == MailMessage.id,
         or_(MailAction.kind == "trash", and_(MailAction.kind == "restore",
             cast(MailAction.previous_json, JSONB)["folder"].astext == "TRASH"))))
     async with get_session_maker()() as session:
-        candidates = dict(await _legacy_conflicts(session, account_id, duplicates))
+        candidates = dict(await _legacy_conflicts(session, account_id, candidates_query))
         if not inbox and not moved_out:
             return candidates
         rows = await session.execute(select(MailMessage.provider_uid, MailMessage.thread_id).where(
@@ -427,14 +428,20 @@ async def trash_conflicts(account_id: str, inbox: Collection[str], moved_out: Co
         return candidates
 
 
-async def trash_origins(account_id: str, uids: Collection[str], *, check_existing: bool = False) -> dict[str, str]:
+async def trash_origins(account_id: str, uids: Collection[str], *, check_existing: bool = False, imap_validity: str | None = None) -> dict[str, str]:
     """Recover pre-move provider IDs from the undo records, including legacy actions."""
     if not uids and not check_existing:
         return {}
-    source = cast(MailAction.previous_json, JSONB)["provider_uid"].astext
+    previous = cast(MailAction.previous_json, JSONB)
+    recorded = previous["trash_inbox_uid"].astext
+    source = func.coalesce(recorded, previous["provider_uid"].astext)
     stmt = select(source, MailMessage.id).join_from(MailAction, MailMessage, MailAction.message_id == MailMessage.id).where(
-        MailAction.account_id == account_id, MailAction.kind == "trash", MailMessage.account_id == account_id,
+        MailAction.account_id == account_id, MailMessage.account_id == account_id,
+        or_(recorded.is_not(None), and_(MailAction.kind == "trash", previous["folder"].astext == "INBOX")),
         or_(MailMessage.folder == "TRASH", MailMessage.provider_uid != source))
+    if imap_validity is not None:
+        validity = previous["imap_source_uidvalidity"].astext
+        stmt = stmt.where(or_(validity.is_(None), validity == imap_validity))
     async with get_session_maker()() as session:
         found = {}
         if check_existing:
@@ -447,14 +454,25 @@ async def trash_origins(account_id: str, uids: Collection[str], *, check_existin
         return found
 
 
+async def restore_imap_flagged(session: AsyncSession, account_id: str, uid: str, local_id: str) -> bool:
+    """Reuse the exact row archived by a reversible IMAP flag in this UIDVALIDITY."""
+    result = await session.execute(update(MailMessage).where(MailMessage.id == local_id, MailMessage.account_id == account_id,
+        MailMessage.provider_uid == uid, MailMessage.folder == "ARCHIVE").values(folder="INBOX"))
+    return bool(result.rowcount)
+
+
 async def reconcile_native_trash(session: AsyncSession, account_id: str, uid: str, original: str,
-                                 *, in_inbox: bool, graph: bool) -> None:
+                                 *, in_inbox: bool, graph: bool) -> bool:
     keep = await session.get(MailMessage, original)
-    if keep is None or keep.account_id != account_id or (in_inbox and (not graph or keep.folder != "TRASH")):
-        return
+    if keep is None or keep.account_id != account_id:
+        return False
+    if in_inbox and (not graph or keep.folder != "TRASH"):
+        return True
     duplicate = await session.scalar(select(MailMessage).where(MailMessage.account_id == account_id,
         MailMessage.provider_uid == uid, MailMessage.folder == "INBOX", MailMessage.id != keep.id))
     if duplicate:
+        if not graph and (not keep.rfc_message_id or duplicate.rfc_message_id != keep.rfc_message_id):
+            return False  # A legacy action can lack UIDVALIDITY. Keep an unrelated removal in ARCHIVE.
         # Only Graph proves identity across folders. Preserve an old IMAP reference
         # as read-only: another UIDVALIDITY may have reused its numeric source UID.
         await _merge_copy(session, keep, duplicate, verified=graph)
@@ -462,14 +480,27 @@ async def reconcile_native_trash(session: AsyncSession, account_id: str, uid: st
     if in_inbox:
         keep.provider_uid, keep.folder = uid, "INBOX"
         await session.flush()
+    return True
 
 
-async def commit_trash_move(message: MailMessage, updates: dict, *, action: MailAction | None = None) -> None:
+async def commit_trash_move(message: MailMessage, updates: dict, *, action: MailAction | None = None, undo_id: str | None = None) -> None:
     """Publish the provider-confirmed move, its undo record and the sync fence together."""
     async with get_session_maker().begin() as session:
         account = await mail_sync_state.fence_folder_change(session, message.account_id)
         stable_uid = account.auth_type == "mistral_connector" or account.provider == "google"
+        updates = updates.copy()
+        validity = updates.pop("imap_source_uidvalidity", None)
         target_uid = updates.get("provider_uid", message.provider_uid)
+        left_inbox = message.folder == "INBOX" and updates["folder"] == "TRASH"
+        if left_inbox and not stable_uid and account.provider in ("microsoft", "imap"):
+            record = await session.get(MailAction, undo_id) if undo_id else action
+            if record is None:
+                raise LookupError("Trash move has no action record")
+            previous = json.loads(record.previous_json)
+            previous["trash_inbox_uid"] = message.provider_uid
+            if validity:
+                previous["imap_source_uidvalidity"] = validity
+            record.previous_json = json.dumps(previous)
         keep = await get_message(message.id, session)
         if keep is None:
             if account.auth_type == "mistral_connector":
@@ -483,6 +514,11 @@ async def commit_trash_move(message: MailMessage, updates: dict, *, action: Mail
             match = and_(MailMessage.folder == updates["folder"], MailMessage.provider_uid == target_uid)
             if account.provider == "microsoft":
                 match = or_(match, MailMessage.provider_uid == message.provider_uid)
+            elif left_inbox and validity:
+                cursor = await session.scalar(select(MailSyncState.cursor).where(MailSyncState.account_id == account.id))
+                if (cursor or "").partition(":")[0] == validity:
+                    match = or_(match, and_(MailMessage.folder == "INBOX", MailMessage.provider_uid == message.provider_uid,
+                                            MailMessage.rfc_message_id == message.rfc_message_id))
         copies = await session.scalars(select(MailMessage).where(MailMessage.account_id == account.id,
             MailMessage.id != keep.id, match).order_by(MailMessage.id).with_for_update())
         for other in copies:

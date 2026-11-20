@@ -435,6 +435,7 @@ def test_imap_late_source_uid_replay_and_uidvalidity_reuse(pg_db, monkeypatch):
     from unittest.mock import AsyncMock, MagicMock
     from api.mail import sync_imap, transport
     from api.mail.sync_types import BODY_VERSION, SyncChanges
+    from db.accessors import mail_insight
 
     async def run():
         account = await service.upsert_account(provider="imap", auth_type="imap_password", email_address="imap@example.test")
@@ -444,6 +445,7 @@ def test_imap_late_source_uid_replay_and_uidvalidity_reuse(pg_db, monkeypatch):
                                                     rfc_message_id="<independent@example.test>", body_version=BODY_VERSION)
         await mail_sync_state.save_state(account_id=account.id, cursor="7:12")
         validity = "7"
+        removed = False
         imap = MagicMock(capabilities=(b"MOVE",))
         imap.select.return_value = imap.login.return_value = ("OK", [])
         imap.list.return_value = ("OK", [b'(\\Trash) "/" "Deleted"'])
@@ -451,7 +453,7 @@ def test_imap_late_source_uid_replay_and_uidvalidity_reuse(pg_db, monkeypatch):
         def command(name, *args):
             if name.upper() == "SEARCH":
                 return "OK", [b"12"]
-            if name.upper() == "FETCH" and validity == "8":
+            if name.upper() == "FETCH" and validity == "8" and not removed:
                 return "OK", [b"1 (UID 12 FLAGS ())"]
             return "OK", []
         imap.uid.side_effect = command
@@ -460,6 +462,8 @@ def test_imap_late_source_uid_replay_and_uidvalidity_reuse(pg_db, monkeypatch):
         monkeypatch.setattr(service, "load_credentials", AsyncMock(return_value={"imap_host": "imap.example.test"}))
         monkeypatch.setattr(service, "imap_password", AsyncMock(return_value="test"))
         async def page(*args, **kwargs):
+            if removed:
+                return SyncChanges(cursor="8:12", moved_out=["12"])
             return SyncChanges(cursor=f"{validity}:12", full_rebuild=validity == "8",
                 upserts=[{"folder": "INBOX", "provider_uid": "12", "body_text": "", "rfc_message_id":
                          target.rfc_message_id if validity == "7" else "<new@example.test>"}])
@@ -476,6 +480,145 @@ def test_imap_late_source_uid_replay_and_uidvalidity_reuse(pg_db, monkeypatch):
             assert [row.rfc_message_id for row in returned] == ["<new@example.test>"]
             assert returned[0].id not in {existing.id, target.id}
             assert await listed(browser, "TRASH") == {existing.id, target.id}
+            replacement = returned[0].id
+            await mail_insight.store_if_missing(replacement, points=["Synthetic"], deadline=None,
+                                                needs_reply=False, followups=[], model="test")
+            removed = True
+            assert (await sync.sync_account(account.id)).status == "ok"
+            assert await listed(browser, "ARCHIVE") == {replacement}
+            assert await mail_insight.get(replacement) is not None
+            assert await listed(browser, "TRASH") == {existing.id, target.id}
+    asyncio.run(run())
+
+
+def test_imap_old_inbox_rebuild_commits_before_trash_ack(pg_db, monkeypatch):
+    from unittest.mock import AsyncMock
+    from bulk_mailboxes import Mailboxes
+    from api.mail import sync_imap
+
+    async def run():
+        provider = Mailboxes(["Yahoo"], False, "move")
+        await provider.connect(monkeypatch)
+        account = provider.accounts["Yahoo"]
+        ids = await mail_message.known_uids(account.id, "INBOX")
+        before_move = await sync_imap.fetch_changes(account, cursor="", folders=["INBOX"], limit=20, max_body_chars=100)
+        assert before_move.full_rebuild
+        commit = mail_message.commit_trash_move
+        async def rebuild_first(*args, **kwargs):
+            with monkeypatch.context() as patch:
+                patch.setattr(sync_imap, "fetch_changes", AsyncMock(return_value=before_move))
+                assert (await sync.sync_account(account.id)).status == "ok"
+            assert (await mail_message.known_uids(account.id, "INBOX"))["11"] != ids["11"]
+            await commit(*args, **kwargs)
+        monkeypatch.setattr(mail_message, "commit_trash_move", rebuild_first)
+        async with client() as browser:
+            result = await browser.post(MAIL + "/messages/actions", json={"message_ids": [ids["11"]], "kind": "trash"})
+            assert result.json()["results"][0]["status"] == "done"
+            assert provider.labels["Yahoo"]["11"] == {"TRASH"}
+            rows = (await browser.get(MAIL + "/messages")).json()["items"]
+            assert {row["subject"] for row in rows} == {"Yahoo 12", "Yahoo 13", "Yahoo 14"}
+            assert await listed(browser, "TRASH") == {ids["11"]}
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("initially_indexed", [True, False])
+def test_imap_deleted_flag_cleared_below_cursor(pg_db, monkeypatch, initially_indexed):
+    from bulk_mailboxes import Mailboxes, YahooConnection
+
+    async def run():
+        provider = Mailboxes(["Yahoo"], False, "move")
+        deleted = not initially_indexed
+        submit = YahooConnection.uid
+        def observe(self, cmd, *args):
+            status, data = submit(self, cmd, *args)
+            if not deleted or cmd.upper() != "FETCH":
+                return status, data
+            def flag(header):
+                return header.replace(b"FLAGS ()", b"FLAGS (\\Deleted)") if b"UID 11 " in header else header
+            return status, [(flag(item[0]), item[1]) if isinstance(item, tuple) else flag(item) for item in data]
+        monkeypatch.setattr(YahooConnection, "uid", observe)
+        await provider.connect(monkeypatch)
+        account = provider.accounts["Yahoo"]
+        ids = await mail_message.known_uids(account.id, "INBOX")
+        assert ("11" in ids) == initially_indexed
+        if initially_indexed:
+            await mail_sync_state.save_state(account_id=account.id, cursor="7:14")
+        deleted = True
+        async with client() as browser:
+            assert (await sync.sync_account(account.id)).status == "ok"
+            assert len(await listed(browser, "INBOX")) == 3
+            deleted = False
+            assert (await sync.sync_account(account.id)).status == "ok"
+            restored = await mail_message.known_uids(account.id, "INBOX")
+            assert set(restored) == {"11", "12", "13", "14"}
+            if initially_indexed:
+                assert restored["11"] == ids["11"]
+            assert await listed(browser, "ARCHIVE") == set()
+    asyncio.run(run())
+
+
+def test_studio_owner_restores_quiet_old_trash_without_duplicate(pg_db, monkeypatch):
+    async def run():
+        provider = StudioMailbox()
+        provider.date = (datetime.now(UTC) - timedelta(days=60)).isoformat()
+        ids = await provider.connect(monkeypatch)
+        async with client() as browser:
+            move = await browser.post(f"{MAIL}/messages/{ids['target']}/actions", json={"kind": "trash"})
+            assert move.status_code == 200 and await listed(browser, "TRASH") == {ids["target"]}
+            async def quiet(path, payload):
+                if urlsplit(path).path.endswith("/search_threads/call"):
+                    return {"content": [{"type": "text", "text": '{"threads":[]}'}]}
+                return await provider.dispatch(path, payload)
+            monkeypatch.setattr(connectors, "_post", quiet)
+            assert (await sync.sync_account(provider.account.id)).status == "ok"
+            assert await listed(browser, "TRASH") == {ids["target"]}
+            provider.labels["target"] = {"INBOX"}
+            assert (await sync.sync_account(provider.account.id)).status == "ok"
+            assert ids["target"] in await listed(browser, "INBOX")
+            assert await listed(browser, "TRASH") == set()
+            assert len(provider.writes) == 2
+    asyncio.run(run())
+
+
+def test_graph_undo_restore_rejects_intermediate_inbox_id(pg_db, monkeypatch):
+    from unittest.mock import AsyncMock
+    from api.mail.sync_types import BODY_VERSION
+
+    async def run():
+        account = await service.upsert_account(provider="microsoft", auth_type="oauth2", email_address="graph@example.test")
+        row = await mail_message.upsert_message(account_id=account.id, folder="INBOX", provider_uid="initial", body_version=BODY_VERSION)
+        delta = "https://graph.microsoft.com/v1.0/delta"
+        await mail_sync_state.save_state(account_id=account.id, cursor=delta)
+        browser = client()
+        real_client = httpx.AsyncClient
+        moves = iter([("initial", "deleteditems", "trash-one"), ("trash-one", "inbox", "returned"),
+                      ("returned", "deleteditems", "trash-two")])
+        def dispatch(request):
+            path = request.url.path
+            if path.endswith("/move"):
+                previous, destination, next_id = next(moves)
+                assert path.endswith(f"/messages/{previous}/move") and json.loads(request.content)["destinationId"] == destination
+                return httpx.Response(201, json={"id": next_id})
+            if request.method == "PATCH":
+                return httpx.Response(200, json={})
+            if path.endswith("/delta"):
+                return httpx.Response(200, json={"value": [{"id": "returned"}, {"id": "control"}], "@odata.deltaLink": delta})
+            assert path.endswith("/mailFolders/inbox/messages/returned")
+            return httpx.Response(404)
+        monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(dispatch), **kw))
+        monkeypatch.setattr(service, "load_credentials", AsyncMock(return_value={}))
+        monkeypatch.setattr(service, "valid_access_token", AsyncMock(return_value="test"))
+        async with browser:
+            endpoint = f"{MAIL}/messages/{row.id}/actions"
+            assert (await browser.post(endpoint, json={"kind": "trash"})).status_code == 200
+            restored = await browser.post(endpoint, json={"kind": "restore"})
+            assert restored.status_code == 200 and await listed(browser, "INBOX") == {row.id}
+            token = restored.json()["action_id"]
+            undo = await browser.post(MAIL + "/actions/undo", json={"action_ids": [token]})
+            assert undo.json()["restored"] == [token] and await listed(browser, "INBOX") == set()
+            assert (await sync.sync_account(account.id)).status == "ok"
+            assert set(await mail_message.known_uids(account.id, "INBOX")) == {"control"}
+            assert await listed(browser, "TRASH") == {row.id}
     asyncio.run(run())
 
 

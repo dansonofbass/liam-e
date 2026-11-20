@@ -251,9 +251,14 @@ class ImapBackend:
             uid = _message_uid(connection, message)
             if not uid.isdigit():
                 raise ActionUnsupportedError()
+            updates = {}
             if moving and folder == "TRASH" and message.folder == "INBOX":
                 # An IMAP UID command can return OK even if it matched no message.
                 _search(connection, message, uid)
+                _, values = connection.response("UIDVALIDITY")
+                if not values or not values[0] or not values[0].isdigit():
+                    raise RuntimeError("Missing source UIDVALIDITY")
+                updates["imap_source_uidvalidity"] = values[0].decode()
             if is_read is not None:
                 _ok(connection.uid("STORE", uid, "+FLAGS" if is_read else "-FLAGS", "(\\Seen)"))
             stored_uid = message.provider_uid
@@ -286,7 +291,7 @@ class ImapBackend:
                     else:
                         _ok(connection.select(_quoted(target)))
                         stored_uid = _search(connection, message)
-            return {"provider_uid": stored_uid}
+            return {"provider_uid": stored_uid, **updates}
         finally:
             try:
                 connection.logout()

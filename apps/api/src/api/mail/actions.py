@@ -143,6 +143,9 @@ async def undo_actions(action_ids: list[str], *, now: datetime) -> UndoResult:
             if account is None:
                 raise ActionUnsupportedError()
             previous = json.loads(action.previous_json)
+            # This provider evidence belongs to the action, not the message being restored.
+            previous.pop("trash_inbox_uid", None)
+            previous.pop("imap_source_uidvalidity", None)
             updates = await action_backends.backend_for(account).revert(message, previous)
         except Exception as error:
             logger.warning("%s", type(error).__name__)
@@ -150,7 +153,7 @@ async def undo_actions(action_ids: list[str], *, now: datetime) -> UndoResult:
             result.failed.append(action.id)
         else:
             if action.kind == "trash" or (action.kind == "restore" and previous["folder"] == "TRASH"):
-                await message_access.commit_trash_move(message, previous | updates)
+                await message_access.commit_trash_move(message, previous | updates, undo_id=action.id)
             else:
                 await _write_provider_state(message, previous | updates, folder=previous["folder"])
             result.restored.append(action.id)

@@ -68,7 +68,9 @@ class FakeStore:
     async def sync_transaction(self, account_id, previous, *, verified, connector=True):
         yield None, self.states[account_id]
 
-    async def commit_trash_move(self, message, updates, *, action=None):
+    async def commit_trash_move(self, message, updates, *, action=None, undo_id=None):
+        updates = updates.copy()
+        updates.pop("imap_source_uidvalidity", None)
         await self.set_message_state(message.id, **updates)
         if action:
             self.actions[action.id] = action

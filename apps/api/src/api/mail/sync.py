@@ -130,7 +130,8 @@ async def _check_native_returns(account, changes):
                 changes.observe_current_labels(uid, labels.get(uid), rows.get(uid))
         return {}
     graph = account.provider == providers.MICROSOFT
-    origins = await message_access.trash_origins(account.id, uids | set(changes.moved_out), check_existing=graph)
+    origins = await message_access.trash_origins(account.id, uids | set(changes.moved_out), check_existing=graph,
+        imap_validity=None if graph else changes.cursor.partition(":")[0])
     if not origins:
         return {}
     if graph:
@@ -154,7 +155,8 @@ async def _connector_changes(account, progress, deferred, options):
     excluded = set(changes.moved_out) | changes.unconfirmed_uids
     changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in excluded]
     possible = {row["provider_uid"] for row in changes.upserts} | changes.read_updates.keys() | changes.flag_updates.keys()
-    candidates = await message_access.trash_conflicts(account.id, possible, changes.moved_out)
+    # Studio's date searches omit an old message restored today. Rotate point reads through local trash.
+    candidates = await message_access.trash_conflicts(account.id, possible, changes.moved_out, check_unlisted=True)
     if candidates:
         await sync_connector.confirm_trash_conflicts(account, changes, candidates)
     return changes, list(dict.fromkeys([*pending[retry_count:], *changes.deferred_threads]))
@@ -167,10 +169,11 @@ async def _apply_changes(account, changes, session, verified, native_moves):
     unverified = connector and not verified
     invalidated = []
     known = await message_access.known_uids(account_id, "INBOX", session=session)
-    moved = set(changes.moved_out) - changes.confirmed_inbox - native_moves.keys()
+    moved = set(changes.moved_out) - changes.confirmed_inbox
     graph = account.provider == providers.MICROSOFT
     for uid, (original, in_inbox) in native_moves.items():
-        await message_access.reconcile_native_trash(session, account_id, uid, original, in_inbox=in_inbox, graph=graph)
+        if await message_access.reconcile_native_trash(session, account_id, uid, original, in_inbox=in_inbox, graph=graph):
+            moved.discard(uid)
     if changes.full_rebuild:
         retained = changes.confirmed_inbox | moved if label_folders else {uid for uid, (_, present) in native_moves.items() if graph and present}
         await message_access.delete_folder(account_id, "INBOX", session=session, exclude_uids=retained)
@@ -185,6 +188,9 @@ async def _apply_changes(account, changes, session, verified, native_moves):
     new_ids = []
     for parsed in changes.upserts:
         uid = parsed["provider_uid"]
+        if uid not in known and (local_id := changes.imap_undeleted.get(uid)):
+            if await message_access.restore_imap_flagged(session, account_id, uid, local_id):
+                known[uid] = local_id
         if connector:
             if uid in changes.read_updates:
                 parsed["is_read"] = changes.read_updates[uid]

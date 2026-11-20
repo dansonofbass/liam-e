@@ -108,6 +108,12 @@ providers compare the exact message ID, Graph uses the recorded pre-move ID, and
 the current INBOX UID flags. An ambiguous Studio thread keeps its existing rows until the
 provider supplies message-specific evidence.
 
+Studio also rotates point reads through stored trash, so a restore outside the recent search
+window can reach the inbox without a new message in the thread. For native moves the action
+records the exact departing inbox ID, including an undo that moves a restored message back
+to trash. IMAP binds that ID to the source UIDVALIDITY. Its high-water cursor can also carry
+temporarily deleted UIDs until the server expunges them or clears their `\Deleted` flag.
+
 ### API endpoints
 
 Inventory from `apps/api/openapi.json`; each row names method, path and `operation_id`.
