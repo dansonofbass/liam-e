@@ -484,6 +484,8 @@ Each create call identifies the corresponding request. A completed card leaves t
 of a separate unfinished appointment available for scheduling questions. Where the request
 or its target is ambiguous, the owner clarifies it before a card is created. A pending card can retry a failed lookup
 of either the mail grant or calendar access.
+An explicitly excluded calendar stays excluded through scheduling questions. If the default
+is excluded, the owner chooses a target. An edit or deletion carries its target only on its own card.
 
 The API persists the full set of readable IDs in `chat_context.calendar_scope_json`. For ICS
 subscriptions it also records a private fingerprint of each encrypted feed configuration.

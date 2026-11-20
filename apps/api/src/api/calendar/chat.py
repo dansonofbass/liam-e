@@ -21,8 +21,8 @@ async def _create_source(arguments, ctx):
     if part is None or part in ctx.completed_calendar_requests:
         raise writes.WriteError("calendar_appointment_ambiguous", 422)
     ctx.calendar_request_part = part
-    selection = owner_selection(part, arguments.get("title"))
     entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
+    selection = owner_selection(part, arguments.get("title"), entries=entries)
     previous = ctx.requested_calendar or (ctx.calendar_choice if part == parts[0] else None)
     target = stated_destination(selection, entries, previous)
     if target:
@@ -40,27 +40,32 @@ async def _create_source(arguments, ctx):
         matches_pending = pending and pending.name.strip().casefold() == named.strip().casefold()
         if target and target.name and not matches_pending:
             raise writes.WriteError("calendar_name_required", 422)
-        if selection.mentions(named):
+        if selection.mentions(named) and not matches_pending:
             pending = named_choice(named, entries, selection)
         elif not matches_pending:
             raise writes.WriteError("calendar_name_required", 422)
     if pending:
         ctx.calendar_targets[part] = pending
-    if pending and not pending.use_default:
         if pending.error:
             raise writes.WriteError(pending.error, 422)
+    using_default = not pending or pending.use_default
+    if using_default:
+        chosen = (await calendar_settings.get()).default_source_id
+        if source_id and source_id != chosen:
+            raise writes.WriteError("calendar_name_required", 422)
+        if not chosen:
+            raise writes.WriteError("calendar_default_missing", 422)
+        if chosen not in ctx.calendar_source_ids:
+            raise writes.WriteError("calendar_default_unavailable", 409)
+    else:
         if pending.source_id not in ctx.calendar_source_ids or (source_id and source_id != pending.source_id):
             raise writes.WriteError("calendar_out_of_scope", 403)
-        return pending.source_id
-
-    default_id = (await calendar_settings.get()).default_source_id
-    if source_id and source_id != default_id:
+        chosen = pending.source_id
+    if pending and (chosen in pending.excluded_source_ids or
+                    pending.exclude_default and (using_default or chosen == (await calendar_settings.get()).default_source_id)):
+        ctx.calendar_targets[part] = pending.model_copy(update={"error": "calendar_name_required"})
         raise writes.WriteError("calendar_name_required", 422)
-    if not default_id:
-        raise writes.WriteError("calendar_default_missing", 422)
-    if default_id not in ctx.calendar_source_ids:
-        raise writes.WriteError("calendar_default_unavailable", 409)
-    return default_id
+    return chosen
 
 
 async def prepare(arguments: dict, ctx) -> CalendarCommand:

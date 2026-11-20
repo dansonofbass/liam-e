@@ -748,3 +748,34 @@ async def test_unfinished_calendar_request_survives_a_completed_card(store, monk
             conversation_id=conversation.id, text=text, resolved_context=(conversation, snapshot, None)) if event.event == 'proposal']
     assert [card.source_id for card in await turn('Schedule a dentist visit at 09:00. Create a review in the Work calendar.')] == ['personal']
     assert [card.source_id for card in await turn('Tomorrow at 15:00')] == ['work']
+
+
+async def test_calendar_edit_does_not_set_a_target_for_the_next_create(store, monkeypatch):
+    from api.calendar import writes
+    from db.accessors import calendar_occurrence, calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    sources = [CalendarSource(id=name.lower(), name=name, provider='google', connection_ref='synthetic',
+        external_id=name, capabilities_json='["read","write"]', timezone='UTC') for name in ('Work', 'Personal')]
+    async def catalog(*, ids):
+        return [(source, None) for source in sources if source.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id='personal')))
+    monkeypatch.setattr(calendar_occurrence, 'get_visible', AsyncMock(return_value=NS(source_id='work')))
+    monkeypatch.setattr(writes, 'live', AsyncMock(return_value=writes.LiveEvent(occurrence_id='meeting', source_id='work',
+        title='Meeting', start_date=date(2026, 11, 21), end_date=date(2026, 11, 22), revision='one', editable=True)))
+    conversation = await store.create()
+    snapshot = store.snapshot('edit-then-create', calendar_scope_json='["work","personal"]')
+    fake = FakeMistral(streams=[
+        [chunk('propose_calendar_change', {'action': 'update', 'occurrence_id': 'meeting', 'title': 'Budget review'})],
+        ['The title change is ready for confirmation.'],
+        [chunk('propose_calendar_change', {'action': 'create', 'title': 'Lunch', 'start_local': '2026-11-27T12:00',
+                                          'end_local': '2026-11-27T13:00'})], ['Ready for confirmation.'],
+    ])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def turn(text):
+        return [e.message.proposal.calendar async for e in agent.run_turn_events(conversation_id=conversation.id,
+            text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
+    assert [c.source_id for c in await turn('Set the title of the meeting in the Work calendar to Budget review.')] == ['work']
+    assert 'calendar_clarification' not in json.loads(store.rows[-1].extras_json)
+    assert [c.source_id for c in await turn('Schedule lunch for Friday at noon.')] == ['personal']

@@ -375,3 +375,42 @@ async def test_non_calendar_alternative_does_not_change_explicit_destination(mon
     if named:
         fields['calendar_name'] = named
     assert (await chat.prepare(fields, ctx)).source_id == 'work'
+
+
+@pytest.mark.parametrize('default, request_text, expected', [
+    ('personal', 'Schedule lunch tomorrow at noon, but do not put it in the Work calendar', 'personal'),
+    ('personal', 'Plane ein Mittagessen, aber bitte nicht im Kalender „Work“', 'personal'),
+    ('work', 'Schedule lunch tomorrow at noon, but do not put it in the Work calendar', None),
+    ('work', 'Put lunch in the Personal calendar, not in the Work calendar', 'personal'),
+    ('work', 'Schedule lunch, but not in my default calendar', None),
+    ('work', 'Schedule lunch, use Personal instead of Work', 'personal'),
+    ('personal', 'Schedule lunch, not before noon in the Work calendar', 'work'),
+    ('personal', 'Schedule a meeting titled “Not Work” in the Work calendar', 'work'),
+])
+async def test_calendar_create_keeps_an_excluded_destination_out(monkeypatch, default, request_text, expected):
+    from dataclasses import replace
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+    from unittest.mock import AsyncMock
+
+    sources = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic',
+        external_id=key, capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'personal')]
+    async def catalog(*, ids):
+        return [(source, None) for source in sources if source.id in ids]
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    settings = SimpleNamespace(default_source_id=default)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=settings))
+    ctx = TurnContext('synthetic', None, date(2026, 11, 20), calendar_source_ids=[s.id for s in sources], user_text=request_text)
+    args = {'action': 'create', 'title': 'Lunch', 'start_local': '2026-11-21T12:00', 'end_local': '2026-11-21T13:00'}
+    if expected:
+        assert (await chat.prepare(args, ctx)).source_id == expected
+        if ctx.requested_calendar.excluded_source_ids and ctx.requested_calendar.use_default:
+            settings.default_source_id = 'work'
+            reply = replace(ctx, calendar_choice=ctx.requested_calendar, user_text='Tomorrow at noon')
+            with pytest.raises(writes.WriteError, match='calendar_name_required'):
+                await chat.prepare(args, reply)
+    else:
+        with pytest.raises(writes.WriteError, match='calendar_name_required'):
+            await chat.prepare(args, ctx)
+        reply = replace(ctx, calendar_choice=ctx.requested_calendar, user_text='Personal, please.')
+        assert (await chat.prepare(args, reply)).source_id == 'personal'

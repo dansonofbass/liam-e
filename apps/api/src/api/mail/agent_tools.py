@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from db.accessors import chat_context, mail_account, mail_message
 from db.models.chat_message import ChatMessage
-from api.calendar.chat_target import CalendarChoice
+from api.calendar.chat_target import CalendarChoice, appointment_part, appointment_parts
 from api.locales import DEFAULT_LOCALE, Locale
 from api.mail import headers, insights, newsletters, proposals, send
 from api.mail.chat_events import StatusEvent
@@ -143,8 +143,12 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         except writes.WriteError as error:
             return result({'error': error.code})
         outcome = await _proposal(ctx, proposals.Proposal(kind='calendar', reason=str(arguments.get('reason', ''))[:500], items=[], calendar=command))
-        if command.action == 'create' and ctx.calendar_request_part is not None:
-            ctx.completed_calendar_requests.add(ctx.calendar_request_part)
+        if command.action == 'create':
+            part = ctx.calendar_request_part
+        else:
+            part = appointment_part(appointment_parts(ctx.user_text), arguments.get('title'), arguments.get('appointment_request'))
+        if part is not None:
+            ctx.completed_calendar_requests.add(part)
         return outcome
     if name == 'propose_preference':
         from api.preferences import candidates
