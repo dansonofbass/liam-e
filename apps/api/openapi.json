@@ -1032,6 +1032,16 @@
             "title": "Model",
             "type": "string"
           },
+          "skill": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillExecutionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "suggestions": {
             "items": {
               "type": "string"
@@ -1383,6 +1393,30 @@
             ],
             "title": "Prompt Revision Id"
           },
+          "skill_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Id"
+          },
+          "skill_revision_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Revision Id"
+          },
           "task_source": {
             "default": "none",
             "enum": [
@@ -1536,6 +1570,30 @@
               }
             ],
             "title": "Prompt Revision Id"
+          },
+          "skill_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Id"
+          },
+          "skill_revision_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Revision Id"
           },
           "task_source": {
             "default": "none",
@@ -1722,6 +1780,39 @@
           "revoked": {
             "title": "Revoked",
             "type": "boolean"
+          },
+          "skill_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Hash"
+          },
+          "skill_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Id"
+          },
+          "skill_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Revision Id"
           },
           "task_scope_json": {
             "default": "{\"source\":\"none\"}",
@@ -4606,6 +4697,39 @@
         "title": "ReconcileOut",
         "type": "object"
       },
+      "RegisteredToolOut": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "read",
+              "propose",
+              "ui"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "skill_only": {
+            "title": "Skill Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "description",
+          "skill_only"
+        ],
+        "title": "RegisteredToolOut",
+        "type": "object"
+      },
       "ScheduleOut": {
         "properties": {
           "end_key": {
@@ -5005,6 +5129,503 @@
           "personalization"
         ],
         "title": "SettingsUpdate",
+        "type": "object"
+      },
+      "SkillCreateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_tools": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Allowed Tools",
+            "type": "array"
+          },
+          "description": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "instructions": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "workflow_steps": {
+            "items": {
+              "$ref": "#/components/schemas/SkillWorkflowStep"
+            },
+            "maxItems": 20,
+            "title": "Workflow Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "description",
+          "instructions"
+        ],
+        "title": "SkillCreateIn",
+        "type": "object"
+      },
+      "SkillDetailOut": {
+        "properties": {
+          "allowed_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Tools",
+            "type": "array"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "builtin",
+              "custom"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/SkillRevisionOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "workflow_steps": {
+            "items": {
+              "$ref": "#/components/schemas/SkillWorkflowStep"
+            },
+            "title": "Workflow Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "origin",
+          "status",
+          "name",
+          "description",
+          "version",
+          "revision_id",
+          "instructions",
+          "workflow_steps",
+          "allowed_tools",
+          "content_hash",
+          "updated_at",
+          "revisions"
+        ],
+        "title": "SkillDetailOut",
+        "type": "object"
+      },
+      "SkillExecutionRef": {
+        "additionalProperties": false,
+        "description": "Content-free reference identifying the skill revision executed in a turn.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "builtin",
+              "custom"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "revision_id",
+          "version",
+          "origin"
+        ],
+        "title": "SkillExecutionRef",
+        "type": "object"
+      },
+      "SkillOut": {
+        "properties": {
+          "allowed_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Tools",
+            "type": "array"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "builtin",
+              "custom"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "workflow_steps": {
+            "items": {
+              "$ref": "#/components/schemas/SkillWorkflowStep"
+            },
+            "title": "Workflow Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "origin",
+          "status",
+          "name",
+          "description",
+          "version",
+          "revision_id",
+          "instructions",
+          "workflow_steps",
+          "allowed_tools",
+          "content_hash",
+          "updated_at"
+        ],
+        "title": "SkillOut",
+        "type": "object"
+      },
+      "SkillRevisionOut": {
+        "properties": {
+          "allowed_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Tools",
+            "type": "array"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "workflow_steps": {
+            "items": {
+              "$ref": "#/components/schemas/SkillWorkflowStep"
+            },
+            "title": "Workflow Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "slug",
+          "name",
+          "description",
+          "instructions",
+          "workflow_steps",
+          "allowed_tools",
+          "content_hash"
+        ],
+        "title": "SkillRevisionOut",
+        "type": "object"
+      },
+      "SkillUpdateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Tools"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 400,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "disabled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "workflow_steps": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SkillWorkflowStep"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Steps"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "SkillUpdateIn",
+        "type": "object"
+      },
+      "SkillWorkflowStep": {
+        "additionalProperties": false,
+        "description": "One documented, inspectable step inside a skill workflow.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "tool_names": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Tool Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description"
+        ],
+        "title": "SkillWorkflowStep",
         "type": "object"
       },
       "SourceOut": {
@@ -10240,6 +10861,244 @@
           }
         },
         "summary": "Update Ui Settings"
+      }
+    },
+    "/api/v1/skills": {
+      "get": {
+        "operationId": "skills_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SkillOut"
+                  },
+                  "title": "Response Skills List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Built-in skill structure cannot be edited or deleted"
+          },
+          "404": {
+            "description": "Skill unavailable"
+          },
+          "409": {
+            "description": "Conflict, disabled skill, or stale expected version"
+          },
+          "422": {
+            "description": "Invalid fields or unregistered tools; content is not echoed"
+          }
+        },
+        "summary": "List registered and custom skills"
+      },
+      "post": {
+        "operationId": "skill_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Built-in skill structure cannot be edited or deleted"
+          },
+          "404": {
+            "description": "Skill unavailable"
+          },
+          "409": {
+            "description": "Conflict, disabled skill, or stale expected version"
+          },
+          "422": {
+            "description": "Invalid fields or unregistered tools; content is not echoed"
+          }
+        },
+        "summary": "Create a custom versioned skill"
+      }
+    },
+    "/api/v1/skills/tools": {
+      "get": {
+        "operationId": "skill_tools_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RegisteredToolOut"
+                  },
+                  "title": "Response Skill Tools List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Built-in skill structure cannot be edited or deleted"
+          },
+          "404": {
+            "description": "Skill unavailable"
+          },
+          "409": {
+            "description": "Conflict, disabled skill, or stale expected version"
+          },
+          "422": {
+            "description": "Invalid fields or unregistered tools; content is not echoed"
+          }
+        },
+        "summary": "List server-registered trusted tools"
+      }
+    },
+    "/api/v1/skills/{skill_id}": {
+      "delete": {
+        "operationId": "skill_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "title": "Skill Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Built-in skill structure cannot be edited or deleted"
+          },
+          "404": {
+            "description": "Skill unavailable"
+          },
+          "409": {
+            "description": "Conflict, disabled skill, or stale expected version"
+          },
+          "422": {
+            "description": "Invalid fields or unregistered tools; content is not echoed"
+          }
+        },
+        "summary": "Delete a custom skill"
+      },
+      "get": {
+        "operationId": "skill_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Built-in skill structure cannot be edited or deleted"
+          },
+          "404": {
+            "description": "Skill unavailable"
+          },
+          "409": {
+            "description": "Conflict, disabled skill, or stale expected version"
+          },
+          "422": {
+            "description": "Invalid fields or unregistered tools; content is not echoed"
+          }
+        },
+        "summary": "Read one skill and its active revisions"
+      },
+      "patch": {
+        "operationId": "skill_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Built-in skill structure cannot be edited or deleted"
+          },
+          "404": {
+            "description": "Skill unavailable"
+          },
+          "409": {
+            "description": "Conflict, disabled skill, or stale expected version"
+          },
+          "422": {
+            "description": "Invalid fields or unregistered tools; content is not echoed"
+          }
+        },
+        "summary": "Update a skill or change its activation status"
       }
     },
     "/api/v1/tasks": {

@@ -13,6 +13,7 @@ from api.skills.service import (
     delete_skill,
     get_skill_detail,
     list_skills_with_revisions,
+    load_active_skill,
     resolve_skill,
     update_skill,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "ensure_builtin_skills",
     "get_skill_detail",
     "list_skills_with_revisions",
+    "load_active_skill",
     "resolve_skill",
     "skill_prompt_message",
     "tools_for_turn",

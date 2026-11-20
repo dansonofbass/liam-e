@@ -169,6 +169,12 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Settings | PATCH | `/api/v1/settings/chat` | `chat_settings_update` |
 | Settings | GET | `/api/v1/settings/ui` | `settings_ui_get` |
 | Settings | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
+| Skills | GET | `/api/v1/skills` | `skills_list` |
+| Skills | POST | `/api/v1/skills` | `skill_create` |
+| Skills | GET | `/api/v1/skills/tools` | `skill_tools_list` |
+| Skills | GET | `/api/v1/skills/{skill_id}` | `skill_get` |
+| Skills | PATCH | `/api/v1/skills/{skill_id}` | `skill_update` |
+| Skills | DELETE | `/api/v1/skills/{skill_id}` | `skill_delete` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
 | Chat | POST | `/api/v1/chat/stream` | `chat_stream` |
 | Chat | GET | `/api/v1/chat/conversations` | `chat_conversations_list` |
@@ -662,6 +668,7 @@ never executed or loaded; instructions in descriptions remain plain data.
 - `mail_insight` — summary (`points_json`), deadline, reply need, follow-up suggestions and model per mail.
 - `mail_job` — durable sync/insight queue with status, deduplication, attempts and lock time.
 - `chat_conversation`, `chat_message` — history; proposals in `proposal_json` with `proposal_status`, mail references/proposals/model in `extras_json`; older drafts carry `draft_json`.
+- `skill_definition`, `skill_revision` — versioned built-in and custom skills within `installation`, immutable revisions (`instructions`, `workflow_steps_json`, `allowed_tools_json`, `content_hash`) and content-free deletion tombstones.
 - `user_preference` — server-side owner `installation`, key, canonical scope (`*` global or account ID), status, revision pointer and object version; removed rows remain as content-free suppression references.
 - `preference_revision` — immutable value, key/scope at the time, source `manual` or `confirmed_candidate` and confirmation time per revision; deletion removes the value and sets `removed`.
 - `preference_candidate` — unconfirmed value with own source message, conversation, field/scope, expected target version/revision and optional card ID; status `pending|accepted|rejected|expired`. Rejected and invalidated candidates retain only content-free references.
@@ -693,6 +700,19 @@ before each model call and tool and every ten deltas during streaming; a revoked
 and reports `context_revoked`. For a history, associated contexts are loaded in one database query.
 Inbox undo requests are aborted after 15 seconds; if the result is unclear, the action remains
 available for another attempt for ten more seconds. A conversation with messages can continue only with its original grant revision, effective accounts and focus.
+
+### Server-side skill runtime (#84)
+
+Executable tools are registered only in trusted server application code (`api/skills/registry.py`,
+`api/mail/agent_tools.py`). Built-in skills (`api/skills/catalog.py`, currently `daily_briefing`
+with the domain aggregation tool `collect_daily_briefing` in `api/skills/briefing.py`) and custom
+skills live in `skill_definition`/`skill_revision` and reference registered tools explicitly.
+Turns activate a skill only when `skill_id` or `skill_revision_id` is passed on that turn request
+(turn-scoped, never sticky to later turns or other chats); `chat_context` records `skill_id`,
+`skill_revision_id`, and `skill_hash`. Legacy turns without a skill never receive skill tool rights.
+When active, the model receives only that revision's `allowed_tools`, instructions stay in `role="user"`,
+domain scopes and confirmation cards remain mandatory, and disabling, narrowing tools, or deleting
+a skill revokes affected contexts (`409 proposal_context_revoked`, mid-stream `context_revoked`). See [docs/skills.md](docs/skills.md).
 
 Studio mail connector operations pin the named OAuth credential with `credentials_name`. The
 first identity-checked sync verifies existing inbox rows in place by provider UID and follows stored pages. Pre-migration connector

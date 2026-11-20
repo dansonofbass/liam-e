@@ -566,6 +566,7 @@ export type ChatExtrasOut = {
      * Model
      */
     model?: string;
+    skill?: SkillExecutionRef | null;
     /**
      * Suggestions
      */
@@ -757,6 +758,14 @@ export type ChatStreamRequest = {
      */
     prompt_revision_id?: string | null;
     /**
+     * Skill Id
+     */
+    skill_id?: string | null;
+    /**
+     * Skill Revision Id
+     */
+    skill_revision_id?: string | null;
+    /**
      * Task Source
      */
     task_source?: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked';
@@ -828,6 +837,14 @@ export type ChatTurnRequest = {
      * Prompt Revision Id
      */
     prompt_revision_id?: string | null;
+    /**
+     * Skill Id
+     */
+    skill_id?: string | null;
+    /**
+     * Skill Revision Id
+     */
+    skill_revision_id?: string | null;
     /**
      * Task Source
      */
@@ -946,6 +963,18 @@ export type ContextOut = {
      * Revoked
      */
     revoked: boolean;
+    /**
+     * Skill Hash
+     */
+    skill_hash?: string | null;
+    /**
+     * Skill Id
+     */
+    skill_id?: string | null;
+    /**
+     * Skill Revision Id
+     */
+    skill_revision_id?: string | null;
     /**
      * Task Scope Json
      */
@@ -2570,6 +2599,28 @@ export type ReconcileOut = {
 };
 
 /**
+ * RegisteredToolOut
+ */
+export type RegisteredToolOut = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Kind
+     */
+    kind: 'read' | 'propose' | 'ui';
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Skill Only
+     */
+    skill_only: boolean;
+};
+
+/**
  * ScheduleOut
  */
 export type ScheduleOut = {
@@ -2786,6 +2837,288 @@ export type SettingsOut = {
  */
 export type SettingsUpdate = {
     personalization: PersonalizationUpdate;
+};
+
+/**
+ * SkillCreateIn
+ */
+export type SkillCreateIn = {
+    /**
+     * Allowed Tools
+     */
+    allowed_tools?: Array<string>;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Instructions
+     */
+    instructions: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Status
+     */
+    status?: 'active' | 'disabled';
+    /**
+     * Workflow Steps
+     */
+    workflow_steps?: Array<SkillWorkflowStep>;
+};
+
+/**
+ * SkillDetailOut
+ */
+export type SkillDetailOut = {
+    /**
+     * Allowed Tools
+     */
+    allowed_tools: Array<string>;
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Instructions
+     */
+    instructions: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Origin
+     */
+    origin: 'builtin' | 'custom';
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Revisions
+     */
+    revisions: Array<SkillRevisionOut>;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Status
+     */
+    status: 'active' | 'disabled';
+    /**
+     * Updated At
+     */
+    updated_at: string | null;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Workflow Steps
+     */
+    workflow_steps: Array<SkillWorkflowStep>;
+};
+
+/**
+ * SkillExecutionRef
+ *
+ * Content-free reference identifying the skill revision executed in a turn.
+ */
+export type SkillExecutionRef = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Origin
+     */
+    origin: 'builtin' | 'custom';
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * SkillOut
+ */
+export type SkillOut = {
+    /**
+     * Allowed Tools
+     */
+    allowed_tools: Array<string>;
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Instructions
+     */
+    instructions: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Origin
+     */
+    origin: 'builtin' | 'custom';
+    /**
+     * Revision Id
+     */
+    revision_id: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Status
+     */
+    status: 'active' | 'disabled';
+    /**
+     * Updated At
+     */
+    updated_at: string | null;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Workflow Steps
+     */
+    workflow_steps: Array<SkillWorkflowStep>;
+};
+
+/**
+ * SkillRevisionOut
+ */
+export type SkillRevisionOut = {
+    /**
+     * Allowed Tools
+     */
+    allowed_tools: Array<string>;
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Instructions
+     */
+    instructions: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Number
+     */
+    number: number;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Workflow Steps
+     */
+    workflow_steps: Array<SkillWorkflowStep>;
+};
+
+/**
+ * SkillUpdateIn
+ */
+export type SkillUpdateIn = {
+    /**
+     * Allowed Tools
+     */
+    allowed_tools?: Array<string> | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Instructions
+     */
+    instructions?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Status
+     */
+    status?: 'active' | 'disabled' | null;
+    /**
+     * Workflow Steps
+     */
+    workflow_steps?: Array<SkillWorkflowStep> | null;
+};
+
+/**
+ * SkillWorkflowStep
+ *
+ * One documented, inspectable step inside a skill workflow.
+ */
+export type SkillWorkflowStep = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Tool Names
+     */
+    tool_names?: Array<string>;
 };
 
 /**
@@ -6046,6 +6379,240 @@ export type SettingsUiUpdateResponses = {
 };
 
 export type SettingsUiUpdateResponse = SettingsUiUpdateResponses[keyof SettingsUiUpdateResponses];
+
+export type SkillsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/skills';
+};
+
+export type SkillsListErrors = {
+    /**
+     * Built-in skill structure cannot be edited or deleted
+     */
+    403: unknown;
+    /**
+     * Skill unavailable
+     */
+    404: unknown;
+    /**
+     * Conflict, disabled skill, or stale expected version
+     */
+    409: unknown;
+    /**
+     * Invalid fields or unregistered tools; content is not echoed
+     */
+    422: unknown;
+};
+
+export type SkillsListResponses = {
+    /**
+     * Response Skills List
+     *
+     * Successful Response
+     */
+    200: Array<SkillOut>;
+};
+
+export type SkillsListResponse = SkillsListResponses[keyof SkillsListResponses];
+
+export type SkillCreateData = {
+    body: SkillCreateIn;
+    path?: never;
+    query?: never;
+    url: '/api/v1/skills';
+};
+
+export type SkillCreateErrors = {
+    /**
+     * Built-in skill structure cannot be edited or deleted
+     */
+    403: unknown;
+    /**
+     * Skill unavailable
+     */
+    404: unknown;
+    /**
+     * Conflict, disabled skill, or stale expected version
+     */
+    409: unknown;
+    /**
+     * Invalid fields or unregistered tools; content is not echoed
+     */
+    422: unknown;
+};
+
+export type SkillCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: SkillOut;
+};
+
+export type SkillCreateResponse = SkillCreateResponses[keyof SkillCreateResponses];
+
+export type SkillToolsListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/skills/tools';
+};
+
+export type SkillToolsListErrors = {
+    /**
+     * Built-in skill structure cannot be edited or deleted
+     */
+    403: unknown;
+    /**
+     * Skill unavailable
+     */
+    404: unknown;
+    /**
+     * Conflict, disabled skill, or stale expected version
+     */
+    409: unknown;
+    /**
+     * Invalid fields or unregistered tools; content is not echoed
+     */
+    422: unknown;
+};
+
+export type SkillToolsListResponses = {
+    /**
+     * Response Skill Tools List
+     *
+     * Successful Response
+     */
+    200: Array<RegisteredToolOut>;
+};
+
+export type SkillToolsListResponse = SkillToolsListResponses[keyof SkillToolsListResponses];
+
+export type SkillDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Skill Id
+         */
+        skill_id: string;
+    };
+    query: {
+        /**
+         * Expected Version
+         */
+        expected_version: number;
+    };
+    url: '/api/v1/skills/{skill_id}';
+};
+
+export type SkillDeleteErrors = {
+    /**
+     * Built-in skill structure cannot be edited or deleted
+     */
+    403: unknown;
+    /**
+     * Skill unavailable
+     */
+    404: unknown;
+    /**
+     * Conflict, disabled skill, or stale expected version
+     */
+    409: unknown;
+    /**
+     * Invalid fields or unregistered tools; content is not echoed
+     */
+    422: unknown;
+};
+
+export type SkillDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type SkillDeleteResponse = SkillDeleteResponses[keyof SkillDeleteResponses];
+
+export type SkillGetData = {
+    body?: never;
+    path: {
+        /**
+         * Skill Id
+         */
+        skill_id: string;
+    };
+    query?: never;
+    url: '/api/v1/skills/{skill_id}';
+};
+
+export type SkillGetErrors = {
+    /**
+     * Built-in skill structure cannot be edited or deleted
+     */
+    403: unknown;
+    /**
+     * Skill unavailable
+     */
+    404: unknown;
+    /**
+     * Conflict, disabled skill, or stale expected version
+     */
+    409: unknown;
+    /**
+     * Invalid fields or unregistered tools; content is not echoed
+     */
+    422: unknown;
+};
+
+export type SkillGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SkillDetailOut;
+};
+
+export type SkillGetResponse = SkillGetResponses[keyof SkillGetResponses];
+
+export type SkillUpdateData = {
+    body: SkillUpdateIn;
+    path: {
+        /**
+         * Skill Id
+         */
+        skill_id: string;
+    };
+    query?: never;
+    url: '/api/v1/skills/{skill_id}';
+};
+
+export type SkillUpdateErrors = {
+    /**
+     * Built-in skill structure cannot be edited or deleted
+     */
+    403: unknown;
+    /**
+     * Skill unavailable
+     */
+    404: unknown;
+    /**
+     * Conflict, disabled skill, or stale expected version
+     */
+    409: unknown;
+    /**
+     * Invalid fields or unregistered tools; content is not echoed
+     */
+    422: unknown;
+};
+
+export type SkillUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: SkillOut;
+};
+
+export type SkillUpdateResponse = SkillUpdateResponses[keyof SkillUpdateResponses];
 
 export type TasksListData = {
     body?: never;

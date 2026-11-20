@@ -21,4 +21,7 @@ class ChatContext(SQLModel, table=True):
     preference_revision_ids_json: str = Field(default='[]', sa_column=Column(Text, nullable=False, server_default='[]'))
     preference_resolver_version: str = Field(default='1', sa_column=Column(Text, nullable=False, server_default='1'))
     preferences_enabled: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default='false'))
+    skill_id: str | None = Field(default=None, index=True)
+    skill_revision_id: str | None = Field(default=None, index=True)
+    skill_hash: str | None = None
     revoked: bool = False

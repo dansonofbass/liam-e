@@ -18,6 +18,8 @@ class ChatTurnRequest(BaseModel):
     expected_mail_scope_version: int | None = Field(default=None, ge=1)
     account_id: str | None = None
     prompt_revision_id: str | None = None
+    skill_id: str | None = Field(default=None, max_length=100)
+    skill_revision_id: str | None = Field(default=None, max_length=100)
     without_preferences: bool = False
     locale: Locale = Field(default=DEFAULT_LOCALE, description="Browser language when the saved setting follows the browser")
     model: str | None = None
@@ -37,7 +39,7 @@ async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
     conversation_id = ''
     user_id = ''
     try:
-        async for event in agent.run_turn_events(conversation_id=body.conversation_id or None, text=body.message, account_id=body.account_id, expected_mail_scope_version=body.expected_mail_scope_version, prompt_revision_id=body.prompt_revision_id, model=body.model, context_message_id=body.context_message_id, context_occurrence_id=body.context_occurrence_id, calendar_source_ids=body.calendar_source_ids, calendar_timezone=body.calendar_timezone, task_source=body.task_source, task_source_account_id=body.task_source_account_id, without_preferences=body.without_preferences, locale=body.locale):
+        async for event in agent.run_turn_events(conversation_id=body.conversation_id or None, text=body.message, account_id=body.account_id, expected_mail_scope_version=body.expected_mail_scope_version, prompt_revision_id=body.prompt_revision_id, skill_id=body.skill_id, skill_revision_id=body.skill_revision_id, model=body.model, context_message_id=body.context_message_id, context_occurrence_id=body.context_occurrence_id, calendar_source_ids=body.calendar_source_ids, calendar_timezone=body.calendar_timezone, task_source=body.task_source, task_source_account_id=body.task_source_account_id, without_preferences=body.without_preferences, locale=body.locale):
             if event.event == 'start':
                 conversation_id, user_id = event.conversation_id, event.user_message_id
             elif event.event == 'error':

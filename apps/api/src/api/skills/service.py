@@ -27,6 +27,7 @@ from api.skills.types import (
 )
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+RESERVED_SKILL_SLUGS = frozenset({"tools"})
 
 
 def parse_workflow_steps(raw: str | None) -> list[SkillWorkflowStep]:
@@ -67,7 +68,7 @@ def validate_skill_payload(
     normalized: dict[str, Any] = {}
     if slug is not None:
         cleaned_slug = slug.strip()
-        if not SLUG_PATTERN.match(cleaned_slug):
+        if not SLUG_PATTERN.match(cleaned_slug) or cleaned_slug in RESERVED_SKILL_SLUGS:
             raise SkillValidationError("Prüfe die Kennung: 1–64 Zeichen, Kleinbuchstaben, Ziffern, Bindestrich oder Unterstrich.")
         normalized["slug"] = cleaned_slug
     if name is not None:
@@ -276,6 +277,17 @@ def active_skill_from_rows(skill: SkillDefinition, revision: SkillRevision) -> A
         workflow_steps=steps,
         allowed_tools=allowed_tools,
     )
+
+
+async def load_active_skill(skill_revision_id: str) -> ActiveSkill:
+    """Load an already-resolved pinned skill revision without syncing catalog rows."""
+    revision = await revision_access.get_revision(skill_revision_id)
+    if revision is None or revision.removed:
+        raise SkillRevisionUnavailableError()
+    skill = await skill_access.get_skill(revision.skill_id)
+    if skill is None:
+        raise SkillNotFoundError()
+    return active_skill_from_rows(skill, revision)
 
 
 async def resolve_skill(*, skill_id: str | None = None, skill_revision_id: str | None = None) -> ActiveSkill | None:

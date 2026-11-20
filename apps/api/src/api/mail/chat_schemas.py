@@ -7,6 +7,7 @@ from db.models.chat_message import ChatMessage
 from pydantic import BaseModel, Field, ValidationError
 
 from api.mail.proposals import Proposal, proposal_view
+from api.skills.types import SkillExecutionRef
 
 
 class CalendarRefOut(BaseModel):
@@ -19,6 +20,7 @@ class ChatExtrasOut(BaseModel):
     suggestions: list[str] = Field(default_factory=list)
     model: str = ""
     calendars: list[CalendarRefOut] = Field(default_factory=list)
+    skill: SkillExecutionRef | None = None
 
 
 class ContextOut(BaseModel):
@@ -35,6 +37,9 @@ class ContextOut(BaseModel):
     preference_revision_ids_json: str = '[]'
     preference_resolver_version: str = '1'
     preferences_enabled: bool = False
+    skill_id: str | None = None
+    skill_revision_id: str | None = None
+    skill_hash: str | None = None
     revoked: bool
 
 

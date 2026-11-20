@@ -42,6 +42,9 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "prompt_create",
         "prompt_update",
         "prompt_delete",
+        "skill_create",
+        "skill_update",
+        "skill_delete",
         "chat_conversation_update",
         "chat_proposal_cancel",
         "chat_proposal_confirm",
@@ -94,6 +97,9 @@ BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
         "chat_mail_reference_get",
         "mail_account_oauth_authorize",
         "mail_account_oauth_callback",
+        "skill_tools_list",
+        "skills_list",
+        "skill_get",
     }
 )
 
