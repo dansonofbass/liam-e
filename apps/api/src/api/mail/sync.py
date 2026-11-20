@@ -130,9 +130,12 @@ async def _connector_changes(account, progress, deferred, options):
     retry_count = min(5, len(deferred))
     if retry_count:
         recovered = await sync_connector.retry_threads(account, deferred[:retry_count], options["max_body_chars"])
-        by_uid = {item["provider_uid"]: item for item in changes.upserts}
-        by_uid.update((item["provider_uid"], item) for item in recovered.upserts)
+        removed = set(recovered.moved_out)
+        returned = {item["provider_uid"]: item for item in recovered.upserts}
+        by_uid = {item["provider_uid"]: item for item in changes.upserts if item["provider_uid"] not in removed}
+        by_uid.update(returned)
         changes.upserts = list(by_uid.values())
+        changes.moved_out = [uid for uid in changes.moved_out if uid not in returned] + recovered.moved_out
         changes.deferred_threads.extend(recovered.deferred_threads)
     return changes, list(dict.fromkeys([*deferred[retry_count:], *changes.deferred_threads]))
 

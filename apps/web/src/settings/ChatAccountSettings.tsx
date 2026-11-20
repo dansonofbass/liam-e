@@ -21,9 +21,8 @@ export function ChatAccountSettings() {
   const choices = accounts.data?.filter(account => account.is_active) ?? []
   const shown = edit ?? settings.data
   const eligible = new Set(choices.filter(account => account.chat_eligibility === 'eligible').map(account => account.id))
-  const savedSelection = shown?.account_ids.filter(id => eligible.has(id)) ?? []
   const eligibilityReady = accounts.isSuccess && choices.every(account => account.chat_eligibility != null)
-  const canSave = eligibilityReady && (!!edit || (!!shown && savedSelection.length !== shown.account_ids.length))
+  const canSave = eligibilityReady && !!edit
 
   function toggle(id: string, checked: boolean) {
     if (!shown) return
@@ -41,11 +40,11 @@ export function ChatAccountSettings() {
   }
 
   async function save() {
-    if (!shown || !canSave || saving.current) return
+    if (!edit || !canSave || saving.current) return
     saving.current = true
     setStatus('saving')
     try {
-      const result = await chatSettingsUpdate({ body: { expected_version: shown.version, account_ids: savedSelection } })
+      const result = await chatSettingsUpdate({ body: { expected_version: edit.version, account_ids: edit.account_ids } })
       if (!result.data) {
         const code = errorCode(result.error)
         if (code === 'chat_settings_invalid') setStatus('invalid')
@@ -78,7 +77,7 @@ export function ChatAccountSettings() {
         {choices.length ? <fieldset className="le-chat-account-list" disabled={status === 'saving' || status === 'conflict'}>
           <legend className="le-sr">{texts.chatAccounts.title}</legend>
           {choices.map(account => <label key={account.id}>
-            <input type="checkbox" disabled={!eligible.has(account.id)} checked={savedSelection.includes(account.id)} onChange={event => toggle(account.id, event.target.checked)} />
+            <input type="checkbox" disabled={!eligible.has(account.id) && !shown.account_ids.includes(account.id)} checked={shown.account_ids.includes(account.id)} onChange={event => toggle(account.id, event.target.checked)} />
             <span>{account.display_name || account.email_address}{account.display_name && account.display_name !== account.email_address && <small>{account.email_address}</small>}{!eligible.has(account.id) && <small>{account.chat_eligibility === 'inbox_only' ? texts.chatAccounts.inboxOnly : texts.chatAccounts.awaitingVerification}</small>}</span>
           </label>)}
         </fieldset> : <Link to="/accounts">{texts.accounts.connect}</Link>}

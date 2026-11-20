@@ -25,18 +25,35 @@ from api.mail.sync_types import Reread, SyncChanges, attachments, body_text, com
 logger = logging.getLogger(__name__)
 
 
+async def _thread_page(provider: str, args: dict) -> tuple[list[dict], str]:
+    page = await connectors.call_read_tool_json(provider, "search_threads", args)
+    threads = page.get("threads") if isinstance(page, dict) else None
+    if not isinstance(threads, list) or not all(isinstance(row, dict) and isinstance(row.get("id"), str)
+                                               and row["id"] for row in threads):
+        raise ValueError("Incomplete connector thread listing")
+    token = page.get("nextPageToken")
+    if token is None:
+        token = ""
+    if not isinstance(token, str):
+        raise ValueError("Invalid connector page token")
+    return threads, token
+
+
 async def _search(provider: str, query: str) -> list[dict[str, Any]]:
     threads = []
+    seen = set()
     token = ""
     while True:
         args: dict[str, Any] = {"query": query, "pageSize": 50}
         if token:
             args["pageToken"] = token
-        page = await connectors.call_read_tool_json(provider, "search_threads", args)
-        threads.extend(page.get("threads", []))
-        token = page.get("nextPageToken") or ""
+        rows, token = await _thread_page(provider, args)
+        threads.extend(rows)
         if not token:
             return threads
+        if token in seen:
+            raise ValueError("Repeated connector page token")
+        seen.add(token)
 
 
 def incremental_cursor(progress: str) -> str:
@@ -69,6 +86,20 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
         _, token = json.loads(history.cursor.removeprefix("initial:"))
         current.cursor = "initial:" + json.dumps([current.cursor, token])
     return current
+
+
+async def _thread_messages(provider: str, thread_id: str):
+    try:
+        thread = await connectors.call_read_tool_json(provider, "get_thread",
+            {"threadId": thread_id, "messageFormat": "FULL_CONTENT"})
+    except httpx.HTTPStatusError as error:
+        return [] if error.response.status_code == 404 else None
+    except (ValueError, TypeError, httpx.TransportError):
+        return None
+    if not isinstance(thread, dict) or thread.get("id", thread_id) != thread_id:
+        return None
+    messages = thread.get("messages")
+    return messages if isinstance(messages, list) else None
 
 
 async def _history_page(account, cursor, limit, max_body_chars):
@@ -105,15 +136,17 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
             args: dict[str, Any] = {"query": query, "pageSize": 50 if valid else min(50, limit)}
             if token:
                 args["pageToken"] = token
-            page = await connectors.call_read_tool_json(account.provider, "search_threads", args)
-            threads = page.get("threads", [])
+            threads, next_token = await _thread_page(account.provider, args)
             for thread in threads:
                 if valid and len(changes.upserts) >= limit and frontier is not None:
                     return False, frontier, latest
-                full = await connectors.call_read_tool_json(account.provider, "get_thread", {"threadId": thread.get("id", ""), "messageFormat": "FULL_CONTENT"})
-                thread_id = full.get("id") or thread.get("id", "")
+                thread_id = thread["id"]
+                messages = await _thread_messages(account.provider, thread_id)
+                if messages is None:
+                    changes.deferred_threads.append(thread_id)
+                    continue
                 thread_latest = None
-                for message in full.get("messages", []):
+                for message in messages:
                     parsed = _indexed_message(message, thread_id, max_body_chars)
                     if parsed is None:
                         if thread_id not in changes.deferred_threads:
@@ -130,7 +163,7 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
                         seen.add(parsed["provider_uid"])
                 if thread_latest is not None:
                     frontier = min(thread_latest, upper) if upper is not None else thread_latest
-            token = page.get("nextPageToken") or ""
+            token = next_token
             if not valid:
                 page_token = token
             if not token:
@@ -201,28 +234,73 @@ def _indexed_message(row, thread_id, max_body_chars):
     return parsed if parsed["internal_date"] is not None else None
 
 
+async def _inbox_evidence(provider: str, thread_id: str, stamp: int) -> tuple[bool | None, dict[str, list | None]]:
+    """Check the current inbox near the message date, even for mail outside the recent window."""
+    token = ""
+    query = f"in:inbox after:{max(0, stamp - 1)} before:{stamp + 2}"
+    for _ in range(10):
+        args = {"query": query, "pageSize": 50}
+        if token:
+            args["pageToken"] = token
+        threads, token = await _thread_page(provider, args)
+        for item in threads:
+            if item["id"] != thread_id:
+                continue
+            rows = item.get("messages") or []
+            if not isinstance(rows, list) or not all(isinstance(row, dict) and row.get("id") for row in rows):
+                raise ValueError("Incomplete connector inbox match")
+            return True, {row["id"]: row.get("labelIds") for row in rows}
+        if not token:
+            return False, {}
+    return None, {}
+
+
+async def _message_in_inbox(provider, thread_id, message, labels, thread_size, evidence) -> bool | None:
+    if isinstance(labels, list):
+        return "INBOX" in labels
+    stamp = int(message["internal_date"].timestamp())
+    if stamp not in evidence:
+        evidence[stamp] = await _inbox_evidence(provider, thread_id, stamp)
+    listed, members = evidence[stamp]
+    if listed is not True:
+        return listed
+    uid = message["provider_uid"]
+    if isinstance(members.get(uid), list):
+        return "INBOX" in members[uid]
+    if thread_size == 1 and (not members or set(members) == {uid}):
+        return True
+    # A different message in this thread could be the inbox match.
+    return None
+
+
 async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_chars: int) -> SyncChanges:
-    """Retry a bounded part of the verified mailbox's deferred list without moving its cursors."""
+    """Direct reads by thread ID need current inbox evidence before restoring messages."""
     recovered = SyncChanges()
     for thread_id in thread_ids:
+        pending = False
         try:
-            thread = await connectors.call_read_tool_json(account.provider, "get_thread",
-                {"threadId": thread_id, "messageFormat": "FULL_CONTENT"})
-            if thread.get("id") != thread_id or not isinstance(thread.get("messages"), list):
+            messages = await _thread_messages(account.provider, thread_id)
+            if messages is None:
                 raise ValueError("Incomplete connector thread")
-            for row in thread["messages"]:
+            evidence = {}
+            for row in messages:
                 parsed = _indexed_message(row, thread_id, max_body_chars)
                 if parsed is None:
-                    if thread_id not in recovered.deferred_threads:
-                        recovered.deferred_threads.append(thread_id)
-                elif row.get("labelIds") is None or "INBOX" in row["labelIds"]:
+                    pending = True
+                    continue
+                uid = parsed["provider_uid"]
+                in_inbox = await _message_in_inbox(account.provider, thread_id, parsed, row.get("labelIds"), len(messages), evidence)
+                if in_inbox is None:
+                    pending = True
+                    continue
+                if in_inbox:
                     recovered.upserts.append(parsed)
-        except httpx.HTTPStatusError as error:
-            if error.response.status_code in (401, 403):
-                raise
-            if error.response.status_code != 404:
-                recovered.deferred_threads.append(thread_id)
-        except (ValueError, KeyError, TypeError, httpx.TransportError):
+                else:
+                    recovered.moved_out.append(uid)
+        except (ValueError, KeyError, TypeError, httpx.HTTPError):
+            # Keep independent new arrivals. The caller verifies the mailbox after this read.
+            pending = True
+        if pending:
             recovered.deferred_threads.append(thread_id)
     return recovered
 

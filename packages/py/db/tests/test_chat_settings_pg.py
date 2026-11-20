@@ -223,11 +223,11 @@ def test_connector_upgrade_verifies_pages_in_place_and_keeps_ordinary_inbox_only
                 assert args['query'] == 'in:inbox'
                 pages.append(args.get('pageToken'))
                 if args.get('pageToken'):
+                    if pages.count('opaque-next') == 1:
+                        raise ValueError("Incomplete historical provider response")
                     return {'threads': [{'id': 'two'}]}
                 return {'threads': [{'id': 'one'}], 'nextPageToken': 'opaque-next'}
             uid = args['threadId']
-            if uid == 'two' and pages.count('opaque-next') == 1:
-                raise ValueError("Incomplete historical provider response")
             return {'id': uid, 'messages': [{'id': uid, 'labelIds': ['INBOX', 'UNREAD'], 'date': '2026-01-01T10:00:00+00:00', 'subject': 'Checked'}]}
         monkeypatch.setattr(connectors, 'call_read_tool_json', provider)
         assert (await current_account_out(a)).chat_eligibility == "awaiting_verification"

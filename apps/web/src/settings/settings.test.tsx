@@ -350,3 +350,18 @@ test('a previous API response without eligibility cannot clear a stored chat gra
   expect((screen.getByRole('button', { name: de.settingsUi.save }) as HTMLButtonElement).disabled).toBe(true)
   expect(requests.filter(item => item.method === 'PATCH')).toHaveLength(0)
 })
+
+test('editing a visible account preserves a newly granted account omitted from a cached list', async () => {
+  setup('/settings/chat', async request => {
+    if (new URL(request.url).pathname.endsWith('/mail/accounts')) return Response.json([chatAccounts[0]])
+    if (request.method === 'PATCH') return Response.json({ version: 8, account_ids: ['elsewhere', 'work'] })
+    return Response.json({ version: 7, account_ids: ['elsewhere'] })
+  })
+  const visible = await screen.findByRole('checkbox', { name: /Work/ })
+  const save = screen.getByRole('button', { name: de.settingsUi.save }) as HTMLButtonElement
+  expect(save.disabled).toBe(true)
+  fireEvent.click(visible)
+  fireEvent.click(save)
+  await screen.findByText(de.settingsUi.saved)
+  expect(requests.find(item => item.method === 'PATCH')?.body).toEqual({ expected_version: 7, account_ids: ['elsewhere', 'work'] })
+})
