@@ -37,6 +37,9 @@ class CalendarChoice(AppointmentCalendar):
     sequence_id: str | None = None
     appointments: tuple[AppointmentCalendar, ...] = ()
 
+    def appointment(self) -> AppointmentCalendar:
+        return AppointmentCalendar(**self.model_dump(include=set(AppointmentCalendar.model_fields)))
+
 
 _QUOTED = re.compile(r""""[^"]*"|“[^”]*”|„[^“]*“|‘[^’]*’|‚[^‘]*‘|«[^»]*»|»[^«]*«|(?<!\w)'[^']*'(?!\w)""")
 _DETERMINER = r"(?:(?:the|my|mein(?:em|en)?|den|dem|der|das)\s+)?"
@@ -225,7 +228,24 @@ _NEXT_REQUEST = re.compile(
     rf"|(?P<shared>\s+(?:and|und)\s+)(?={_ARTICLE}\s+(?:{_CLOCK}\b|[^,;.!?\n]+?\s+(?:at|um)\s+{_CLOCK}\b))", re.I)
 
 
-def appointment_parts(text: str) -> list[str]:
+_TIME_DETAIL = re.compile(rf"(?<!\w)(?:{_DATE_TAIL}|{_CLOCK}|(?:at|um)\s+\w+|(?:hours?|minutes?|stunden?|minuten)\b)", re.I)
+
+
+def _split_named_times(part: str, appointments, divider) -> list[str]:
+    masked = _QUOTED.sub(lambda match: " " * len(match[0]), part)
+    boundaries = list(divider.finditer(masked))
+    clauses = []
+    start = 0
+    for index, boundary in enumerate(boundaries):
+        end = boundaries[index + 1].start() if index + 1 < len(boundaries) else len(part)
+        left, right = masked[start:boundary.start()], masked[boundary.end():end]
+        if _mentioned_appointments(appointments, left) and _TIME_DETAIL.search(left) and _TIME_DETAIL.search(right):
+            clauses.append(part[start:boundary.start()].strip())
+            start = boundary.end()
+    return [*clauses, part[start:].strip()]
+
+
+def appointment_parts(text: str, previous: CalendarChoice | None = None) -> list[str]:
     """Split independent requests outside quoted event text, keeping alternatives together."""
     masked = _QUOTED.sub(lambda match: " " * len(match.group()), text)
     parts = []
@@ -241,7 +261,14 @@ def appointment_parts(text: str) -> list[str]:
         if part := text[offset:boundary.start()].strip():
             parts.append(part)
         offset = boundary.end()
-    return [*parts, text[offset:].strip()]
+    parts.append(text[offset:].strip())
+    subjects = {item.appointment_subject for item in previous.appointments if item.appointment_subject} if previous else set()
+    if not subjects:
+        return parts
+    names = "|".join(re.escape(subject) for subject in sorted(subjects, key=len, reverse=True))
+    divider = re.compile(r"(?:[,;.!?]\s*(?:(?:and|und)\s+)?|\n+|\s+(?:and|und)\s+)"
+                         rf"(?=(?:(?:the|der|die|das)\s+)?(?:{names})(?![\w-]))", re.I)
+    return [clause for part in parts for clause in _split_named_times(part, previous.appointments, divider)]
 
 
 def appointment_part(parts: list[str], title, excerpt) -> str | None:
@@ -289,7 +316,7 @@ def _mentioned_appointments(appointments, text):
             re.search(r"(?<!\w)" + re.escape(item.appointment_subject) + r"(?!\w)", folded)]
 
 
-def pending_for_request(previous: CalendarChoice | None, text: str, title=None, *, first=True) -> CalendarChoice | None:
+def pending_for_request(previous: CalendarChoice | None, text: str, title=None, *, first=True, selected_source_id=None) -> CalendarChoice | None:
     if not previous:
         return None
     subject = _appointment_subject(text)
@@ -301,8 +328,10 @@ def pending_for_request(previous: CalendarChoice | None, text: str, title=None, 
             matches = _mentioned_appointments(previous.appointments, text)
             if not matches and first and previous.appointment_subject:
                 matches = [item for item in previous.appointments if item.appointment_subject == previous.appointment_subject]
+        if selected_source_id and len(matches) > 1 and len({item.appointment_subject for item in matches}) == 1:
+            matches = [item for item in matches if item.source_id == selected_source_id] or matches
         if len(matches) == 1:
-            if any(item.appointment_subject == proposed and item != matches[0] for item in previous.appointments):
+            if proposed != matches[0].appointment_subject and any(item.appointment_subject == proposed for item in previous.appointments):
                 return previous
             return CalendarChoice(**matches[0].model_dump(), sequence_id=previous.sequence_id)
         if matches:
@@ -322,6 +351,20 @@ def pending_for_request(previous: CalendarChoice | None, text: str, title=None, 
     command = re.search(rf"\b{_ACTION}\b", words, re.I)
     create = command and command[0].casefold() in {"schedule", "create", "book", "arrange", "add", "set up", "erstelle", "plane", "buche"}
     return None if create or (proposed and proposed == subject) else previous
+
+
+async def appointment_continuation(previous, part, title=None, *, first, selection, entries):
+    choice = pending_for_request(previous, part, title, first=first)
+    if not choice or not choice.appointments:
+        return choice
+    # Two appointments can have the same title. Only a calendar selected by
+    # the owner can distinguish those original bindings.
+    target = await stated_destination(selection, entries, None)
+    if target and not target.error:
+        selected_id = (await calendar_settings.get()).default_source_id if target.use_default else target.source_id
+        if selected_id:
+            return pending_for_request(previous, part, title, first=first, selected_source_id=selected_id)
+    return choice
 
 
 def previous_choice(history, user_id: str, contexts) -> CalendarChoice | None:
@@ -542,18 +585,29 @@ def _clarification(appointments: list[AppointmentCalendar], sequence_id: str | N
 
 
 async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
-    parts = appointment_parts(ctx.user_text)
+    parts = appointment_parts(ctx.user_text, ctx.calendar_choice)
     unfinished = [part for part in parts if part not in ctx.completed_calendar_requests]
     previous = ctx.calendar_choice
-    continuations = {part: pending_for_request(previous, part, first=index == 0) for index, part in enumerate(parts)}
+    entries = None
+    continuations = dict(ctx.calendar_continuations)
+    for index, part in enumerate(parts):
+        if part in continuations:
+            continue
+        if previous and previous.appointments:
+            if entries is None:
+                entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
+            continuations[part] = await appointment_continuation(previous, part, first=index == 0,
+                selection=owner_selection(part, entries=entries), entries=entries)
+        else:
+            continuations[part] = pending_for_request(previous, part, first=index == 0)
     sequence_id = ctx.calendar_sequence_id
     # Updating one previously unfinished appointment leaves its siblings bound
     # to their own targets, even when the assistant has just prepared its card.
     appointments = []
     if previous and any(continuations.values()):
         sequence_id = sequence_id or previous.sequence_id
-        subjects = {choice.appointment_subject for choice in continuations.values() if choice and not choice.appointments}
-        appointments.extend(item for item in previous.appointments if item.appointment_subject not in subjects)
+        addressed = [choice.appointment() for choice in continuations.values() if choice and not choice.appointments]
+        appointments.extend(item for item in previous.appointments if item not in addressed)
     if not unfinished:
         return _clarification(appointments, sequence_id, answer)
     details = re.search(r"\b(?:when|what time|date|duration|title|location|where|how long|wann|zeit|uhrzeit|datum|dauer|titel|ort|wie lange)\b", answer, re.I)
@@ -564,7 +618,8 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
                          r"trag[e]?|leg[e]?|buch[e]?|anlegen|eintragen)\b", owner_selection(ctx.user_text).text, re.I)
     if not (ctx.calendar_targets or ctx.calendar_choice or creating):
         return None
-    entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
+    if entries is None:
+        entries = await calendar_source.catalog(ids=ctx.calendar_source_ids)
     for part in unfinished:
         inherited = continuations[part]
         if inherited and inherited.appointments:
@@ -577,7 +632,7 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
             if default:
                 choice = (choice or CalendarChoice()).bind_default(default)
         if choice or sequence_id or len(unfinished) > 1:
-            binding = choice.model_dump(include=set(AppointmentCalendar.model_fields)) if choice else {}
-            binding["appointment_subject"] = (inherited.appointment_subject if inherited else "") or _appointment_subject(part)
-            appointments.append(AppointmentCalendar(**binding))
+            binding = choice.appointment() if choice else AppointmentCalendar()
+            binding.appointment_subject = (inherited.appointment_subject if inherited else "") or _appointment_subject(part)
+            appointments.append(binding)
     return _clarification(appointments, sequence_id, answer)

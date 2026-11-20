@@ -7,7 +7,7 @@ from db.accessors import calendar_occurrence, calendar_settings, calendar_source
 from pydantic import ValidationError
 
 from api.calendar import writes
-from api.calendar.chat_target import CalendarChoice, appointment_part, appointment_parts, named_choice, owner_selection, pending_for_request, stated_destination
+from api.calendar.chat_target import CalendarChoice, appointment_continuation, appointment_part, appointment_parts, named_choice, owner_selection, stated_destination
 from api.calendar.proposals import CalendarCommand, CalendarValues, values
 
 
@@ -16,7 +16,7 @@ async def _create_source(arguments, ctx):
     source_id = arguments.get("source_id")
     if source_id and source_id not in ctx.calendar_source_ids:
         raise writes.WriteError("calendar_out_of_scope", 403)
-    parts = appointment_parts(ctx.user_text)
+    parts = appointment_parts(ctx.user_text, ctx.calendar_choice)
     part = appointment_part(parts, arguments.get("title"), arguments.get("appointment_request"))
     if part is None or part in ctx.completed_calendar_requests:
         raise writes.WriteError("calendar_appointment_ambiguous", 422)
@@ -25,10 +25,16 @@ async def _create_source(arguments, ctx):
     selection = owner_selection(part, arguments.get("title"), entries=entries, location=arguments.get("location"))
     previous = ctx.requested_calendar
     if previous is None:
-        previous = pending_for_request(ctx.calendar_choice, part, arguments.get("title"), first=part == parts[0])
+        previous = await appointment_continuation(ctx.calendar_choice, part, arguments.get("title"),
+            first=part == parts[0], selection=selection, entries=entries)
+        if ctx.calendar_choice and ctx.calendar_choice.appointments:
+            ctx.calendar_continuations[part] = previous
     if previous and previous.appointments:
         raise writes.WriteError("calendar_appointment_ambiguous", 422)
     target = await stated_destination(selection, entries, previous)
+    if (previous and target and previous.source_id and previous.source_id == target.source_id
+            and previous.connection_ref != target.connection_ref):
+        raise writes.WriteError("calendar_not_writable", 403)
     current = ctx.requested_calendar
     if target and current and current.source_id and (
             target.source_id == current.source_id or (target.use_default and current.use_default)):

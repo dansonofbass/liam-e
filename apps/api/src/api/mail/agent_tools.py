@@ -28,6 +28,7 @@ class TurnContext:
     calendar_choice: CalendarChoice | None = None
     calendar_request_part: str | None = field(default=None, init=False)
     calendar_targets: dict[str, CalendarChoice] = field(default_factory=dict, init=False)
+    calendar_continuations: dict[str, CalendarChoice | None] = field(default_factory=dict, init=False)
     completed_calendar_requests: set[str] = field(default_factory=set, init=False)
     calendar_sequence_id: str | None = field(default=None, init=False)
 
@@ -113,7 +114,7 @@ async def _proposal(ctx, proposal):
     from db.accessors import calendar_proposal_queue
 
     create = proposal.kind == 'calendar' and proposal.calendar.action == 'create'
-    parts = appointment_parts(ctx.user_text) if create else []
+    parts = appointment_parts(ctx.user_text, ctx.calendar_choice) if create else []
     continuing = ctx.calendar_choice and any(pending_for_request(ctx.calendar_choice, part, first=index == 0)
                                              for index, part in enumerate(parts))
     if continuing and not ctx.calendar_sequence_id:
@@ -169,7 +170,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         if command.action == 'create':
             part = ctx.calendar_request_part
         else:
-            part = appointment_part(appointment_parts(ctx.user_text), arguments.get('title'), arguments.get('appointment_request'))
+            part = appointment_part(appointment_parts(ctx.user_text, ctx.calendar_choice), arguments.get('title'), arguments.get('appointment_request'))
         if part is not None:
             ctx.completed_calendar_requests.add(part)
         return outcome

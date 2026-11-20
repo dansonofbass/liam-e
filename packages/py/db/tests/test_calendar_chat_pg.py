@@ -184,7 +184,13 @@ def test_confirm_three_appointments_across_time_clarifications(appointment_strea
 
 
 @pytest.mark.parametrize('dinner_first', [False, True])
-def test_clarify_both_times_in_one_reply(appointment_stream, dinner_first):
+@pytest.mark.parametrize('reply,clauses', [
+    ('Schedule lunch at noon. Schedule dinner at 18:00.', None),
+    ('Lunch at 12:00 for one hour, dinner at 18:00 for one hour',
+     ('Lunch at 12:00 for one hour', 'dinner at 18:00 for one hour')),
+    ('Lunch at noon for one hour and dinner at 18:00 for one hour.', None),
+])
+def test_clarify_both_times_in_one_reply(appointment_stream, dinner_first, reply, clauses):
     from api.mail import agent, proposals
     streams, dispatched = appointment_stream
 
@@ -196,20 +202,61 @@ def test_clarify_both_times_in_one_reply(appointment_stream, dinner_first):
         conversation = events[-1].conversation_id
         assert not await _visible_cards(conversation)
         calls = [_create_args('Lunch', '12:00', '13:00'), _create_args('Dinner', '18:00', '19:00')]
-        expected = [('Lunch', 'work'), ('Dinner', 'personal')]
+        if clauses:
+            for call, clause in zip(calls, clauses, strict=True):
+                call['appointment_request'] = clause
+        expected = [('Lunch', 'work', '12:00', '13:00'), ('Dinner', 'personal', '18:00', '19:00')]
         if dinner_first:
             calls.reverse()
             expected.reverse()
         streams.extend([_calendar_calls(*calls), ['Ready for confirmation.']])
-        reply = 'Schedule lunch at noon. Schedule dinner at 18:00.'
         events = [e async for e in agent.run_turn_events(conversation_id=conversation, text=reply)]
         assert [e.event for e in events].count('proposal') == 1 and dispatched == []
-        for title, source_id in expected:
+        for title, source_id, start, end in expected:
             card, = [row for row in await _visible_cards(conversation) if row.proposal_status == 'pending']
-            assert (card.proposal.calendar.after.title, card.proposal.calendar.source_id) == (title, source_id)
+            command = card.proposal.calendar
+            assert (command.after.title, command.source_id) == (title, source_id)
+            assert (command.after.start_local, command.after.end_local) == ('2026-11-21T' + start, '2026-11-21T' + end)
             assert (await proposals.confirm(card.id, selected_ids=[])).proposal_status == 'done'
             assert dispatched[-1] == (title, source_id, card.id)
         assert len(dispatched) == 2
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('named_tool_argument', [False, True])
+def test_clarify_same_title_by_original_calendar(appointment_stream, named_tool_argument):
+    from api.mail import agent, proposals
+    from db.accessors import calendar_settings, chat_message
+    streams, dispatched = appointment_stream
+
+    async def run():
+        await _seed_appointment_calendars()
+        streams.append(['What times should the two reviews start?'])
+        opening = 'Schedule the review in the Work calendar. Schedule the review in the Personal calendar.'
+        events = [e async for e in agent.run_turn_events(conversation_id=None, text=opening)]
+        conversation = events[-1].conversation_id
+
+        async def turn(text, call, answer):
+            streams.extend([_calendar_calls(call), [answer]])
+            events = [e async for e in agent.run_turn_events(conversation_id=conversation, text=text)]
+            assert events[-1].event == 'done'
+            return [e.message for e in events if e.event == 'proposal']
+
+        morning = _create_args('Review', '09:00', '10:00')
+        assert await turn('The review at 09:00 for one hour.', {**morning, 'calendar_name': 'Work'}, 'Which review is that for?') == []
+        history = await chat_message.list_messages(conversation)
+        assert json.loads([row for row in history if row.role == 'tool'][-1].content)['error'] == 'calendar_appointment_ambiguous'
+        if named_tool_argument:
+            morning['calendar_name'] = 'Work'
+        first, = await turn('Schedule the review in the Work calendar at 09:00 for one hour.', morning, 'What time is the other review?')
+        assert first.proposal.calendar.source_id == 'work' and first.proposal.calendar.after.start_local == '2026-11-21T09:00'
+        assert dispatched == []
+        assert (await proposals.confirm(first.id, selected_ids=[])).proposal_status == 'done'
+        await calendar_settings.update(2, 'work')
+        other, = await turn('Tomorrow at 15:00 for one hour.', _create_args('Review', '15:00', '16:00'), 'Ready for confirmation.')
+        assert other.proposal.calendar.source_id == 'personal' and other.proposal.calendar.after.start_local == '2026-11-21T15:00'
+        assert (await proposals.confirm(other.id, selected_ids=[])).proposal_status == 'done'
+        assert dispatched == [('Review', 'work', first.id), ('Review', 'personal', other.id)]
     asyncio.run(run())
 
 

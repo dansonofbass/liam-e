@@ -491,6 +491,8 @@ cancelling a card makes the next one available for its own confirmation. An unce
 keeps the next appointment waiting until the owner checks its outcome.
 Time questions keep each unfinished appointment's calendar and place in the same sequence,
 including when a confirmation publishes another card between the question and the owner's reply.
+A reply can give times for several named appointments together. When two appointments share
+a title, an explicit calendar can identify which one receives the supplied time.
 An explicitly excluded calendar stays excluded through scheduling questions. If the default
 is excluded, the owner chooses a target. An edit or deletion carries its target only on its own card.
 When the owner rules out one of several offered calendars, the chat keeps the remaining
