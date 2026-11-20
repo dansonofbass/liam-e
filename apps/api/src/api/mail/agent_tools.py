@@ -160,11 +160,13 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
     if any(id is not None and id not in scope for id in (ctx.account_id, arguments.get('account_id'))):
         return result({'error': 'account_out_of_scope'})
     ids = arguments.get('message_ids', []) + [arguments.get('message_id'), arguments.get('reply_to_message_id')]
+    verified_messages = {}
     for id in ids:
-        if id:
+        if id and id not in verified_messages:
             row = await mail_message.get_message(id)
             if row is None or row.account_id not in scope or row.unverified_connector:
                 return result({'error': 'message_not_found'})
+            verified_messages[id] = row
     if arguments.get('sender_ids'):
         allowed = {s.sender_id for s in await newsletters.find_newsletters(account_ids=scope, chat_only=True)} if scope else set()
         if any(id not in allowed for id in arguments['sender_ids']):
@@ -182,7 +184,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
             rows = [m for m in rows if m.internal_date and (m.internal_date.replace(tzinfo=timezone.utc) if m.internal_date.tzinfo is None else m.internal_date) >= cutoff]
         return result({'untrusted_mails': [_summary(m) for m in rows]})
     if name == 'get_message':
-        m = await mail_message.get_message(arguments.get('message_id', ''))
+        m = verified_messages.get(arguments.get('message_id'))
         if not m: return result({'error':'message_not_found'})
         return result({'untrusted_mail': {'id':m.id, 'account_id':m.account_id, 'folder':m.folder, 'subject':m.subject, 'sender':m.sender, 'to':json.loads(m.recipients_json), 'cc':json.loads(m.cc_json), 'reply_to':json.loads(m.reply_to_json), 'date':m.internal_date, 'body_text':m.body_text[:8000], 'has_attachments':m.has_attachments, 'is_read':m.is_read}})
     if name == 'get_insights':
@@ -217,7 +219,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
                 subtitle = unsubscribe_subtitle(s.total, s.address, s.method, s.link if s.method == 'mailto' else None, locale=ctx.locale)
                 items.append(proposals.ProposalItem(id=id, kind='sender', title=s.display_name, subtitle=subtitle, count=s.total, unread=s.unread, last_read_at=s.last_read_at, method=s.method, target=s.link))
             else:
-                m = await mail_message.get_message(id)
+                m = verified_messages.get(id)
                 if not m or m.folder != 'INBOX' or (kind == 'mark_read' and m.is_read): continue
                 account = await mail_account.get_account(m.account_id)
                 items.append(proposals.ProposalItem(id=id, kind='mail', title=m.subject or ('No subject' if ctx.locale == 'en' else 'Ohne Betreff'), subtitle=f'{headers.sender_name(m.sender)} · {account.email_address if account else ""}'))
@@ -229,7 +231,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         to = [] if mode in ('reply', 'reply_all') else arguments.get('to', [])
         cc = arguments.get('cc', [])
         if not _valid_addresses(to + cc): return result({'error':'invalid_address'})
-        original = await mail_message.get_message(arguments.get('reply_to_message_id', '')) if mode != 'new' else None
+        original = verified_messages.get(arguments.get('reply_to_message_id')) if mode != 'new' else None
         if mode != 'new' and not original: return result({'error':'message_not_found'})
         sender_id = arguments.get('account_id')
         if original:
@@ -266,7 +268,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
     if name == 'show_mails':
         ids = []
         for id in dict.fromkeys(arguments.get('message_ids', [])):
-            if await mail_message.get_message(id): ids.append(id)
+            if id in verified_messages: ids.append(id)
             if len(ids) == 10: break
         return result({'ok':True}, mails=ids)
     if name == 'suggest_followups':

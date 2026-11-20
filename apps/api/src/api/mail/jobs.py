@@ -35,7 +35,7 @@ async def enqueue_insights(account_id: str) -> bool:
 
 async def _sync(payload: dict[str, Any]) -> None:
     result = await sync.sync_account(payload["account_id"])
-    if result.status == "ok" and result.new_message_ids:
+    if result.status == "ok" and (result.new_message_ids or result.refresh_insights):
         await enqueue_insights(payload["account_id"])
 
 

@@ -24,6 +24,8 @@ class MailSyncState(SQLModel, table=True):
     id: str = Field(default_factory=new_id, primary_key=True)
     account_id: str = Field(index=True)
     cursor: str = ""
+    connector_cursor: str = Field(default="", sa_column_kwargs={"server_default": ""})
+    connector_generation: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     connector_verified: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default=false()))
     status: str = "idle"  # idle | syncing | ok | error
     last_error: str = ""

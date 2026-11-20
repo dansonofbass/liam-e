@@ -32,6 +32,7 @@ class SyncResult:
     cursor: str
     error_code: str
     new_message_ids: list[str] = field(default_factory=list)
+    refresh_insights: bool = False
 
 
 def addresses(value: str) -> str:

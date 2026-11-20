@@ -1,5 +1,5 @@
 """Short live mail previews for the chat UI."""
-from db.accessors import chat_settings, mail_account, mail_insight
+from db.accessors import chat_settings, mail_account
 from fastapi import APIRouter, Query
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -14,10 +14,10 @@ router = APIRouter()
 @router.get('/{message_id}', operation_id='chat_mail_reference_get')
 async def mail_reference(message_id: str, expected_version: int = Query(ge=1), context_id: str | None = None) -> MailRefOut:
     try:
-        row = await chat_settings.mail_reference(message_id, expected_version, context_id)
-        if row is None:
+        preview = await chat_settings.mail_preview(message_id, expected_version, context_id)
+        if preview is None:
             raise refuse(404, 'message_not_found', 'Diese Mail ist im Chat nicht verfügbar.')
-        insight = await mail_insight.get(row.id)
+        row, insight = preview
         colors = color_indexes(await mail_account.list_accounts())
         return MailRefOut(id=row.id, account_id=row.account_id, color_index=colors.get(row.account_id, 0),
                           subject=row.subject, sender_name=sender_name(row.sender), snippet=row.snippet,

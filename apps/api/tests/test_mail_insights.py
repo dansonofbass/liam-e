@@ -205,13 +205,14 @@ def test_insight_endpoint_does_not_mask_storage_errors(client, monkeypatch):
 
 @pytest.mark.anyio
 async def test_sync_job_enqueues_insights_after_new_mail(monkeypatch):
-    sync = AsyncMock(return_value=SimpleNamespace(status="ok", new_message_ids=["m1"]))
+    from api.mail.sync_types import SyncResult
+    sync = AsyncMock(return_value=SyncResult("ok", 1, "", "", ["m1"]))
     enqueue = AsyncMock()
     monkeypatch.setattr(jobs.sync, "sync_account", sync)
     monkeypatch.setattr(jobs, "enqueue_insights", enqueue)
     await jobs._sync({"account_id": "a1"})
     enqueue.assert_awaited_once_with("a1")
-    for result in [SimpleNamespace(status="error", new_message_ids=["m1"]), SimpleNamespace(status="ok", new_message_ids=[])]:
+    for result in [SyncResult("error", 0, "", "error", ["m1"]), SyncResult("ok", 0, "", "")]:
         sync.return_value = result
         enqueue.reset_mock()
         await jobs._sync({"account_id": "a1"})

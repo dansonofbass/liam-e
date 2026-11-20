@@ -5,7 +5,7 @@ import unicodedata
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from db.accessors import chat_context, mail_insight, mail_message
+from db.accessors import chat_context, chat_settings, mail_insight, mail_message
 from db.models.mail_insight import MailInsight
 from db.models.mail_message import MailMessage
 from env.mail import env as mail_env
@@ -127,16 +127,36 @@ def _stored(insight: MailInsight | None) -> MailInsight:
 
 
 async def get_or_compute(message_id: str, *, locale: Locale = DEFAULT_LOCALE, context_id: str | None = None) -> MailInsight:
-    existing = await mail_insight.get(message_id)
-    if existing is not None:
-        return existing
-    message = await _message(message_id)
+    if context_id is None:
+        existing = await mail_insight.get(message_id)
+        if existing is not None:
+            return existing
     locale = await resolve_locale(locale)
-    try:
-        return await compute_insight(message, today=datetime.now(BERLIN).date(), locale=locale, context_id=context_id)
-    except InsightOutdated:
-        # The text was re-read while the model worked: summarize the new one (a second change is reported).
-        return await compute_insight(await _message(message_id), today=datetime.now(BERLIN).date(), locale=locale, context_id=context_id)
+    retried = False
+    while True:
+        if context_id is not None:
+            preview = await chat_settings.mail_preview(message_id, None, context_id)
+            if preview is None:
+                raise InsightContextRevoked
+            message, existing = preview
+            if existing is not None:
+                return existing
+        else:
+            message = await _message(message_id)
+        try:
+            stored = await compute_insight(message, today=datetime.now(BERLIN).date(), locale=locale, context_id=context_id)
+            if context_id is None:
+                return stored
+            current = await chat_settings.mail_preview(message_id, None, context_id)
+            if current is None:
+                raise InsightContextRevoked
+            if current[1] is None:
+                raise InsightOutdated("Mail text changed while it was summarized")
+            return current[1]
+        except InsightOutdated:
+            if retried:
+                raise
+            retried = True
 
 
 async def _message(message_id: str) -> MailMessage:

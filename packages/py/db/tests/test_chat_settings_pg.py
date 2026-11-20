@@ -162,7 +162,7 @@ def test_connector_indexes_need_positive_verification_and_explicit_regrant(pg_db
     async def run():
         a = await service.upsert_account(provider='gmail', auth_type=connectors.CONNECTOR, email_address='a@example.test')
         async def save(cursor, checked):
-            await mail_sync_state.save_state(account_id=a.id, cursor=cursor, connector_verified=checked)
+            await mail_sync_state.save_state(account_id=a.id, cursor="234", connector_cursor=cursor, connector_verified=checked)
         await save('234', False)
         with pytest.raises(chat_settings.AccountNotGranted):
             await chat_settings.update(1, [a.id])
@@ -177,7 +177,7 @@ def test_connector_indexes_need_positive_verification_and_explicit_regrant(pg_db
         assert await chat_context.is_live(original.id)
         with pytest.raises(chat_settings.AccountNotGranted):
             await resolve(context_message_id=legacy.id)
-        assert await chat_settings.mail_reference(legacy.id, 2, original.id) is None
+        assert await chat_settings.mail_preview(legacy.id, 2, original.id) is None
         await chat_settings.invalidate_connector(a.id)
         assert not await chat_context.is_live(original.id)
         with pytest.raises(chat_settings.AccountNotGranted):
@@ -199,6 +199,10 @@ def test_connector_upgrade_verifies_pages_in_place_and_keeps_ordinary_inbox_only
         placeholder = await service.upsert_account(provider='gmail', auth_type=connectors.CONNECTOR, email_address='gmail@connector.mistral')
         legacy = [await mail_message.upsert_message(account_id=a.id, folder='INBOX', provider_uid=uid,
             subject='Previous', unverified_connector=True, body_version=BODY_VERSION) for uid in ('one', 'two', 'absent')]
+        from db.models.mail_insight import MailInsight
+        async with get_session_maker()() as session:
+            session.add(MailInsight(message_id=legacy[0].id, needs_reply=True, model="fixture"))
+            await session.commit()
         await mail_sync_state.save_state(account_id=a.id, cursor='234')
         listing = AsyncMock(side_effect=[{'credentials': None}, {'credentials': [{'name': 'identity', 'authentication_type': 'oauth2'}]}])
         monkeypatch.setattr(connectors, '_get', listing)
@@ -211,25 +215,31 @@ def test_connector_upgrade_verifies_pages_in_place_and_keeps_ordinary_inbox_only
             if args.get('threadId') == 'sent':
                 return anchor
             if tool == 'search_threads':
+                if 'after:' in args['query']:
+                    return {'threads': [{'id': 'new-arrival'}]}
+                if 'newer_than:' in args['query']:
+                    return {'threads': []}
                 assert args['query'] == 'in:inbox'
                 pages.append(args.get('pageToken'))
                 if args.get('pageToken'):
                     return {'threads': [{'id': 'two'}]}
                 return {'threads': [{'id': 'one'}], 'nextPageToken': 'opaque-next'}
             uid = args['threadId']
-            return {'id': uid, 'messages': [{'id': uid, 'labelIds': ['INBOX'], 'date': '2026-01-01T10:00:00+00:00', 'subject': 'Checked'}]}
+            return {'id': uid, 'messages': [{'id': uid, 'labelIds': ['INBOX', 'UNREAD'], 'date': '2026-01-01T10:00:00+00:00', 'subject': 'Checked'}]}
         monkeypatch.setattr(connectors, 'call_read_tool_json', provider)
         first = await sync.sync_account(a.id)
-        assert first.status == 'ok' and first.new_message_ids == []
+        assert first.status == 'ok' and first.new_message_ids == [] and first.refresh_insights
         assert listing.await_args_list[1].args[0].endswith('/user/credentials')
         assert connector_mailbox.decode(first.cursor)[1].startswith('initial:')
         assert not (await mail_message.get_message(legacy[0].id)).unverified_connector
         assert (await mail_message.get_message(legacy[1].id)).unverified_connector
         assert (await sync.sync_account(a.id)).status == 'ok' and pages == [None, 'opaque-next']
+        arrivals = await mail_message.list_page(account_ids=[a.id], chat_only=True)
+        assert 'new-arrival' in {m.provider_uid for m in arrivals}
         assert not (await mail_message.get_message(legacy[1].id)).unverified_connector
         assert (await mail_message.get_message(legacy[2].id)).folder == 'INBOX'
         await chat_settings.update(1, [a.id])
-        assert await chat_settings.mail_reference(legacy[2].id, 2, None) is None
+        assert await chat_settings.mail_preview(legacy[2].id, 2, None) is None
         assert (await sync.sync_account(placeholder.id)).status == 'ok'
         rows = await mail_message.list_page(account_ids=[placeholder.id])
         assert len(rows) == 1 and rows[0].unverified_connector
@@ -254,4 +264,40 @@ def test_unverified_task_mail_is_refused_at_proposal_and_confirmation(pg_db):
         async with get_session_maker()() as session:
             with pytest.raises(task_proposals.TaskSourceGone):
                 await task_proposals.execute(session, command, proposal_id='unverified')
+    asyncio.run(run())
+
+
+def test_legacy_writes_and_obsolete_batches_cannot_publish_verified_mail(pg_db):
+    from db.accessors import mail_message, mail_sync_state
+    from api.mail import connector_mailbox, connectors
+    async def run():
+        a = await service.upsert_account(provider='gmail', auth_type=connectors.CONNECTOR, email_address='rollout@example.test')
+        initial = await mail_sync_state.save_state(account_id=a.id, cursor='12')
+        async with mail_sync_state.connector_transaction(a.id, initial, verified=True) as (session, state):
+            verified = await mail_message.upsert_message(session=session, account_id=a.id, folder='INBOX', provider_uid='one', subject='Verified')
+            state.connector_cursor = connector_mailbox.encode(('named', 'thread', 'proof'), '12')
+            state.connector_verified = True
+        await chat_settings.update(1, [a.id])
+        assert await chat_settings.mail_preview(verified.id, 2, None) is not None
+        # Both a new insert and an update by a transaction without a verified provider read are quarantined.
+        old = await mail_message.upsert_message(account_id=a.id, folder='INBOX', provider_uid='legacy', subject='Legacy')
+        await mail_message.upsert_message(account_id=a.id, folder='INBOX', provider_uid='one', subject='Legacy overwrite')
+        old_state = await mail_sync_state.save_state(account_id=a.id, cursor='17')
+        assert old_state.connector_cursor and old_state.cursor == '17'
+        for row in (old, verified):
+            assert await chat_settings.mail_preview(row.id, 2, None) is None
+        await chat_settings.invalidate_connector(a.id, old_state.connector_generation)
+        with pytest.raises(mail_sync_state.StaleConnectorSync):
+            async with mail_sync_state.connector_transaction(a.id, old_state, verified=True):
+                pytest.fail('stale publication was admitted')
+        with pytest.raises(chat_settings.AccountNotGranted):
+            await chat_settings.update(3, [a.id])
+        current = await mail_sync_state.get_state(a.id)
+        with pytest.raises(RuntimeError, match='incomplete page'):
+            async with mail_sync_state.connector_transaction(a.id, current, verified=True) as (session, state):
+                await mail_message.upsert_message(session=session, account_id=a.id, folder='INBOX', provider_uid='partial')
+                state.connector_verified = True
+                raise RuntimeError('incomplete page')
+        assert 'partial' not in await mail_message.known_uids(a.id, 'INBOX')
+        assert not (await mail_sync_state.get_state(a.id)).connector_verified
     asyncio.run(run())

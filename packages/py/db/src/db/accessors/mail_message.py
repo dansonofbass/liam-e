@@ -1,6 +1,7 @@
 """Accessor for ``mail_message`` rows: upsert during sync, search for the chat agent."""
 
 from collections.abc import Collection
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -11,6 +12,15 @@ from db.models.mail_insight import MailInsight
 
 from db.engine import get_session_maker
 from db.models.mail_message import MailMessage
+
+
+@asynccontextmanager
+async def _writer(session):
+    if session is None:
+        async with get_session_maker().begin() as owned:
+            yield owned
+    else:
+        yield session
 
 
 async def upsert_message(
@@ -40,16 +50,18 @@ async def upsert_message(
     body_version: int = 0,
     drop_insight: bool = False,
     unverified_connector: bool = False,
+    session: AsyncSession | None = None,
+    invalidated_insights: list[str] | None = None,
 ) -> MailMessage:
     """Insert the message, or refresh it when (account, folder, uid) already exists. `drop_insight`
     removes its insight in the same transaction (the summarized text changed)."""
-    async with get_session_maker()() as session:
+    async with _writer(session) as session:
         result = await session.execute(
             select(MailMessage).where(
                 MailMessage.account_id == account_id,
                 MailMessage.folder == folder,
                 MailMessage.provider_uid == provider_uid,
-            )
+            ).with_for_update()
         )
         message = result.scalar_one_or_none()
         if message is None:
@@ -80,8 +92,9 @@ async def upsert_message(
         message.labels_json = labels_json
         session.add(message)
         if drop_insight and message.id:
-            await _drop_insight(session, message.id)
-        await session.commit()
+            removed = await _drop_insight(session, message.id)
+            if removed and not message.is_read and invalidated_insights is not None:
+                invalidated_insights.append(message.id)
         return message
 
 
@@ -200,15 +213,14 @@ async def count_unread(*, chat_only: bool = False, folder: str = "INBOX", accoun
         return dict(rows.all())
 
 
-async def set_state(message_id: str, *, folder: str | None = None, is_read: bool | None = None, is_flagged: bool | None = None, provider_uid: str | None = None, labels_json: str | None = None) -> MailMessage | None:
-    async with get_session_maker()() as session:
+async def set_state(message_id: str, *, session: AsyncSession | None = None, folder: str | None = None, is_read: bool | None = None, is_flagged: bool | None = None, provider_uid: str | None = None, labels_json: str | None = None) -> MailMessage | None:
+    async with _writer(session) as session:
         row = await session.get(MailMessage, message_id)
         if row is None:
             return None
         for name, value in (("folder", folder), ("is_read", is_read), ("is_flagged", is_flagged), ("provider_uid", provider_uid), ("labels_json", labels_json)):
             if value is not None:
                 setattr(row, name, value)
-        await session.commit()
         return row
 
 
@@ -263,21 +275,21 @@ async def unread_without_insight(*, since: datetime, limit: int, exclude_account
         return list((await session.execute(stmt)).scalars().all())
 
 
-async def known_uids(account_id: str, folder: str, *, verified_only: bool = False) -> dict[str, str]:
+async def known_uids(account_id: str, folder: str, *, verified_only: bool = False, session: AsyncSession | None = None) -> dict[str, str]:
     query = select(MailMessage.provider_uid, MailMessage.id).where(MailMessage.account_id == account_id, MailMessage.folder == folder)
     if verified_only:
         query = query.where(MailMessage.unverified_connector.is_(False))
-    async with get_session_maker()() as session:
+    async with (nullcontext(session) if session is not None else get_session_maker()()) as session:
         return dict((await session.execute(query)).all())
 
 
-async def stale_body_texts(account_id: str, folder: str, version: int, uids: list[str]) -> dict[str, str]:
+async def stale_body_texts(account_id: str, folder: str, version: int, uids: list[str], *, session: AsyncSession | None = None) -> dict[str, str]:
     """Stored text of the given rows whose body comes from an older text extraction, by provider id."""
     if not uids:
         return {}
     stmt = select(MailMessage.provider_uid, MailMessage.body_text).where(
         MailMessage.account_id == account_id, MailMessage.folder == folder, MailMessage.body_version < version, MailMessage.provider_uid.in_(uids))
-    async with get_session_maker()() as session:
+    async with (nullcontext(session) if session is not None else get_session_maker()()) as session:
         return {uid: text for uid, text in (await session.execute(stmt)).all()}
 
 
@@ -292,17 +304,18 @@ async def stale_bodies(account_id: str, folder: str, version: int, *, limit: int
         return list((await session.execute(stmt)).scalars().all())
 
 
-async def _drop_insight(session, message_id: str) -> None:
+async def _drop_insight(session, message_id: str) -> bool:
     # The row is written first: its lock makes an insight being stored for the old text either land
     # before this delete or see the new text (mail_insight.store_if_missing, `summarized`).
     await session.flush()
-    await session.execute(delete(MailInsight).where(MailInsight.message_id == message_id))
+    removed = await session.execute(delete(MailInsight).where(MailInsight.message_id == message_id))
+    return bool(removed.rowcount)
 
 
-async def set_body(message_id: str, *, body_version: int, body_text: str | None = None, snippet: str | None = None, drop_insight: bool = False) -> None:
+async def set_body(message_id: str, *, session: AsyncSession | None = None, body_version: int, body_text: str | None = None, snippet: str | None = None, drop_insight: bool = False) -> None:
     """Store a re-read body; without text only the version moves on (the provider no longer has the mail).
     `drop_insight` removes its insight in the same transaction."""
-    async with get_session_maker()() as session:
+    async with _writer(session) as session:
         row = await session.get(MailMessage, message_id)
         if row is None:
             return
@@ -313,7 +326,6 @@ async def set_body(message_id: str, *, body_version: int, body_text: str | None 
             row.snippet = snippet
         if drop_insight:
             await _drop_insight(session, message_id)
-        await session.commit()
 
 
 async def delete_folder(account_id: str, folder: str) -> int:

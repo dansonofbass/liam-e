@@ -638,8 +638,8 @@ Studio mail connector operations pin the named OAuth credential with `credential
 first identity-checked sync verifies existing inbox rows in place by provider UID and follows stored pages. Pre-migration connector
 messages, including archived rows, stay outside chat reads until a verified sync rewrites them. It requires a provider
 Sent message from the registered mailbox and retains its opaque thread and message IDs as an
-anchor inside the connector cursor. Sync and body rereads check it before and after fetching.
-Sending and label writes check it immediately before dispatch on the pinned credential.
+anchor alongside the verified pagination cursor. The ordinary sync cursor stays numeric for older workers. Sync and body rereads check it before and after fetching.
+Writes check the mailbox immediately before dispatch. An incoming-only placeholder can change labels from the inbox after the connector confirms the specific thread and message, sender and subject. Chat cannot use these accounts. A verified batch publishes rows and progress atomically after checking the stored generation. Invalidation wins against a stale batch. Database transactions from older workers cannot insert or overwrite verified provider content. Independent new-mail and historical cursors keep new arrivals visible during the upgrade. Invalidated unread insights are scheduled again.
 A confirmed missing or mismatched identity withdraws chat access. Temporary transport or provider failures stop the operation and leave the binding available for a later sync. Incoming-only accounts with a placeholder address can sync the ordinary inbox and keep every row outside chat. The owner can reselect the account after a
 successful verified sync. A replacement mailbox registers separately and starts without a grant.
 After an anchor is lost, the next sync must establish a fresh verified binding before selection and verify indexed messages page by page. A provider reauthorization under the same credential name

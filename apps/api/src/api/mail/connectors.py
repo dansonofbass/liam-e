@@ -116,10 +116,16 @@ async def call_read_tool_json(connector: str, tool: str, arguments: dict[str, An
     return json.loads(await call_read_tool(connector, tool, arguments))
 
 
-async def call_write_tool(account, tool: str, arguments: dict[str, Any]) -> str:
+async def call_write_tool(account, tool: str, arguments: dict[str, Any], *, target=None) -> str:
     """Call an allowed mutation; reserved for send and confirmed mail actions."""
     if tool not in WRITE_TOOLS:
         raise ToolNotAllowedError("Tool is not a permitted write tool")
-    from api.mail.connector_mailbox import bound_mailbox
-    async with bound_mailbox(account):
+    from api.mail.connector_mailbox import bound_inbox_message, bound_mailbox, inbox_only
+    if target is not None and tool in {"label_message", "unlabel_message"} and inbox_only(account):
+        if arguments.get("messageId") != target.provider_uid:
+            raise ToolNotAllowedError("Label target does not match the verified message")
+        guard = bound_inbox_message(account, target)
+    else:
+        guard = bound_mailbox(account)
+    async with guard:
         return await _call_tool(account.provider, tool, arguments)

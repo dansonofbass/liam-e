@@ -35,13 +35,41 @@ async def _search(provider: str, query: str) -> list[dict[str, Any]]:
             return threads
 
 
+def incremental_cursor(progress: str) -> str:
+    """A legacy worker can always resume the numeric new-mail cursor."""
+    if progress.startswith("initial:"):
+        return str(json.loads(progress.removeprefix("initial:"))[0])
+    return progress or "0"
+
+
 async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int) -> SyncChanges:
+    if not cursor.startswith("initial:"):
+        return await _fetch_page(account, cursor=cursor, limit=limit, max_body_chars=max_body_chars)
+    delta, _ = json.loads(cursor.removeprefix("initial:"))
+    current = await _fetch_page(account, cursor=str(delta), limit=limit, max_body_chars=max_body_chars)
+    try:
+        history = await _fetch_page(account, cursor=cursor, limit=limit, max_body_chars=max_body_chars)
+    except httpx.HTTPStatusError as error:
+        if error.response.status_code not in (400, 410):
+            raise
+        # An expired page token restarts only the historical pass. Keep new-mail progress.
+        history = await _fetch_page(account, cursor="", limit=limit, max_body_chars=max_body_chars)
+    rows = {item["provider_uid"]: item for item in history.upserts}
+    rows.update((item["provider_uid"], item) for item in current.upserts)
+    current.upserts = list(rows.values())
+    if history.cursor.startswith("initial:"):
+        _, token = json.loads(history.cursor.removeprefix("initial:"))
+        current.cursor = "initial:" + json.dumps([current.cursor, token])
+    return current
+
+
+async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body_chars: int) -> SyncChanges:
     parts = cursor.split(":")
     valid = len(parts) in (1, 3) and all(part.isdigit() for part in parts)
     newest = int(parts[0]) if valid else 0
     page_token = ""
     if cursor.startswith("initial:"):
-        newest, page_token = json.loads(cursor.removeprefix("initial:"))
+        _, page_token = json.loads(cursor.removeprefix("initial:"))
     gap = (int(parts[1]), int(parts[2])) if valid and len(parts) == 3 else None
     # Provider UIDs keep their local IDs, including legacy rows referenced by tasks and history.
     changes = SyncChanges()

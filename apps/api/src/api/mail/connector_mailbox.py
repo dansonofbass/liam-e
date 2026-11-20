@@ -86,21 +86,21 @@ async def _verify(account, thread_id: str, message_id: str) -> None:
 
 
 @asynccontextmanager
-async def _check_identity(account_id: str):
+async def _check_identity(account_id: str, generation: int | None):
     try:
         yield
     except httpx.HTTPStatusError as error:
         if error.response.status_code != 404:
             raise
-        await chat_settings.invalidate_connector(account_id)
+        await chat_settings.invalidate_connector(account_id, generation)
         raise MailboxUnavailable() from None
     except MailboxUnavailable:
-        await chat_settings.invalidate_connector(account_id)
+        await chat_settings.invalidate_connector(account_id, generation)
         raise
 
 
 @asynccontextmanager
-async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool = False, check_after: bool = False):
+async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool = False, check_after: bool = False, generation: int | None = None):
     """Check the provider identity on the pinned credential. Transient failures stop this call."""
     if inbox_only(account):
         raise MailboxUnavailable()
@@ -108,9 +108,10 @@ async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool =
         state = await mail_sync_state.get_state(account.id)
         if not state or not state.connector_verified:
             raise MailboxUnavailable()
-        cursor = state.cursor
+        cursor = state.connector_cursor
+        generation = state.connector_generation
     if cursor.startswith(CONNECTOR_CURSOR_PREFIX):
-        async with _check_identity(account.id):
+        async with _check_identity(account.id, generation):
             (credential, thread_id, message_id), progress = decode(cursor)
     elif bootstrap:
         credential = await _credential(account.provider)
@@ -121,11 +122,33 @@ async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool =
     try:
         if not thread_id:
             thread_id, message_id = await _anchor(account)
-        async with _check_identity(account.id):
+        async with _check_identity(account.id, generation):
             await _verify(account, thread_id, message_id)
         yield (credential, thread_id, message_id), progress
         if check_after:
-            async with _check_identity(account.id):
+            async with _check_identity(account.id, generation):
                 await _verify(account, thread_id, message_id)
+    finally:
+        connectors.mailbox_credential.reset(token)
+
+
+@asynccontextmanager
+async def bound_inbox_message(account, message):
+    """A direct label action on an incoming-only mailbox needs proof of this provider message."""
+    if message.account_id != account.id or not message.provider_uid or not message.thread_id:
+        raise MailboxUnavailable()
+    try:
+        credential = await _credential(account.provider)
+    except MailboxUnproven:
+        credential = None
+    token = connectors.mailbox_credential.set(credential)
+    try:
+        thread = await connectors.call_read_tool_json(account.provider, 'get_thread',
+            {'threadId': message.thread_id, 'messageFormat': 'MINIMAL'})
+        if thread.get('id') != message.thread_id or not any(
+                row.get('id') == message.provider_uid and row.get('sender', '') == message.sender
+                and row.get('subject', '') == message.subject for row in thread.get('messages', [])):
+            raise MailboxUnavailable()
+        yield
     finally:
         connectors.mailbox_credential.reset(token)

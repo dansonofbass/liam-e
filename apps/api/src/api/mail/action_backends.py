@@ -90,7 +90,7 @@ class LabelBackend:
     async def _change(self, message: MailMessage, current: set[str], desired: set[str], *, kind: ActionKind | None = None) -> dict:
         added, removed = sorted(desired - current), sorted(current - desired)
         if self.connector:
-            await write_connector_labels(self.account, message.provider_uid, added=added, removed=removed)
+            await write_connector_labels(self.account, message, added=added, removed=removed)
         else:
             headers = await _headers(self.account)
             path = f"/messages/{quote(message.provider_uid, safe='')}"

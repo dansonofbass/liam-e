@@ -5,7 +5,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from db.accessors import chat_settings, mail_account as account_access
+from db.accessors import mail_account as account_access
 from db.accessors import mail_message as message_access
 from db.accessors import mail_sync_state as sync_state_access
 from env.mail import env as mail_env
@@ -53,7 +53,8 @@ async def sync_account(account_id: str) -> SyncResult:
     cursor = previous.cursor if previous else ""
     if is_seed_account(account_id):
         return SyncResult("ok", 0, cursor, "")
-    await sync_state_access.save_state(account_id=account_id, cursor=cursor, status="syncing")
+    is_connector = account.auth_type == connectors.CONNECTOR
+    await sync_state_access.save_state(account_id=account_id, cursor=None if is_connector else cursor, status="syncing")
     try:
         if account.auth_type == connectors.CONNECTOR:
             provider = sync_connector
@@ -67,65 +68,78 @@ async def sync_account(account_id: str) -> SyncResult:
             raise ValueError("Unknown provider")
         options = dict(folders=[f.strip().upper() for f in mail_env.mail_sync_folders.split(",") if f.strip()],
                        limit=mail_env.mail_sync_page_size, max_body_chars=mail_env.mail_sync_max_body_chars)
-        is_connector = account.auth_type == connectors.CONNECTOR
-        verify_connector = is_connector and not connector_mailbox.inbox_only(account)
-        if verify_connector:
-            verified_cursor = cursor if previous and previous.connector_verified else ""
-            try:
-                async with connector_mailbox.bound_mailbox(account, cursor=verified_cursor, bootstrap=True, check_after=True) as (binding, progress):
-                    changes = await provider.fetch_changes(account, cursor=progress, **options)
-                if not verified_cursor:
-                    # Includes writes an older app process could have made during a rolling upgrade.
-                    await chat_settings.invalidate_connector(account_id)
-                changes.cursor = connector_mailbox.encode(binding, changes.cursor)
-            except connector_mailbox.MailboxUnproven:
-                if cursor.startswith(connector_mailbox.CONNECTOR_CURSOR_PREFIX):
-                    raise
-                verify_connector = False
-        if not verify_connector:
-            changes = await provider.fetch_changes(account, cursor=cursor, **options)
-        known = await message_access.known_uids(account_id, "INBOX")
-        # Rows this run rewrites that still hold text from an older extraction.
-        previous = {} if changes.full_rebuild else await message_access.stale_body_texts(account_id, "INBOX", BODY_VERSION, [parsed["provider_uid"] for parsed in changes.upserts])
-        if changes.full_rebuild:
-            await message_access.delete_folder(account_id, "INBOX")
-        new_ids = []
-        for parsed in changes.upserts:
-            uid = parsed["provider_uid"]
-            outdated = uid in previous and insight_outdated(previous[uid], parsed["body_text"])
-            row = await message_access.upsert_message(account_id=account_id, **parsed, body_version=BODY_VERSION, drop_insight=outdated,
-                                                      unverified_connector=is_connector and not verify_connector)
-            if uid not in known:
-                new_ids.append(row.id)
-            if changes.full_rebuild:
-                known[parsed["provider_uid"]] = row.id
-        moved = set(changes.moved_out)
-        for uid in set(changes.read_updates) | set(changes.flag_updates) | moved:
-            if uid not in known:
-                continue
-            updates = {}
-            if uid in changes.read_updates:
-                updates["is_read"] = changes.read_updates[uid]
-            if uid in changes.flag_updates:
-                updates["is_flagged"] = changes.flag_updates[uid]
-            if uid in moved:
-                updates["folder"] = "ARCHIVE"
-            await message_access.set_state(known[uid], **updates)
-        await sync_state_access.save_state(account_id=account_id, cursor=changes.cursor, status="ok", last_error="",
-                                          connector_verified=verify_connector if is_connector else None)
+        verified = is_connector and not connector_mailbox.inbox_only(account)
+        if verified:
+            verified_cursor = previous.connector_cursor if previous and previous.connector_verified else ""
+            generation = previous.connector_generation if previous else 0
+            async with connector_mailbox.bound_mailbox(account, cursor=verified_cursor, generation=generation, bootstrap=True, check_after=True) as (binding, progress):
+                changes = await provider.fetch_changes(account, cursor=progress, **options)
+            stored_progress = connector_mailbox.encode(binding, changes.cursor)
+        else:
+            progress = (previous.connector_cursor or cursor) if previous and is_connector else cursor
+            changes = await provider.fetch_changes(account, cursor=progress, **options)
+            stored_progress = changes.cursor
+        if is_connector:
+            async with sync_state_access.connector_transaction(account_id, previous, verified=verified) as (session, state):
+                new_ids, invalidated = await _apply_changes(account_id, changes, unverified=not verified, session=session)
+                if verified and not state.connector_verified:
+                    state.connector_generation += 1
+                state.connector_verified = verified
+                state.connector_cursor = stored_progress
+                state.cursor = sync_connector.incremental_cursor(changes.cursor)
+                state.status, state.last_error = "ok", ""
+                state.last_sync_at = state.updated_at = datetime.now(UTC)
+        else:
+            new_ids, invalidated = await _apply_changes(account_id, changes, unverified=False)
+            await sync_state_access.save_state(account_id=account_id, cursor=changes.cursor, status="ok", last_error="")
         try:
-            await refresh_bodies(account, provider, inbox_only=is_connector and not verify_connector)
-        except connector_mailbox.MailboxUnavailable:
-            cursor = changes.cursor
+            reread = await refresh_bodies(account, provider)
+        except (connector_mailbox.MailboxUnavailable, sync_state_access.StaleConnectorSync):
             raise
-        except Exception as error:  # noqa: BLE001 — the sync itself succeeded; the next run retries
+        except Exception as error:  # noqa: BLE001 — keep the completed page and retry body refresh
             logger.warning("Body refresh failed: %s", type(error).__name__)
-        return SyncResult("ok", len(changes.upserts), changes.cursor, "", new_ids)
+            reread = []
+        return SyncResult("ok", len(changes.upserts), stored_progress, "", new_ids, bool(invalidated or reread))
+    except sync_state_access.StaleConnectorSync:
+        return SyncResult("error", 0, cursor, "provider_error")
     except Exception as error:  # noqa: BLE001 — provider failures must not expose credentials
         code = _error_code(error)
         logger.warning("%s", type(error).__name__)
-        await sync_state_access.save_state(account_id=account_id, cursor=cursor, status="error", last_error=code)
+        await sync_state_access.save_state(account_id=account_id, cursor=None if is_connector else cursor, status="error", last_error=code)
         return SyncResult("error", 0, cursor, code)
+
+
+async def _apply_changes(account_id, changes, *, unverified, session=None):
+    transaction = {"session": session} if session is not None else {}
+    invalidated = []
+    known = await message_access.known_uids(account_id, "INBOX", **transaction)
+    # Rows this run rewrites that still hold text from an older extraction.
+    old_texts = {} if changes.full_rebuild else await message_access.stale_body_texts(account_id, "INBOX", BODY_VERSION, [parsed["provider_uid"] for parsed in changes.upserts], **transaction)
+    if changes.full_rebuild:
+        await message_access.delete_folder(account_id, "INBOX")
+    new_ids = []
+    for parsed in changes.upserts:
+        uid = parsed["provider_uid"]
+        outdated = uid in old_texts and insight_outdated(old_texts[uid], parsed["body_text"])
+        row = await message_access.upsert_message(account_id=account_id, **parsed, body_version=BODY_VERSION, drop_insight=outdated,
+                                                  unverified_connector=unverified, invalidated_insights=invalidated, **transaction)
+        if uid not in known:
+            new_ids.append(row.id)
+        if changes.full_rebuild:
+            known[parsed["provider_uid"]] = row.id
+    moved = set(changes.moved_out)
+    for uid in set(changes.read_updates) | set(changes.flag_updates) | moved:
+        if uid not in known:
+            continue
+        updates = {}
+        if uid in changes.read_updates:
+            updates["is_read"] = changes.read_updates[uid]
+        if uid in changes.flag_updates:
+            updates["is_flagged"] = changes.flag_updates[uid]
+        if uid in moved:
+            updates["folder"] = "ARCHIVE"
+        await message_access.set_state(known[uid], **updates, **transaction)
+    return new_ids, invalidated
 
 
 def insight_outdated(old_text: str, new_text: str) -> bool:
@@ -134,18 +148,27 @@ def insight_outdated(old_text: str, new_text: str) -> bool:
     return new_text != old_text or not new_text.strip()
 
 
-async def refresh_bodies(account, provider, *, inbox_only=False) -> list[str]:
+async def refresh_bodies(account, provider) -> list[str]:
     """Re-read INBOX bodies stored by an older text extraction; returns the ids whose insight was dropped."""
     now = datetime.now(UTC)
     waiting = [message_id for message_id, (_, retry_at) in _reread_backoff.items() if retry_at > now]
     stale = await message_access.stale_bodies(account.id, "INBOX", BODY_VERSION, limit=BODY_REFRESH_BATCH, exclude=waiting)
     if not stale:
         return []
-    if account.auth_type == connectors.CONNECTOR and not (inbox_only or connector_mailbox.inbox_only(account)):
-        async with connector_mailbox.bound_mailbox(account, check_after=True):
+    if account.auth_type == connectors.CONNECTOR and not connector_mailbox.inbox_only(account):
+        state = await sync_state_access.get_state(account.id)
+        if state is None or not state.connector_verified:
+            raise connector_mailbox.MailboxUnavailable()
+        async with connector_mailbox.bound_mailbox(account, cursor=state.connector_cursor, generation=state.connector_generation, check_after=True):
             found = await provider.fetch_bodies(account, stale, max_body_chars=mail_env.mail_sync_max_body_chars)
-    else:
-        found = await provider.fetch_bodies(account, stale, max_body_chars=mail_env.mail_sync_max_body_chars)
+        async with sync_state_access.connector_transaction(account.id, state, verified=True) as (session, _):
+            return await _apply_bodies(stale, found, now, session=session)
+    found = await provider.fetch_bodies(account, stale, max_body_chars=mail_env.mail_sync_max_body_chars)
+    return await _apply_bodies(stale, found, now)
+
+
+async def _apply_bodies(stale, found, now, *, session=None):
+    transaction = {"session": session} if session is not None else {}
     dropped = []
     for message in stale:
         if message.provider_uid not in found:
@@ -163,7 +186,7 @@ async def refresh_bodies(account, provider, *, inbox_only=False) -> list[str]:
             dropped.append(message.id)
         if parsed is None:
             # Gone or not this mail: the stored text stays and the row is not asked for again.
-            await message_access.set_body(message.id, body_version=BODY_VERSION, drop_insight=outdated)
+            await message_access.set_body(message.id, body_version=BODY_VERSION, drop_insight=outdated, **transaction)
         else:
-            await message_access.set_body(message.id, body_version=BODY_VERSION, body_text=text, snippet=parsed["snippet"], drop_insight=outdated)
+            await message_access.set_body(message.id, body_version=BODY_VERSION, body_text=text, snippet=parsed["snippet"], drop_insight=outdated, **transaction)
     return dropped

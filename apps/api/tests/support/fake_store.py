@@ -206,9 +206,12 @@ class FakeStore:
         return self.states.get(account_id)
 
     async def save_state(self, *, account_id, **kwargs):
-        if kwargs.get("connector_verified") is None:
-            previous = self.states.get(account_id)
-            kwargs["connector_verified"] = bool(previous and previous.connector_verified)
+        previous = self.states.get(account_id)
+        for key in ("connector_verified", "connector_cursor", "connector_generation", "cursor"):
+            if kwargs.get(key) is None:
+                kwargs.pop(key, None)
+                if previous:
+                    kwargs[key] = getattr(previous, key)
         state = MailSyncState(account_id=account_id, **kwargs)
         self.states[account_id] = state
         return state
