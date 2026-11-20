@@ -37,7 +37,7 @@ class FakeStore:
         for module, names in (
             (mail_account, ("list_accounts", "get_account", "get_account_by_email", "create_account", "touch_account", "update_display_name", "delete_account")),
             (mail_credential, ("load_credential", "store_credential")),
-            (mail_sync_state, ("get_state", "save_state")),
+            (mail_sync_state, ("get_state", "save_state", "fail_connector")),
         ):
             for name in names:
                 monkeypatch.setattr(module, name, getattr(self, name))
@@ -205,7 +205,13 @@ class FakeStore:
     async def get_state(self, account_id):
         return self.states.get(account_id)
 
+    async def fail_connector(self, account_id, previous, code):
+        current = self.states.get(account_id)
+        if current and mail_sync_state.same_connector_attempt(current, previous):
+            current.status, current.last_error = "error", code
+
     async def save_state(self, *, account_id, **kwargs):
+        claim_connector = kwargs.pop("claim_connector", False)
         previous = self.states.get(account_id)
         for key in ("connector_verified", "connector_cursor", "connector_generation", "cursor"):
             if kwargs.get(key) is None:
@@ -213,5 +219,7 @@ class FakeStore:
                 if previous:
                     kwargs[key] = getattr(previous, key)
         state = MailSyncState(account_id=account_id, **kwargs)
+        if claim_connector:
+            state.connector_generation += 1
         self.states[account_id] = state
         return state

@@ -86,21 +86,21 @@ async def _verify(account, thread_id: str, message_id: str) -> None:
 
 
 @asynccontextmanager
-async def _check_identity(account_id: str, generation: int | None):
+async def _check_identity(account_id: str, generation: int | None, observed):
     try:
         yield
     except httpx.HTTPStatusError as error:
         if error.response.status_code != 404:
             raise
-        await chat_settings.invalidate_connector(account_id, generation)
+        await chat_settings.invalidate_connector(account_id, generation, observed=observed)
         raise MailboxUnavailable() from None
     except MailboxUnavailable:
-        await chat_settings.invalidate_connector(account_id, generation)
+        await chat_settings.invalidate_connector(account_id, generation, observed=observed)
         raise
 
 
 @asynccontextmanager
-async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool = False, check_after: bool = False, generation: int | None = None):
+async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool = False, check_after: bool = False, generation: int | None = None, observed=None):
     """Check the provider identity on the pinned credential. Transient failures stop this call."""
     if inbox_only(account):
         raise MailboxUnavailable()
@@ -110,8 +110,9 @@ async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool =
             raise MailboxUnavailable()
         cursor = state.connector_cursor
         generation = state.connector_generation
+        observed = state
     if cursor.startswith(CONNECTOR_CURSOR_PREFIX):
-        async with _check_identity(account.id, generation):
+        async with _check_identity(account.id, generation, observed):
             (credential, thread_id, message_id), progress = decode(cursor)
     elif bootstrap:
         credential = await _credential(account.provider)
@@ -122,11 +123,11 @@ async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool =
     try:
         if not thread_id:
             thread_id, message_id = await _anchor(account)
-        async with _check_identity(account.id, generation):
+        async with _check_identity(account.id, generation, observed):
             await _verify(account, thread_id, message_id)
         yield (credential, thread_id, message_id), progress
         if check_after:
-            async with _check_identity(account.id, generation):
+            async with _check_identity(account.id, generation, observed):
                 await _verify(account, thread_id, message_id)
     finally:
         connectors.mailbox_credential.reset(token)
@@ -140,7 +141,7 @@ async def bound_inbox_message(account, message):
     try:
         credential = await _credential(account.provider)
     except MailboxUnproven:
-        credential = None
+        raise MailboxUnavailable() from None
     token = connectors.mailbox_credential.set(credential)
     try:
         thread = await connectors.call_read_tool_json(account.provider, 'get_thread',

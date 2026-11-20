@@ -7,7 +7,7 @@ from sqlalchemy import and_, cast, delete, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB, insert
 
 from db.engine import get_session_maker
-from db.models._common import utcnow
+from db.models._common import new_id, utcnow
 from db.models.mail_job import MailJob
 
 
@@ -18,6 +18,16 @@ async def enqueue(kind: str, payload: dict, *, dedupe_key: str, run_after: datet
         result = (await session.execute(stmt)).scalar_one_or_none()
         await session.commit()
         return result
+
+
+def queue_verified_insights(session, account_id: str, message_ids: list[str], limit: int) -> None:
+    """Commit bounded refresh jobs with the verified mail batch that invalidated its insights."""
+    if limit <= 0:
+        return
+    for offset in range(0, len(message_ids), limit):
+        payload = {"account_id": account_id, "message_ids": message_ids[offset:offset + limit]}
+        # Each invalidation is durable even while an earlier job for the same mail is running.
+        session.add(MailJob(kind="insights", payload_json=json.dumps(payload), dedupe_key=f"insights-refresh:{new_id()}"))
 
 
 async def claim_next(now: datetime, *, stale_after: timedelta) -> MailJob | None:

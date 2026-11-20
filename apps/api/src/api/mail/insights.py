@@ -166,8 +166,10 @@ async def _message(message_id: str) -> MailMessage:
     return message
 
 
-async def fill_missing(*, limit: int, days: int, locale: Locale = DEFAULT_LOCALE) -> int:
-    messages = await mail_message.unread_without_insight(since=datetime.now(UTC) - timedelta(days=days), limit=limit, exclude_account_ids=SEED_ACCOUNT_IDS)
+async def fill_missing(*, limit: int, days: int, locale: Locale = DEFAULT_LOCALE,
+                       account_id: str | None = None, verified_ids: list[str] | None = None) -> int:
+    messages = await mail_message.unread_without_insight(since=datetime.now(UTC) - timedelta(days=days), limit=limit,
+        exclude_account_ids=SEED_ACCOUNT_IDS, account_id=account_id, verified_ids=verified_ids)
     count = 0
     for message in messages:
         try:
@@ -176,4 +178,6 @@ async def fill_missing(*, limit: int, days: int, locale: Locale = DEFAULT_LOCALE
             logger.warning("Insight failed: %s", type(error).__name__)
         else:
             count += 1
+    if verified_ids is not None and count != len(messages):
+        raise InsightError("Verified message summaries need a retry")
     return count

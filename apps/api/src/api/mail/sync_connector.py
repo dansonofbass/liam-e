@@ -8,6 +8,7 @@ for an unfinished window. Window boundaries overlap by one second.
 """
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -19,6 +20,9 @@ from db.models.mail_message import MailMessage
 
 from api.mail import connectors
 from api.mail.sync_types import Reread, SyncChanges, attachments, body_text, common
+
+
+logger = logging.getLogger(__name__)
 
 
 async def _search(provider: str, query: str) -> list[dict[str, Any]]:
@@ -45,15 +49,18 @@ def incremental_cursor(progress: str) -> str:
 async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int) -> SyncChanges:
     if not cursor.startswith("initial:"):
         return await _fetch_page(account, cursor=cursor, limit=limit, max_body_chars=max_body_chars)
-    delta, _ = json.loads(cursor.removeprefix("initial:"))
+    delta, previous_token = json.loads(cursor.removeprefix("initial:"))
     current = await _fetch_page(account, cursor=str(delta), limit=limit, max_body_chars=max_body_chars)
     try:
-        history = await _fetch_page(account, cursor=cursor, limit=limit, max_body_chars=max_body_chars)
-    except httpx.HTTPStatusError as error:
-        if error.response.status_code not in (400, 410):
+        history = await _history_page(account, cursor, limit, max_body_chars)
+    except (ValueError, KeyError, TypeError, httpx.HTTPError) as error:
+        if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (401, 403):
             raise
-        # An expired page token restarts only the historical pass. Keep new-mail progress.
-        history = await _fetch_page(account, cursor="", limit=limit, max_body_chars=max_body_chars)
+        # Keep this exact historical page for retry. The caller still verifies the mailbox
+        # identity after this return and fences publication of the independent delta.
+        logger.warning("Connector history page deferred: %s", type(error).__name__)
+        current.cursor = "initial:" + json.dumps([current.cursor, previous_token])
+        return current
     rows = {item["provider_uid"]: item for item in history.upserts}
     rows.update((item["provider_uid"], item) for item in current.upserts)
     current.upserts = list(rows.values())
@@ -61,6 +68,16 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
         _, token = json.loads(history.cursor.removeprefix("initial:"))
         current.cursor = "initial:" + json.dumps([current.cursor, token])
     return current
+
+
+async def _history_page(account, cursor, limit, max_body_chars):
+    try:
+        return await _fetch_page(account, cursor=cursor, limit=limit, max_body_chars=max_body_chars)
+    except httpx.HTTPStatusError as error:
+        if error.response.status_code not in (400, 410):
+            raise
+        # Restart expired provider pagination independently of the new-mail watermark.
+        return await _fetch_page(account, cursor="", limit=limit, max_body_chars=max_body_chars)
 
 
 async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body_chars: int) -> SyncChanges:

@@ -42,7 +42,10 @@ async def _sync(payload: dict[str, Any]) -> None:
 async def _insights(payload: dict[str, Any]) -> None:
     # Background triage still needs unread deadlines and reply flags in browser mode.
     locale = await resolve_locale()
-    await insights.fill_missing(limit=mail_env.mail_insight_batch_limit, days=mail_env.mail_insight_days, locale=locale)
+    verified_ids = payload.get("message_ids")
+    limit = len(verified_ids) if verified_ids is not None else mail_env.mail_insight_batch_limit
+    await insights.fill_missing(limit=limit, days=mail_env.mail_insight_days, locale=locale,
+                               account_id=payload.get("account_id"), verified_ids=verified_ids)
 
 
 register_handler("sync", _sync)

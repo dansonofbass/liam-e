@@ -4,7 +4,8 @@ import json
 from sqlalchemy import select, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.accessors import user_preference
+from db.accessors import mail_sync_state, user_preference
+from db.models._common import utcnow
 from db.accessors.prompt_template import StaleVersion
 from db.engine import get_session_maker
 from db.models.chat_context import ChatContext
@@ -108,17 +109,21 @@ async def mail_preview(message_id: str, version: int | None, context_id: str | N
         return (await session.execute(query)).tuples().one_or_none()
 
 
-async def invalidate_connector(account_id: str, generation: int | None = None) -> None:
+async def invalidate_connector(account_id: str, generation: int | None = None, *, observed: MailSyncState | None = None) -> None:
     """A lost mailbox proof withdraws the grant and blocks reselection until a verified sync."""
     async with get_session_maker()() as session:
         await user_preference.lock(session)
         state = (await session.execute(select(MailSyncState).where(
             MailSyncState.account_id == account_id).with_for_update())).scalar_one_or_none()
+        if observed is not None and (state is None or not mail_sync_state.same_connector_attempt(state, observed)):
+            return
         if state is not None:
             if generation is not None and state.connector_generation != generation:
                 return
             state.connector_generation += 1
             state.connector_verified = False
+            state.status, state.last_error = "error", "auth_expired"
+            state.last_sync_at = state.updated_at = utcnow()
             await session.execute(sql_update(MailMessage).where(MailMessage.account_id == account_id).values(unverified_connector=True))
         await remove_account(session, account_id)
         await session.commit()

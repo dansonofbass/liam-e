@@ -68,7 +68,8 @@ async def upsert_message(
             message = MailMessage(
                 account_id=account_id, folder=folder, provider_uid=provider_uid
             )
-        drop_insight = drop_insight or (message.unverified_connector and not unverified_connector)
+        reverified = message.unverified_connector and not unverified_connector
+        drop_insight = drop_insight or reverified
         message.unverified_connector = unverified_connector
         message.thread_id = thread_id
         message.subject = subject
@@ -93,7 +94,7 @@ async def upsert_message(
         session.add(message)
         if drop_insight and message.id:
             removed = await _drop_insight(session, message.id)
-            if removed and not message.is_read and invalidated_insights is not None:
+            if (removed or reverified) and not message.is_read and invalidated_insights is not None:
                 invalidated_insights.append(message.id)
         return message
 
@@ -266,8 +267,13 @@ async def message_ids_from_sender(account_id: str, sender_address: str, *, folde
         return list((await session.execute(select(MailMessage.id).where(MailMessage.account_id == account_id, MailMessage.sender_address == sender_address.lower(), MailMessage.folder == folder, MailMessage.unverified_connector.is_(False)))).scalars().all())
 
 
-async def unread_without_insight(*, since: datetime, limit: int, exclude_account_ids: Collection[str] = ()) -> list[MailMessage]:
+async def unread_without_insight(*, since: datetime, limit: int, exclude_account_ids: Collection[str] = (),
+                                 account_id: str | None = None, verified_ids: Collection[str] | None = None) -> list[MailMessage]:
     stmt = select(MailMessage).where(MailMessage.folder != "SPAM", MailMessage.is_read.is_(False), MailMessage.internal_date >= since, ~exists(select(MailInsight.id).where(MailInsight.message_id == MailMessage.id)))
+    if account_id is not None:
+        stmt = stmt.where(MailMessage.account_id == account_id)
+    if verified_ids is not None:
+        stmt = stmt.where(MailMessage.id.in_(verified_ids), MailMessage.unverified_connector.is_(False))
     if exclude_account_ids:
         stmt = stmt.where(MailMessage.account_id.not_in(list(exclude_account_ids)))
     stmt = stmt.order_by(MailMessage.internal_date.desc()).limit(limit)

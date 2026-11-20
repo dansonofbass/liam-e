@@ -83,7 +83,7 @@ async def test_named_mailbox_is_pinned_for_reads_and_writes(monkeypatch):
     with pytest.raises(connector_mailbox.MailboxUnavailable):
         await connectors.call_write_tool(mailbox, 'send_email', {})
     assert sent == ['send_email']
-    invalidated.assert_awaited_once_with(mailbox.id, 0)
+    invalidated.assert_awaited_once_with(mailbox.id, 0, observed=state)
     assert connectors.mailbox_credential.get() is None
 
 
@@ -105,7 +105,7 @@ async def test_connector_change_during_sync_discards_the_unverified_page(fake_st
     result = await sync.sync_account(account.id)
     assert (result.status, result.error_code) == ('error', 'auth_expired')
     replace.assert_not_awaited()
-    invalidated.assert_awaited_once_with(account.id, 0)
+    invalidated.assert_awaited_once_with(account.id, 1, observed=await fake_store.get_state(account.id))
 
 
 @pytest.mark.anyio
@@ -153,6 +153,12 @@ async def test_incoming_only_labels_verify_the_target_message_without_allowing_s
         await connectors.call_write_tool(account, 'send_email', {}, target=mail)
     write.assert_awaited_once_with('gmail', 'unlabel_message', {'messageId': mail.provider_uid, 'labelIds': ['UNREAD']})
     assert connectors.mailbox_credential.get() is None
+    monkeypatch.setattr(connector_mailbox, '_credential', AsyncMock(side_effect=connector_mailbox.MailboxUnproven()))
+    get.reset_mock()
+    with pytest.raises(connector_mailbox.MailboxUnavailable):
+        await actions.write_connector_labels(account, mail, added=['TRASH'], removed=[])
+    get.assert_not_awaited()
+    assert write.await_count == 1
 
 
 @pytest.mark.anyio

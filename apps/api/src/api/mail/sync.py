@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 from db.accessors import mail_account as account_access
+from db.accessors import mail_job
 from db.accessors import mail_message as message_access
 from db.accessors import mail_sync_state as sync_state_access
 from env.mail import env as mail_env
@@ -49,12 +50,16 @@ async def sync_account(account_id: str) -> SyncResult:
     account = await account_access.get_account(account_id)
     if account is None:
         raise LookupError(f"no mail account with id {account_id}")
-    previous = await sync_state_access.get_state(account_id)
+    is_connector = account.auth_type == connectors.CONNECTOR
+    if is_connector and not is_seed_account(account_id):
+        previous = await sync_state_access.save_state(account_id=account_id, cursor=None, status="syncing", claim_connector=True)
+    else:
+        previous = await sync_state_access.get_state(account_id)
     cursor = previous.cursor if previous else ""
     if is_seed_account(account_id):
         return SyncResult("ok", 0, cursor, "")
-    is_connector = account.auth_type == connectors.CONNECTOR
-    await sync_state_access.save_state(account_id=account_id, cursor=None if is_connector else cursor, status="syncing")
+    if not is_connector:
+        await sync_state_access.save_state(account_id=account_id, cursor=cursor, status="syncing")
     try:
         if account.auth_type == connectors.CONNECTOR:
             provider = sync_connector
@@ -72,7 +77,7 @@ async def sync_account(account_id: str) -> SyncResult:
         if verified:
             verified_cursor = previous.connector_cursor if previous and previous.connector_verified else ""
             generation = previous.connector_generation if previous else 0
-            async with connector_mailbox.bound_mailbox(account, cursor=verified_cursor, generation=generation, bootstrap=True, check_after=True) as (binding, progress):
+            async with connector_mailbox.bound_mailbox(account, cursor=verified_cursor, generation=generation, observed=previous, bootstrap=True, check_after=True) as (binding, progress):
                 changes = await provider.fetch_changes(account, cursor=progress, **options)
             stored_progress = connector_mailbox.encode(binding, changes.cursor)
         else:
@@ -82,6 +87,8 @@ async def sync_account(account_id: str) -> SyncResult:
         if is_connector:
             async with sync_state_access.connector_transaction(account_id, previous, verified=verified) as (session, state):
                 new_ids, invalidated = await _apply_changes(account_id, changes, unverified=not verified, session=session)
+                if verified:
+                    mail_job.queue_verified_insights(session, account_id, invalidated, mail_env.mail_insight_batch_limit)
                 if verified and not state.connector_verified:
                     state.connector_generation += 1
                 state.connector_verified = verified
@@ -99,13 +106,16 @@ async def sync_account(account_id: str) -> SyncResult:
         except Exception as error:  # noqa: BLE001 — keep the completed page and retry body refresh
             logger.warning("Body refresh failed: %s", type(error).__name__)
             reread = []
-        return SyncResult("ok", len(changes.upserts), stored_progress, "", new_ids, bool(invalidated or reread))
+        return SyncResult("ok", len(changes.upserts), stored_progress, "", new_ids, bool(invalidated or reread) and not verified)
     except sync_state_access.StaleConnectorSync:
         return SyncResult("error", 0, cursor, "provider_error")
     except Exception as error:  # noqa: BLE001 — provider failures must not expose credentials
         code = _error_code(error)
         logger.warning("%s", type(error).__name__)
-        await sync_state_access.save_state(account_id=account_id, cursor=None if is_connector else cursor, status="error", last_error=code)
+        if is_connector:
+            await sync_state_access.fail_connector(account_id, previous, code)
+        else:
+            await sync_state_access.save_state(account_id=account_id, cursor=cursor, status="error", last_error=code)
         return SyncResult("error", 0, cursor, code)
 
 
@@ -159,10 +169,12 @@ async def refresh_bodies(account, provider) -> list[str]:
         state = await sync_state_access.get_state(account.id)
         if state is None or not state.connector_verified:
             raise connector_mailbox.MailboxUnavailable()
-        async with connector_mailbox.bound_mailbox(account, cursor=state.connector_cursor, generation=state.connector_generation, check_after=True):
+        async with connector_mailbox.bound_mailbox(account, cursor=state.connector_cursor, generation=state.connector_generation, observed=state, check_after=True):
             found = await provider.fetch_bodies(account, stale, max_body_chars=mail_env.mail_sync_max_body_chars)
         async with sync_state_access.connector_transaction(account.id, state, verified=True) as (session, _):
-            return await _apply_bodies(stale, found, now, session=session)
+            dropped = await _apply_bodies(stale, found, now, session=session)
+            mail_job.queue_verified_insights(session, account.id, dropped, mail_env.mail_insight_batch_limit)
+            return dropped
     found = await provider.fetch_bodies(account, stale, max_body_chars=mail_env.mail_sync_max_body_chars)
     return await _apply_bodies(stale, found, now)
 
