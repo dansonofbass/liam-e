@@ -21,6 +21,7 @@ export function beginSwipe(basis: SwipeBasis, x: number, y: number, width: numbe
   return { phase: 'undecided', basis: { ...basis }, x, y, dx: 0, threshold: Math.min(SWIPE_MAX_PX, Math.max(SWIPE_MIN_PX, width * SWIPE_WIDTH_RATIO)) }
 }
 export function cancelSwipe(state: SwipeState): SwipeState { return { ...state, phase: 'cancelled' } }
+export function scrollSwipe(state: SwipeState): SwipeState { return state.phase === 'undecided' ? { ...state, phase: 'scrolling' } : state }
 export function moveSwipe(state: SwipeState, x: number, y: number, basis: SwipeBasis): SwipeState {
   if (!sameBasis(state.basis, basis)) return cancelSwipe(state)
   if (state.phase === 'cancelled' || state.phase === 'scrolling') return state

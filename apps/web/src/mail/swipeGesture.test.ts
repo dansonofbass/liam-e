@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { beginSwipe, blocksScroll, moveSwipe, endSwipe, cancelSwipe, type SwipeBasis } from './swipeGesture'
+import { beginSwipe, blocksScroll, moveSwipe, endSwipe, cancelSwipe, scrollSwipe, type SwipeBasis } from './swipeGesture'
 
 const basis: SwipeBasis = { id: 'mail-1', isRead: false, revision: 1, left: 'archive', right: 'toggle_read' }
 const start = () => beginSwipe(basis, 200, 100, 300)
@@ -47,5 +47,13 @@ describe('swipe gesture', () => {
     expect(scroll.phase).toBe('scrolling')
     expect(blocksScroll(scroll)).toBe(false)
     expect(blocksScroll(cancelSwipe(preview))).toBe(false)
+  })
+  test('scrollSwipe locks only undecided touches into scrolling permanently', () => {
+    const locked = scrollSwipe(start())
+    expect(locked.phase).toBe('scrolling')
+    expect(blocksScroll(locked)).toBe(false)
+    expect(endSwipe(moveSwipe(locked, 320, 100, basis), basis)).toBeUndefined()
+    const preview = moveSwipe(start(), 230, 100, basis)
+    expect(scrollSwipe(preview)).toBe(preview)
   })
 })

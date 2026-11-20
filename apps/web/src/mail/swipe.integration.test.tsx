@@ -15,19 +15,23 @@ function setup(settings = assignment) {
   client.setQueryData<InfiniteData<MessagePageOut>>(key, { pages: [{ items: [row], next_cursor: null }], pageParams: [undefined] })
   client.setQueryData(['ui-settings'], settings)
   const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'a1', message: row }, response: { status: 200 } })) as never)
+  const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['a1'], skipped: [], expired: [], failed: [] }, response: { status: 200 } })) as never)
   const open = mock(() => {})
+  let triggerUndo: (() => Promise<void>) | undefined
   function Harness() {
     const { data } = useQuery<InfiniteData<MessagePageOut>>({ queryKey: key, queryFn: async () => client.getQueryData<InfiniteData<MessagePageOut>>(key)!, enabled: false })
     const settings = useSwipeSettings()
     const actions = useMailActions()
+    triggerUndo = async () => { await actions.undo() }
     const mail = data!.pages[0]!.items[0]
     if (!mail) return null
-    return <MailRow mail={mail} selected={false} coarse onOpen={open} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} swipe={{ basis: settings.assignment && settings.revision !== undefined ? { id: mail.id, isRead: mail.is_read, revision: settings.revision, ...settings.assignment } : undefined, enabled: settings.status === 'ready' && actions.capacityAvailable && !actions.isBusy(mail.id), navigation: '/mail', valid: basis => { const settings = client.getQueryData<typeof assignment>(['ui-settings']); const current = client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items[0]; return settings?.revision === basis.revision && settings.swipe_left === basis.left && settings.swipe_right === basis.right && current?.id === basis.id && current.is_read === basis.isRead && !actions.isBusy(basis.id) }, run: kind => { if (!actions.isBusy(mail.id) && actions.checkCapacity()) void actions.run(mail.id, kind) } }} />
+    return <div className="le-inbox-scroll"><MailRow mail={mail} selected={false} coarse onOpen={open} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} swipe={{ basis: settings.assignment && settings.revision !== undefined ? { id: mail.id, isRead: mail.is_read, revision: settings.revision, ...settings.assignment } : undefined, enabled: settings.status === 'ready' && actions.capacityAvailable && !actions.isBusy(mail.id), navigation: '/mail', valid: basis => { const settings = client.getQueryData<typeof assignment>(['ui-settings']); const current = client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items[0]; return settings?.revision === basis.revision && settings.swipe_left === basis.left && settings.swipe_right === basis.right && current?.id === basis.id && current.is_read === basis.isRead && !actions.isBusy(basis.id) }, run: kind => { if (!actions.isBusy(mail.id) && actions.checkCapacity()) void actions.run(mail.id, kind) } }} /></div>
   }
   const view = render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
+  const scroller = view.container.querySelector<HTMLElement>('.le-inbox-scroll')!
   const element = view.container.querySelector<HTMLElement>('.le-mailrow')!
   element.getBoundingClientRect = () => ({ width: 300, height: 100, left: 0, right: 300, top: 0, bottom: 100, x: 0, y: 0, toJSON() {} })
-  return { client, action, open, element }
+  return { client, action, undo, triggerUndo: () => triggerUndo?.(), open, element, scroller }
 }
 function pointer(element: Element, type: string, x: number, y = 100, id = 1, pointerType = 'touch') {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })
@@ -111,8 +115,8 @@ test('a drag without a following click does not swallow a later mouse click', ()
 
 // iOS WebKit hands a horizontal drag to vertical scrolling once the finger drifts about 10 px, cancels the
 // pointer and the row snaps back; only a prevented touchmove keeps the touch with the row.
-function touchMove(element: Element, x: number, y = 100, fingers = 1) {
-  const event = new Event('touchmove', { bubbles: true, cancelable: true })
+function touchMove(element: Element, x: number, y = 100, fingers = 1, cancelable = true) {
+  const event = new Event('touchmove', { bubbles: true, cancelable })
   Object.defineProperty(event, 'touches', { value: Array.from({ length: fingers }, (_, i) => ({ clientX: x + 40 * i, clientY: y })) })
   fireEvent(element, event)
   return event.defaultPrevented
@@ -185,4 +189,95 @@ test('lifting inside the threshold after the last armed preview cancels the swip
   const { element, action } = setup({ ...assignment, swipe_left: 'trash' })
   down(element); move(element, 100); up(element, 180)
   expect(action).not.toHaveBeenCalled()
+})
+
+test('a swipe after minor scroll momentum settle runs once and supports undo', async () => {
+  const { element, scroller, action, undo, triggerUndo } = setup()
+  scroller.scrollTop = 200
+  down(element)
+  scroller.scrollTop = 205
+  fireEvent.scroll(scroller)
+  expect(touchMove(element, 180, 104)).toBe(true)
+  expect(touchMove(element, 100, 108)).toBe(true)
+  expect(screen.getByRole('status').textContent).toBe('Loslassen zum Archivieren')
+  up(element, 100)
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  expect(action.mock.calls[0]?.[0]).toEqual({ path: { message_id: 'm1' }, body: { kind: 'archive' } })
+  await act(async () => { await triggerUndo() })
+  expect(undo).toHaveBeenCalledWith({ body: { action_ids: ['a1'] }, signal: expect.any(AbortSignal) })
+})
+
+test('a right swipe after minor scroll momentum settle locks scroll and runs once', async () => {
+  const { element, scroller, action } = setup()
+  scroller.scrollTop = 150
+  down(element)
+  scroller.scrollTop = 146
+  fireEvent.scroll(scroller)
+  expect(touchMove(element, 220, 103)).toBe(true)
+  expect(touchMove(element, 300, 106)).toBe(true)
+  expect(screen.getByRole('status').textContent).toBe('Loslassen: Als gelesen markieren')
+  up(element, 300)
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  expect(action.mock.calls[0]?.[0]).toEqual({ path: { message_id: 'm1' }, body: { kind: 'mark_read' } })
+})
+
+test('active list scrolling before horizontal intent locks out swiping without preventing scroll', () => {
+  const { element, scroller, action } = setup()
+  scroller.scrollTop = 100
+  down(element)
+  scroller.scrollTop = 116
+  fireEvent.scroll(scroller)
+  expect(touchMove(element, 100)).toBe(false)
+  move(element, 90)
+  expect(screen.getByRole('status').textContent).toBe('')
+  up(element, 90)
+  expect(action).not.toHaveBeenCalled()
+})
+
+test('continued list scrolling after preview cancels the swipe before release', () => {
+  const { element, scroller, action } = setup()
+  scroller.scrollTop = 100
+  down(element)
+  expect(touchMove(element, 160)).toBe(true)
+  expect(screen.getByRole('status').textContent).toBe('Archivieren')
+  scroller.scrollTop = 110
+  fireEvent.scroll(scroller)
+  expect(screen.getByRole('status').textContent).toBe('')
+  up(element, 80)
+  expect(action).not.toHaveBeenCalled()
+})
+
+test('non-cancelable touchmove from active browser scrolling cancels without showing a preview', () => {
+  const { element, action } = setup()
+  down(element)
+  expect(touchMove(element, 100, 100, 1, false)).toBe(false)
+  expect(screen.getByRole('status').textContent).toBe('')
+  up(element, 100)
+  expect(action).not.toHaveBeenCalled()
+})
+
+test('touchcancel and a missed pointerup recover cleanly for the next swipe or tap', async () => {
+  const { element, action, open } = setup()
+  down(element)
+  move(element, 100)
+  expect(screen.getByRole('status').textContent).toBe('Loslassen zum Archivieren')
+  fireEvent(element, new Event('touchcancel', { bubbles: true }))
+  expect(screen.getByRole('status').textContent).toBe('')
+  up(element, 100)
+  expect(action).not.toHaveBeenCalled()
+
+  // Simulate a gesture that never received pointerup/pointercancel before a fresh primary tap arrives.
+  down(element)
+  move(element, 100)
+  down(element)
+  up(element, 200)
+  fireEvent.click(element)
+  expect(open).toHaveBeenCalledTimes(1)
+  expect(action).not.toHaveBeenCalled()
+
+  // A subsequent swipe still runs once cleanly.
+  down(element)
+  move(element, 300)
+  up(element, 300)
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
 })
