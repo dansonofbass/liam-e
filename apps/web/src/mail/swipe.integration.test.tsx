@@ -10,11 +10,13 @@ import { useMailActions } from './useMailActions'
 const row = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.org', subject: 'Termin', snippet: '', internal_date: null, deadline: null, has_attachments: false, is_flagged: false, is_read: false, needs_reply: false }
 const key = ['messages', {}]
 const assignment = { swipe_left: 'archive', swipe_right: 'toggle_read', revision: 1 }
-function setup(settings = assignment) {
+function setup(settings = assignment, count = 1) {
+  const rows = Array.from({ length: count }, (_, i) => i === 0 ? row : { ...row, id: `m${i + 1}`, subject: `Mail ${i + 1}` })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  client.setQueryData<InfiniteData<MessagePageOut>>(key, { pages: [{ items: [row], next_cursor: null }], pageParams: [undefined] })
+  client.setQueryData<InfiniteData<MessagePageOut>>(key, { pages: [{ items: rows, next_cursor: null }], pageParams: [undefined] })
   client.setQueryData(['ui-settings'], settings)
-  const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ data: { action_id: 'a1', message: row }, response: { status: 200 } })) as never)
+  spyOn(sdk, 'settingsUiGet').mockImplementation((async () => ({ data: client.getQueryData(['ui-settings']) ?? settings, response: { ok: true } })) as never)
+  const action = spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => ({ data: { action_id: 'a1', message: rows.find(item => item.id === options.path.message_id) ?? row }, response: { status: 200 } })) as never)
   const undo = spyOn(sdk, 'mailActionsUndo').mockImplementation((async () => ({ data: { restored: ['a1'], skipped: [], expired: [], failed: [] }, response: { status: 200 } })) as never)
   const open = mock(() => {})
   let triggerUndo: (() => Promise<void>) | undefined
@@ -23,15 +25,15 @@ function setup(settings = assignment) {
     const settings = useSwipeSettings()
     const actions = useMailActions()
     triggerUndo = async () => { await actions.undo() }
-    const mail = data!.pages[0]!.items[0]
-    if (!mail) return null
-    return <div className="le-inbox-scroll"><MailRow mail={mail} selected={false} coarse onOpen={open} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} swipe={{ basis: settings.assignment && settings.revision !== undefined ? { id: mail.id, isRead: mail.is_read, revision: settings.revision, ...settings.assignment } : undefined, enabled: settings.status === 'ready' && actions.capacityAvailable && !actions.isBusy(mail.id), navigation: '/mail', valid: basis => { const settings = client.getQueryData<typeof assignment>(['ui-settings']); const current = client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items[0]; return settings?.revision === basis.revision && settings.swipe_left === basis.left && settings.swipe_right === basis.right && current?.id === basis.id && current.is_read === basis.isRead && !actions.isBusy(basis.id) }, run: kind => { if (!actions.isBusy(mail.id) && actions.checkCapacity()) void actions.run(mail.id, kind) } }} /></div>
+    const items = data!.pages[0]!.items
+    if (!items.length) return null
+    return <div className="le-inbox-scroll">{items.map(mail => <MailRow key={mail.id} mail={mail} selected={false} coarse onOpen={() => open(mail.id)} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} swipe={{ basis: settings.assignment && settings.revision !== undefined ? { id: mail.id, isRead: mail.is_read, revision: settings.revision, ...settings.assignment } : undefined, enabled: settings.status === 'ready' && actions.capacityAvailable && !actions.isBusy(mail.id), navigation: '/mail', valid: basis => { const settings = client.getQueryData<typeof assignment>(['ui-settings']); const current = client.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items.find(item => item.id === basis.id); return settings?.revision === basis.revision && settings.swipe_left === basis.left && settings.swipe_right === basis.right && current?.id === basis.id && current.is_read === basis.isRead && !actions.isBusy(basis.id) }, run: kind => { if (!actions.isBusy(mail.id) && actions.checkCapacity()) void actions.run(mail.id, kind) } }} />)}</div>
   }
   const view = render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
   const scroller = view.container.querySelector<HTMLElement>('.le-inbox-scroll')!
-  const element = view.container.querySelector<HTMLElement>('.le-mailrow')!
-  element.getBoundingClientRect = () => ({ width: 300, height: 100, left: 0, right: 300, top: 0, bottom: 100, x: 0, y: 0, toJSON() {} })
-  return { client, action, undo, triggerUndo: () => triggerUndo?.(), open, element, scroller }
+  const elements = Array.from(view.container.querySelectorAll<HTMLElement>('.le-mailrow'))
+  for (const el of elements) el.getBoundingClientRect = () => ({ width: 300, height: 100, left: 0, right: 300, top: 0, bottom: 100, x: 0, y: 0, toJSON() {} })
+  return { client, action, undo, triggerUndo: () => triggerUndo?.(), open, element: elements[0]!, elements, scroller }
 }
 function pointer(element: Element, type: string, x: number, y = 100, id = 1, pointerType = 'touch') {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })
@@ -280,4 +282,29 @@ test('touchcancel and a missed pointerup recover cleanly for the next swipe or t
   move(element, 300)
   up(element, 300)
   await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+})
+
+test('a fresh primary touch on another row with the same pointerId clears a stale armed swipe', async () => {
+  const { elements, action, open } = setup(assignment, 2)
+  const [first, second] = elements as [HTMLElement, HTMLElement]
+  down(first)
+  move(first, 100)
+  await waitFor(() => expect(first.style.transform).toBe('translateX(-100px)'))
+  expect(screen.getAllByRole('status').map(node => node.textContent)).toEqual(['Loslassen zum Archivieren', ''])
+
+  // Reuse pointerId=1 for a new primary touch on the second row without releasing the first.
+  down(second)
+  await waitFor(() => expect(first.style.transform).toBe(''))
+  expect(screen.getAllByRole('status').map(node => node.textContent)).toEqual(['', ''])
+  up(second, 200)
+  fireEvent.click(second)
+  expect(open).toHaveBeenCalledWith('m2')
+  expect(action).not.toHaveBeenCalled()
+
+  // Swiping the second row afterwards commits only on m2.
+  down(second)
+  move(second, 300)
+  up(second, 300)
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1))
+  expect(action.mock.calls[0]?.[0]).toEqual({ path: { message_id: 'm2' }, body: { kind: 'mark_read' } })
 })

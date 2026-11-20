@@ -53,11 +53,11 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
       if (row.current) row.current.style.transform = dx ? `translateX(${dx}px)` : ''
     })
   }
-  const stop = () => {
+  const stop = (suppress = true) => {
     const gesture = active.current
     active.current = null
     // Only the click the browser synthesizes right after this drag is swallowed; a later tap, mouse click or keyboard activation is not.
-    if (gesture?.dragged) suppressClick.current = performance.now() + SUPPRESS_CLICK_MS
+    if (suppress && gesture?.dragged) suppressClick.current = performance.now() + SUPPRESS_CLICK_MS
     if (gesture && row.current?.hasPointerCapture(gesture.pointer)) row.current.releasePointerCapture(gesture.pointer)
     paint(0)
     setPreview(null)
@@ -90,8 +90,10 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     if (!value.enabled || !value.basis || !value.valid(gesture.state.basis) || value.navigation !== gesture.navigation || moveSwipe(gesture.state, gesture.state.x + gesture.state.dx, gesture.state.y, value.basis).phase === 'cancelled') stop()
   })
   useLayoutEffect(() => {
-    const second = (event: globalThis.PointerEvent) => {
-      if (active.current && event.pointerType === 'touch' && event.pointerId !== active.current.pointer) stop()
+    const interrupt = (event: globalThis.PointerEvent) => {
+      if (active.current && event.pointerType === 'touch' && (event.isPrimary || event.pointerId !== active.current.pointer)) {
+        stop(!event.isPrimary)
+      }
     }
     const cancel = () => { if (active.current) stop() }
     const onScroll = (event: Event) => {
@@ -125,12 +127,12 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
       }
     }
     const node = row.current
-    document.addEventListener('pointerdown', second, true)
+    document.addEventListener('pointerdown', interrupt, true)
     document.addEventListener('scroll', onScroll, { capture: true, passive: true })
     node?.addEventListener('touchmove', hold, { passive: false })
     node?.addEventListener('touchcancel', cancel)
     return () => {
-      document.removeEventListener('pointerdown', second, true)
+      document.removeEventListener('pointerdown', interrupt, true)
       document.removeEventListener('scroll', onScroll, true)
       node?.removeEventListener('touchmove', hold)
       node?.removeEventListener('touchcancel', cancel)
@@ -139,7 +141,6 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     }
   }, [])
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'touch' && event.isPrimary && active.current) stop()
     if (event.isPrimary) suppressClick.current = 0
     if (active.current || event.pointerType !== 'touch' || !event.isPrimary || !current.current.enabled || !current.current.basis) return
     // A control keeps the gesture, except the row's own open link: it spans the subject line and is the row itself.
