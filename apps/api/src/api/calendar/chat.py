@@ -33,7 +33,7 @@ async def _create_source(arguments, ctx):
             raise writes.WriteError(target.error, 422)
     pending = target or previous
     if not target and previous and previous.error and named is None:
-        names = {source.name for source, _ in entries if selection.mentions(source.name)}
+        names = {source.name for source, _ in entries if selection.names_target(source.name)}
         if len(names) == 1:
             pending = named_choice(names.pop(), entries, selection, offered=previous.offered)
     if named is not None and not (target and target.use_default):
@@ -42,15 +42,18 @@ async def _create_source(arguments, ctx):
         matches_pending = pending and pending.name.strip().casefold() == named.strip().casefold()
         if target and target.name and not matches_pending:
             raise writes.WriteError("calendar_name_required", 422)
-        if selection.mentions(named) and not matches_pending:
+        if selection.names_target(named) and not matches_pending:
             pending = named_choice(named, entries, selection, offered=previous.offered if previous else ())
+            if target:
+                pending = pending.model_copy(update={"excluded_source_ids": target.excluded_source_ids,
+                                                     "exclude_default": target.exclude_default})
         elif not matches_pending:
             raise writes.WriteError("calendar_name_required", 422)
     if pending:
         ctx.calendar_targets[part] = pending
         if pending.error:
             raise writes.WriteError(pending.error, 422)
-    using_default = not pending or pending.use_default
+    using_default = pending is None or pending.source_id is None
     if using_default:
         chosen = (await calendar_settings.get()).default_source_id
         if source_id and source_id != chosen:

@@ -599,7 +599,7 @@ async def test_insight_batch_stops_and_discards_prior_results_after_revocation(s
     cached.assert_awaited_once_with(rows[0].id, locale=ctx.browser_locale, context_id='turn')
 
 
-@pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'independent_title',
+@pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'independent_title', 'independent_location',
                                    'repeated_title', 'repeated_title_after_duration', 'start_field', 'switch', 'reschedule', 'default', 'default_de'])
 async def test_calendar_create_keeps_owner_target_through_scheduling_question(store, monkeypatch, case):
     from db.accessors import calendar_settings, calendar_source
@@ -625,8 +625,10 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
     sprint = case.startswith('repeated_title') or case == 'start_field'
     if sprint:
         choose['title'] = 'Sprint Planning'
-    if case == 'independent_title':
+    if case.startswith('independent_'):
         choose['title'] = 'Lunch'
+    if case == 'independent_location':
+        choose['location'] = 'Café Central'
     rounds = [[chunk('propose_calendar_change', first)]] if case == 'tool_clarification' else []
     additional = [['What time should it start?']] if case == 'repeated_title_after_duration' else []
     fake = FakeMistral(streams=[*rounds, ['When should the review start?'],
@@ -647,6 +649,7 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
     second = {
         'fresh_request': 'Create another appointment tomorrow at ten',
         'independent_title': 'Schedule lunch for Friday at ten',
+        'independent_location': 'Schedule Lunch for Friday at noon and please set the location to Café Central.',
         'repeated_title': 'Schedule Sprint Planning for Friday at 10.',
         'repeated_title_after_duration': 'Schedule Sprint Planning for Friday at 10.',
         'start_field': 'Set the start time to Friday at 10.',
@@ -663,7 +666,7 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         assert any('calendar_not_writable' in row.content for row in store.rows if row.role == 'tool')
     else:
         assert len(cards) == 1 and cards[0].proposal_status == 'pending'
-        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'independent_title', 'switch', 'default', 'default_de') else work.id)
+        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'independent_title', 'independent_location', 'switch', 'default', 'default_de') else work.id)
         assert cards[0].context.calendar_scope_json == snapshot.calendar_scope_json
     assert 'calendar_clarification' not in json.dumps(fake.requests, default=str)
 

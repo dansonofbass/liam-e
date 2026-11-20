@@ -50,6 +50,16 @@ class OwnerSelection:
     def includes_id(self, source_id: str) -> bool:
         return bool(re.search(r"(?<![\w-])" + re.escape(source_id) + r"(?![\w-])", self.text))
 
+    def names_target(self, name: str) -> bool:
+        key = name.strip().casefold()
+        if key in self.quoted_names:
+            return True
+        folded = self.text.strip().casefold()
+        operand = rf"(?:{_CALENDAR}\s+)?{re.escape(key)}(?![\w-])(?:\s+{_CALENDAR})?"
+        if re.search(rf"(?<!\w)(?:{_PREFIX}|(?:use|choose|pick|nutze|verwende|nimm)\s+(?:(?:the|den)\s+)?){operand}", folded):
+            return True
+        return bool(re.fullmatch(rf"(?:please\s+|bitte\s+)?{operand}(?:,?\s+(?:please|bitte))?[.!?]?", folded))
+
 
 def _selection_words(text: str, title: str | None, entries) -> OwnerSelection:
     """Quoted descriptions are content. A quoted destination is one exact name."""
@@ -114,7 +124,7 @@ def owner_selection(text: str, title: str | None = None, *, entries=()) -> Owner
     return OwnerSelection(selected.text, selected.quoted_names, frozenset(blocked), selected.alternatives_text)
 
 
-_ACTION = r"(?:put|schedule|create|book|add|arrange|make|set|plan[e]?|erstell[e]?|trag[e]?|leg[e]?|buch[e]?)"
+_ACTION = r"(?:put|schedule|create|book|add|arrange|make|set up|set|plane?|erstelle?|trage?|lege?|buche?)"
 _ARTICLE = r"(?:a|an|another|ein(?:e[nmr]?)?)"
 _CLOCK = r"(?:[0-2]?\d[:.][0-5]\d|\d{1,2}\s*(?:am|pm|uhr))"
 _NEXT_REQUEST = re.compile(
@@ -163,13 +173,19 @@ def appointment_part(parts: list[str], title, excerpt) -> str | None:
 
 
 def _appointment_subject(text: str) -> str:
-    command = re.search(rf"\b{_ACTION}\s+(?:(?:a|an|the|den|das|der|ein(?:e[nmrs]?)?)\s+)?", text, re.I)
+    masked = _QUOTED.sub(lambda match: " " * len(match[0]), text)
+    command = re.search(rf"\b{_ACTION}\b", masked, re.I)
     if not command:
         return ""
     rest = text[command.end():].strip()
+    rest = re.sub(r"^(?:a|an|the|its|den|das|der|die|ein(?:e[nmrs]?)?)\s+", "", rest, flags=re.I)
     if quoted := _QUOTED.match(rest):
         return " ".join(quoted.group()[1:-1].casefold().split())
-    modifier = r"\b(?:in|into|on|for|at|from|im|am|um|für|tomorrow|today|heute|morgen)\b|[,;.!?]"
+    if re.match(r"(?:start(?:ing)? time|end time|time|date|duration|title|location|description|"
+                r"startzeit|endzeit|uhrzeit|datum|dauer|titel|ort|beschreibung)\b"
+                r"(?=\s*(?:[:=]|\d)|\s+(?:to|as|at|for|on|of|auf|um|für)\b|$)", rest, re.I):
+        return ""
+    modifier = r"\b(?:in|into|on|to|for|at|from|im|am|um|für|tomorrow|today|heute|morgen)\b|[,;.!?]"
     subject = re.split(modifier, rest, maxsplit=1, flags=re.I)[0].strip()
     if re.match(r"(?:it|this|that|ihn|es|diesen)\b", subject, re.I):
         return ""
@@ -188,12 +204,10 @@ def pending_for_request(previous: CalendarChoice | None, text: str, title=None) 
         return None
     # "Set/make/put ..." can fill a field of the pending appointment. Only a
     # separately identifiable appointment should acquire a fresh default.
-    field = re.search(r"\b(?:set|change|move|adjust|update|make|use|ändere|setze|verschiebe)\s+"
-                      r"(?:(?:the|its|die|den|das)\s+)?(?:start(?:ing)? time|end time|time|date|duration|title|"
-                      r"location|description|startzeit|endzeit|uhrzeit|datum|dauer|titel|ort|beschreibung)\b", words, re.I)
-    if field or not subject:
+    if not subject:
         return previous
-    create = re.search(r"\b(?:schedule|create|book|arrange|add|set up|erstelle|plane|buche)\s+", words, re.I)
+    command = re.search(rf"\b{_ACTION}\b", words, re.I)
+    create = command and command[0].casefold() in {"schedule", "create", "book", "arrange", "add", "set up", "erstelle", "plane", "buche"}
     proposed = " ".join(title.casefold().split()) if isinstance(title, str) else ""
     return None if create or (proposed and proposed == subject) else previous
 
@@ -290,7 +304,8 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
         name = re.escape(source.name.strip().casefold())
         calendar_phrase = rf'{_PREFIX}(?:{name}\s+{_CALENDAR}|{_CALENDAR}\s+{name})(?!\w)'
         directive = rf'(?:use|choose|pick|nutze|nimm|verwende)\s+(?:(?:the|den)\s+)?{name}(?=\s*(?:{_CALENDAR}\b|[,.;!?]|$))'
-        if re.search(rf'(?<!\w)(?:{calendar_phrase}|{directive})', folded):
+        bare = selection.excluded_targets and re.search(rf'(?<!\w){_PREFIX}{name}(?=\s*(?:[,.;!?]|$))', folded)
+        if bare or re.search(rf'(?<!\w)(?:{calendar_phrase}|{directive})', folded):
             names.add(source.name.strip().casefold())
     if use_default and not names:
         return CalendarChoice(use_default=True)
@@ -304,8 +319,10 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
         if use_default:
             offered.append(CalendarOption(use_default=True))
         return CalendarChoice(error="calendar_name_ambiguous", offered=tuple(offered))
-    identified = {source.name for source, _ in entries if selection.includes_id(source.id)
-                  and (selection.mentions(source.name) or previous and previous.name.casefold() == source.name.casefold())}
+    identified = {source.name for source, _ in entries if selection.includes_id(source.id) and (
+        previous and previous.name.casefold() == source.name.casefold()
+        or source.id.casefold() != source.name.strip().casefold() and selection.mentions(source.name)
+        or selection.names_target(source.name))}
     if len(identified) == 1:
         return named_choice(identified.pop(), entries, selection)
     if identified:
@@ -334,7 +351,9 @@ def stated_destination(selection: OwnerSelection, entries, previous: CalendarCho
                 target = previous.model_copy(update={"offered": remaining})
         elif previous.source_id and previous.source_id not in blocked:
             target = previous
-    choice = target or CalendarChoice(use_default=True)
+    # Only the owner's explicit choice of the default can override a named
+    # destination. Exclusions by themselves constrain whichever source wins.
+    choice = target or CalendarChoice()
     return choice.model_copy(update={"excluded_source_ids": tuple(sorted(blocked)), "exclude_default": default_blocked})
 
 

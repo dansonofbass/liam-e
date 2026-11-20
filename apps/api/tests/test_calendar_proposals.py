@@ -386,6 +386,8 @@ async def test_non_calendar_alternative_does_not_change_explicit_destination(mon
     ('work', 'Schedule lunch, use Personal instead of Work', 'personal'),
     ('personal', 'Schedule lunch, not before noon in the Work calendar', 'work'),
     ('personal', 'Schedule a meeting titled “Not Work” in the Work calendar', 'work'),
+    ('personal', 'Add tomorrow’s 10:00 review to Home instead of Work.', 'home'),
+    ('personal', 'Schedule home inspection tomorrow, but do not use the Work calendar.', 'personal'),
 ])
 async def test_calendar_create_keeps_an_excluded_destination_out(monkeypatch, default, request_text, expected):
     from dataclasses import replace
@@ -394,7 +396,7 @@ async def test_calendar_create_keeps_an_excluded_destination_out(monkeypatch, de
     from unittest.mock import AsyncMock
 
     sources = [CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic',
-        external_id=key, capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'personal')]
+        external_id=key, capabilities_json='["read","write"]', timezone='UTC') for key in ('work', 'personal', 'home')]
     async def catalog(*, ids):
         return [(source, None) for source in sources if source.id in ids]
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
@@ -404,7 +406,12 @@ async def test_calendar_create_keeps_an_excluded_destination_out(monkeypatch, de
     args = {'action': 'create', 'title': 'Lunch', 'start_local': '2026-11-21T12:00', 'end_local': '2026-11-21T13:00'}
     if expected:
         assert (await chat.prepare(args, ctx)).source_id == expected
-        if ctx.requested_calendar.excluded_source_ids and ctx.requested_calendar.use_default:
+        if expected == 'home':
+            assert (await chat.prepare({**args, 'calendar_name': 'Home'}, ctx)).source_id == 'home'
+        if 'home inspection' in request_text:
+            with pytest.raises(writes.WriteError, match='calendar_name_required'):
+                await chat.prepare({**args, 'calendar_name': 'Home'}, ctx)
+        if ctx.requested_calendar.excluded_source_ids and ctx.requested_calendar.source_id is None:
             settings.default_source_id = 'work'
             reply = replace(ctx, calendar_choice=ctx.requested_calendar, user_text='Tomorrow at noon')
             with pytest.raises(writes.WriteError, match='calendar_name_required'):
