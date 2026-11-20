@@ -17,6 +17,7 @@ function setup(accounts = true, path = '/', unread = 3, lastSync: string | null 
   window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { request = JSON.parse(String(init.body)) as Record<string, unknown>; return Promise.resolve(new Response(new ReadableStream({ start() {} }))) }) as typeof fetch
   spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
+  spyOn(sdk, 'calendarSettingsGet').mockResolvedValue({ data: { version: 1, default_source_id: null } } as never)
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { mail_scope_version: 7, accounts: accounts ? [{ id: 'a', display_name: displayName, provider: 'gmail', email_address: 'a@example.com', color_index: 0, state: 'ok' }] : [], unread_total: unread, newsletter_senders: 2, last_sync_at: lastSync } })) as never)
   spyOn(sdk, 'chatSettingsGet').mockResolvedValue({ data: { version: 7, account_ids: accounts ? ['a'] : [] } } as never)
   spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)

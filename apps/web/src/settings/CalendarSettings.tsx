@@ -74,6 +74,7 @@ export function CalendarSettings() {
             {calendarTargetLabel(source, choices)}{source.chat_access !== 'writable' && ' · ' + t.reason[source.chat_access ?? 'unreadable']}
           </option>)}
         </select>
+        {selected && selected.chat_access !== 'writable' && <Notice tone="info">{t.defaultUnavailable(selected.name, t.reason[selected.chat_access ?? 'unreadable'])}</Notice>}
         {!choices.some(source => source.chat_access === 'writable') && <Notice tone="info">{t.noWritable}</Notice>}
         {status === 'conflict' && <Notice tone="danger" action={retry}>{t.conflict}</Notice>}
         {status === 'invalid' && <Notice tone="danger" action={retry}>{t.invalid}</Notice>}

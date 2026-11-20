@@ -13,13 +13,17 @@ from api.skills import briefing
 from conftest import build_app
 from db.accessors import (
     calendar_occurrence,
+    calendar_settings,
     calendar_source,
     chat_context,
     chat_conversation,
     chat_message,
     chat_settings,
+    mail_account,
     mail_insight,
+    mail_job,
     mail_message,
+    mail_sync_state,
     skill_definition,
     skill_revision,
 )
@@ -442,8 +446,10 @@ async def skill_runtime(monkeypatch):
 
     monkeypatch.setattr(briefing.calendar_tools.calendar_source, "catalog", AsyncMock(side_effect=lambda *a, **kw: [(c, calendar_states[c.id]) for c in calendars.values()]))
     monkeypatch.setattr(briefing.calendar_tools.calendar_occurrence, "page_visible", AsyncMock(return_value=list(occurrences.values())))
+    monkeypatch.setattr(briefing.calendar_tools.calendar_settings, "get", AsyncMock(return_value=NS(default_source_id=None)))
     monkeypatch.setattr(calendar_source, "catalog", AsyncMock(side_effect=lambda *a, **kw: [(c, calendar_states[c.id]) for c in calendars.values()]))
     monkeypatch.setattr(calendar_occurrence, "get_visible", AsyncMock(side_effect=lambda oid: occurrences.get(oid)))
+    monkeypatch.setattr(calendar_settings, "get", AsyncMock(return_value=NS(default_source_id=None)))
     monkeypatch.setattr(calendar_source, "feed_bindings", AsyncMock(return_value={}))
     monkeypatch.setattr(calendar_source, "stored_feed_bindings", lambda ctx: {})
 
@@ -458,6 +464,9 @@ async def skill_runtime(monkeypatch):
     monkeypatch.setattr(briefing.task_chat, "read", fake_task_read)
     monkeypatch.setattr("api.tasks.chat.read", fake_task_read)
 
+    monkeypatch.setattr(mail_account, "list_accounts", AsyncMock(side_effect=lambda: list(accounts.values())))
+    monkeypatch.setattr(mail_sync_state, "get_state", AsyncMock(return_value=None))
+    monkeypatch.setattr(mail_job, "latest_for_account", AsyncMock(return_value=None))
     monkeypatch.setattr(mail_message, "list_page", AsyncMock(return_value=[due_mail]))
     monkeypatch.setattr(mail_message, "get_message", AsyncMock(side_effect=lambda mid: mails.get(mid)))
     monkeypatch.setattr(mail_insight, "get_for_messages", AsyncMock(side_effect=lambda ids: {i: insights_by_mail[i] for i in ids if i in insights_by_mail}))
