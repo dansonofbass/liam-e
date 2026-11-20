@@ -584,3 +584,17 @@ async def test_new_draft_uses_the_requested_granted_sender(store):
     assert proposal['draft']['account_id'] == other.id
     assert other.email_address in proposal['reason']
     assert outcome.proposal_message.proposal_status == 'pending'
+
+
+async def test_insight_batch_stops_and_discards_prior_results_after_revocation(store, monkeypatch):
+    from api.mail import agent_tools, insights
+    from db.models.mail_insight import MailInsight
+    rows = [MailMessage(id=str(i), account_id=store.account.id, provider_uid=str(i)) for i in range(2)]
+    monkeypatch.setattr(mail_message, 'get_message', AsyncMock(side_effect=rows))
+    monkeypatch.setattr(agent.chat_context, 'is_live', AsyncMock(side_effect=[True, False]))
+    cached = AsyncMock(return_value=MailInsight(message_id=rows[0].id))
+    monkeypatch.setattr(insights, 'get_or_compute', cached)
+    ctx = agent_tools.TurnContext('conversation', None, date.today(), [store.account.id], context_id='turn')
+    result = await agent_tools.execute_tool('get_insights', {'message_ids': [m.id for m in rows]}, ctx)
+    assert json.loads(result.content) == {'error': 'context_revoked'}
+    cached.assert_awaited_once_with(rows[0].id, locale=ctx.browser_locale, context_id='turn')

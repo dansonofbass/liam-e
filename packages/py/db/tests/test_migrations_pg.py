@@ -115,6 +115,24 @@ def test_migrating_leaves_the_process_loggers_enabled(scratch: tuple[Config, str
 def test_grant_migration_keeps_existing_turns_unverified(scratch: tuple[Config, str]) -> None:
     config, url = scratch
     command.upgrade(config, "f491e66e47d3")
+    async def previous_connector_cache():
+        from sqlalchemy import MetaData, Table
+        from db.models.mail_account import MailAccount
+        from db.models.mail_message import MailMessage
+        account = MailAccount(provider='gmail', auth_type='mistral_connector', email_address='synthetic@example.test')
+        mail = MailMessage(id='previous-mail', account_id=account.id, folder='ARCHIVE', provider_uid='1')
+        engine = create_async_engine(url)
+        try:
+            async with engine.begin() as conn:
+                def insert_existing(connection):
+                    for model in (account, mail):
+                        table = Table(model.__tablename__, MetaData(), autoload_with=connection)
+                        values = {col.name: getattr(model, col.name) for col in table.c if col.computed is None}
+                        connection.execute(table.insert().values(**values))
+                await conn.run_sync(insert_existing)
+        finally:
+            await engine.dispose()
+    asyncio.run(previous_connector_cache())
     asyncio.run(_admin_on(url, """
         INSERT INTO chat_context (id, conversation_id, app_prompt_version, account_scope_json, revoked)
         VALUES ('previous-turn', 'previous-chat', '9', '{"account_ids": ["previous-account"], "selection": null}', false)
@@ -125,3 +143,4 @@ def test_grant_migration_keeps_existing_turns_unverified(scratch: tuple[Config, 
     """))
     assert preserved == 1
     assert asyncio.run(_scalar(url, "SELECT count(*) FROM chat_settings")) == 0
+    assert asyncio.run(_scalar(url, "SELECT unverified_connector FROM mail_message WHERE id='previous-mail'")) is True

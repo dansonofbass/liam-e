@@ -72,7 +72,7 @@ async def test_confirm_seeded_unsubscribe_is_blocked(seeded, monkeypatch):
     item = proposals.proposal_view(row).items[0]
     account_id, address = item.id.split("|", 1)
     mail = next(m for m in store.messages.values() if m.account_id == account_id and m.sender_address == address)
-    async def rows(*, account_ids=None):
+    async def rows(*, account_ids=None, chat_only=False):
         return [NewsletterRow(account_id, address, mail.sender, 23, 23, None, mail.list_unsubscribe, "", "[]")]
     monkeypatch.setattr(newsletters.mail_message, "newsletter_senders", rows)
     await proposals.confirm(row.id, selected_ids=[item.id])

@@ -35,13 +35,13 @@ class UndoResult:
     failed: list[str] = field(default_factory=list)
 
 
-async def write_connector_labels(connector: str, message_id: str, *, added: list[str], removed: list[str]) -> None:
+async def write_connector_labels(account, message_id: str, *, added: list[str], removed: list[str]) -> None:
     """Keep connector writes inside the guarded action boundary."""
     from api.mail import connectors
 
     for tool, labels in (("label_message", added), ("unlabel_message", removed)):
         if labels:
-            await connectors.call_write_tool(connector, tool, {"messageId": message_id, "labelIds": labels})
+            await connectors.call_write_tool(account, tool, {"messageId": message_id, "labelIds": labels})
 
 
 async def _write_provider_state(message: MailMessage, updates: dict, *, folder: str) -> None:

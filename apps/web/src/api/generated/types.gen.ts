@@ -4790,6 +4790,45 @@ export type ChatProposalConfirmResponses = {
 
 export type ChatProposalConfirmResponse = ChatProposalConfirmResponses[keyof ChatProposalConfirmResponses];
 
+export type ChatMailReferenceGetData = {
+    body?: never;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query: {
+        /**
+         * Expected Version
+         */
+        expected_version: number;
+        /**
+         * Context Id
+         */
+        context_id?: string | null;
+    };
+    url: '/api/v1/chat/references/{message_id}';
+};
+
+export type ChatMailReferenceGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatMailReferenceGetError = ChatMailReferenceGetErrors[keyof ChatMailReferenceGetErrors];
+
+export type ChatMailReferenceGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MailRefOut;
+};
+
+export type ChatMailReferenceGetResponse = ChatMailReferenceGetResponses[keyof ChatMailReferenceGetResponses];
+
 export type ChatStreamData = {
     body: ChatStreamRequest;
     path?: never;

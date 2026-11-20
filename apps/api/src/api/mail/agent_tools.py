@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
-from db.accessors import mail_account, mail_message
+from db.accessors import chat_context, mail_account, mail_message
 from db.models.chat_message import ChatMessage
 from api.locales import DEFAULT_LOCALE, Locale
 from api.mail import headers, insights, newsletters, proposals, send
@@ -163,10 +163,10 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
     for id in ids:
         if id:
             row = await mail_message.get_message(id)
-            if row is None or row.account_id not in scope:
+            if row is None or row.account_id not in scope or row.unverified_connector:
                 return result({'error': 'message_not_found'})
     if arguments.get('sender_ids'):
-        allowed = {s.sender_id for s in await newsletters.find_newsletters(account_ids=scope)} if scope else set()
+        allowed = {s.sender_id for s in await newsletters.find_newsletters(account_ids=scope, chat_only=True)} if scope else set()
         if any(id not in allowed for id in arguments['sender_ids']):
             return result({'error': 'sender_not_found'})
     if name == 'list_accounts':
@@ -175,7 +175,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         account_id = arguments.get('account_id') or ctx.account_id
         if scope == []:
             return result({'untrusted_mails': []})
-        rows = await mail_message.list_page(folder='INBOX', account_ids=[account_id] if account_id else scope, unread_only=arguments.get('unread_only', False), query=arguments.get('query', ''), limit=max(1, min(int(arguments.get('limit', 10)), 50)))
+        rows = await mail_message.list_page(chat_only=True, folder='INBOX', account_ids=[account_id] if account_id else scope, unread_only=arguments.get('unread_only', False), query=arguments.get('query', ''), limit=max(1, min(int(arguments.get('limit', 10)), 50)))
         since = arguments.get('since_days')
         if since is not None:
             cutoff = datetime.now(timezone.utc) - timedelta(days=int(since))
@@ -188,16 +188,20 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
     if name == 'get_insights':
         items = []
         for id in arguments.get('message_ids', [])[:20]:
+            if not ctx.context_id or not await chat_context.is_live(ctx.context_id):
+                return result({'error': 'context_revoked'})
             try:
-                insight = await insights.get_or_compute(id, locale=ctx.browser_locale)
+                insight = await insights.get_or_compute(id, locale=ctx.browser_locale, context_id=ctx.context_id)
                 items.append({'message_id':id, 'points':json.loads(insight.points_json), 'deadline':insight.deadline, 'needs_reply':insight.needs_reply, 'followups':json.loads(insight.followups_json)})
+            except insights.InsightContextRevoked:
+                return result({'error': 'context_revoked'})
             except insights.MessageNotFound:
                 items.append({'message_id':id, 'error':'not_found'})
             except insights.InsightError:
                 items.append({'message_id':id, 'error':'unavailable'})
         return result({'untrusted_insights':items})
     if name == 'find_newsletters':
-        rows = await newsletters.find_newsletters(account_ids=scope) if scope != [] else []
+        rows = await newsletters.find_newsletters(account_ids=scope, chat_only=True) if scope != [] else []
         return result({'untrusted_senders':[{k:getattr(s, k) for k in ('sender_id','address','display_name','total','unread','last_read_at','method')} for s in rows]})
     if name == 'propose_action':
         kind = arguments.get('kind')
@@ -208,7 +212,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         for id in ids:
             if len(items) == 50: break
             if kind == 'unsubscribe':
-                s = await newsletters.sender_by_id(id)
+                s = await newsletters.sender_by_id(id, chat_only=True)
                 if not s: continue
                 subtitle = unsubscribe_subtitle(s.total, s.address, s.method, s.link if s.method == 'mailto' else None, locale=ctx.locale)
                 items.append(proposals.ProposalItem(id=id, kind='sender', title=s.display_name, subtitle=subtitle, count=s.total, unread=s.unread, last_read_at=s.last_read_at, method=s.method, target=s.link))

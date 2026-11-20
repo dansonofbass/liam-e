@@ -31,7 +31,7 @@ class FakeStore:
             monkeypatch.setattr(mail_job, name, getattr(self, "job_" + name))
         monkeypatch.setattr(mail_message, "count_unread", self.count_unread)
         monkeypatch.setattr(mail_message, "count_for_account", self.count_for_account)
-        async def newsletter_senders(*, account_ids=None):
+        async def newsletter_senders(*, account_ids=None, chat_only=False):
             return []
         monkeypatch.setattr(mail_message, "newsletter_senders", newsletter_senders)
         for module, names in (
@@ -121,7 +121,7 @@ class FakeStore:
     async def count_for_account(self, account_id):
         return sum(row.account_id == account_id for row in self.messages.values())
 
-    async def count_unread(self, *, folder="INBOX", account_ids=None):
+    async def count_unread(self, *, folder="INBOX", account_ids=None, chat_only=False):
         return {id: count for id, count in self.unread.items() if account_ids is None or id in account_ids}
 
     async def job_enqueue(self, kind, payload, *, dedupe_key, run_after=None):
@@ -206,6 +206,9 @@ class FakeStore:
         return self.states.get(account_id)
 
     async def save_state(self, *, account_id, **kwargs):
+        if kwargs.get("connector_verified") is None:
+            previous = self.states.get(account_id)
+            kwargs["connector_verified"] = bool(previous and previous.connector_verified)
         state = MailSyncState(account_id=account_id, **kwargs)
         self.states[account_id] = state
         return state

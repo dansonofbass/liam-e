@@ -31,6 +31,7 @@ async def save_state(
     status: str = "ok",
     last_error: str = "",
     last_sync_at: datetime | None = None,
+    connector_verified: bool | None = None,
 ) -> MailSyncState:
     async with get_session_maker()() as session:
         result = await session.execute(
@@ -39,6 +40,8 @@ async def save_state(
         state = result.scalar_one_or_none()
         if state is None:
             state = MailSyncState(account_id=account_id)
+        if connector_verified is not None:
+            state.connector_verified = connector_verified
         state.cursor = cursor
         state.status = status
         state.last_error = last_error

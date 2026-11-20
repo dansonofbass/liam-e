@@ -5,7 +5,7 @@ import unicodedata
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from db.accessors import mail_insight, mail_message
+from db.accessors import chat_context, mail_insight, mail_message
 from db.models.mail_insight import MailInsight
 from db.models.mail_message import MailMessage
 from env.mail import env as mail_env
@@ -51,6 +51,10 @@ class InsightError(RuntimeError):
     """The model did not produce a valid insight."""
 
 
+class InsightContextRevoked(InsightError):
+    """The chat grant changed before the next model dispatch."""
+
+
 class InsightOutdated(InsightError):
     """The mail's text changed while the model summarized it; the summary was not stored."""
 
@@ -63,7 +67,7 @@ def escape_delimiters(text: str) -> str:
     return unicodedata.normalize("NFKC", text).replace("<", "&lt;").replace(">", "&gt;")
 
 
-async def compute_insight(message: MailMessage, *, today: date, locale: Locale = DEFAULT_LOCALE) -> MailInsight:
+async def compute_insight(message: MailMessage, *, today: date, locale: Locale = DEFAULT_LOCALE, context_id: str | None = None) -> MailInsight:
     if is_seed_account(message.account_id):
         # Sample mail never costs model calls; only insights seeded up front are served.
         raise InsightError("Sample accounts have no generated insights")
@@ -97,6 +101,8 @@ async def compute_insight(message: MailMessage, *, today: date, locale: Locale =
     user = (f"<mail>\nBetreff: {escape_delimiters(message.subject)}\nAbsender: {escape_delimiters(message.sender)}\n"
             f"Datum: {message.internal_date}\nText:\n{escape_delimiters(message.body_text[:8000])}\n</mail>")
     for _ in range(2):
+        if context_id is not None and not await chat_context.is_live(context_id):
+            raise InsightContextRevoked
         try:
             client = mistral_client()
             response = await client.chat.complete_async(
@@ -120,17 +126,17 @@ def _stored(insight: MailInsight | None) -> MailInsight:
     return insight
 
 
-async def get_or_compute(message_id: str, *, locale: Locale = DEFAULT_LOCALE) -> MailInsight:
+async def get_or_compute(message_id: str, *, locale: Locale = DEFAULT_LOCALE, context_id: str | None = None) -> MailInsight:
     existing = await mail_insight.get(message_id)
     if existing is not None:
         return existing
     message = await _message(message_id)
     locale = await resolve_locale(locale)
     try:
-        return await compute_insight(message, today=datetime.now(BERLIN).date(), locale=locale)
+        return await compute_insight(message, today=datetime.now(BERLIN).date(), locale=locale, context_id=context_id)
     except InsightOutdated:
         # The text was re-read while the model worked: summarize the new one (a second change is reported).
-        return await compute_insight(await _message(message_id), today=datetime.now(BERLIN).date(), locale=locale)
+        return await compute_insight(await _message(message_id), today=datetime.now(BERLIN).date(), locale=locale, context_id=context_id)
 
 
 async def _message(message_id: str) -> MailMessage:

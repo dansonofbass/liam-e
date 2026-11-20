@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ChatMessageOut, ChatStreamRequest, ConversationOut, MailRefOut, StatusEvent, CalendarRefOut, SourceOut } from '../api/generated/types.gen'
 import { ChatStreamError, streamChatTurn, type ChatRefusal } from './transport'
@@ -138,9 +138,10 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
 export function useConversationScope(id?: string, mail?: ComposerMail) {
   const session = useChatSession()
   const conversations = useQuery({ ...conversationsQuery(), enabled: !!id })
+  const focus = useSearch({ strict: false }).chatAccount
   const saved = conversations.data?.find(item => item.id === id)
   const live = id && session.state.conversationId === id ? session.state.request : undefined
-  const scope = id ? (live ? live.account_id ?? null : savedSelection(saved)) : mail?.account_id ?? null
+  const scope = id ? (live ? live.account_id ?? null : savedSelection(saved)) : mail?.account_id ?? (typeof focus === 'string' ? focus : null)
   return { saved, scope: scope ?? null, ready: scope !== undefined }
 }
 
@@ -169,6 +170,7 @@ export function useRestartConversation(id?: string) {
       attempt.current.pending = false
       const now = latest.current
       const text = now.id ? now.session.composerTexts[now.id] : undefined
+      let focus: string | undefined
       if (now.id) {
         const activeIds = sources && new Set(sources.filter(source => source.is_active).map(source => source.id))
         const ids = now.session.calendarScopes[now.id] ?? (now.session.state.conversationId === now.id ? now.session.state.request?.calendar_source_ids : undefined) ?? savedCalendarScope(client.getQueryData(historyQuery(now.id).queryKey))
@@ -176,11 +178,14 @@ export function useRestartConversation(id?: string) {
         const liveTask = now.session.state.conversationId === now.id ? now.session.state.request : undefined
         const task = now.session.taskScopes[now.id] ?? (liveTask ? { source: liveTask.task_source ?? 'none', account_id: liveTask.task_source_account_id ?? undefined } : savedTaskScope(client.getQueryData(historyQuery(now.id).queryKey)))
         const allowed = client.getQueryData(summaryQuery(true).queryKey)?.accounts
-        const valid = task.source !== 'account_and_unlinked' && (!task.account_id || allowed?.some(account => account.id === task.account_id))
+        const previous = liveTask?.account_id ?? savedSelection(client.getQueryData(conversationsQuery().queryKey)?.find(item => item.id === now.id))
+        focus = previous && allowed?.some(account => account.id === previous) ? previous : undefined
+        const valid = (!task.account_id || allowed?.some(account => account.id === task.account_id)) &&
+          (task.source !== 'account_and_unlinked' || Boolean(focus && focus === task.account_id))
         now.session.setTaskScope('new', valid ? task : { source: 'none' })
       }
       if (text) now.session.setComposerText('new', text)
-      void navigate({ to: '/' })
+      void navigate({ to: '/', search: { chatAccount: focus } })
     }
     void transfer()
   }

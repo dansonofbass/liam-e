@@ -77,5 +77,5 @@ def test_chat_summary_uses_only_granted_active_accounts(client, fake_store, monk
         summary = response.json()
         assert summary['mail_scope_version'] == 3 and summary['unread_total'] == count
         assert [item['id'] for item in summary['accounts']] == ids
-        senders.assert_awaited_with(account_ids=ids)
+        senders.assert_awaited_with(account_ids=ids, chat_only=True)
     assert client.get('/api/v1/mail/summary').json()['unread_total'] == 15

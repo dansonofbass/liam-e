@@ -35,7 +35,7 @@ function setup(path = '/', historyGone = false, selection: string | null = null)
   spyOn(sdk, 'chatConversationsList').mockImplementation((async () => ({ data: [{ id: 'c', title: 'Test', model: 'm1', version: 5, prompt_revision_id: null, account_scope_json: JSON.stringify({ account_ids: selection ? [selection] : ['a'], selection }), created_at: '', updated_at: '' }] })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider> })
-  const start = createRoute({ getParentRoute: () => root, path: '/', component: StartRoute.options.component })
+  const start = createRoute({ getParentRoute: () => root, path: '/', validateSearch: StartRoute.options.validateSearch, component: StartRoute.options.component })
   const chat = createRoute({ getParentRoute: () => root, path: '/chat/$conversationId', component: function ChatRoute() { const { conversationId } = chat.useParams(); return <Conversation conversationId={conversationId} /> } })
   const mail = createRoute({ getParentRoute: () => root, path: '/mail/$messageId', component: () => <p>Mail</p> })
   const router = createRouter({ routeTree: root.addChildren([start, chat, mail]), history: createMemoryHistory({ initialEntries: [path] }) })
@@ -387,8 +387,8 @@ test('a restored account choice waits for the account list before calling the ac
   expect(await screen.findByRole('button', { name: 'Aufgaben: Gespeichertes Konto nicht verfügbar' })).toBeTruthy()
 })
 
-test('task selection conflict restarts visibly without the old conversation', async () => {
-  const { router } = setup('/chat/c')
+test.each([null, 'a'])('a restarted chat preserves the permitted mail and task focus %s', async selection => {
+  const { router } = setup('/chat/c', false, selection)
   await taskChoice('Keine Aufgaben', 'Alle Aufgaben')
   globalThis.fetch = ((_url: unknown, init: RequestInit) => {
     requestBody = JSON.parse(String(init.body))
@@ -396,13 +396,15 @@ test('task selection conflict restarts visibly without the old conversation', as
   }) as typeof fetch
   await send()
   const notice = (await screen.findByText(/Für andere Konten, Kalender oder Aufgaben/)).closest('[role="alert"]') as HTMLElement
-  expect(requestBody.task_source).toBe('all')
+  expect(requestBody.task_source).toBe(selection ? 'account_and_unlinked' : 'all')
   fireEvent.click(within(notice).getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   expect(await screen.findByRole('button', { name: 'Alle Aufgaben' })).toBeTruthy()
   await send()
   await waitFor(() => expect(requestBody.conversation_id).toBeUndefined())
-  expect(requestBody.task_source).toBe('all')
+  expect(requestBody.task_source).toBe(selection ? 'account_and_unlinked' : 'all')
+  expect(requestBody.account_id).toBe(selection)
+  if (selection) expect(requestBody.task_source_account_id).toBe(selection)
   expect(requestBody.text).toBe('Meine Frage')
   expect(requestBody.history).toBeUndefined()
 })
@@ -605,20 +607,32 @@ test('a model conflict reloads the conversation and only an explicit retry uses 
   expect(await screen.findByRole('button', { name: /Modell Zwei/ })).toBeTruthy()
 })
 
+test('older mail references keep their stored answer without opening a live preview', async () => {
+  const { client } = setup('/chat/c')
+  const scoped = spyOn(sdk, 'chatMailReferenceGet')
+  const inbox = spyOn(sdk, 'mailMessageGet')
+  await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([]))
+  const row = historyRow('previous', 'assistant', { mails: ['old-mail'] })
+  act(() => { client.setQueryData(['history', 'c'], [{ ...row, context: { ...currentContext, mail_scope_version: 3 } }]) })
+  expect(await screen.findByText('Antwort previous')).toBeTruthy()
+  expect(scoped).not.toHaveBeenCalled()
+  expect(inbox).not.toHaveBeenCalled()
+})
+
 test('a missing history mail reference is requested only once', async () => {
-  const get = spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ response: new Response(null, { status: 404 }) })) as never)
+  const get = spyOn(sdk, 'chatMailReferenceGet').mockImplementation((async () => ({ response: new Response(null, { status: 404 }) })) as never)
   const { client } = setup('/chat/c')
   await waitFor(() => expect(client.getQueryData(['history', 'c'])).toEqual([]))
   const row: ChatMessageOut = { id: 'm', conversation_id: 'c', role: 'assistant', content: 'Antwort', created_at: '', extras: { mails: ['missing'] }, proposal: null, proposal_status: '', stopped: false, context: currentContext, tool_name: '' }
   act(() => { client.setQueryData(['history', 'c'], [row]) })
-  await waitFor(() => expect(client.getQueryState(['message', 'missing'])?.status).toBe('error'))
-  expect(client.getQueryState(['message', 'missing'])?.fetchFailureCount).toBe(1)
+  await waitFor(() => expect(client.getQueryState(['chat-mail-reference', 'missing', 4, currentContext.id])?.status).toBe('error'))
+  expect(client.getQueryState(['chat-mail-reference', 'missing', 4, currentContext.id])?.fetchFailureCount).toBe(1)
   expect(get).toHaveBeenCalledTimes(1)
 })
 
 test('history renders safe text, model, mail account and only the latest suggestions', async () => {
   const { client, router } = setup('/chat/c')
-  spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail', account_id: 'a', color_index: 0, sender_name: 'Absender', subject: '<b>Betreff</b>', internal_date: null, deadline: null, is_flagged: true } })) as never)
+  spyOn(sdk, 'chatMailReferenceGet').mockImplementation((async () => ({ data: { id: 'mail', account_id: 'a', color_index: 0, sender_name: 'Absender', subject: '<b>Betreff</b>', internal_date: null, deadline: null, is_flagged: true } })) as never)
   const row =(id: string, content: string, extras: ChatMessageOut['extras']): ChatMessageOut => ({ id, conversation_id: 'c', role: 'assistant', content, created_at: '', extras, proposal: null, proposal_status: '', stopped: false, context: currentContext, tool_name: '' })
   await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
   await waitFor(() => expect(screen.queryByText('Unterhaltung wird geladen …')).toBeNull())

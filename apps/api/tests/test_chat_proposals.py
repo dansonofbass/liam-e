@@ -141,7 +141,7 @@ async def test_confirm_sends_connector_without_credentials(store, monkeypatch):
     row = await proposals.create_proposal("chat", draft(store))
     await proposals.confirm(row.id, selected_ids=[])
     assert row.proposal_status == "done"
-    call.assert_awaited_once_with("gmail", "send_email", {"to": ["toni@example.org"], "subject": "Hallo", "body": "Text"})
+    call.assert_awaited_once_with(store, "send_email", {"to": ["toni@example.org"], "subject": "Hallo", "body": "Text"})
 
 
 @pytest.mark.parametrize("error,code", [(transport.MailHostNotAllowedError("private"), "host_not_allowed"), (RuntimeError("secret-ish provider text"), "send_failed")])
@@ -225,7 +225,7 @@ async def test_unsubscribe_binds_latest_sender_target(store, monkeypatch, old, n
     from db.accessors.mail_message import NewsletterRow
 
     latest = [old]
-    async def rows(*, account_ids=None):
+    async def rows(*, account_ids=None, chat_only=False):
         return [NewsletterRow(store.id, "news@example.org", "News", len(latest), 0, None, f"<{latest[-1]}>", "", "[]")]
 
     monkeypatch.setattr(proposals.newsletters.mail_message, "newsletter_senders", rows)

@@ -352,7 +352,7 @@ export const en = {
     proposal_not_found: 'The proposal is gone. Reload the conversation.',
     chat_account_not_granted: 'Chat does not have access to this mail account. Check the account permissions in settings.',
     chat_settings_changed: 'Mail account permissions have changed. Check your selection before sending again.',
-    chat_settings_invalid: 'An account is no longer connected. Reload your selection.',
+    chat_settings_invalid: 'Check the account connection and sync Studio mailboxes before granting access.',
     settings_unavailable: 'Settings aren’t available right now. Try again in a moment.',
     task_creation_conflict: 'This creation request belongs to another task.',
     task_cursor_invalid: 'The tasks couldn’t be loaded. Open the list again.',

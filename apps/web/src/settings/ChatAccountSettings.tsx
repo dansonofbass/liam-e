@@ -16,7 +16,7 @@ export function ChatAccountSettings() {
   const settings = useQuery(chatSettingsQuery())
   const accounts = useQuery(accountsQuery())
   const [edit, setEdit] = useState<ChatSettingsOut>()
-  const [status, setStatus] = useState<'saving' | 'saved' | 'conflict' | 'error'>()
+  const [status, setStatus] = useState<'saving' | 'saved' | 'conflict' | 'invalid' | 'error'>()
   const saving = useRef(false)
   const choices = accounts.data?.filter(account => account.is_active) ?? []
   const shown = edit ?? settings.data
@@ -44,7 +44,8 @@ export function ChatAccountSettings() {
       const result = await chatSettingsUpdate({ body: { expected_version: edit.version, account_ids: edit.account_ids } })
       if (!result.data) {
         const code = errorCode(result.error)
-        setStatus(code === 'version_conflict' || code === 'chat_settings_invalid' ? 'conflict' : 'error')
+        if (code === 'chat_settings_invalid') setStatus('invalid')
+        else setStatus(code === 'version_conflict' ? 'conflict' : 'error')
         return
       }
       await client.cancelQueries({ queryKey: chatSettingsQuery().queryKey })
@@ -78,6 +79,7 @@ export function ChatAccountSettings() {
           </label>)}
         </fieldset> : <Link to="/accounts">{texts.accounts.connect}</Link>}
         {status === 'saved' && <Notice tone="success">{texts.settingsUi.saved}</Notice>}
+        {status === 'invalid' && <Notice tone="danger" action={{ label: texts.settingsUi.reload, onClick: () => { void reload() } }}>{texts.errors.chat_settings_invalid}</Notice>}
         {status === 'error' && <Notice tone="danger">{texts.settingsUi.saveError}</Notice>}
         {status === 'conflict' && <Notice tone="danger" action={{ label: texts.settingsUi.reload, onClick: () => { void reload() } }}>{texts.chatAccounts.conflict}</Notice>}
         <div className="le-swipe-actions"><Button type="submit" variant="primary" disabled={!edit || status === 'saving' || status === 'conflict'}>{texts.settingsUi.save}</Button></div>

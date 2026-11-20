@@ -342,7 +342,7 @@ export const de = {
     proposal_not_found: 'Der Vorschlag ist nicht mehr da. Lade die Unterhaltung neu.',
     chat_account_not_granted: 'Dieses Mailkonto ist für den Chat nicht freigegeben. Prüfe die Kontofreigaben in den Einstellungen.',
     chat_settings_changed: 'Die Kontofreigaben haben sich geändert. Prüfe die Auswahl, bevor du erneut sendest.',
-    chat_settings_invalid: 'Mindestens ein Konto ist nicht mehr verbunden. Lade die Auswahl neu.',
+    chat_settings_invalid: 'Prüfe die Kontoverbindung und synchronisiere Studio-Postfächer vor der Freigabe.',
     settings_unavailable: 'Die Einstellungen sind gerade nicht erreichbar. Versuch es gleich noch einmal.',
     task_creation_conflict: 'Diese Erstellungskennung gehört zu einer anderen Aufgabe.',
     task_cursor_invalid: 'Die Aufgaben konnten nicht geladen werden. Öffne die Liste noch einmal.',

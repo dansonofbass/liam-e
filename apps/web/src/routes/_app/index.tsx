@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { calendarSourcesQuery, messageQuery, modelsQuery, summaryQuery } from '../../api/queries'
+import { calendarSourcesQuery, chatMailReferenceQuery, MessageNotFoundError, modelsQuery, summaryQuery } from '../../api/queries'
 import { CalendarReference } from '../../chat/CalendarContext'
 import { ChatComposer } from '../../chat/Conversation'
 import { ModelMenu } from '../../chat/ModelMenu'
@@ -14,7 +14,7 @@ import { useI18n } from '../../i18n/I18n'
 import { formatTime } from '../../i18n/format'
 export const Route = createFileRoute('/_app/')({
   staticData: { landing: true },
-  validateSearch: (search: Record<string, unknown>): { about?: string; calendarAbout?: string } => ({ about: typeof search.about === 'string' ? search.about : undefined, calendarAbout: typeof search.calendarAbout === 'string' ? search.calendarAbout : undefined }),
+  validateSearch: (search: Record<string, unknown>): { about?: string; calendarAbout?: string; chatAccount?: string } => ({ chatAccount: typeof search.chatAccount === 'string' ? search.chatAccount : undefined, about: typeof search.about === 'string' ? search.about : undefined, calendarAbout: typeof search.calendarAbout === 'string' ? search.calendarAbout : undefined }),
   beforeLoad: ({ context }) => {
     const to = context.landingPath()
     if (to !== undefined && to !== '' && to !== '/') {
@@ -34,7 +34,7 @@ function Greeting() {
   const about = typeof search.about === 'string' ? search.about : undefined
   const summary = useQuery(summaryQuery(true))
   const calendars = useQuery(calendarSourcesQuery())
-  const reference = useQuery({ ...messageQuery(about ?? ''), enabled: Boolean(about) })
+  const reference = useQuery(chatMailReferenceQuery(about ?? '', summary.data?.mail_scope_version))
   const [started, setStarted] = useState(false)
   // The model chosen in the chip rides along with the first message and becomes the model of the new conversation.
   const [model, setModel] = useState<string>()
@@ -43,7 +43,7 @@ function Greeting() {
   const quickSend = (text: string) => {
     if (busy || audioDraftLocked) return
     setStarted(true)
-    void send({ text, context_message_id: about, context_occurrence_id: calendarAbout, model, prompt_revision_id: revision })
+    void send({ text, account_id: about ? mail?.account_id : search.chatAccount, context_message_id: about, context_occurrence_id: calendarAbout, model, prompt_revision_id: revision })
   }
   const modelGone = started && state.phase === 'error' && !state.conversationId && state.errorCode === 'model_unknown'
   useEffect(() => {
@@ -83,7 +83,8 @@ function Greeting() {
       {calendarAbout && <div className="le-chat-reference"><CalendarReference occurrenceId={calendarAbout} /><IconButton icon="x" label={texts.calendar.removeReference} onClick={() => { void navigate({ to: '/', search: { about } }) }} /></div>}
       {about && <div className="le-chat-reference">
         {reference.isPending && <span className="le-hint">{texts.chat.loadingReference}</span>}
-        {reference.isError && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void reference.refetch() } }}>{texts.chat.referenceError}</Notice>}
+        {reference.error instanceof MessageNotFoundError && <Notice tone="info">{texts.errors.chat_account_not_granted}</Notice>}
+        {reference.isError && !(reference.error instanceof MessageNotFoundError) && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void reference.refetch() } }}>{texts.chat.referenceError}</Notice>}
         {mail && data && !account && <Notice tone="info">{texts.errors.chat_account_not_granted}</Notice>}
         {mail && account && <MailReference compact mail={mail} accountLabel={account && providerLabel(account)} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} />}
         <IconButton icon="x" label={texts.chat.removeReference} onClick={() => { void navigate({ to: '/', search: { about: undefined } }) }} />

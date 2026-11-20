@@ -154,6 +154,7 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Chat | POST | `/api/v1/chat/stream` | `chat_stream` |
 | Chat | GET | `/api/v1/chat/conversations` | `chat_conversations_list` |
 | Chat | PATCH | `/api/v1/chat/conversations/{conversation_id}` | `chat_conversation_update` |
+| Chat | GET | `/api/v1/chat/references/{message_id}` | `chat_mail_reference_get` |
 | Chat | GET | `/api/v1/chat/history` | `chat_history` |
 | Chat | GET | `/api/v1/chat/models` | `chat_models_list` |
 | Chat | POST | `/api/v1/chat/proposals/{proposal_id}/confirm` | `chat_proposal_confirm` |
@@ -632,6 +633,17 @@ before each model call and tool and every ten deltas during streaming; a revoked
 and reports `context_revoked`. For a history, associated contexts are loaded in one database query.
 Inbox undo requests are aborted after 15 seconds; if the result is unclear, the action remains
 available for another attempt for ten more seconds. A conversation with messages can continue only with its original grant revision, effective accounts and focus.
+
+Studio mail connector operations pin the named OAuth credential with `credentials_name`. The
+first identity-checked sync rebuilds the previously unverified inbox. Pre-migration connector
+messages, including archived rows, stay outside chat reads until a verified sync rewrites them. It requires a provider
+Sent message from the registered mailbox and retains its opaque thread and message IDs as an
+anchor inside the connector cursor. Sync and body rereads check it before and after fetching.
+Sending and label writes check it immediately before dispatch on the pinned credential.
+A missing or mismatched proof withdraws chat access. The owner can reselect the account after a
+successful verified sync. A replacement mailbox registers separately and starts without a grant.
+After an anchor is lost, the next sync must establish a fresh verified binding and rebuild the index before selection. A provider reauthorization under the same credential name
+between the last check and dispatch remains outside the connector's transaction guarantees.
 
 ## Chat mail access (#80)
 

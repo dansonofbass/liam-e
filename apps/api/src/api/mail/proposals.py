@@ -211,7 +211,7 @@ async def _apply(item: ProposalItem, kind: ProposalKind, result: ProposalResult)
 
     try:
         if kind == "unsubscribe":
-            sender = await newsletters.sender_by_id(item.id)
+            sender = await newsletters.sender_by_id(item.id, chat_only=True)
             account = await account_access.get_account(sender.account_id) if sender else None
             if sender is None or account is None:
                 fail("item_gone")

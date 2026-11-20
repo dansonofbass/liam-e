@@ -38,6 +38,6 @@ async def update_chat_settings(body: ChatSettingsUpdate) -> ChatSettingsOut:
     except StaleVersion:
         raise refuse(409, "version_conflict", "Die Freigaben wurden inzwischen geändert. Lade sie erneut.") from None
     except chat_settings.AccountNotGranted:
-        raise refuse(422, "chat_settings_invalid", "Mindestens ein Konto ist nicht mehr verbunden.") from None
+        raise refuse(422, "chat_settings_invalid", "Mindestens ein Konto ist nicht verbunden oder sein Studio-Postfach wurde noch nicht durch eine Synchronisierung bestätigt.") from None
     except SQLAlchemyError:
         raise refuse(503, "settings_unavailable", "Die Einstellungen sind gerade nicht erreichbar.") from None

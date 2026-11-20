@@ -11,7 +11,7 @@ from db.accessors import mail_sync_state as sync_state_access
 from env.mail import env as mail_env
 from utils.mistral import MistralNotConfiguredError
 
-from api.mail import connectors, netguard, providers, secrets, service, sync_connector, sync_gmail, sync_graph, sync_imap, transport
+from api.mail import connector_mailbox, connectors, netguard, providers, secrets, service, sync_connector, sync_gmail, sync_graph, sync_imap, transport
 from api.mail.seed_ids import is_seed_account
 from api.mail.sync_types import BODY_VERSION, SyncResult
 
@@ -34,7 +34,7 @@ def _error_code(error: Exception) -> str:
         return "mistral_not_configured"
     if isinstance(error, secrets.WorkspaceSecretAccessDeniedError):
         return "secret_access_denied"
-    if isinstance(error, service.CredentialError):
+    if isinstance(error, (service.CredentialError, connector_mailbox.MailboxUnavailable)):
         return "auth_expired"
     if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (401, 403):
         return "auth_expired"
@@ -65,11 +65,15 @@ async def sync_account(account_id: str) -> SyncResult:
             provider = sync_graph
         else:
             raise ValueError("Unknown provider")
-        changes = await provider.fetch_changes(
-            account, cursor=cursor,
-            folders=[f.strip().upper() for f in mail_env.mail_sync_folders.split(",") if f.strip()],
-            limit=mail_env.mail_sync_page_size, max_body_chars=mail_env.mail_sync_max_body_chars,
-        )
+        options = dict(folders=[f.strip().upper() for f in mail_env.mail_sync_folders.split(",") if f.strip()],
+                       limit=mail_env.mail_sync_page_size, max_body_chars=mail_env.mail_sync_max_body_chars)
+        if account.auth_type == connectors.CONNECTOR:
+            verified_cursor = cursor if previous and previous.connector_verified else ""
+            async with connector_mailbox.bound_mailbox(account, cursor=verified_cursor, bootstrap=True, check_after=True) as (binding, progress):
+                changes = await provider.fetch_changes(account, cursor=progress, **options)
+            changes.cursor = connector_mailbox.encode(binding, changes.cursor)
+        else:
+            changes = await provider.fetch_changes(account, cursor=cursor, **options)
         known = await message_access.known_uids(account_id, "INBOX")
         # Rows this run rewrites that still hold text from an older extraction.
         previous = {} if changes.full_rebuild else await message_access.stale_body_texts(account_id, "INBOX", BODY_VERSION, [parsed["provider_uid"] for parsed in changes.upserts])
@@ -96,9 +100,13 @@ async def sync_account(account_id: str) -> SyncResult:
             if uid in moved:
                 updates["folder"] = "ARCHIVE"
             await message_access.set_state(known[uid], **updates)
-        await sync_state_access.save_state(account_id=account_id, cursor=changes.cursor, status="ok", last_error="")
+        await sync_state_access.save_state(account_id=account_id, cursor=changes.cursor, status="ok", last_error="",
+                                          connector_verified=True if account.auth_type == connectors.CONNECTOR else None)
         try:
             await refresh_bodies(account, provider)
+        except connector_mailbox.MailboxUnavailable:
+            cursor = changes.cursor
+            raise
         except Exception as error:  # noqa: BLE001 — the sync itself succeeded; the next run retries
             logger.warning("Body refresh failed: %s", type(error).__name__)
         return SyncResult("ok", len(changes.upserts), changes.cursor, "", new_ids)
@@ -122,7 +130,11 @@ async def refresh_bodies(account, provider) -> list[str]:
     stale = await message_access.stale_bodies(account.id, "INBOX", BODY_VERSION, limit=BODY_REFRESH_BATCH, exclude=waiting)
     if not stale:
         return []
-    found = await provider.fetch_bodies(account, stale, max_body_chars=mail_env.mail_sync_max_body_chars)
+    if account.auth_type == connectors.CONNECTOR:
+        async with connector_mailbox.bound_mailbox(account, check_after=True):
+            found = await provider.fetch_bodies(account, stale, max_body_chars=mail_env.mail_sync_max_body_chars)
+    else:
+        found = await provider.fetch_bodies(account, stale, max_body_chars=mail_env.mail_sync_max_body_chars)
     dropped = []
     for message in stale:
         if message.provider_uid not in found:

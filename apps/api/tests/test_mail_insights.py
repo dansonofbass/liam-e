@@ -309,3 +309,15 @@ def test_insight_endpoint_prioritizes_saved_locale_over_missing_or_stale_hint(cl
     assert response.status_code == 200
     assert "Schreibe auf Deutsch" in setup.requests[0]["messages"][0]["content"]
     ui_locale_in_browser_mode.assert_awaited_once()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('live, requests', [([False], 0), ([True, False], 1)])
+async def test_chat_grant_is_checked_before_each_insight_model_request(setup, monkeypatch, live, requests):
+    permitted = AsyncMock(side_effect=live)
+    monkeypatch.setattr(insights.chat_context, 'is_live', permitted)
+    setup.responses.extend(['invalid JSON', payload()])
+    with pytest.raises(insights.InsightContextRevoked):
+        await insights.compute_insight(message(), today=date(2026, 2, 1), context_id='test-turn')
+    assert len(setup.requests) == requests
+    assert setup.summarized == []

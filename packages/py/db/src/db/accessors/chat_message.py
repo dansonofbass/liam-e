@@ -58,8 +58,11 @@ async def claim_proposal(message_id: str, *, required_accounts: Collection[str] 
             permitted = set(json.loads(context.account_scope_json)['account_ids'])
             targets = set(required_accounts)
             if mail_ids:
-                targets.update((await session.execute(select(MailMessage.account_id).where(
-                    MailMessage.id.in_(mail_ids)).distinct())).scalars())
+                rows = (await session.execute(select(MailMessage.account_id, MailMessage.unverified_connector).where(
+                    MailMessage.id.in_(mail_ids)).distinct())).all()
+                if any(unverified for _, unverified in rows):
+                    raise chat_settings.AccountNotGranted
+                targets.update(account for account, _ in rows)
             if not targets.issubset(permitted):
                 raise chat_settings.AccountNotGranted
         await session.commit()

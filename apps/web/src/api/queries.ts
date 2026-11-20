@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions, type QueryClient } from '@tanstack/react-query'
-import { promptsList, promptGet, mailSummary, chatSettingsGet, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
+import { promptsList, promptGet, mailSummary, chatSettingsGet, chatMailReferenceGet, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
 import { REFERENCE_LOCALE, type Locale } from '../i18n/locales'
 import type { SourceOut, MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData, UiSettingsOut } from './generated/types.gen'
 import { calendarIndexCache, readCalendarIndex, refreshChangedIndexes, sourceScope } from '../calendar/cache'
@@ -23,6 +23,14 @@ export const accountOptionsQuery = () => queryOptions({ queryKey: ['account-opti
 export const connectorsQuery = () => queryOptions({ queryKey: ['connectors'], queryFn: () => unwrap(mailConnectorsList({ throwOnError: true })) })
 export const messagesInfiniteQuery = (filters: Omit<NonNullable<MailMessagesListData['query']>, 'cursor'>) => infiniteQueryOptions({ queryKey: ['messages', filters], initialPageParam: undefined as string | undefined, queryFn: ({ pageParam }) => unwrap(mailMessagesList({ query: { ...filters, cursor: pageParam }, throwOnError: true })), getNextPageParam: page => page.next_cursor ?? undefined })
 export const messageQuery = (id: string) => queryOptions({ queryKey: ['message', id], queryFn: async () => dataOr404(await mailMessageGet({ path: { message_id: id } }), () => new MessageNotFoundError()) })
+export const chatMailReferenceQuery = (id: string, version?: number | null, contextId?: string) => queryOptions({
+  queryKey: ['chat-mail-reference', id, version, contextId ?? null],
+  enabled: Boolean(id) && version != null,
+  retry: (count: number, error: Error) => !(error instanceof MessageNotFoundError) && count < 2,
+  queryFn: async ({ signal }) => dataOr404(await chatMailReferenceGet({
+    path: { message_id: id }, query: { expected_version: version!, context_id: contextId }, signal,
+  }), () => new MessageNotFoundError()),
+})
 export const insightQuery = (id: string, locale: Locale = REFERENCE_LOCALE) => queryOptions({ queryKey: ['insight', id], queryFn: () => unwrap(mailMessageInsight({ path: { message_id: id }, query: { locale }, throwOnError: true })) })
 export const historyQuery = (conversationId: string) => queryOptions({ queryKey: ['history', conversationId], queryFn: () => unwrap(chatHistory({ query: { conversation_id: conversationId }, throwOnError: true })) })
 export const modelsQuery = () => queryOptions({ queryKey: ['models'], queryFn: () => unwrap(chatModelsList({ throwOnError: true })), staleTime: 60_000 })

@@ -350,7 +350,8 @@ async def test_imap_spam_unsupported(imap, reason):
 async def test_connector_trash_uses_label_or_reports_unsupported(monkeypatch):
     call = AsyncMock(return_value="{}")
     monkeypatch.setattr(connectors, "call_write_tool", call)
-    result = await backends.backend_for(account("gmail", connectors.CONNECTOR)).apply(message(labels_json='["INBOX"]'), "trash")
-    call.assert_any_await("gmail", "label_message", {"messageId": "12", "labelIds": ["TRASH"]})
-    call.assert_any_await("gmail", "unlabel_message", {"messageId": "12", "labelIds": ["INBOX"]})
+    sender = account("gmail", connectors.CONNECTOR)
+    result = await backends.backend_for(sender).apply(message(labels_json='["INBOX"]'), "trash")
+    call.assert_any_await(sender, "label_message", {"messageId": "12", "labelIds": ["TRASH"]})
+    call.assert_any_await(sender, "unlabel_message", {"messageId": "12", "labelIds": ["INBOX"]})
     assert json.loads(result["labels_json"]) == ["TRASH"]

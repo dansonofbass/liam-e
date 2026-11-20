@@ -10,6 +10,8 @@ from db.engine import get_session_maker
 from db.models.chat_context import ChatContext
 from db.models.chat_settings import ChatSettings
 from db.models.mail_account import MailAccount
+from db.models.mail_message import MailMessage
+from db.models.mail_sync_state import CONNECTOR_CURSOR_PREFIX, MailSyncState
 from db.models.prompt_template import OWNER_SCOPE
 
 
@@ -33,7 +35,11 @@ async def get() -> ChatSettings:
 async def active_ids(session: AsyncSession, account_ids: list[str]) -> list[str]:
     if not account_ids:
         return []
-    query = select(MailAccount.id).where(MailAccount.id.in_(account_ids), MailAccount.is_active.is_(True))
+    # Pre-binding connector indexes may contain mail fetched from a different default mailbox.
+    verified_index = select(MailSyncState.id).where(MailSyncState.account_id == MailAccount.id,
+        MailSyncState.connector_verified.is_(True), MailSyncState.cursor.startswith(CONNECTOR_CURSOR_PREFIX)).exists()
+    query = select(MailAccount.id).where(MailAccount.id.in_(account_ids), MailAccount.is_active.is_(True),
+        (MailAccount.auth_type != 'mistral_connector') | verified_index)
     return sorted((await session.execute(query)).scalars())
 
 
@@ -81,3 +87,33 @@ async def permits_context(session: AsyncSession, context: ChatContext | None) ->
     if focus is not None:
         return focus in ids and scope.get("account_ids") == [focus]
     return scope.get("account_ids") == ids
+
+
+async def mail_reference(message_id: str, version: int, context_id: str | None) -> MailMessage | None:
+    """Retrieve a live preview only within the current grant and optional stored turn focus."""
+    async with get_session_maker()() as session:
+        await user_preference.lock(session)
+        settings = await in_session(session)
+        if settings.version != version:
+            return None
+        ids = await active_ids(session, settings.account_ids)
+        if context_id is not None:
+            context = await session.get(ChatContext, context_id)
+            if context is None or context.revoked or not await permits_context(session, context):
+                return None
+            ids = json.loads(context.account_scope_json)['account_ids']
+        return (await session.execute(select(MailMessage).where(
+            MailMessage.id == message_id, MailMessage.account_id.in_(ids), MailMessage.unverified_connector.is_(False)
+        ))).scalar_one_or_none()
+
+
+async def invalidate_connector(account_id: str) -> None:
+    """A lost mailbox proof withdraws the grant and blocks reselection until a verified sync."""
+    async with get_session_maker()() as session:
+        await user_preference.lock(session)
+        state = (await session.execute(select(MailSyncState).where(
+            MailSyncState.account_id == account_id).with_for_update())).scalar_one_or_none()
+        if state is not None:
+            state.connector_verified = False
+        await remove_account(session, account_id)
+        await session.commit()

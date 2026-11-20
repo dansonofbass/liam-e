@@ -96,8 +96,8 @@ def parse_mailto(link: str | None) -> MailtoTarget | None:
     return MailtoTarget(recipient, _clean_mailto_text(query.get('subject')), _clean_mailto_text(query.get('body')))
 
 
-async def find_newsletters(*, account_ids: list[str] | None = None) -> list[NewsletterSender]:
-    rows = await mail_message.newsletter_senders(account_ids=account_ids)
+async def find_newsletters(*, chat_only: bool = False, account_ids: list[str] | None = None) -> list[NewsletterSender]:
+    rows = await mail_message.newsletter_senders(account_ids=account_ids, chat_only=chat_only)
     connector_ids = {a.id for a in await mail_account.list_accounts() if a.auth_type == connectors.CONNECTOR}
     result = []
     for row in rows:
@@ -115,11 +115,11 @@ async def find_newsletters(*, account_ids: list[str] | None = None) -> list[News
     return result
 
 
-async def sender_by_id(sender_id: str) -> NewsletterSender | None:
+async def sender_by_id(sender_id: str, *, chat_only: bool = False) -> NewsletterSender | None:
     parts = sender_id.split('|', 1)
     if len(parts) != 2 or not all(parts):
         return None
-    return next((s for s in await find_newsletters(account_ids=[parts[0]]) if s.address == parts[1]), None)
+    return next((s for s in await find_newsletters(account_ids=[parts[0]], chat_only=chat_only) if s.address == parts[1]), None)
 
 
 async def unsubscribe(sender: NewsletterSender, account: MailAccount) -> UnsubscribeOutcome:

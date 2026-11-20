@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useCallback, useRef } from 'react'
-import { historyQuery, messageQuery, MessageNotFoundError, modelsQuery, summaryQuery } from '../api/queries'
+import { chatMailReferenceQuery, historyQuery, modelsQuery, summaryQuery } from '../api/queries'
 import { errorCode } from '../api/unwrap'
 import type { AccountSummaryOut, ChatMessageOut, MailRefOut } from '../api/generated/types.gen'
 import { Button, ChatMessage, Chip, Composer, MailReference, Notice } from '../ds'
@@ -62,9 +62,11 @@ function Reference({ mail, accounts, draft }: { mail: MailRefOut; accounts: Acco
   const navigate = useNavigate()
   return <MailReference mail={mail} accountLabel={accounts.filter(account => account.id === mail.account_id).map(providerLabel)[0]} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} onDraft={() => draft.onDraft(mail.id)} draftDisabled={draft.disabled || !accounts.some(account => account.id === mail.account_id)} />
 }
-function HistoryReference({ id, accounts, draft }: { id: string; accounts: Accounts; draft: Draft }) {
-  const { data } = useQuery({ ...messageQuery(id), retry: (count, error) => !(error instanceof MessageNotFoundError) && count < 2 })
-  return data ? <Reference mail={data} accounts={accounts} draft={draft} /> : null
+function HistoryReference({ id, accounts, draft, version, contextId }: { id: string; accounts: Accounts; draft: Draft; version: number; contextId: string }) {
+  const { texts } = useI18n()
+  const { data, isError } = useQuery(chatMailReferenceQuery(id, version, contextId))
+  if (isError) return <p className="le-hint">{texts.chat.referenceError}</p>
+  return data && accounts.some(account => account.id === data.account_id) ? <Reference mail={data} accounts={accounts} draft={draft} /> : null
 }
 // DESIGN.md §9.1: at most three follow-up suggestions, whatever the model sent.
 function Suggestions({ items, onSend }: { items: string[]; onSend: (text: string) => void }) {
@@ -127,7 +129,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     return <>{message.context && <PreferenceContext context={message.context} />}{message.context?.revoked && <Notice tone="info" action={{ label: texts.prompts.restart, onClick: restart }}>{message.context.preferences_enabled ? texts.errors.context_revoked : texts.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>
       {speechEnabled && !message.stopped && !message.context?.revoked && message.content.trim() &&
         <SpeechControls messageId={message.id} player={speech} disabled={audioDraftLocked} />}
-      {message.extras.mails?.map(id => <HistoryReference key={id} id={id} accounts={accounts} draft={draft} />)}{message.extras.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}</>
+      {message.extras.mails?.map(id => !oldGrant && grantVersion != null && message.context && !message.context.revoked ? <HistoryReference key={id} id={id} accounts={accounts} draft={draft} version={grantVersion} contextId={message.context.id} /> : <p className="le-hint" key={id}>{texts.chat.referenceError}</p>)}{message.extras.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}</>
   }
   const status = state.status?.code === 'searching' ? texts.status.searching(state.status.count ?? 0) : state.status ? texts.status[state.status.code] : null
   const historyGone = errorCode(history.error instanceof Error ? history.error.cause : history.error) === 'conversation_not_found'

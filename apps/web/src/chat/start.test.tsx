@@ -21,7 +21,7 @@ function setup(accounts = true, path = '/', unread = 3, lastSync: string | null 
   spyOn(sdk, 'chatSettingsGet').mockResolvedValue({ data: { version: 7, account_ids: accounts ? ['a'] : [] } } as never)
   spyOn(sdk, 'promptsList').mockImplementation((async () => ({ data: [] })) as never)
   spyOn(sdk, 'chatModelsList').mockImplementation((async () => ({ data: models })) as never)
-  spyOn(sdk, 'mailMessageGet').mockImplementation((async () => ({ data: { id: 'mail1', account_id: 'a', color_index: 0, sender_name: 'Anna', subject: 'Termin', internal_date: null, deadline: null } })) as never)
+  spyOn(sdk, 'chatMailReferenceGet').mockImplementation((async () => ({ data: { id: 'mail1', account_id: 'a', color_index: 0, sender_name: 'Anna', subject: 'Termin', internal_date: null, deadline: null } })) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const root = createRootRoute({ component: () => <I18nProvider locale={locale}><QueryClientProvider client={client}><ChatSessionProvider><Outlet /></ChatSessionProvider></QueryClientProvider></I18nProvider> })
   const index = createRoute({ getParentRoute: () => root, path: '/', validateSearch: Route.options.validateSearch, component: Route.options.component })

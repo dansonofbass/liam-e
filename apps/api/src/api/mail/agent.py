@@ -131,7 +131,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         if template_text is not None:
             messages.insert(2 if preference_ids else 1, {'role': 'user', 'content': 'Nutzervorlage für diesen Turn:\n' + template_text})
         context_mail = await mail_message.get_message(context_message_id) if context_message_id else None
-        if context_mail and context_mail.account_id in scope_ids:
+        if context_mail and context_mail.account_id in scope_ids and not context_mail.unverified_connector:
             messages.insert(1, {'role':'system', 'content':f'Die Bitte bezieht sich auf die Mail mit der ID {context_message_id}. Lies sie mit get_message, bevor du antwortest.'})
         if context_occurrence_id:
             occurrence = await calendar_occurrence.get_visible(context_occurrence_id)
@@ -220,7 +220,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                     refs = []
                     for id in mails:
                         m = await mail_message.get_message(id)
-                        if m and m.account_id in scope_ids:
+                        if m and m.account_id in scope_ids and not m.unverified_connector:
                             insight = insight_map.get(id)
                             refs.append(MailRefOut(id=m.id, account_id=m.account_id, color_index=colors.get(m.account_id, 0), subject=m.subject, sender_name=headers.sender_name(m.sender), snippet=m.snippet, internal_date=m.internal_date, deadline=insight.deadline if insight else None, is_flagged=m.is_flagged))
                     if refs: yield MailsEvent(mails=refs)

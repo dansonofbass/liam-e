@@ -84,7 +84,7 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             raise chat_settings.AccountNotGranted
         if context_message_id is not None:
             source_account = (await session.execute(select(MailMessage.account_id).where(
-                MailMessage.id == context_message_id, MailMessage.account_id.in_(accounts)
+                MailMessage.id == context_message_id, MailMessage.account_id.in_(accounts), MailMessage.unverified_connector.is_(False)
             ))).scalar_one_or_none()
             if source_account is None or (account_id is not None and account_id != source_account):
                 raise chat_settings.AccountNotGranted

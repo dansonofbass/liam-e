@@ -124,3 +124,66 @@ def test_confirmation_checks_grant_and_actual_sender_in_claim_transaction(pg_db,
             assert (await proposals.cancel(card.id)).proposal_status == 'cancelled'
         send.assert_not_awaited()
     asyncio.run(run())
+
+
+def test_live_preview_only_exposes_authorized_short_references(pg_db):
+    from api.routers.api.v1.chat import references
+    async def run():
+        first, second = await connect('first'), await connect('second')
+        await chat_settings.update(1, [first.id, second.id])
+        _, focus, _ = await resolve(account_id=first.id)
+        rows = [MailMessage(account_id=a.id, provider_uid='one', subject='Synthetic', snippet='Short', body_text='Full private text') for a in (first, second)]
+        async with get_session_maker()() as session:
+            session.add_all(rows)
+            await session.commit()
+        app = FastAPI()
+        app.include_router(references.router, prefix='/refs')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            async def preview(id, version=2, context=None):
+                params = {'expected_version': version}
+                if context:
+                    params['context_id'] = context
+                return await client.get('/refs/' + id, params=params)
+            allowed = await preview(rows[0].id, context=focus.id)
+            assert allowed.status_code == 200 and allowed.json()['snippet'] == 'Short'
+            assert 'body_text' not in allowed.json() and 'Full private text' not in allowed.text
+            assert (await preview(rows[1].id)).status_code == 200
+            assert (await preview(rows[1].id, context=focus.id)).json() == (await preview('missing')).json()
+            await chat_settings.update(2, [second.id])
+            for id, version, context in [(rows[0].id, 2, None), (rows[0].id, 3, None), (rows[1].id, 3, focus.id)]:
+                assert (await preview(id, version, context)).status_code == 404
+            assert (await preview(rows[1].id, 3)).status_code == 200
+    asyncio.run(run())
+
+
+def test_connector_indexes_need_positive_verification_and_explicit_regrant(pg_db):
+    from db.accessors import mail_sync_state
+    from api.mail import connector_mailbox, connectors
+    async def run():
+        a = await service.upsert_account(provider='gmail', auth_type=connectors.CONNECTOR, email_address='a@example.test')
+        async def save(cursor, checked):
+            await mail_sync_state.save_state(account_id=a.id, cursor=cursor, connector_verified=checked)
+        await save('234', False)
+        with pytest.raises(chat_settings.AccountNotGranted):
+            await chat_settings.update(1, [a.id])
+        legacy = MailMessage(account_id=a.id, provider_uid='legacy', folder='ARCHIVE', unverified_connector=True)
+        async with get_session_maker()() as session:
+            session.add(legacy)
+            await session.commit()
+        cursor = connector_mailbox.encode(('named', 'thread', 'message'), '244')
+        await save(cursor, True)
+        await chat_settings.update(1, [a.id])
+        _, original, _ = await resolve(account_id=a.id)
+        assert await chat_context.is_live(original.id)
+        with pytest.raises(chat_settings.AccountNotGranted):
+            await resolve(context_message_id=legacy.id)
+        assert await chat_settings.mail_reference(legacy.id, 2, original.id) is None
+        await chat_settings.invalidate_connector(a.id)
+        assert not await chat_context.is_live(original.id)
+        with pytest.raises(chat_settings.AccountNotGranted):
+            await chat_settings.update(3, [a.id])
+        await save(cursor, True)
+        assert (await chat_settings.get()).account_ids == []
+        assert (await chat_settings.update(3, [a.id])).version == 4
+        assert not await chat_context.is_live(original.id)
+    asyncio.run(run())

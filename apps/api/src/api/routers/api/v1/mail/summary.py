@@ -52,8 +52,8 @@ async def mail_summary(chat_scope: bool = False) -> MailSummaryOut:
         version = grants.version
         accounts = [a for a in accounts if a.is_active and a.id in grants.account_ids]
         ids = [a.id for a in accounts]
-    unread = await mail_message.count_unread(folder="INBOX", account_ids=ids)
+    unread = await mail_message.count_unread(folder="INBOX", account_ids=ids, chat_only=chat_scope)
     summaries = [await account_summary(a, colors, unread) for a in accounts]
     dates = [a.last_sync_at for a in summaries if a.last_sync_at is not None]
-    senders = await newsletters.find_newsletters(account_ids=ids)
+    senders = await newsletters.find_newsletters(account_ids=ids, chat_only=chat_scope)
     return MailSummaryOut(mail_scope_version=version, unread_total=sum(a.unread for a in summaries), accounts=summaries, last_sync_at=max(dates, default=None), newsletter_senders=len(senders))

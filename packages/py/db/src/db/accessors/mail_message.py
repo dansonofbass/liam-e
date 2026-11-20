@@ -55,6 +55,7 @@ async def upsert_message(
             message = MailMessage(
                 account_id=account_id, folder=folder, provider_uid=provider_uid
             )
+        message.unverified_connector = False
         message.thread_id = thread_id
         message.subject = subject
         message.sender = sender
@@ -164,11 +165,13 @@ class NewsletterRow:
     labels_json: str
 
 
-async def list_page(*, folder: str = "INBOX", account_ids: list[str] | None = None, unread_only: bool = False, important_only: bool = False, with_attachments: bool = False, query: str = "", before: tuple[datetime | None, str] | None = None, limit: int = 50) -> list[MailMessage]:
+async def list_page(*, chat_only: bool = False, folder: str = "INBOX", account_ids: list[str] | None = None, unread_only: bool = False, important_only: bool = False, with_attachments: bool = False, query: str = "", before: tuple[datetime | None, str] | None = None, limit: int = 50) -> list[MailMessage]:
     date_key = func.coalesce(MailMessage.internal_date, datetime(1970, 1, 1, tzinfo=UTC))
     stmt = select(MailMessage).where(MailMessage.folder == folder)
     if account_ids is not None:
         stmt = stmt.where(MailMessage.account_id.in_(account_ids))
+    if chat_only:
+        stmt = stmt.where(MailMessage.unverified_connector.is_(False))
     if unread_only:
         stmt = stmt.where(MailMessage.is_read.is_(False))
     if important_only:
@@ -184,11 +187,13 @@ async def list_page(*, folder: str = "INBOX", account_ids: list[str] | None = No
         return list((await session.execute(stmt)).scalars().all())
 
 
-async def count_unread(*, folder: str = "INBOX", account_ids: list[str] | None = None) -> dict[str, int]:
+async def count_unread(*, chat_only: bool = False, folder: str = "INBOX", account_ids: list[str] | None = None) -> dict[str, int]:
     async with get_session_maker()() as session:
         query = select(MailMessage.account_id, func.count()).where(MailMessage.folder == folder, MailMessage.is_read.is_(False))
         if account_ids is not None:
             query = query.where(MailMessage.account_id.in_(account_ids))
+        if chat_only:
+            query = query.where(MailMessage.unverified_connector.is_(False))
         rows = await session.execute(query.group_by(MailMessage.account_id))
         return dict(rows.all())
 
@@ -221,7 +226,7 @@ async def delete_duplicate(account_id: str, folder: str, provider_uid: str, *, k
         return bool(result.rowcount)
 
 
-async def newsletter_senders(*, account_ids: list[str] | None = None) -> list[NewsletterRow]:
+async def newsletter_senders(*, chat_only: bool = False, account_ids: list[str] | None = None) -> list[NewsletterRow]:
     partition = (MailMessage.account_id, MailMessage.sender_address)
     date_key = func.coalesce(MailMessage.internal_date, datetime(1970, 1, 1, tzinfo=UTC))
     ranked = select(
@@ -234,6 +239,8 @@ async def newsletter_senders(*, account_ids: list[str] | None = None) -> list[Ne
     ).where(MailMessage.folder == "INBOX", MailMessage.sender_address != "")
     if account_ids is not None:
         ranked = ranked.where(MailMessage.account_id.in_(account_ids))
+    if chat_only:
+        ranked = ranked.where(MailMessage.unverified_connector.is_(False))
     ranked = ranked.subquery()
     stmt = select(ranked.c.account_id, ranked.c.sender_address, ranked.c.sender, ranked.c.total, ranked.c.unread, ranked.c.last_read_at, ranked.c.list_unsubscribe, ranked.c.list_unsubscribe_post, ranked.c.labels_json).where(ranked.c.rank == 1).order_by(ranked.c.total.desc(), ranked.c.sender_address, ranked.c.account_id)
     async with get_session_maker()() as session:
@@ -242,7 +249,7 @@ async def newsletter_senders(*, account_ids: list[str] | None = None) -> list[Ne
 
 async def message_ids_from_sender(account_id: str, sender_address: str, *, folder: str = "INBOX") -> list[str]:
     async with get_session_maker()() as session:
-        return list((await session.execute(select(MailMessage.id).where(MailMessage.account_id == account_id, MailMessage.sender_address == sender_address.lower(), MailMessage.folder == folder))).scalars().all())
+        return list((await session.execute(select(MailMessage.id).where(MailMessage.account_id == account_id, MailMessage.sender_address == sender_address.lower(), MailMessage.folder == folder, MailMessage.unverified_connector.is_(False)))).scalars().all())
 
 
 async def unread_without_insight(*, since: datetime, limit: int, exclude_account_ids: Collection[str] = ()) -> list[MailMessage]:
