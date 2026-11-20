@@ -278,13 +278,13 @@ async def test_connector_backlog_and_boundary_progress(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_connector_invalid_cursor_rebuilds(monkeypatch):
+async def test_connector_invalid_cursor_rescans_without_removing_links(monkeypatch):
     async def known(*_): return {}
     async def call(*_): return {"threads": []}
     monkeypatch.setattr(sync_connector.message_access, "known_uids", known)
     monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
     result = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="not-a-cursor", folders=["INBOX"], limit=2, max_body_chars=100)
-    assert result.full_rebuild
+    assert not result.full_rebuild and result.cursor == "0"
 
 
 @pytest.mark.anyio

@@ -3,18 +3,18 @@ import { useState } from 'react'
 import type { Proposal, TaskCreateCommand } from '../api/generated/types.gen'
 import { Button } from '../ds'
 import { useI18n } from '../i18n/I18n'
-import { SourceMail } from '../tasks/SourceMail'
+import { ChatSourceMail } from '../tasks/SourceMail'
 import { SchedulePreview, TaskForm, type TaskFormDraft } from '../tasks/TaskForm'
 import { formatTaskDue } from '../tasks/format'
 import { TaskRule } from '../tasks/TaskRule'
 import './task-proposal.css'
 
-export function TaskProposal({ proposal, busy, confirm, cancel, draft }: { proposal: Proposal; busy: boolean; confirm: (edit?: TaskCreateCommand) => void; cancel: () => void; draft?: TaskFormDraft }) {
+export function TaskProposal({ proposal, busy, confirm, cancel, draft, grantVersion, contextId }: { grantVersion?: number; contextId?: string; proposal: Proposal; busy: boolean; confirm: (edit?: TaskCreateCommand) => void; cancel: () => void; draft?: TaskFormDraft }) {
   const { texts, locale } = useI18n()
   const [previewValid, setPreviewValid] = useState(false)
   const task = proposal.task
   if (!task) return null
-  const source = task.source_message_id ? <SourceMail id={task.source_message_id} /> : <p>{texts.tasks.unlinked}</p>
+  const source = task.source_message_id ? <ChatSourceMail id={task.source_message_id} version={grantVersion} contextId={contextId} /> : <p>{texts.tasks.unlinked}</p>
   if (task.action === 'create') return <section className="le-confirm le-task-proposal">
     <p>{proposal.reason}</p>{source}
     <TaskForm proposal busy={busy} draft={draft} initial={{ ...task, creation_key: 'proposal' }} save={body => confirm({

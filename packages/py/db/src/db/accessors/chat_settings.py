@@ -1,7 +1,7 @@
 """The installed owner's chat grants, serialized with turn creation and proposal claims."""
 import json
 
-from sqlalchemy import select
+from sqlalchemy import select, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.accessors import user_preference
@@ -115,5 +115,6 @@ async def invalidate_connector(account_id: str) -> None:
             MailSyncState.account_id == account_id).with_for_update())).scalar_one_or_none()
         if state is not None:
             state.connector_verified = False
+            await session.execute(sql_update(MailMessage).where(MailMessage.account_id == account_id).values(unverified_connector=True))
         await remove_account(session, account_id)
         await session.commit()

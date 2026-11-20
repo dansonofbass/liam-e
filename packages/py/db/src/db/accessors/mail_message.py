@@ -39,6 +39,7 @@ async def upsert_message(
     is_flagged: bool = False,
     body_version: int = 0,
     drop_insight: bool = False,
+    unverified_connector: bool = False,
 ) -> MailMessage:
     """Insert the message, or refresh it when (account, folder, uid) already exists. `drop_insight`
     removes its insight in the same transaction (the summarized text changed)."""
@@ -55,7 +56,8 @@ async def upsert_message(
             message = MailMessage(
                 account_id=account_id, folder=folder, provider_uid=provider_uid
             )
-        message.unverified_connector = False
+        drop_insight = drop_insight or (message.unverified_connector and not unverified_connector)
+        message.unverified_connector = unverified_connector
         message.thread_id = thread_id
         message.subject = subject
         message.sender = sender
@@ -261,9 +263,12 @@ async def unread_without_insight(*, since: datetime, limit: int, exclude_account
         return list((await session.execute(stmt)).scalars().all())
 
 
-async def known_uids(account_id: str, folder: str) -> dict[str, str]:
+async def known_uids(account_id: str, folder: str, *, verified_only: bool = False) -> dict[str, str]:
+    query = select(MailMessage.provider_uid, MailMessage.id).where(MailMessage.account_id == account_id, MailMessage.folder == folder)
+    if verified_only:
+        query = query.where(MailMessage.unverified_connector.is_(False))
     async with get_session_maker()() as session:
-        return dict((await session.execute(select(MailMessage.provider_uid, MailMessage.id).where(MailMessage.account_id == account_id, MailMessage.folder == folder))).all())
+        return dict((await session.execute(query)).all())
 
 
 async def stale_body_texts(account_id: str, folder: str, version: int, uids: list[str]) -> dict[str, str]:

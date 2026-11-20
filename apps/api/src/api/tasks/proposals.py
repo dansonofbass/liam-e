@@ -108,7 +108,7 @@ async def execute(session: AsyncSession, command: TaskProposal, *, proposal_id: 
     if isinstance(command, TaskCreateCommand):
         if command.source_message_id:
             source = await mail_message.get_message(command.source_message_id, session)
-            if source is None or source.account_id != command.source_account_id:
+            if source is None or source.unverified_connector or source.account_id != command.source_account_id:
                 raise TaskSourceGone
         row, created = await create.create(
             session, creation_key=proposal_id, title=command.title, start=patch.parse_local(command.start),

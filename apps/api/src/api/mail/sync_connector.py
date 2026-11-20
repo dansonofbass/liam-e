@@ -39,22 +39,30 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
     parts = cursor.split(":")
     valid = len(parts) in (1, 3) and all(part.isdigit() for part in parts)
     newest = int(parts[0]) if valid else 0
+    page_token = ""
+    if cursor.startswith("initial:"):
+        newest, page_token = json.loads(cursor.removeprefix("initial:"))
     gap = (int(parts[1]), int(parts[2])) if valid and len(parts) == 3 else None
-    changes = SyncChanges(full_rebuild=not valid)
-    known = await message_access.known_uids(account.id, "INBOX")
+    # Provider UIDs keep their local IDs, including legacy rows referenced by tasks and history.
+    changes = SyncChanges()
+    if connectors.mailbox_credential.get() is not None:
+        known = await message_access.known_uids(account.id, "INBOX", verified_only=True)
+    else:
+        known = await message_access.known_uids(account.id, "INBOX")
     seen = set(known) if valid else set()
 
     async def scan(query: str, lower: int | None, upper: int | None) -> tuple[bool, int | None, int | None]:
-        token = ""
+        nonlocal page_token
+        token = page_token if not valid else ""
         frontier = latest = None
         for _ in range(10):
-            args: dict[str, Any] = {"query": query, "pageSize": 50}
+            args: dict[str, Any] = {"query": query, "pageSize": 50 if valid else min(50, limit)}
             if token:
                 args["pageToken"] = token
             page = await connectors.call_read_tool_json(account.provider, "search_threads", args)
             threads = page.get("threads", [])
             for thread in threads:
-                if len(changes.upserts) >= limit and frontier is not None:
+                if valid and len(changes.upserts) >= limit and frontier is not None:
                     return False, frontier, latest
                 full = await connectors.call_read_tool_json(account.provider, "get_thread", {"threadId": thread.get("id", ""), "messageFormat": "FULL_CONTENT"})
                 thread_id = full.get("id") or thread.get("id", "")
@@ -76,14 +84,22 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
                 if thread_latest is not None:
                     frontier = min(thread_latest, upper) if upper is not None else thread_latest
             token = page.get("nextPageToken") or ""
+            if not valid:
+                page_token = token
             if not token:
                 return True, frontier, latest
+            if not valid and len(changes.upserts) >= limit:
+                return False, frontier, latest
         return False, frontier, latest
 
     old_newest = newest
     done, frontier, latest = await scan(f"in:inbox after:{newest - 1}" if valid else "in:inbox", newest - 1 if valid else None, None)
     if latest is not None:
         newest = max(newest, latest)
+    if not valid and not done:
+        # Finish the current page before saving its opaque successor. Equal timestamps do not skip rows.
+        changes.cursor = "initial:" + json.dumps([newest, page_token])
+        return changes
     if valid and not done and frontier is not None:
         gap = (gap[0] if gap else old_newest, frontier)
     if gap and gap[1] < gap[0]:

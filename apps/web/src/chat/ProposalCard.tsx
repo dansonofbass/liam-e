@@ -116,7 +116,7 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
   })}{error && <Notice tone="danger">{texts.proposal.requestError}</Notice>}</>
 }
 
-export function ProposalCard({ message, clock = systemClock, oldGrant = false }: { message: ChatMessageOut; clock?: Clock; oldGrant?: boolean }) {
+export function ProposalCard({ message, clock = systemClock, oldGrant = false, grantVersion }: { message: ChatMessageOut; clock?: Clock; oldGrant?: boolean; grantVersion?: number | null }) {
   const { texts } = useI18n()
   const client = useQueryClient()
   const [updated, setUpdated] = useState<ChatMessageOut | null>(null)
@@ -195,7 +195,8 @@ export function ProposalCard({ message, clock = systemClock, oldGrant = false }:
   if (current.proposal_status === 'failed') return settled(<Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code, proposal.kind, texts)}</Notice>)
   if (current.proposal_status === 'done' || current.proposal_status === 'partial') return settled(<Result key={current.id} message={current} proposal={proposal} clock={clock} onUndone={() => outcome.current?.focus()} />)
   if (current.proposal_status !== 'pending') return null
-  if (proposal.kind === 'task') return <><TaskProposal key={current.id} proposal={proposal} busy={busy} draft={cardState(client, current.id).task ??= {}}
+  if (proposal.kind === 'task') return <><TaskProposal key={current.id} grantVersion={grantVersion ?? undefined}
+    contextId={!oldGrant && grantVersion != null && current.context?.mail_scope_version === grantVersion && !current.context.revoked ? current.context.id : undefined} proposal={proposal} busy={busy} draft={cardState(client, current.id).task ??= {}}
     confirm={task_edit => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids: [], task_edit }, throwOnError: true })), true) }}
     cancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }}
   />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' || error === 'task_scope_invalid' ? { label: texts.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind, texts)}</Notice>}</>

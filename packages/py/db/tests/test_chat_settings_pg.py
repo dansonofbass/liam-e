@@ -187,3 +187,71 @@ def test_connector_indexes_need_positive_verification_and_explicit_regrant(pg_db
         assert (await chat_settings.update(3, [a.id])).version == 4
         assert not await chat_context.is_live(original.id)
     asyncio.run(run())
+
+
+def test_connector_upgrade_verifies_pages_in_place_and_keeps_ordinary_inbox_only_accounts(pg_db, monkeypatch):
+    from db.accessors import mail_message, mail_sync_state
+    from api.mail import connector_mailbox, connectors, sync
+    from api.mail.sync_types import BODY_VERSION
+
+    async def run():
+        a = await service.upsert_account(provider='gmail', auth_type=connectors.CONNECTOR, email_address='a@example.test')
+        placeholder = await service.upsert_account(provider='gmail', auth_type=connectors.CONNECTOR, email_address='gmail@connector.mistral')
+        legacy = [await mail_message.upsert_message(account_id=a.id, folder='INBOX', provider_uid=uid,
+            subject='Previous', unverified_connector=True, body_version=BODY_VERSION) for uid in ('one', 'two', 'absent')]
+        await mail_sync_state.save_state(account_id=a.id, cursor='234')
+        listing = AsyncMock(side_effect=[{'credentials': None}, {'credentials': [{'name': 'identity', 'authentication_type': 'oauth2'}]}])
+        monkeypatch.setattr(connectors, '_get', listing)
+        monkeypatch.setattr(sync.mail_env, 'mail_sync_page_size', 1)
+        pages = []
+        async def provider(name, tool, args):
+            anchor = {'id': 'sent', 'messages': [{'id': 'sent-proof', 'labelIds': ['SENT'], 'sender': a.email_address}]}
+            if args.get('query') == 'in:sent from:me':
+                return {'threads': [anchor]}
+            if args.get('threadId') == 'sent':
+                return anchor
+            if tool == 'search_threads':
+                assert args['query'] == 'in:inbox'
+                pages.append(args.get('pageToken'))
+                if args.get('pageToken'):
+                    return {'threads': [{'id': 'two'}]}
+                return {'threads': [{'id': 'one'}], 'nextPageToken': 'opaque-next'}
+            uid = args['threadId']
+            return {'id': uid, 'messages': [{'id': uid, 'labelIds': ['INBOX'], 'date': '2026-01-01T10:00:00+00:00', 'subject': 'Checked'}]}
+        monkeypatch.setattr(connectors, 'call_read_tool_json', provider)
+        first = await sync.sync_account(a.id)
+        assert first.status == 'ok' and first.new_message_ids == []
+        assert listing.await_args_list[1].args[0].endswith('/user/credentials')
+        assert connector_mailbox.decode(first.cursor)[1].startswith('initial:')
+        assert not (await mail_message.get_message(legacy[0].id)).unverified_connector
+        assert (await mail_message.get_message(legacy[1].id)).unverified_connector
+        assert (await sync.sync_account(a.id)).status == 'ok' and pages == [None, 'opaque-next']
+        assert not (await mail_message.get_message(legacy[1].id)).unverified_connector
+        assert (await mail_message.get_message(legacy[2].id)).folder == 'INBOX'
+        await chat_settings.update(1, [a.id])
+        assert await chat_settings.mail_reference(legacy[2].id, 2, None) is None
+        assert (await sync.sync_account(placeholder.id)).status == 'ok'
+        rows = await mail_message.list_page(account_ids=[placeholder.id])
+        assert len(rows) == 1 and rows[0].unverified_connector
+        assert not (await mail_sync_state.get_state(placeholder.id)).connector_verified
+        with pytest.raises(chat_settings.AccountNotGranted):
+            await chat_settings.update(2, [placeholder.id])
+    asyncio.run(run())
+
+
+def test_unverified_task_mail_is_refused_at_proposal_and_confirmation(pg_db):
+    from types import SimpleNamespace
+    from api.tasks import chat, proposals as task_proposals
+    from db.accessors import mail_message
+    async def run():
+        a = await connect('source')
+        row = await mail_message.upsert_message(account_id=a.id, folder='ARCHIVE', provider_uid='old', unverified_connector=True)
+        ctx = SimpleNamespace(task_scope={'source': 'all'}, account_ids=[a.id], account_id=None, source_message_id=None)
+        request = dict(action='create', title='Example', start='2027-01-01', timezone='UTC', source_message_id=row.id)
+        with pytest.raises(ValueError, match='task_scope_invalid'):
+            await chat.prepare(request, ctx)
+        command = task_proposals.TaskCreateCommand(**request, source_account_id=a.id)
+        async with get_session_maker()() as session:
+            with pytest.raises(task_proposals.TaskSourceGone):
+                await task_proposals.execute(session, command, proposal_id='unverified')
+    asyncio.run(run())

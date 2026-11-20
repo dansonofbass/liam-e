@@ -105,7 +105,7 @@ async def prepare(args, ctx):
             source_id = command.get('source_message_id')
             if source_id:
                 source = await mail_message.get_message(source_id, session)
-                if source is None or source.account_id not in ctx.account_ids:
+                if source is None or source.unverified_connector or source.account_id not in ctx.account_ids:
                     raise ValueError('task_scope_invalid')
                 command['source_account_id'] = source.account_id
         else:

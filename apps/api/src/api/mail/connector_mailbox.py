@@ -6,10 +6,17 @@ from email.utils import parseaddr
 from urllib.parse import quote
 
 import httpx
-from utils.mistral import MistralNotConfiguredError
 from db.accessors import chat_settings, mail_sync_state
 from db.models.mail_sync_state import CONNECTOR_CURSOR_PREFIX
 from api.mail import connectors
+
+
+def inbox_only(account) -> bool:
+    return not account.email_address or account.email_address.casefold().endswith('@connector.mistral')
+
+
+class MailboxUnproven(ValueError):
+    """An initial connection has no usable identity yet. Its ordinary inbox can still sync."""
 
 
 class MailboxUnavailable(ValueError):
@@ -41,13 +48,13 @@ async def _credential(provider: str) -> str:
             if error.response.status_code in (403, 404):
                 continue
             raise
-        choices = [row for row in result.get('credentials', []) if row.get('name') and row.get('authentication_type') == 'oauth2']
+        choices = [row for row in (result.get('credentials') or []) if row.get('name') and row.get('authentication_type') == 'oauth2']
         if choices:
             selected = [row for row in choices if row.get('is_default')] or choices
             if len(selected) == 1:
                 return selected[0]['name']
             break
-    raise MailboxUnavailable()
+    raise MailboxUnproven()
 
 
 def _sent_by(message: dict, address: str) -> bool:
@@ -57,7 +64,11 @@ def _sent_by(message: dict, address: str) -> bool:
 
 async def _anchor(account) -> tuple[str, str]:
     data = await connectors.call_read_tool_json(account.provider, 'search_threads', {'query': 'in:sent from:me', 'pageSize': 1})
-    for thread in data.get('threads', []):
+    if not isinstance(data.get('threads'), list):
+        raise ValueError('Incomplete connector search response')
+    if not data['threads']:
+        raise MailboxUnproven()
+    for thread in data['threads']:
         for message in thread.get('messages', []):
             if thread.get('id') and message.get('id') and _sent_by(message, account.email_address):
                 return thread['id'], message['id']
@@ -66,48 +77,55 @@ async def _anchor(account) -> tuple[str, str]:
 
 async def _verify(account, thread_id: str, message_id: str) -> None:
     thread = await connectors.call_read_tool_json(account.provider, 'get_thread', {'threadId': thread_id, 'messageFormat': 'MINIMAL'})
-    if thread.get('id') != thread_id or not any(
+    if not isinstance(thread, dict) or not thread.get('id') or not isinstance(thread.get('messages'), list):
+        raise ValueError('Incomplete connector identity response')
+    if thread['id'] != thread_id or not any(
         message.get('id') == message_id and _sent_by(message, account.email_address) for message in thread.get('messages', [])
     ):
         raise MailboxUnavailable()
 
 
 @asynccontextmanager
-async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool = False, check_after: bool = False):
-    """Only a full index rebuild may establish the named credential and provider-owned Sent anchor."""
-    async def invalidate():
-        await chat_settings.invalidate_connector(account.id)
-        raise MailboxUnavailable()
+async def _check_identity(account_id: str):
+    try:
+        yield
+    except httpx.HTTPStatusError as error:
+        if error.response.status_code != 404:
+            raise
+        await chat_settings.invalidate_connector(account_id)
+        raise MailboxUnavailable() from None
+    except MailboxUnavailable:
+        await chat_settings.invalidate_connector(account_id)
+        raise
 
-    if not account.email_address or account.email_address.casefold().endswith('@connector.mistral'):
-        await invalidate()
+
+@asynccontextmanager
+async def bound_mailbox(account, *, cursor: str | None = None, bootstrap: bool = False, check_after: bool = False):
+    """Check the provider identity on the pinned credential. Transient failures stop this call."""
+    if inbox_only(account):
+        raise MailboxUnavailable()
     if cursor is None:
         state = await mail_sync_state.get_state(account.id)
         if not state or not state.connector_verified:
             raise MailboxUnavailable()
         cursor = state.cursor
-    token = None
+    if cursor.startswith(CONNECTOR_CURSOR_PREFIX):
+        async with _check_identity(account.id):
+            (credential, thread_id, message_id), progress = decode(cursor)
+    elif bootstrap:
+        credential = await _credential(account.provider)
+        thread_id = message_id = progress = ''
+    else:
+        raise MailboxUnavailable()
+    token = connectors.mailbox_credential.set(credential)
     try:
-        try:
-            if cursor.startswith(CONNECTOR_CURSOR_PREFIX):
-                (credential, thread_id, message_id), progress = decode(cursor)
-            elif bootstrap:
-                credential = await _credential(account.provider)
-                thread_id = message_id = progress = ''
-            else:
-                raise MailboxUnavailable()
-            token = connectors.mailbox_credential.set(credential)
-            if not thread_id:
-                thread_id, message_id = await _anchor(account)
+        if not thread_id:
+            thread_id, message_id = await _anchor(account)
+        async with _check_identity(account.id):
             await _verify(account, thread_id, message_id)
-        except (ValueError, TypeError, KeyError, AttributeError, httpx.HTTPError, MistralNotConfiguredError):
-            await invalidate()
         yield (credential, thread_id, message_id), progress
         if check_after:
-            try:
+            async with _check_identity(account.id):
                 await _verify(account, thread_id, message_id)
-            except (ValueError, TypeError, KeyError, AttributeError, httpx.HTTPError, MistralNotConfiguredError):
-                await invalidate()
     finally:
-        if token is not None:
-            connectors.mailbox_credential.reset(token)
+        connectors.mailbox_credential.reset(token)

@@ -106,3 +106,25 @@ async def test_connector_change_during_sync_discards_the_unverified_page(fake_st
     assert (result.status, result.error_code) == ('error', 'auth_expired')
     replace.assert_not_awaited()
     invalidated.assert_awaited_once_with(account.id)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('after,status_code', [(False, 429), (True, 503), (True, None)])
+async def test_transient_proof_failure_retains_the_mailbox_binding(monkeypatch, after, status_code):
+    import httpx
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from api.mail import connector_mailbox
+    account = SimpleNamespace(id='account', provider='gmail', email_address='a@example.test')
+    thread = {'id': 'thread', 'messages': [{'id': 'message', 'sender': account.email_address, 'labelIds': ['SENT']}]}
+    request = httpx.Request('GET', 'https://example.test')
+    error = httpx.ReadTimeout('timeout', request=request) if status_code is None else httpx.HTTPStatusError(
+        'temporary', request=request, response=httpx.Response(status_code, request=request))
+    monkeypatch.setattr(connectors, 'call_read_tool_json', AsyncMock(side_effect=[thread, error] if after else [error]))
+    invalidate = AsyncMock()
+    monkeypatch.setattr(connector_mailbox.chat_settings, 'invalidate_connector', invalidate)
+    with pytest.raises(httpx.HTTPError):
+        async with connector_mailbox.bound_mailbox(account, cursor=connector_mailbox.encode(('pinned', 'thread', 'message'), '12'), check_after=True):
+            assert after
+    invalidate.assert_not_awaited()
+    assert connectors.mailbox_credential.get() is None

@@ -194,6 +194,24 @@ test('task card edits survive the replacement by the history row and are confirm
   await waitFor(() => expect(confirm.mock.calls[0]?.[0]?.body?.task_edit).toMatchObject({ title: 'Edited example', start: '2027-02-01T09:30' }))
 })
 
+test('task cards fetch their mail link only with the current grant and turn', async () => {
+  const card = message()
+  card.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'archive', series_id: 'task', expected_version: 1, title: 'Task', source_message_id: 'mail' } }
+  card.context = { id: 'turn', mail_scope_version: 4, app_prompt_version: '10', prompt_revision_id: null, prompt_hash: null, preference_revision_id: null, account_scope_json: '{}', revoked: false }
+  const inbox = spyOn(sdk, 'mailMessageGet')
+  const scoped = spyOn(sdk, 'chatMailReferenceGet').mockResolvedValue({ data: { id: 'mail' } } as never)
+  const client = testClient()
+  const view = (version?: number) => <QueryClientProvider client={client}><TestRouter><ProposalCard message={card} grantVersion={version} /></TestRouter></QueryClientProvider>
+  const mounted = render(view())
+  expect(scoped).not.toHaveBeenCalled()
+  mounted.rerender(view(5))
+  expect(scoped).not.toHaveBeenCalled()
+  mounted.rerender(view(4))
+  await waitFor(() => expect(scoped).toHaveBeenCalledTimes(1))
+  expect(scoped.mock.calls[0]?.[0]).toMatchObject({ path: { message_id: 'mail' }, query: { expected_version: 4, context_id: 'turn' } })
+  expect(inbox).not.toHaveBeenCalled()
+})
+
 test('cancelling a task card never confirms or invalidates tasks', async () => {
   const initial = message()
   initial.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'archive', series_id: 'task', expected_version: 1, title: 'Example' } }
