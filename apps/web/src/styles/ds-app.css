@@ -16,6 +16,9 @@
 .le-model-control, .le-mobile-model { display: inline-flex; min-width: 0; max-width: min(48vw, 18rem); }
 .le-model-control .le-menu-anchor, .le-model-control .le-tooltip-anchor, .le-model-control .le-chip { min-width: 0; max-width: 100%; }
 .le-model-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.le-model-detail { margin-block: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.le-model-detail h3, .le-model-detail p { margin: 0 0 var(--space-1); }
+.le-model-detail small { display: block; margin-bottom: var(--space-2); }
 .le-topbar:has(.le-mobile-model) { flex-wrap: nowrap; gap: var(--space-2); padding-inline: var(--space-3); }
 .le-menu-item[aria-disabled="true"], .le-menu-item[aria-disabled="true"] .le-ico { color: var(--ink-muted); cursor: not-allowed; }
 .le-menu-item[aria-disabled="true"]:hover { background: transparent; }
@@ -37,8 +40,8 @@
 .le-mailrow-side { grid-column: 3; }
 .le-mailrow-marks { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-muted); }
 .le-mailrow-more { display: none; position: relative; z-index: 3; align-self: flex-end; }
-.le-mailrow-more--coarse { display: block; }
-@media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: block; } .le-mailrow-actions { display: none; } }
+.le-mailrow-more--coarse { display: flex; }
+@media (max-width: 639px), (pointer: coarse) { .le-mailrow-more { display: flex; } .le-mailrow-actions { display: none; } }
 @media (pointer: coarse) { .le-composer .le-send, .le-composer .le-chip, .le-account-actions .le-icon-btn, .le-menu-item, .le-confirm-foot .le-btn, .le-chat-suggestions .le-chip, .le-chat-header .le-menu-anchor .le-chip, .le-chat-topbar .le-menu-anchor .le-chip, .le-model-control .le-chip, .le-chat-end .le-btn, .le-chat-retry .le-btn, .le-chat-reference .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-drawer-brand .le-icon-btn, .le-shell-status .le-icon-btn { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } }
 @media (pointer: coarse) { .le-topbar .le-icon-btn, .le-side .le-icon-btn, .le-side .le-nav-item, .le-side .le-conv, .le-drawer .le-nav-item, .le-drawer .le-conv { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } .le-composer textarea { min-height: var(--control-height-lg); } }
@@ -106,25 +109,39 @@
 .le-chat-header { display: flex; justify-content: flex-end; padding: var(--space-3) var(--space-5) 0; }
 .le-chat-topbar { flex-wrap: nowrap; }
 .le-chat-crumb-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.le-chat-view--mail-question { overflow-y: auto; }
+.le-chat-view--mail-question .le-chat-start-scroll { flex: none; }
+.le-chat-view--mail-question .le-chat-scope { margin-top: var(--space-4); }
 .le-chat-start-scroll { display: flex; flex-direction: column; }
 .le-chat-start { width: 100%; margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-4); }
 .le-chat-quick-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); width: 100%; }
 .le-chat-quick-actions > * { min-width: 0; }
 .le-chat-reference { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
 .le-chat-reference .le-mailref { flex: 1; min-width: 0; }
+.le-mailref--compact { align-items: center; text-align: start; border: 0; color: var(--ink); font: inherit; cursor: pointer; min-height: var(--control-height-lg); }
+.le-mailref--compact strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.le-mailref--compact small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .le-mailref-dot { margin-top: 8px; }
 .le-mailref-dot--none { visibility: hidden; }
 .le-chat-end { align-self: center; padding: var(--space-2); }
 @media (max-width: 639px) { .le-chat-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .le-chat-entry { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
 .le-chat-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.le-chat-composer { width: 100%; max-width: var(--chat-width); box-sizing: border-box; align-self: center; padding: var(--space-3) var(--space-5) max(var(--space-3), env(safe-area-inset-bottom)); }
+.le-chat-composer { width: 100%; max-width: var(--chat-width); box-sizing: border-box; align-self: center; padding: var(--space-3) var(--space-5); }
 .le-greeting { padding: var(--space-5); }
 .le-greeting span { color: var(--accent); }
 @media (min-width: 640px) and (max-width: 1023px) { .le-side { flex: 0 0 auto; } }
 @media (max-width: 639px) { .le-app > .le-side { display: none; } }
 /* On a phone the main sheet fills the screen: no frame around it, no rounding, no shadow. */
-@media (max-width: 639px) { .le-app { padding: 0; gap: 0; } .le-sheet { border-radius: 0; box-shadow: none; } }
+@media (max-width: 639px) { .le-app { --shell-inset: 0px; gap: 0; } .le-sheet { border-radius: 0; box-shadow: none; } }
+
+/* Keep controls inside the display cutout and home indicator, including in landscape. */
+.le-app, .le-drawer {
+  padding-top: max(var(--shell-inset, var(--space-3)), env(safe-area-inset-top));
+  padding-right: max(var(--shell-inset, var(--space-3)), env(safe-area-inset-right));
+  padding-bottom: max(var(--shell-inset, var(--space-3)), env(safe-area-inset-bottom));
+  padding-left: max(var(--shell-inset, var(--space-3)), env(safe-area-inset-left));
+}
 
 .le-sheet:has(.le-inbox) { min-height: 0; }
 .le-inbox { display: flex; flex: 1; min-height: 0; min-width: 0; }
@@ -135,8 +152,16 @@
 .le-inbox-search { padding: var(--space-2) var(--space-4); }
 .le-inbox-search .le-input { width: 100%; }
 .le-inbox-selection { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); min-width: 0; max-width: 100%; overflow-x: auto; }
+.le-inbox-selection-actions { display: flex; gap: var(--space-2); }
+.le-mailrow-swipe .le-mailrow.is-checked { background: var(--accent-soft); }
 .le-inbox-selection > * { flex: none; }
 .le-inbox-selection-count { white-space: nowrap; }
+@media (max-width: 639px) {
+  .le-inbox-selection { flex-wrap: wrap; row-gap: 0; }
+  .le-inbox-selection-count { flex: 1; }
+  .le-inbox-selection-actions { flex-basis: 100%; justify-content: space-between; }
+  .le-inbox-mobile-status .le-inbox-control { min-height: var(--control-height-lg); }
+}
 @media (pointer: coarse) { .le-inbox-selection .le-chip { min-height: var(--control-height-lg); min-width: var(--control-height-lg); } }
 .le-inbox-mobile-status { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); }
 .le-inbox-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: calc(var(--control-height-lg) + 2 * var(--space-4)); }
@@ -174,7 +199,7 @@
 .le-mail-attachment { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 36px; max-width: 100%; padding: var(--space-1) var(--space-3); border: 1px solid var(--control-border); border-radius: var(--radius-pill); }
 .le-mail-attachment-name { font-weight: 600; overflow-wrap: anywhere; }
 .le-mail-attachment-size { color: var(--ink-muted); white-space: nowrap; }
-.le-mail-bottom { display: flex; gap: var(--space-2); border-top: 1px solid var(--line); padding: var(--space-2) var(--space-3) max(var(--space-3), env(safe-area-inset-bottom)); }
+.le-mail-bottom { display: flex; gap: var(--space-2); border-top: 1px solid var(--line); padding: var(--space-2) var(--space-3) var(--space-3); }
 .le-mail-bottom > .le-tooltip-anchor { flex: 1 1 0; min-width: 0; }
 .le-mail-bottom .le-btn { width: 100%; min-height: var(--control-height-lg); }
 .le-mail-error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }

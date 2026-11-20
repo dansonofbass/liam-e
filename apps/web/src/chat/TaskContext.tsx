@@ -3,16 +3,16 @@ import { useQuery } from '@tanstack/react-query'
 import { summaryQuery } from '../api/queries'
 import { Chip, Icon, Menu, Tooltip } from '../ds'
 import { useI18n } from '../i18n/I18n'
-import { useConversationScope, useTaskScope, type TaskScope } from './session'
+import { useConversationScope, useTaskScope, type ComposerMail, type TaskScope } from './session'
 
 type Choice = { label: string; scope: TaskScope; hint?: string }
 
 // One chip in the composer bar, like the account chip beside it: a block of choice chips above the composer pushed the
 // composer itself off a small phone screen.
-export function TaskScopeSelector({ conversationId, disabled }: { conversationId?: string; disabled: boolean }) {
+export function TaskScopeSelector({ conversationId, contextMail, disabled }: { conversationId?: string; contextMail?: ComposerMail; disabled: boolean }) {
   const { texts } = useI18n()
-  const tasks = useTaskScope(conversationId)
-  const mail = useConversationScope(conversationId)
+  const tasks = useTaskScope(conversationId, contextMail?.id)
+  const mail = useConversationScope(conversationId, contextMail)
   const summary = useQuery(summaryQuery())
   const blocked = disabled || !tasks.ready || !mail.ready
   const choices: Choice[] = [{ label: texts.taskChat.none, scope: { source: 'none' } }]

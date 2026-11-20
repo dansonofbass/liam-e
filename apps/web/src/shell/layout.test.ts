@@ -43,7 +43,9 @@ test('the viewport bounds the shell and its independently scrolling content', as
   for (const selector of ['.le-chat-messages', '.le-inbox-scroll', '.le-mail-scroll', '.le-accounts-scroll']) {
     for (const property of ['min-height: 0', 'overflow-y: auto']) expect(rule(app, selector)).toContain(property)
   }
-  for (const selector of ['.le-chat-composer', '.le-mail-bottom']) expect(rule(app, selector)).toContain('env(safe-area-inset-bottom)')
+  const insets = rule(app, '.le-app, .le-drawer')
+  for (const edge of ['top', 'bottom', 'left', 'right']) expect(insets).toContain('env(safe-area-inset-' + edge + ')')
+  for (const selector of ['.le-chat-composer', '.le-mail-bottom']) expect(rule(app, selector)).not.toContain('safe-area-inset-bottom')
 })
 
 test('only the sidebar conversation list scrolls, with room for focus rings', async () => {
@@ -89,7 +91,7 @@ test('on a phone the main sheet fills the screen without frame, rounding or shad
   const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
   const rule = css.match(/@media \(max-width: 639px\) \{ \.le-app \{ ([^}]+) \} \.le-sheet \{ ([^}]+) \} \}/u)
   expect(rule).toBeTruthy()
-  for (const property of ['padding: 0', 'gap: 0']) expect(rule?.[1]).toContain(property)
+  for (const property of ['--shell-inset: 0px', 'gap: 0']) expect(rule?.[1]).toContain(property)
   for (const property of ['border-radius: 0', 'box-shadow: none']) expect(rule?.[2]).toContain(property)
 })
 

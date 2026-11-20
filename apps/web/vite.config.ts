@@ -72,6 +72,10 @@ export default defineConfig(async ({ mode }) => ({
       loadEnv(mode, WORKSPACE_ROOT, "APP_NAME").APP_NAME ?? ""
     ),
   },
+  // The service worker needs a stable root URL to control all app routes.
+  worker: {
+    rolldownOptions: { output: { entryFileNames: (chunk: { name: string }) => chunk.name === "service-worker" ? "service-worker.js" : "assets/[name]-[hash].js" } },
+  },
   server: {
     port: 3001,
   },

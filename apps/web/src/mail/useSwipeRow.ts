@@ -31,6 +31,20 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     paint(0)
     setPreview(null)
   }
+  const updatePosition = (gesture: Active, x: number, y: number) => {
+    const value = current.current
+    if (!value.enabled || !value.basis || !value.valid(gesture.state.basis) || value.navigation !== gesture.navigation) { stop(); return }
+    // Browsers can deliver both events for the same physical movement.
+    if (gesture.state.phase === 'scrolling' || (blocksScroll(gesture.state) && x - gesture.state.x === gesture.state.dx)) return
+    gesture.state = moveSwipe(gesture.state, x, y, value.basis)
+    if (gesture.state.phase === 'cancelled') { stop(); return }
+    if (gesture.state.phase !== 'preview' && gesture.state.phase !== 'armed') return
+    gesture.dragged = true
+    const action = actionFor(gesture.state)
+    paint(action ? gesture.state.dx : 0)
+    const next = action ? { action, armed: gesture.state.phase === 'armed', direction: gesture.state.dx < 0 ? 'left' as const : 'right' as const } : null
+    setPreview(old => old?.action === next?.action && old?.armed === next?.armed && old?.direction === next?.direction ? old : next)
+  }
   useLayoutEffect(() => {
     const gesture = active.current
     if (!gesture) return
@@ -45,7 +59,13 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     // cancels the pointer. React registers touchmove as passive, so the row listens natively. Two fingers stay free to pinch.
     const hold = (event: TouchEvent) => {
       const gesture = active.current
-      if (gesture && event.touches.length === 1 && event.cancelable && blocksScroll(gesture.state)) event.preventDefault()
+      if (!gesture) return
+      if (event.touches.length !== 1) { stop(); return }
+      // A native touchmove may precede the corresponding pointermove. Decide from
+      // this sample while the browser can still yield the gesture to the row.
+      const touch = event.touches[0]!
+      updatePosition(gesture, touch.clientX, touch.clientY)
+      if (active.current && event.cancelable && blocksScroll(gesture.state)) event.preventDefault()
     }
     const node = row.current
     document.addEventListener('pointerdown', second, true)
@@ -67,24 +87,20 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const gesture = active.current, value = current.current
-    if (!gesture || gesture.pointer !== event.pointerId) return
-    if (!value.enabled || !value.basis || !value.valid(gesture.state.basis) || value.navigation !== gesture.navigation) { stop(); return }
-    gesture.state = moveSwipe(gesture.state, event.clientX, event.clientY, value.basis)
-    if (gesture.state.phase === 'cancelled') { stop(); return }
-    if (gesture.state.phase !== 'preview' && gesture.state.phase !== 'armed') return
-    gesture.dragged = true
-    const action = actionFor(gesture.state)
-    paint(action ? gesture.state.dx : 0)
-    const next = action ? { action, armed: gesture.state.phase === 'armed', direction: gesture.state.dx < 0 ? 'left' as const : 'right' as const } : null
-    setPreview(old => old?.action === next?.action && old?.armed === next?.armed && old?.direction === next?.direction ? old : next)
+    const gesture = active.current
+    if (gesture?.pointer === event.pointerId) updatePosition(gesture, event.clientX, event.clientY)
   }
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
     const gesture = active.current, value = current.current
     if (!gesture || gesture.pointer !== event.pointerId) return
-    const result = value.enabled && value.basis && value.valid(gesture.state.basis) && value.navigation === gesture.navigation ? endSwipe(gesture.state, value.basis) : undefined
+    const basis = value.basis
+    const armed = basis && endSwipe(gesture.state, basis)
+    // A release can carry a newer position. Commit only the action already
+    // previewed, with the finger still past its threshold on the same side.
+    const release = basis && armed && endSwipe(moveSwipe(gesture.state, event.clientX, event.clientY, basis), basis)
+    const sameSide = Math.sign(event.clientX - gesture.state.x) === Math.sign(gesture.state.dx)
     stop()
-    if (result) value.run(result.action)
+    if (release && sameSide && value.enabled && value.navigation === gesture.navigation && value.valid(gesture.state.basis)) value.run(release.action)
   }
   const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => { if (active.current?.pointer === event.pointerId) stop() }
   const onClickCapture = (event: MouseEvent<HTMLDivElement>) => {

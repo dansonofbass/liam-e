@@ -287,7 +287,7 @@ test('running confirmation yields to the completed history row and stops polling
   const view = render(card(message()))
   fireEvent.click(screen.getByRole('button', { name: '2 abbestellen und archivieren' }))
   expect(await screen.findByText('Wird ausgeführt …')).toBeTruthy()
-  expect([...timers.values()]).toContain(3000)
+  await waitFor(() => expect([...timers.values()]).toContain(3000))
   view.rerender(card(message('done', { done: 1 })))
   expect(screen.getByText('1 Newsletter abbestellt.')).toBeTruthy()
   expect([...timers.values()]).not.toContain(3000)

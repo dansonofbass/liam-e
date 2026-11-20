@@ -14,7 +14,7 @@ import { ProposalCard } from './ProposalCard'
 import { useFollowScroll } from './useFollowScroll'
 import { SafeMarkdown } from './SafeMarkdown'
 import { CalendarReference, CalendarScope } from './CalendarContext'
-import { useCalendarScope, useChatSession, useConversationScope, useRestartConversation, useTaskScope } from './session'
+import { composerDraftKey, useCalendarScope, useChatSession, useConversationScope, useRestartConversation, useTaskScope, type ComposerMail } from './session'
 import { TaskScopeSelector } from './TaskContext'
 import { PreferenceContext } from './PreferenceContext'
 
@@ -22,23 +22,26 @@ type Accounts = AccountSummaryOut[]
 // A retry would send the same request and be refused again.
 const NEEDS_NEW_CONVERSATION = new Set(['conversation_not_found', 'conversation_scope_change_requires_new', 'context_unavailable', 'context_revoked'])
 
-export function ChatComposer({ conversationId, contextMessageId, contextOccurrenceId, model, promptRevisionId, onSend, autoFocus }: { conversationId?: string; contextMessageId?: string; contextOccurrenceId?: string; model?: string; promptRevisionId?: string | null; onSend?: () => void; autoFocus?: boolean }) {
+export function ChatComposer({ conversationId, contextMail, contextOccurrenceId, model, promptRevisionId, onSend, autoFocus }: { conversationId?: string; contextMail?: ComposerMail; contextOccurrenceId?: string; model?: string; promptRevisionId?: string | null; onSend?: () => void; autoFocus?: boolean }) {
   const { texts } = useI18n()
   const { data: summary } = useQuery(summaryQuery())
   const { state, send, stop, composerTexts, setComposerText } = useChatSession()
-  const { scope, setScope, ready } = useConversationScope(conversationId)
-  const calendar = useCalendarScope(conversationId)
-  const tasks = useTaskScope(conversationId)
-  const accounts = (summary?.accounts ?? []).map(account => ({ id: account.id, label: account.display_name || account.email_address }))
+  const contextMessageId = contextMail?.id
+  const { scope, setScope, ready } = useConversationScope(conversationId, contextMail)
+  const calendar = useCalendarScope(conversationId, contextMessageId)
+  const tasks = useTaskScope(conversationId, contextMessageId)
+  const accounts = (summary?.accounts ?? []).filter(account => !contextMail || account.id === contextMail.account_id).map(account => ({ id: account.id, label: account.display_name || account.email_address }))
   if (scope && !accounts.some(account => account.id === scope)) accounts.push({ id: scope, label: texts.prompts.scopeUnavailable })
-  const value = composerTexts[conversationId ?? 'new'] ?? ''
-  const setValue = (text: string) => setComposerText(conversationId ?? 'new', text)
+  const draftKey = composerDraftKey(conversationId, contextMessageId)
+  const value = composerTexts[draftKey] ?? ''
+  const setValue = (text: string) => setComposerText(draftKey, text)
   const busy = state.phase === 'working' || state.phase === 'streaming'
-  return <><CalendarScope conversationId={conversationId} disabled={busy} /><Composer value={value} onChange={setValue} onSubmit={() => {
+  const calendars = <CalendarScope conversationId={conversationId} messageId={contextMessageId} disabled={busy} />
+  return <>{!contextMessageId && calendars}<Composer value={value} onChange={setValue} onSubmit={() => {
     if (busy || !ready || !calendar.ready || !tasks.ready || !value.trim()) return
     onSend?.()
     void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, context_occurrence_id: contextOccurrenceId, calendar_source_ids: calendar.ids, task_source: tasks.scope.source, task_source_account_id: tasks.scope.account_id, model, ...(!conversationId ? { prompt_revision_id: promptRevisionId } : {}) })
-  }} onStop={stop} busy={busy} scope={scope} accounts={accounts} onScopeChange={value => { setScope(value); if (value !== scope) tasks.set({ source: 'none' }) }} placeholder={texts.chat.placeholder} autoFocus={autoFocus} controls={<TaskScopeSelector conversationId={conversationId} disabled={busy} />} /></>
+  }} onStop={stop} busy={busy} scope={scope} accounts={accounts} onScopeChange={value => { setScope(value); if (value !== scope) tasks.set({ source: 'none' }) }} placeholder={contextMessageId ? texts.inbox.mailQuestionPlaceholder : texts.chat.placeholder} autoFocus={autoFocus} controls={<TaskScopeSelector conversationId={conversationId} contextMail={contextMail} disabled={busy} />} />{contextMessageId && calendars}</>
 }
 
 type Draft = { onDraft: (id: string) => void; disabled: boolean }
