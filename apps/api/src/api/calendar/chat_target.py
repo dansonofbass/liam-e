@@ -9,11 +9,20 @@ from db.accessors import calendar_source
 from pydantic import BaseModel
 
 
-class CalendarChoice(BaseModel):
+class CalendarOption(BaseModel):
     name: str = ""
     use_default: bool = False
     source_id: str | None = None
     connection_ref: str | None = None
+
+    @classmethod
+    def for_source(cls, source):
+        return cls(name=source.name, source_id=source.id, connection_ref=source.connection_ref)
+
+
+class CalendarChoice(CalendarOption):
+    offered: tuple[CalendarOption, ...] = ()
+    appointment_subject: str = ""
     excluded_source_ids: tuple[str, ...] = ()
     exclude_default: bool = False
     error: Literal["calendar_name_required", "calendar_name_ambiguous", "calendar_name_unknown", "calendar_appointment_ambiguous"] | None = None
@@ -148,11 +157,28 @@ def appointment_part(parts: list[str], title, excerpt) -> str | None:
     return matches[0]
 
 
-def _new_appointment(text: str) -> bool:
+def _appointment_subject(text: str) -> str:
+    command = re.search(rf"\b{_ACTION}\s+(?:(?:a|an|the|den|das|der|ein(?:e[nmrs]?)?)\s+)?", text, re.I)
+    if not command:
+        return ""
+    rest = text[command.end():].strip()
+    if quoted := _QUOTED.match(rest):
+        return " ".join(quoted.group()[1:-1].casefold().split())
+    modifier = r"\b(?:in|into|on|for|at|from|im|am|um|für|tomorrow|today|heute|morgen)\b|[,;.!?]"
+    subject = re.split(modifier, rest, maxsplit=1, flags=re.I)[0].strip()
+    if re.match(r"(?:it|this|that|ihn|es|diesen)\b", subject, re.I):
+        return ""
+    return " ".join(subject.casefold().split())
+
+
+def _new_appointment(text: str, pending_subject: str) -> bool:
+    subject = _appointment_subject(text)
+    if subject and subject == pending_subject:
+        return False
     explicit = r"\b(?:another|different|new|weiteren?|andere[nmrs]?|neue[nmrs]?)\s+(?:appointment|event|meeting|termin)\b"
-    fresh = (r"\b(?:create|schedule|book|arrange|add|erstelle|plane)\s+"
-             r"(?!(?:it|this|that|the|den|dem|das|ihn|diesen|es|at|for|on|um|am|für|today|tomorrow|heute|morgen)\b)\w+")
-    return bool(re.search(explicit, text, re.I) or re.search(fresh, text, re.I))
+    if re.search(explicit, owner_selection(text).text, re.I):
+        return True
+    return bool(subject)
 
 
 def previous_choice(history, user_id: str, text: str, contexts) -> CalendarChoice | None:
@@ -167,27 +193,35 @@ def previous_choice(history, user_id: str, text: str, contexts) -> CalendarChoic
         return None
     try:
         data = json.loads(reply.extras_json).get("calendar_clarification")
-        return CalendarChoice.model_validate(data) if data and not _new_appointment(owner_selection(appointment_parts(text)[0]).text) else None
+        if not data:
+            return None
+        choice = CalendarChoice.model_validate(data)
+        subject = choice.appointment_subject or _appointment_subject(previous_user.content)
+        return None if _new_appointment(appointment_parts(text)[0], subject) else choice
     except (AttributeError, TypeError, ValueError):
         return None
 
 
-def named_choice(name, entries, selection: OwnerSelection):
-    matches = [source for source, state in entries if source.name.strip().casefold() == name.strip().casefold()
-               and calendar_source.chat_access(source, state) in calendar_source.READABLE]
-    identified = [source for source in matches if selection.includes_id(source.id)]
+def named_choice(name, entries, selection: OwnerSelection, *, offered=()):
+    key = name.strip().casefold()
+    matches = [option for option in offered if option.name.strip().casefold() == key]
+    if not matches:
+        matches = [CalendarOption.for_source(source) for source, state in entries if source.name.strip().casefold() == key
+                   and calendar_source.chat_access(source, state) in calendar_source.READABLE]
+    identified = [option for option in matches if option.source_id and selection.includes_id(option.source_id)]
     if identified:
         matches = identified
-    if len(matches) != 1:
+    if len(matches) != 1 or not matches[0].source_id:
         error = "calendar_name_ambiguous" if matches else "calendar_name_unknown"
-        return CalendarChoice(name=name, error=error)
-    return CalendarChoice(name=matches[0].name, source_id=matches[0].id, connection_ref=matches[0].connection_ref)
+        return CalendarChoice(name=name, error=error, offered=tuple(matches))
+    return CalendarChoice(**matches[0].model_dump())
 
 
-def _calendar_alternatives(text: str, entries) -> bool:
+def _calendar_alternatives(text: str, entries) -> set[str]:
+    alternatives = set()
     disjunctions = list(re.finditer(r"\b(?:or|oder)\b", text, re.I))
     if not disjunctions:
-        return False
+        return alternatives
     names = {source.name.strip() for source, _ in entries if source.name.strip()}
     names.update(("default calendar", "Standardkalender"))
     names_pattern = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
@@ -203,8 +237,8 @@ def _calendar_alternatives(text: str, entries) -> bool:
             if (re.search(rf"\b{_CALENDAR}\b|\bstandardkalender\b", words, re.I)
                     or re.match(_PREFIX, first[0], re.I)
                     or (first.start() == 0 and not right[second.end():].strip(" .?!"))):
-                return True
-    return False
+                alternatives.update((first["name"].casefold(), second["name"].casefold()))
+    return alternatives
 
 
 def _affirmative_destination(selection: OwnerSelection, entries, previous: CalendarChoice | None) -> CalendarChoice | None:
@@ -214,10 +248,10 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
     if not text.strip() and not selection.quoted_names:
         return None
     use_default = bool(_DEFAULT.search(text))
-    if _calendar_alternatives(text, entries):
-        return CalendarChoice(error="calendar_name_ambiguous")
     folded = text.casefold()
-    names = set(selection.quoted_names)
+    alternatives = _calendar_alternatives(text, entries)
+    use_default |= bool(alternatives & _DEFAULT_NAMES)
+    names = set(selection.quoted_names) | (alternatives - _DEFAULT_NAMES)
     for source, _ in entries:
         name = re.escape(source.name.strip().casefold())
         calendar_phrase = rf'{_PREFIX}(?:{name}\s+{_CALENDAR}|{_CALENDAR}\s+{name})(?!\w)'
@@ -227,9 +261,15 @@ def _affirmative_destination(selection: OwnerSelection, entries, previous: Calen
     if use_default and not names:
         return CalendarChoice(use_default=True)
     if len(names) == 1 and not use_default:
-        return named_choice(names.pop(), entries, selection)
+        return named_choice(names.pop(), entries, selection, offered=previous.offered if previous else ())
     if names:
-        return CalendarChoice(name="", error="calendar_name_ambiguous")
+        offered = []
+        for name in sorted(names):
+            option = named_choice(name, entries, selection)
+            offered.extend(option.offered or (CalendarOption.model_validate(option.model_dump()),))
+        if use_default:
+            offered.append(CalendarOption(use_default=True))
+        return CalendarChoice(error="calendar_name_ambiguous", offered=tuple(offered))
     identified = {source.name for source, _ in entries if selection.includes_id(source.id)
                   and (selection.mentions(source.name) or previous and previous.name.casefold() == source.name.casefold())}
     if len(identified) == 1:
@@ -251,7 +291,14 @@ def stated_destination(selection: OwnerSelection, entries, previous: CalendarCho
     if not target and previous:
         blocked.update(previous.excluded_source_ids)
         default_blocked |= previous.exclude_default
-        if previous.source_id and previous.source_id not in blocked:
+        if previous.error:
+            remaining = tuple(option for option in previous.offered if option.name.casefold() not in excluded
+                              and option.source_id not in blocked and not (option.use_default and default_blocked))
+            if len(remaining) == 1 and (remaining[0].source_id or remaining[0].use_default):
+                target = CalendarChoice(**remaining[0].model_dump())
+            else:
+                target = previous.model_copy(update={"offered": remaining})
+        elif previous.source_id and previous.source_id not in blocked:
             target = previous
     choice = target or CalendarChoice(use_default=True)
     return choice.model_copy(update={"excluded_source_ids": tuple(sorted(blocked)), "exclude_default": default_blocked})
@@ -280,4 +327,9 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
     # appointments with different targets. Ask the owner to specify the target.
     if any(choice != choices[0] for choice in choices[1:]):
         return CalendarChoice(error="calendar_appointment_ambiguous")
-    return choices[0]
+    choice = choices[0]
+    if choice and len(unfinished) == 1:
+        inherited = ctx.calendar_choice if unfinished[0] == parts[0] else None
+        subject = _appointment_subject(unfinished[0]) or (inherited.appointment_subject if inherited else "")
+        return choice.model_copy(update={"appointment_subject": subject})
+    return choice

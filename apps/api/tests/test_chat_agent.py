@@ -599,7 +599,8 @@ async def test_insight_batch_stops_and_discards_prior_results_after_revocation(s
     cached.assert_awaited_once_with(rows[0].id, locale=ctx.browser_locale, context_id='turn')
 
 
-@pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'switch', 'reschedule', 'default', 'default_de'])
+@pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'independent_title',
+                                   'repeated_title', 'repeated_title_after_duration', 'switch', 'reschedule', 'default', 'default_de'])
 async def test_calendar_create_keeps_owner_target_through_scheduling_question(store, monkeypatch, case):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
@@ -621,21 +622,32 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
               'end_local': '2026-11-21T11:00', 'timezone': 'UTC'}
     if case == 'named':
         choose['calendar_name'] = 'Work'
+    if case.startswith('repeated_title'):
+        choose['title'] = 'Sprint Planning'
+    if case == 'independent_title':
+        choose['title'] = 'Lunch'
     rounds = [[chunk('propose_calendar_change', first)]] if case == 'tool_clarification' else []
+    additional = [['What time should it start?']] if case == 'repeated_title_after_duration' else []
     fake = FakeMistral(streams=[*rounds, ['When should the review start?'],
-                                [chunk('propose_calendar_change', choose)], ['Response']])
+                                *additional, [chunk('propose_calendar_change', choose)], ['Response']])
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
 
     async def turn(text):
         return [event async for event in agent.run_turn_events(conversation_id=conversation.id, text=text,
             resolved_context=(conversation, snapshot, None))]
 
-    opened = await turn('Create a review in the Work calendar')
+    opening = 'Schedule Sprint Planning in the Work calendar' if case.startswith('repeated_title') else 'Create a review in the Work calendar'
+    opened = await turn(opening)
     assert opened[-1].event == 'done' and all(event.event != 'proposal' for event in opened)
     if case == 'write_revoked':
         work.capabilities_json = '["read"]'
+    if additional:
+        assert all(e.event != 'proposal' for e in await turn('Make it one hour long.'))
     second = {
         'fresh_request': 'Create another appointment tomorrow at ten',
+        'independent_title': 'Schedule lunch for Friday at ten',
+        'repeated_title': 'Schedule Sprint Planning for Friday at 10.',
+        'repeated_title_after_duration': 'Schedule Sprint Planning for Friday at 10.',
         'switch': 'Tomorrow at ten, in the Personal calendar instead',
         'reschedule': 'Schedule the review tomorrow at ten',
         'default': 'Tomorrow at ten, use my default calendar instead',
@@ -649,7 +661,7 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         assert any('calendar_not_writable' in row.content for row in store.rows if row.role == 'tool')
     else:
         assert len(cards) == 1 and cards[0].proposal_status == 'pending'
-        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'switch', 'default', 'default_de') else work.id)
+        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'independent_title', 'switch', 'default', 'default_de') else work.id)
         assert cards[0].context.calendar_scope_json == snapshot.calendar_scope_json
     assert 'calendar_clarification' not in json.dumps(fake.requests, default=str)
 
@@ -691,7 +703,9 @@ async def test_two_appointment_requests_bind_each_card_to_its_own_target(store, 
 
 
 @pytest.mark.parametrize('destinations', ['in the Work calendar or in the Home calendar', 'in the Work or Home calendar'])
-async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(store, monkeypatch, destinations):
+@pytest.mark.parametrize('reply, named', [('Home, please.', None), ('Not Work', None), ('Not Work', 'Home'),
+                                         ('Not Work', 'binding_changed'), ('Not Work', 'read_only')])
+async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(store, monkeypatch, destinations, reply, named):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
 
@@ -707,7 +721,7 @@ async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(s
     fake = FakeMistral(streams=[
         [chunk('propose_calendar_change', {**values, 'calendar_name': 'Work'})],
         [chunk('propose_calendar_change', values)], ['Which calendar?'],
-        [chunk('propose_calendar_change', values)], ['Response'],
+        [chunk('propose_calendar_change', {**values, 'calendar_name': named} if named == 'Home' else values)], ['Response'],
     ])
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     async def turn(text):
@@ -716,8 +730,18 @@ async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(s
     first = await turn('Put the review ' + destinations + '.')
     assert first[-1].event == 'done' and all(e.event != 'proposal' for e in first)
     assert [json.loads(row.content)['error'] for row in store.rows if row.role == 'tool'] == ['calendar_name_ambiguous'] * 2
-    second = await turn('Home, please.')
-    assert [e.message.proposal.calendar.source_id for e in second if e.event == 'proposal'] == ['home']
+    home = calendars[1]
+    if named == 'binding_changed':
+        home.connection_ref = 'another-test-connection'
+    if named == 'read_only':
+        home.capabilities_json = '["read"]'
+    second = await turn(reply)
+    cards = [e.message.proposal.calendar.source_id for e in second if e.event == 'proposal']
+    if named in ('binding_changed', 'read_only'):
+        assert not cards
+        assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_not_writable'
+    else:
+        assert cards == ['home']
 
 
 @pytest.mark.parametrize('attempt', ['plain_question', 'work_first', 'work_last'])

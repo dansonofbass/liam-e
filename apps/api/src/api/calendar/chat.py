@@ -33,7 +33,7 @@ async def _create_source(arguments, ctx):
     if not target and previous and previous.error and named is None:
         names = {source.name for source, _ in entries if selection.mentions(source.name)}
         if len(names) == 1:
-            pending = named_choice(names.pop(), entries, selection)
+            pending = named_choice(names.pop(), entries, selection, offered=previous.offered)
     if named is not None and not (target and target.use_default):
         if not isinstance(named, str) or not named.strip():
             raise writes.WriteError("calendar_name_required", 422)
@@ -41,7 +41,7 @@ async def _create_source(arguments, ctx):
         if target and target.name and not matches_pending:
             raise writes.WriteError("calendar_name_required", 422)
         if selection.mentions(named) and not matches_pending:
-            pending = named_choice(named, entries, selection)
+            pending = named_choice(named, entries, selection, offered=previous.offered if previous else ())
         elif not matches_pending:
             raise writes.WriteError("calendar_name_required", 422)
     if pending:
