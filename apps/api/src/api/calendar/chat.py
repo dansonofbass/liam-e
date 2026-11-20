@@ -7,7 +7,7 @@ from db.accessors import calendar_occurrence, calendar_settings, calendar_source
 from pydantic import ValidationError
 
 from api.calendar import writes
-from api.calendar.chat_target import appointment_part, appointment_parts, named_choice, owner_selection, pending_for_request, stated_destination
+from api.calendar.chat_target import CalendarChoice, appointment_part, appointment_parts, named_choice, owner_selection, pending_for_request, stated_destination
 from api.calendar.proposals import CalendarCommand, CalendarValues, values
 
 
@@ -123,4 +123,8 @@ async def prepare(arguments: dict, ctx) -> CalendarCommand:
         command.request(str(uuid4()))
         return command
     except (ValidationError, ValueError, TypeError, ZoneInfoNotFoundError):
+        if action == "create" and (choice is None or not choice.source_id):
+            # The assistant may ask for missing fields after this tool call.
+            # Keep the source observed here even if settings change before the reply.
+            ctx.calendar_targets[ctx.calendar_request_part] = (choice or CalendarChoice(use_default=True)).bind_default(source)
         raise writes.WriteError("calendar_time_invalid", 422) from None

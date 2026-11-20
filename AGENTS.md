@@ -474,8 +474,9 @@ automatically includes all active, connected sources with read permission. The s
 `/settings/calendar` lets the owner choose or clear a writable default for new appointments.
 Updates require the displayed settings version. A removed or paused default remains identifiable
 as unavailable until the owner changes it. The owner can name another writable calendar in a
-request. A scheduling clarification keeps the chosen source with the pending appointment and
-checks its current write permission. Ambiguous names require clarification. Settings and cards
+request. A scheduling clarification keeps the resolved source and connection with the pending
+appointment, including when it uses the default, and rechecks write permission. An explicit request
+to use the default again reads the current setting. Ambiguous names require clarification. Settings and cards
 identify duplicate names with the local source ID. The owner can use that ID to resolve a
 shared name or explicitly switch back to the default when answering a scheduling question. Each proposal binds the resolved source and
 connection before confirmation. A later settings change only affects new proposals.

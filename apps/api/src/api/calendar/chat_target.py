@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from db.accessors import calendar_source
+from db.accessors import calendar_settings, calendar_source
 from pydantic import BaseModel
 
 
@@ -26,6 +26,11 @@ class CalendarChoice(CalendarOption):
     excluded_source_ids: tuple[str, ...] = ()
     exclude_default: bool = False
     error: Literal["calendar_name_required", "calendar_name_ambiguous", "calendar_name_unknown", "calendar_appointment_ambiguous"] | None = None
+
+    def bind_default(self, source):
+        if self.exclude_default or source.id in self.excluded_source_ids:
+            return self.model_copy(update={"error": "calendar_name_required"})
+        return self.model_copy(update={"source_id": source.id, "connection_ref": source.connection_ref})
 
 
 _QUOTED = re.compile(r""""[^"]*"|“[^”]*”|„[^“]*“|‘[^’]*’|‚[^‘]*‘|«[^»]*»|»[^«]*«|(?<!\w)'[^']*'(?!\w)""")
@@ -340,13 +345,12 @@ def _calendar_list_end(text: str, members, names) -> int:
         if _CALENDAR_NOUN.search(member[0]):
             if index + 1 < len(members) and text[member.end():members[index + 1].start()].strip() == ",":
                 tail = members[index + 1:]
-                # Explicitly enumerated or individually capitalized labels
-                # can also be choices that are no longer configured.
-                if len(tail) > 1 and (all(item["name"][:1].isupper() for item in tail)
-                        or any(re.fullmatch(r",\s*(?:or|oder)", text[a.end():b.start()].strip(), re.I)
-                               for a, b in zip(tail, tail[1:]))):
-                    break
-                return index + 1
+                condition = text[tail[0].start():tail[-1].end()].strip()
+                if (all(re.fullmatch(_DATE_TAIL, item[0], re.I) for item in tail)
+                        or re.fullmatch(r"rain\s+or\s+shine|bei\s+wind\s+und\s+wetter", condition, re.I)):
+                    return index + 1
+                # Unrecognized alternatives may be removed calendar names. A
+                # comma or a change in capitalization does not settle the choice.
             break
         # A later named, quoted or explicitly selected option keeps the list
         # together, including any unavailable options before it.
@@ -512,6 +516,12 @@ async def choice_for_clarification(ctx, answer: str) -> CalendarChoice | None:
     for part in unfinished:
         inherited = pending_for_request(ctx.calendar_choice, part) if part == parts[0] else None
         choice = ctx.calendar_targets.get(part) or await stated_destination(owner_selection(part, entries=entries), entries, inherited) or inherited
+        if entries and (choice is None or (not choice.source_id and not choice.error)):
+            default_id = (await calendar_settings.get()).default_source_id
+            default = next((source for source, state in entries if source.id == default_id
+                            and calendar_source.chat_access(source, state) == "writable"), None)
+            if default:
+                choice = (choice or CalendarChoice(use_default=True)).bind_default(default)
         choices.append(choice)
     # A follow-up containing only a time cannot choose between unfinished
     # appointments with different targets. Ask the owner to specify the target.

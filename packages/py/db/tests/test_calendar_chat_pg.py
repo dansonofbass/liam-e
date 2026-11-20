@@ -210,6 +210,8 @@ def test_calendar_default_revision_and_proposal_target(pg_db, monkeypatch):
         card = await chat.prepare(values, ctx)
         assert card.source_id == chosen.default_source_id
         from api.calendar.chat_target import choice_for_clarification
+        unfinished = await choice_for_clarification(replace(ctx, user_text='Schedule lunch'), 'What time?')
+        assert unfinished.source_id == chosen.default_source_id and unfinished.connection_ref == card.connection_ref
         for unavailable, text in [(paused, 'Schedule a review in the Research calendar'), (west, 'Plane die Besprechung im Kalender Team West')]:
             assert unavailable.id not in ctx.calendar_source_ids
             pending = await choice_for_clarification(replace(ctx, user_text=text), 'What time?')
@@ -233,6 +235,9 @@ def test_calendar_default_revision_and_proposal_target(pg_db, monkeypatch):
             proposals.Proposal(kind='calendar', reason='Test', items=[], calendar=card), context_id=snapshot.id)
         other = first if chosen.default_source_id == second.id else second
         await calendar_settings.update(2, other.id)
+        followup = replace(ctx, user_text='Tomorrow at noon', calendar_choice=unfinished)
+        continued = await chat.prepare(values, followup)
+        assert (continued.source_id, continued.connection_ref) == (card.source_id, card.connection_ref)
         async with get_session_maker().begin() as session:
             session.add(source('newly-connected', 'Additional'))
         assert await chat_context.is_live(snapshot.id)

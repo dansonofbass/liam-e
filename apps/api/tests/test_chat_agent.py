@@ -600,7 +600,7 @@ async def test_insight_batch_stops_and_discards_prior_results_after_revocation(s
 
 
 @pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'independent_title', 'independent_location',
-                                   'repeated_title', 'repeated_title_after_duration', 'start_field', 'switch', 'reschedule', 'default', 'default_de'])
+                                   'repeated_title', 'repeated_title_after_duration', 'start_field', 'switch', 'reschedule', 'default', 'default_de', 'weekday'])
 async def test_calendar_create_keeps_owner_target_through_scheduling_question(store, monkeypatch, case):
     from db.accessors import calendar_settings, calendar_source
     from db.models.calendar_source import CalendarSource
@@ -614,6 +614,7 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         return [(row, None) for row in (work, personal) if row.id in ids]
 
     monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_source, 'configured_names', AsyncMock(return_value={'work', 'personal'}))
     monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id=personal.id)))
     conversation = await store.create()
     snapshot = store.snapshot('with-calendars', calendar_scope_json=json.dumps([work.id, personal.id]))
@@ -625,6 +626,8 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
     sprint = case.startswith('repeated_title') or case == 'start_field'
     if sprint:
         choose['title'] = 'Sprint Planning'
+    if case == 'weekday':
+        choose.update(title='Lunch', start_local='2026-11-24T12:00', end_local='2026-11-24T13:00')
     if case.startswith('independent_'):
         choose['title'] = 'Lunch'
     if case == 'independent_location':
@@ -640,6 +643,8 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
             resolved_context=(conversation, snapshot, None))]
 
     opening = 'Schedule Sprint Planning in the Work calendar' if sprint else 'Create a review in the Work calendar'
+    if case == 'weekday':
+        opening = 'Schedule lunch in the Work calendar, Monday or Tuesday'
     opened = await turn(opening)
     assert opened[-1].event == 'done' and all(event.event != 'proposal' for event in opened)
     if case == 'write_revoked':
@@ -657,6 +662,7 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         'reschedule': 'Schedule the review tomorrow at ten',
         'default': 'Tomorrow at ten, use my default calendar instead',
         'default_de': 'Morgen um zehn, nimm doch meinen Standardkalender',
+        'weekday': 'Tuesday at noon for one hour',
     }.get(case, 'Tomorrow at ten')
     finished = await turn(second)
     assert finished[-1].event == 'done'
@@ -669,6 +675,50 @@ async def test_calendar_create_keeps_owner_target_through_scheduling_question(st
         assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'independent_title', 'independent_location', 'switch', 'default', 'default_de') else work.id)
         assert cards[0].context.calendar_scope_json == snapshot.calendar_scope_json
     assert 'calendar_clarification' not in json.dumps(fake.requests, default=str)
+
+
+@pytest.mark.parametrize('attempt', ['question', 'tool'])
+@pytest.mark.parametrize('opening, reply, expected', [
+    ('Schedule lunch', 'Tomorrow at noon', 'work'),
+    ('Schedule lunch in my default calendar', 'Tomorrow at noon', 'work'),
+    ('Schedule lunch', 'Tomorrow at noon, use my default calendar instead', 'home'),
+    ('Schedule lunch', 'Schedule a separate checkup tomorrow at noon', 'home'),
+    ('Schedule lunch', 'Tomorrow at noon', 'changed_connection'),
+])
+async def test_default_calendar_remains_bound_during_clarification(store, monkeypatch, attempt, opening, reply, expected):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    sources = [CalendarSource(id=name, name=name.title(), provider='google', connection_ref=f'synthetic-{name}',
+        external_id=name, capabilities_json='["read","write"]', timezone='UTC') for name in ('work', 'home')]
+    async def catalog(*, ids):
+        return [(source, None) for source in sources if source.id in ids]
+    settings = NS(default_source_id='work')
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=settings))
+    conversation = await store.create()
+    snapshot = store.snapshot('default-binding', calendar_scope_json='["work","home"]')
+    incomplete = {'action': 'create', 'title': 'Lunch'}
+    complete = {**incomplete, 'start_local': '2026-11-21T12:00', 'end_local': '2026-11-21T13:00'}
+    if 'checkup' in reply:
+        complete['title'] = 'Checkup'
+    first = [[chunk('propose_calendar_change', incomplete)]] if attempt == 'tool' else []
+    fake = FakeMistral(streams=[*first, ['What time?'], [chunk('propose_calendar_change', complete)], ['Response']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    async def cards(text):
+        return [e.message.proposal.calendar.source_id async for e in agent.run_turn_events(
+            conversation_id=conversation.id, text=text, resolved_context=(conversation, snapshot, None)) if e.event == 'proposal']
+
+    assert await cards(opening) == []
+    saved = json.loads(store.rows[-1].extras_json or '{}').get('calendar_clarification', {})
+    assert (saved.get('source_id'), saved.get('connection_ref')) == ('work', 'synthetic-work')
+    settings.default_source_id = 'home'
+    if expected == 'changed_connection':
+        sources[0].connection_ref = 'synthetic-different'
+        assert await cards(reply) == []
+        assert json.loads([row for row in store.rows if row.role == 'tool'][-1].content)['error'] == 'calendar_not_writable'
+    else:
+        assert await cards(reply) == [expected]
 
 
 @pytest.mark.parametrize('dentist_first', [False, True])
@@ -809,6 +859,7 @@ async def test_calendar_alternatives_require_the_owner_to_choose_before_a_card(s
     ('in the Work calendar, Research, or Home', {'research', 'home'}, 'work'),
     ('in the Work calendar, research or home', {'research', 'home'}, 'work'),
     ('in the Work calendar, Removed One or Removed Two', {'research', 'home'}, 'work'),
+    ('For the calendar, use the Work calendar, team east or team west', {'research', 'home'}, 'work'),
 ])
 async def test_calendar_offer_with_a_paused_source_waits_for_owner_choice(store, monkeypatch, selection, paused, chosen):
     from db.accessors import calendar_settings, calendar_source
