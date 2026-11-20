@@ -38,8 +38,11 @@ class UndoResult:
 async def write_connector_labels(account, message: MailMessage, *, added: list[str], removed: list[str]) -> None:
     """Keep connector writes inside the guarded action boundary."""
     from api.mail import connectors
-
     from api.mail.connector_mailbox import inbox_only
+
+    if "TRASH" in added or "TRASH" in removed:
+        await connectors.move_trash_labels(account, message, added, removed)
+        return
     target = {"target": message} if inbox_only(account) else {}
     for tool, labels in (("label_message", added), ("unlabel_message", removed)):
         if labels:
@@ -78,6 +81,17 @@ async def apply_action(message_id: str, kind: ActionKind) -> MailAction:
     backend = action_backends.backend_for(account)
     previous = {key: getattr(message, key) for key in ("folder", "is_read", "provider_uid", "labels_json")}
     changes = {"folder": {"archive": "ARCHIVE", "trash": "TRASH", "spam": "SPAM", "restore": "INBOX"}[kind]} if kind in sources else {"is_read": kind == "mark_read"}
+    if kind == "trash" or (kind == "restore" and message.folder == "TRASH"):
+        try:
+            updates = await backend.apply(message, kind)
+        except ActionUnsupportedError:
+            raise
+        except Exception as error:
+            logger.warning("%s", type(error).__name__)
+            raise ActionFailedError() from None
+        action = MailAction(message_id=message.id, account_id=account.id, kind=kind, previous_json=json.dumps(previous))
+        await message_access.commit_trash_move(message, changes | updates, action=action)
+        return action
     optimistic_written = False
     try:
         await message_access.set_state(message_id, **changes)
@@ -135,6 +149,9 @@ async def undo_actions(action_ids: list[str], *, now: datetime) -> UndoResult:
             await action_access.release(action.id)
             result.failed.append(action.id)
         else:
-            await _write_provider_state(message, previous | updates, folder=previous["folder"])
+            if action.kind == "trash" or (action.kind == "restore" and previous["folder"] == "TRASH"):
+                await message_access.commit_trash_move(message, previous | updates)
+            else:
+                await _write_provider_state(message, previous | updates, folder=previous["folder"])
             result.restored.append(action.id)
     return result

@@ -391,7 +391,7 @@ export const de = {
     unreachable: 'Das Konto ist gerade nicht erreichbar. Versuch es gleich noch mal.',
     host_not_allowed: 'liam-e darf diesen Server nicht ansprechen. Prüfe die Serveradresse oder trag den Server in Mistral Studio unter MAIL_IMAP_ALLOWED_HOSTS ein.',
     provider_error: 'Der Anbieter antwortet gerade nicht. Versuch es gleich noch mal.',
-    provider_failed: 'Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.',
+    provider_failed: 'Der Anbieter hat die Änderung nicht bestätigt. Prüfe die Mail nach dem nächsten Abruf.',
     action_uncertain: 'Das hat nicht geklappt. Lade den Posteingang neu, um zu sehen, wo die Mail jetzt liegt.',
     account_exists: 'Diese Adresse ist schon über einen anderen Weg verbunden. Entferne das Konto zuerst, wenn du die Verbindung wechseln willst.',
     secret_not_allowed: 'Der Name muss auf „-app-password“ enden, etwa „yahoo-app-password“, und darf nur Kleinbuchstaben, Ziffern und Bindestriche enthalten. Leg das Secret in Mistral Studio unter so einem Namen an.',

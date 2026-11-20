@@ -260,7 +260,7 @@ for (const mobile of [false, true]) test(`${mobile ? 'mobile' : 'desktop'} readi
   const toast = document.querySelector('.le-inbox-toast') as HTMLElement
   expect(toast.classList.contains('le-inbox-toast--inline')).toBe(mobile)
   expect(view.contains(toast)).toBe(mobile)
-  expect(toast.textContent).toContain('Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.')
+  expect(toast.textContent).toContain('Der Anbieter hat die Änderung nicht bestätigt. Prüfe die Mail nach dem nächsten Abruf.')
   expect(within(view).getByRole('button', { name: 'Als ungelesen markieren' })).toBeTruthy()
 })
 

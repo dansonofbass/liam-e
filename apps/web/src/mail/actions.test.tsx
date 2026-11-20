@@ -201,7 +201,7 @@ for (const replacement of ['new action', 'timeout']) {
   })
 }
 
-for (const [status, text, removed] of [[502, 'Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.', false], [409, 'Das geht bei dieser Mail nicht.', false], [404, 'Die Mail ist nicht mehr da.', true]] as const) {
+for (const [status, text, removed] of [[502, 'Der Anbieter hat die Änderung nicht bestätigt. Prüfe die Mail nach dem nächsten Abruf.', false], [409, 'Das geht bei dieser Mail nicht.', false], [404, 'Die Mail ist nicht mehr da.', true]] as const) {
   test(`${status} shows a danger notice and ${removed ? 'keeps removal' : 'restores the row'}`, async () => {
     spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({ error: { detail: { code: status === 409 ? 'action_unsupported' : status === 404 ? 'message_not_found' : 'provider_failed' } }, response: { status } })) as never)
     setup(); fireEvent.click(screen.getByText('archive 1'))

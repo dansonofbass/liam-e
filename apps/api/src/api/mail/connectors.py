@@ -99,6 +99,8 @@ async def _call_tool(connector: str, tool: str, arguments: dict[str, Any], timeo
         {"arguments": arguments},
         **({"timeout": timeout} if timeout != 120 else {}),
     )
+    if tool in {"label_message", "unlabel_message"} and (data.get("isError") or data.get("is_error")):
+        raise ValueError("Connector refused the label change")
     return "\n".join(
         part.get("text", "") for part in data.get("content", []) if part.get("text")
     )
@@ -129,3 +131,46 @@ async def call_write_tool(account, tool: str, arguments: dict[str, Any], *, targ
         guard = bound_mailbox(account)
     async with guard:
         return await _call_tool(account.provider, tool, arguments)
+
+
+async def move_trash_labels(account, message, added: list[str], removed: list[str]) -> None:
+    """Both label mutations and their readbacks must use one proven mailbox."""
+    from api.mail.connector_mailbox import bound_inbox_message, bound_mailbox, inbox_only
+
+    if message.account_id != account.id:
+        raise ToolNotAllowedError("Mail does not belong to this account")
+    present: set[str] = set()
+    absent: set[str] = set()
+    binding = None
+    for tool, change, expected in (("label_message", added, present), ("unlabel_message", removed, absent)):
+        if not change:
+            continue
+        guard = bound_inbox_message(account, message) if inbox_only(account) else bound_mailbox(account)
+        async with guard as proof:
+            # Reprove the target before each write. A change of the mailbox between
+            # the two calls must not send half the move to a different account.
+            selected = proof[0] if proof is not None else mailbox_credential.get()
+            if binding is not None and selected != binding:
+                raise ValueError("Connector mailbox changed during move")
+            binding = selected
+            await _call_tool(account.provider, tool, {"messageId": message.provider_uid, "labelIds": change})
+            # HTTP 200 can contain a text diagnostic. Confirm TRASH before removing INBOX.
+            expected.update(change)
+            labels = (await thread_labels(account.provider, message.thread_id, {message.provider_uid})).get(message.provider_uid)
+            if labels is None or not present.issubset(labels) or absent.intersection(labels):
+                raise ValueError("Connector label change not confirmed")
+
+
+async def thread_labels(provider: str, thread_id: str, uids: set[str]) -> dict[str, list[str]]:
+    """Point-read only these thread members. Minimal responses may omit their labels."""
+    found = {}
+    for fmt in ("MINIMAL", "FULL_CONTENT"):
+        thread = await call_read_tool_json(provider, "get_thread", {"threadId": thread_id, "messageFormat": fmt})
+        if not isinstance(thread, dict) or thread.get("id") != thread_id or not isinstance(thread.get("messages"), list):
+            return found
+        for item in thread["messages"]:
+            if isinstance(item, dict) and item.get("id") in uids and isinstance(labels := item.get("labelIds"), list):
+                found[item["id"]] = labels
+        if uids <= found.keys():
+            break
+    return found

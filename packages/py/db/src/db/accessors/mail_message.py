@@ -6,16 +6,18 @@ from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import String, and_, any_, bindparam, delete, exists, func, or_, select, tuple_, update
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import String, and_, any_, bindparam, cast, delete, exists, func, or_, select, tuple_, update
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.orm import aliased
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from db.accessors import mail_reference_snapshot
+from db.accessors import mail_reference_snapshot, mail_sync_state
 from db.models.mail_insight import MailInsight
 from db.models.mail_action import MailAction
 
 from db.engine import get_session_maker
 from db.models.mail_message import MailMessage
+from db.models.mail_sync_state import MailSyncState
 
 
 @asynccontextmanager
@@ -34,6 +36,7 @@ def _connector_labels(stored: str, *, folder: str | None = None, is_read: bool |
         labels = []
     labels = [label for label in labels if isinstance(label, str)] if isinstance(labels, list) else []
     for label, present in (("INBOX", folder == "INBOX" if folder is not None else None),
+                           ("TRASH", folder == "TRASH" if folder is not None else None),
                            ("UNREAD", not is_read if is_read is not None else None), ("STARRED", is_flagged)):
         if present and label not in labels:
             labels.append(label)
@@ -333,47 +336,166 @@ async def known_uids(account_id: str, folder: str, *, verified_only: bool = Fals
         return dict((await session.execute(query)).all())
 
 
-async def reconcile_connector_folders(session: AsyncSession, account_id: str, inbox: set[str], archived: set[str], *, verified: bool) -> None:
-    """The Studio provider UID follows a message between INBOX and ARCHIVE."""
+async def reconcile_label_folders(session: AsyncSession, account_id: str, inbox: set[str], archived: set[str],
+                                  *, verified: bool, restored: set[str], trashed: set[str]) -> set[str]:
+    """A label provider's UID follows the message. Only a point read can restore a trashed UID."""
     if not inbox and not archived:
-        return
+        return set()
     rows = (await session.scalars(select(MailMessage).where(
         MailMessage.account_id == account_id, MailMessage.provider_uid.in_(inbox | archived),
-        MailMessage.folder.in_(("INBOX", "ARCHIVE")),
+        MailMessage.folder.in_(("INBOX", "ARCHIVE", "TRASH")),
     ).order_by(MailMessage.id).with_for_update())).all()
     by_uid: dict[str, dict[str, MailMessage]] = {}
     for row in rows:
         by_uid.setdefault(row.provider_uid, {})[row.folder] = row
     moves = []
-    duplicate_ids = []
+    blocked = set()
     for uid, copies in by_uid.items():
-        target = "ARCHIVE" if uid in archived else "INBOX"
+        target = "TRASH" if uid in trashed else "ARCHIVE" if uid in archived else "INBOX"
         active = copies.get("INBOX")
         stored = copies.get("ARCHIVE")
-        if active is not None and stored is not None:
+        if trash := copies.get("TRASH"):
+            keep = next((row for row in copies.values() if not row.unverified_connector), trash) if trash.unverified_connector else trash
+            if uid in inbox and uid in restored:
+                target = "INBOX"
+            else:
+                target = "TRASH"
+                blocked.add(uid)
+            for other in copies.values():
+                if other is not keep:
+                    await _merge_copy(session, keep, other, verified=verified)
+        elif active is not None and stored is not None:
             # Retain the active inbox identity. An unverified copy cannot displace a
             # verified archive when the only new evidence is that the UID left the inbox.
             keep_archive = active.unverified_connector and not stored.unverified_connector
             keep, duplicate = (stored, active) if keep_archive else (active, stored)
-            if verified and not keep.unverified_connector and not duplicate.unverified_connector:
-                keep.connector_alias_ids = sorted(set(keep.connector_alias_ids + duplicate.connector_alias_ids + [duplicate.id]))
-                await session.execute(update(MailAction).where(MailAction.account_id == account_id,
-                    MailAction.message_id == duplicate.id).values(message_id=keep.id))
-            else:
-                await mail_reference_snapshot.preserve(session, duplicate)
-            duplicate_ids.append(duplicate.id)
-            await session.delete(duplicate)
+            await _merge_copy(session, keep, duplicate, verified=verified)
         else:
             keep = next(iter(copies.values()))
         if keep.folder != target:
             moves.append((keep, target))
-    if duplicate_ids:
-        await session.execute(delete(MailInsight).where(MailInsight.message_id.in_(duplicate_ids)))
-        await session.flush()
+    await session.flush()
     for row, target in moves:
         row.folder = target
         row.labels_json = _connector_labels(row.labels_json, folder=target)
     await session.flush()
+    return blocked
+
+
+async def _merge_copy(session, keep: MailMessage, duplicate: MailMessage, *, verified: bool) -> None:
+    if verified and not keep.unverified_connector and not duplicate.unverified_connector:
+        keep.connector_alias_ids = sorted(set(keep.connector_alias_ids + duplicate.connector_alias_ids + [duplicate.id]))
+        await session.execute(update(MailAction).where(MailAction.account_id == keep.account_id,
+            MailAction.message_id == duplicate.id).values(message_id=keep.id))
+    else:
+        await mail_reference_snapshot.preserve(session, duplicate)
+    await session.execute(delete(MailInsight).where(MailInsight.message_id == duplicate.id))
+    await session.delete(duplicate)
+
+
+async def _legacy_conflicts(session, account_id: str, stmt):
+    """Bound point reads and rotate past ambiguous pairs on later polls."""
+    size = 25
+    rows = (await session.execute(stmt.limit(size + 1))).all()
+    if len(rows) <= size:
+        return rows
+    total = await session.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))
+    generation = await session.scalar(select(MailSyncState.connector_generation).where(MailSyncState.account_id == account_id))
+    page = ((generation or 1) - 1) % max(1, (total + size - 1) // size)
+    return (await session.execute(stmt.offset(page * size).limit(size))).all() if page else rows[:size]
+
+
+async def trash_conflicts(account_id: str, inbox: Collection[str], moved_out: Collection[str]) -> dict[str, str]:
+    """Also repair existing duplicates that no longer occur in search or history."""
+    other = aliased(MailMessage)
+    duplicates = select(MailMessage.provider_uid, MailMessage.thread_id).join(other, and_(
+        MailMessage.account_id == other.account_id, MailMessage.provider_uid == other.provider_uid,
+        MailMessage.folder == "TRASH")).where(other.account_id == account_id, other.folder == "INBOX"
+    ).order_by(other.provider_uid)
+    trash_action = exists(select(MailAction.id).where(MailAction.message_id == MailMessage.id,
+        or_(MailAction.kind == "trash", and_(MailAction.kind == "restore",
+            cast(MailAction.previous_json, JSONB)["folder"].astext == "TRASH"))))
+    async with get_session_maker()() as session:
+        candidates = dict(await _legacy_conflicts(session, account_id, duplicates))
+        if not inbox and not moved_out:
+            return candidates
+        rows = await session.execute(select(MailMessage.provider_uid, MailMessage.thread_id).where(
+            MailMessage.account_id == account_id, or_(
+                and_(MailMessage.folder == "TRASH", MailMessage.provider_uid.in_(inbox)),
+                and_(MailMessage.folder == "INBOX", MailMessage.provider_uid.in_(moved_out), trash_action))))
+        candidates.update(rows.all())
+        return candidates
+
+
+async def trash_origins(account_id: str, uids: Collection[str], *, check_existing: bool = False) -> dict[str, str]:
+    """Recover pre-move provider IDs from the undo records, including legacy actions."""
+    if not uids and not check_existing:
+        return {}
+    source = cast(MailAction.previous_json, JSONB)["provider_uid"].astext
+    stmt = select(source, MailMessage.id).join_from(MailAction, MailMessage, MailAction.message_id == MailMessage.id).where(
+        MailAction.account_id == account_id, MailAction.kind == "trash", MailMessage.account_id == account_id,
+        or_(MailMessage.folder == "TRASH", MailMessage.provider_uid != source))
+    async with get_session_maker()() as session:
+        found = {}
+        if check_existing:
+            other = aliased(MailMessage)
+            existing = stmt.join(other, and_(other.account_id == account_id, other.folder == "INBOX",
+                                              other.provider_uid == source, other.id != MailMessage.id))
+            found.update(await _legacy_conflicts(session, account_id, existing.distinct().order_by(source)))
+        if uids:
+            found.update((await session.execute(stmt.where(source.in_(uids)))).all())
+        return found
+
+
+async def reconcile_native_trash(session: AsyncSession, account_id: str, uid: str, original: str,
+                                 *, in_inbox: bool, graph: bool) -> None:
+    keep = await session.get(MailMessage, original)
+    if keep is None or keep.account_id != account_id or (in_inbox and (not graph or keep.folder != "TRASH")):
+        return
+    duplicate = await session.scalar(select(MailMessage).where(MailMessage.account_id == account_id,
+        MailMessage.provider_uid == uid, MailMessage.folder == "INBOX", MailMessage.id != keep.id))
+    if duplicate:
+        # Only Graph proves identity across folders. Preserve an old IMAP reference
+        # as read-only: another UIDVALIDITY may have reused its numeric source UID.
+        await _merge_copy(session, keep, duplicate, verified=graph)
+        await session.flush()
+    if in_inbox:
+        keep.provider_uid, keep.folder = uid, "INBOX"
+        await session.flush()
+
+
+async def commit_trash_move(message: MailMessage, updates: dict, *, action: MailAction | None = None) -> None:
+    """Publish the provider-confirmed move, its undo record and the sync fence together."""
+    async with get_session_maker().begin() as session:
+        account = await mail_sync_state.fence_folder_change(session, message.account_id)
+        stable_uid = account.auth_type == "mistral_connector" or account.provider == "google"
+        target_uid = updates.get("provider_uid", message.provider_uid)
+        keep = await get_message(message.id, session)
+        if keep is None:
+            if account.auth_type == "mistral_connector":
+                raise LookupError("Connector message identity changed during move")
+            # A native full rebuild can remove this row between dispatch and success.
+            # Carry its public ID and undo history into the confirmed destination.
+            keep = MailMessage(**message.model_dump(exclude={"search_tsv"}))
+        if stable_uid:
+            match = MailMessage.provider_uid == message.provider_uid
+        else:
+            match = and_(MailMessage.folder == updates["folder"], MailMessage.provider_uid == target_uid)
+            if account.provider == "microsoft":
+                match = or_(match, MailMessage.provider_uid == message.provider_uid)
+        copies = await session.scalars(select(MailMessage).where(MailMessage.account_id == account.id,
+            MailMessage.id != keep.id, match).order_by(MailMessage.id).with_for_update())
+        for other in copies:
+            if account.provider == "imap" and (not message.rfc_message_id or message.rfc_message_id != other.rfc_message_id):
+                raise ValueError("Conflicting IMAP folder UID")
+            await _merge_copy(session, keep, other, verified=True)
+        await session.flush()
+        for key, value in updates.items():
+            setattr(keep, key, value)
+        session.add(keep)
+        if action is not None:
+            action.message_id = keep.id
+            session.add(action)
 
 
 async def archived_connector_members(account_id: str, listed: Collection[str], threads: Collection[str], since: datetime):
@@ -382,7 +504,7 @@ async def archived_connector_members(account_id: str, listed: Collection[str], t
         return []
     async with get_session_maker()() as session:
         stmt = select(MailMessage.provider_uid, MailMessage.thread_id).where(MailMessage.account_id == account_id,
-            MailMessage.folder == "ARCHIVE", or_(MailMessage.provider_uid == any_(bindparam("listed", type_=ARRAY(String))),
+            MailMessage.folder.in_(("ARCHIVE", "TRASH")), or_(MailMessage.provider_uid == any_(bindparam("listed", type_=ARRAY(String))),
             and_(MailMessage.thread_id == any_(bindparam("threads", type_=ARRAY(String))),
                  or_(MailMessage.internal_date >= since, MailMessage.internal_date.is_(None))))).order_by(MailMessage.id)
         return (await session.execute(stmt, {"listed": list(listed), "threads": list(threads)})).all()
@@ -433,10 +555,12 @@ async def set_body(message_id: str, *, session: AsyncSession | None = None, body
             await _drop_insight(session, message_id)
 
 
-async def delete_folder(account_id: str, folder: str) -> int:
-    async with get_session_maker()() as session:
-        result = await session.execute(delete(MailMessage).where(MailMessage.account_id == account_id, MailMessage.folder == folder))
-        await session.commit()
+async def delete_folder(account_id: str, folder: str, *, session: AsyncSession | None = None, exclude_uids: Collection[str] = ()) -> int:
+    stmt = delete(MailMessage).where(MailMessage.account_id == account_id, MailMessage.folder == folder)
+    if exclude_uids:
+        stmt = stmt.where(MailMessage.provider_uid.not_in(exclude_uids))
+    async with _writer(session) as session:
+        result = await session.execute(stmt)
         return result.rowcount
 
 

@@ -51,15 +51,11 @@ async def sync_account(account_id: str) -> SyncResult:
     if account is None:
         raise LookupError(f"no mail account with id {account_id}")
     is_connector = account.auth_type == connectors.CONNECTOR
-    if is_connector and not is_seed_account(account_id):
-        previous = await sync_state_access.save_state(account_id=account_id, cursor=None, status="syncing", claim_connector=True)
-    else:
-        previous = await sync_state_access.get_state(account_id)
-    cursor = previous.cursor if previous else ""
     if is_seed_account(account_id):
-        return SyncResult("ok", 0, cursor, "")
-    if not is_connector:
-        await sync_state_access.save_state(account_id=account_id, cursor=cursor, status="syncing")
+        state = await sync_state_access.get_state(account_id)
+        return SyncResult("ok", 0, state.cursor if state else "", "")
+    previous = await sync_state_access.save_state(account_id=account_id, cursor=None, status="syncing", claim_poll=True)
+    cursor = previous.cursor
     try:
         if account.auth_type == connectors.CONNECTOR:
             provider = sync_connector
@@ -73,6 +69,7 @@ async def sync_account(account_id: str) -> SyncResult:
             raise ValueError("Unknown provider")
         options = dict(folders=[f.strip().upper() for f in mail_env.mail_sync_folders.split(",") if f.strip()],
                        limit=mail_env.mail_sync_page_size, max_body_chars=mail_env.mail_sync_max_body_chars)
+        native_moves = {}
         verified = is_connector and not connector_mailbox.inbox_only(account)
         if verified:
             verified_cursor = previous.connector_cursor if previous and previous.connector_verified else ""
@@ -88,9 +85,10 @@ async def sync_account(account_id: str) -> SyncResult:
         else:
             changes = await provider.fetch_changes(account, cursor=cursor, **options)
             stored_progress = changes.cursor
-        if is_connector:
-            async with sync_state_access.connector_transaction(account_id, previous, verified=verified) as (session, state):
-                new_ids, invalidated = await _apply_changes(account_id, changes, unverified=not verified, connector_session=session)
+            native_moves = await _check_native_returns(account, changes)
+        async with sync_state_access.sync_transaction(account_id, previous, verified=verified, connector=is_connector) as (session, state):
+            new_ids, invalidated = await _apply_changes(account, changes, session, verified, native_moves)
+            if is_connector:
                 state.connector_deferred_threads = deferred
                 if verified:
                     state.connector_proof_revision += 1
@@ -100,29 +98,49 @@ async def sync_account(account_id: str) -> SyncResult:
                 state.connector_verified = verified
                 state.connector_cursor = stored_progress
                 state.cursor = sync_connector.incremental_cursor(changes.cursor)
-                state.status, state.last_error = "ok", ""
-                state.last_sync_at = state.updated_at = datetime.now(UTC)
-        else:
-            new_ids, invalidated = await _apply_changes(account_id, changes, unverified=False)
-            await sync_state_access.save_state(account_id=account_id, cursor=changes.cursor, status="ok", last_error="")
+            else:
+                state.cursor = changes.cursor
+            state.status, state.last_error = "ok", ""
+            state.last_sync_at = state.updated_at = datetime.now(UTC)
         try:
             reread = await refresh_bodies(account, provider)
-        except (connector_mailbox.MailboxUnavailable, sync_state_access.StaleConnectorSync):
+        except (connector_mailbox.MailboxUnavailable, sync_state_access.StaleMailSync):
             raise
         except Exception as error:  # noqa: BLE001 — keep the completed page and retry body refresh
             logger.warning("Body refresh failed: %s", type(error).__name__)
             reread = []
         return SyncResult("ok", len(changes.upserts), stored_progress, "", new_ids, bool(invalidated or reread) and not verified)
-    except sync_state_access.StaleConnectorSync:
+    except sync_state_access.StaleMailSync:
         return SyncResult("error", 0, cursor, "provider_error")
     except Exception as error:  # noqa: BLE001 — provider failures must not expose credentials
         code = _error_code(error)
         logger.warning("%s", type(error).__name__)
-        if is_connector:
-            await sync_state_access.fail_connector(account_id, previous, code)
-        else:
-            await sync_state_access.save_state(account_id=account_id, cursor=cursor, status="error", last_error=code)
+        await sync_state_access.fail_poll(account_id, previous, code)
         return SyncResult("error", 0, cursor, code)
+
+
+async def _check_native_returns(account, changes):
+    uids = {row["provider_uid"] for row in changes.upserts}
+    if account.provider == providers.GOOGLE:
+        candidates = await message_access.trash_conflicts(account.id, uids, changes.moved_out)
+        if candidates:
+            labels = await sync_gmail.current_labels(account, set(candidates))
+            rows = {row["provider_uid"]: row for row in changes.upserts}
+            for uid in candidates:
+                changes.observe_current_labels(uid, labels.get(uid), rows.get(uid))
+        return {}
+    graph = account.provider == providers.MICROSOFT
+    origins = await message_access.trash_origins(account.id, uids | set(changes.moved_out), check_existing=graph)
+    if not origins:
+        return {}
+    if graph:
+        confirmed = await sync_graph.confirm_inbox(account, origins)
+    else:
+        confirmed = await sync_imap.confirm_inbox(account, origins, changes.cursor)
+    changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in origins or row["provider_uid"] in confirmed]
+    # Graph's old ID can return to the same row. An IMAP UID in a new UIDVALIDITY
+    # identifies an independent message even when the numeric value is identical.
+    return {uid: (original, uid in confirmed) for uid, original in origins.items()}
 
 
 async def _connector_changes(account, progress, deferred, options):
@@ -135,35 +153,49 @@ async def _connector_changes(account, progress, deferred, options):
         sync_connector.merge_observations(changes, recovered)
     excluded = set(changes.moved_out) | changes.unconfirmed_uids
     changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in excluded]
+    possible = {row["provider_uid"] for row in changes.upserts} | changes.read_updates.keys() | changes.flag_updates.keys()
+    candidates = await message_access.trash_conflicts(account.id, possible, changes.moved_out)
+    if candidates:
+        await sync_connector.confirm_trash_conflicts(account, changes, candidates)
     return changes, list(dict.fromkeys([*pending[retry_count:], *changes.deferred_threads]))
 
 
-async def _apply_changes(account_id, changes, *, unverified, connector_session=None):
-    transaction = {"session": connector_session} if connector_session is not None else {}
+async def _apply_changes(account, changes, session, verified, native_moves):
+    account_id = account.id
+    connector = account.auth_type == connectors.CONNECTOR
+    label_folders = connector or account.provider == providers.GOOGLE
+    unverified = connector and not verified
     invalidated = []
-    known = await message_access.known_uids(account_id, "INBOX", **transaction)
-    moved = set(changes.moved_out)
-    if connector_session is not None:
-        await message_access.reconcile_connector_folders(
-            connector_session, account_id, {row["provider_uid"] for row in changes.upserts}, moved, verified=not unverified)
-    # Rows this run rewrites that still hold text from an older extraction.
-    old_texts = {} if changes.full_rebuild else await message_access.stale_body_texts(account_id, "INBOX", BODY_VERSION, [parsed["provider_uid"] for parsed in changes.upserts], **transaction)
+    known = await message_access.known_uids(account_id, "INBOX", session=session)
+    moved = set(changes.moved_out) - changes.confirmed_inbox - native_moves.keys()
+    graph = account.provider == providers.MICROSOFT
+    for uid, (original, in_inbox) in native_moves.items():
+        await message_access.reconcile_native_trash(session, account_id, uid, original, in_inbox=in_inbox, graph=graph)
     if changes.full_rebuild:
-        await message_access.delete_folder(account_id, "INBOX")
+        retained = changes.confirmed_inbox | moved if label_folders else {uid for uid, (_, present) in native_moves.items() if graph and present}
+        await message_access.delete_folder(account_id, "INBOX", session=session, exclude_uids=retained)
+    if label_folders:
+        changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in moved]
+        blocked = await message_access.reconcile_label_folders(session, account_id,
+            {row["provider_uid"] for row in changes.upserts} | changes.confirmed_inbox, moved,
+            verified=not unverified, restored=changes.confirmed_inbox, trashed=changes.trashed)
+        changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in blocked]
+    # Rows this run rewrites that still hold text from an older extraction.
+    old_texts = {} if changes.full_rebuild else await message_access.stale_body_texts(account_id, "INBOX", BODY_VERSION, [parsed["provider_uid"] for parsed in changes.upserts], session=session)
     new_ids = []
     for parsed in changes.upserts:
         uid = parsed["provider_uid"]
-        if connector_session is not None:
+        if connector:
             if uid in changes.read_updates:
                 parsed["is_read"] = changes.read_updates[uid]
             if uid in changes.flag_updates:
                 parsed["is_flagged"] = changes.flag_updates[uid]
         outdated = uid in old_texts and insight_outdated(old_texts[uid], parsed["body_text"])
         row = await message_access.upsert_message(account_id=account_id, **parsed, body_version=BODY_VERSION, drop_insight=outdated,
-                                                  unverified_connector=unverified, invalidated_insights=invalidated, **transaction)
+                                                  unverified_connector=unverified, invalidated_insights=invalidated, session=session)
         if uid not in known:
             new_ids.append(row.id)
-        if changes.full_rebuild or connector_session is not None:
+        if changes.full_rebuild or label_folders:
             known[parsed["provider_uid"]] = row.id
     for uid in set(changes.read_updates) | set(changes.flag_updates) | moved:
         if uid not in known:
@@ -173,12 +205,12 @@ async def _apply_changes(account_id, changes, *, unverified, connector_session=N
             updates["is_read"] = changes.read_updates[uid]
         if uid in changes.flag_updates:
             updates["is_flagged"] = changes.flag_updates[uid]
-        if uid in moved and connector_session is None:
+        if uid in moved and not label_folders:
             updates["folder"] = "ARCHIVE"
         if updates:
-            if connector_session is not None:
+            if connector:
                 updates["connector_labels"] = True
-            await message_access.set_state(known[uid], **updates, **transaction)
+            await message_access.set_state(known[uid], **updates, session=session)
     return new_ids, invalidated
 
 
@@ -201,7 +233,7 @@ async def refresh_bodies(account, provider) -> list[str]:
             raise connector_mailbox.MailboxUnavailable()
         async with connector_mailbox.bound_mailbox(account, cursor=state.connector_cursor, generation=state.connector_generation, observed=state, check_after=True):
             found = await provider.fetch_bodies(account, stale, max_body_chars=mail_env.mail_sync_max_body_chars)
-        async with sync_state_access.connector_transaction(account.id, state, verified=True) as (session, _):
+        async with sync_state_access.sync_transaction(account.id, state, verified=True) as (session, _):
             dropped = await _apply_bodies(stale, found, now, session=session)
             mail_job.queue_verified_insights(session, account.id, dropped, mail_env.mail_insight_batch_limit)
             return dropped

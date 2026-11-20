@@ -136,7 +136,7 @@ async def message_action(message_id: str, body: MessageActionIn) -> MessageActio
     except actions.ActionUnsupportedError:
         raise refuse(409, "action_unsupported", "Das geht bei dieser Mail nicht.") from None
     except actions.ActionFailedError:
-        raise refuse(502, "provider_failed", "Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert.") from None
+        raise refuse(502, "provider_failed", "Der Anbieter hat die Änderung nicht bestätigt. Prüfe die Mail nach dem nächsten Abruf.") from None
     message = await message_access.get_message(message_id)
     if message is None:
         raise refuse(404, "message_not_found", "Die Mail ist nicht mehr da.")

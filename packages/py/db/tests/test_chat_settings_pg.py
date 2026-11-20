@@ -283,7 +283,7 @@ def test_legacy_writes_and_obsolete_batches_cannot_publish_verified_mail(pg_db):
     async def run():
         a = await service.upsert_account(provider='gmail', auth_type=connectors.CONNECTOR, email_address='rollout@example.test')
         initial = await mail_sync_state.save_state(account_id=a.id, cursor='12')
-        async with mail_sync_state.connector_transaction(a.id, initial, verified=True) as (session, state):
+        async with mail_sync_state.sync_transaction(a.id, initial, verified=True) as (session, state):
             verified = await mail_message.upsert_message(session=session, account_id=a.id, folder='INBOX', provider_uid='one', subject='Verified')
             state.connector_cursor = connector_mailbox.encode(('named', 'thread', 'proof'), '12')
             state.connector_verified = True
@@ -297,14 +297,14 @@ def test_legacy_writes_and_obsolete_batches_cannot_publish_verified_mail(pg_db):
         for row in (old, verified):
             assert await chat_settings.mail_preview(row.id, 2, None) is None
         await chat_settings.invalidate_connector(a.id, old_state.connector_generation)
-        with pytest.raises(mail_sync_state.StaleConnectorSync):
-            async with mail_sync_state.connector_transaction(a.id, old_state, verified=True):
+        with pytest.raises(mail_sync_state.StaleMailSync):
+            async with mail_sync_state.sync_transaction(a.id, old_state, verified=True):
                 pytest.fail('stale publication was admitted')
         with pytest.raises(chat_settings.AccountNotGranted):
             await chat_settings.update(3, [a.id])
         current = await mail_sync_state.get_state(a.id)
         with pytest.raises(RuntimeError, match='incomplete page'):
-            async with mail_sync_state.connector_transaction(a.id, current, verified=True) as (session, state):
+            async with mail_sync_state.sync_transaction(a.id, current, verified=True) as (session, state):
                 await mail_message.upsert_message(session=session, account_id=a.id, folder='INBOX', provider_uid='partial')
                 state.connector_verified = True
                 raise RuntimeError('incomplete page')

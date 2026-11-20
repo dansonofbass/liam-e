@@ -38,6 +38,26 @@ def _logout(connection) -> None:
         pass
 
 
+def _inbox_flags(connection, uid_set: str) -> dict[str, list[bytes]]:
+    status, data = connection.uid("fetch", uid_set, "(FLAGS)")
+    if status != "OK":
+        raise RuntimeError("IMAP flags fetch failed")
+    result = {}
+    for entry in data or []:
+        raw = entry[0] if isinstance(entry, tuple) else entry
+        if not isinstance(raw, bytes):
+            continue
+        uid = re.search(rb"\bUID\s+(\d+)", raw, re.I)
+        if uid:
+            match = re.search(rb"\bFLAGS\s*\(([^)]*)\)", raw, re.I)
+            if not match:
+                raise RuntimeError("IMAP flags missing")
+            flags = match[1].lower().split()
+            if b"\\deleted" not in flags:
+                result[uid[1].decode()] = flags
+    return result
+
+
 def _fetch(host: str, port: int, email_address: str, password: str, cursor: str, known: dict[str, str], limit: int, max_body_chars: int) -> SyncChanges:
     connection = transport.open_imap(host, port)
     try:
@@ -58,28 +78,11 @@ def _fetch(host: str, port: int, email_address: str, password: str, cursor: str,
         if not rebuild and known:
             numeric = [int(uid) for uid in known if uid.isdigit()]
             if numeric:
-                status, data = connection.uid("fetch", f"{min(numeric)}:{max(numeric)}", "(FLAGS)")
-                if status != "OK":
-                    raise RuntimeError("IMAP flags fetch failed")
-                found = set()
-                for entry in data or []:
-                    raw = entry[0] if isinstance(entry, tuple) else entry
-                    if not isinstance(raw, bytes):
-                        continue
-                    uid_match = re.search(rb"\bUID\s+(\d+)", raw, re.I)
-                    flags_match = re.search(rb"\bFLAGS\s*\(([^)]*)\)", raw, re.I)
-                    if uid_match and not flags_match:
-                        raise RuntimeError("IMAP flags missing")
-                    if not uid_match:
-                        continue
-                    uid = uid_match.group(1).decode()
-                    if uid not in known:
-                        continue
-                    found.add(uid)
-                    flags = flags_match.group(1).lower().split()
-                    changes.read_updates[uid] = b"\\seen" in flags
-                    changes.flag_updates[uid] = b"\\flagged" in flags
-                changes.moved_out = [uid for uid in known if uid.isdigit() and uid not in found]
+                flags_by_uid = _inbox_flags(connection, f"{min(numeric)}:{max(numeric)}")
+                for uid in known.keys() & flags_by_uid.keys():
+                    changes.read_updates[uid] = b"\\seen" in flags_by_uid[uid]
+                    changes.flag_updates[uid] = b"\\flagged" in flags_by_uid[uid]
+                changes.moved_out = [uid for uid in known if uid.isdigit() and uid not in flags_by_uid]
         for uid in selected:
             status, data = connection.uid("fetch", str(uid), "(UID FLAGS RFC822.SIZE BODY.PEEK[])")
             if status != "OK":
@@ -89,6 +92,9 @@ def _fetch(host: str, port: int, email_address: str, password: str, cursor: str,
                 raise RuntimeError("IMAP message missing from fetch")
             flags_match = re.search(rb"\bFLAGS\s*\(([^)]*)\)", part[0], re.I)
             flags = flags_match.group(1).lower().split() if flags_match else []
+            if b"\\deleted" in flags:
+                changes.moved_out.append(str(uid))
+                continue
             parsed = parse_rfc822(part[1], max_body_chars=max_body_chars)
             parsed.update(folder="INBOX", provider_uid=str(uid), is_read=b"\\seen" in flags, is_flagged=b"\\flagged" in flags)
             changes.upserts.append(parsed)
@@ -127,6 +133,26 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
     password = await service.imap_password(credentials)
     known = await message_access.known_uids(account.id, "INBOX") if cursor else {}
     return await asyncio.to_thread(_fetch, host, int(credentials.get("imap_port", 993)), account.email_address, password, cursor, known, limit, max_body_chars)
+
+
+async def confirm_inbox(account: MailAccount, uids, cursor: str) -> set[str]:
+    """Resolve replays without treating a UID reused in another UIDVALIDITY as the old mail."""
+    credentials = await service.load_credentials(account)
+    host = credentials["imap_host"]
+    await transport.check_mail_host(host)
+    password = await service.imap_password(credentials)
+
+    def read():
+        connection = transport.open_imap(host, int(credentials.get("imap_port", 993)))
+        try:
+            _open_inbox(connection, account.email_address, password)
+            _, values = connection.response("UIDVALIDITY")
+            if not values or values[0] != cursor.partition(":")[0].encode():
+                raise RuntimeError("IMAP UIDVALIDITY changed during poll")
+            return set(_inbox_flags(connection, ",".join(uids))).intersection(uids)
+        finally:
+            _logout(connection)
+    return await asyncio.to_thread(read)
 
 
 async def fetch_bodies(account: MailAccount, messages: list[MailMessage], *, max_body_chars: int) -> Reread:

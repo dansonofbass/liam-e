@@ -11,7 +11,7 @@ from db.models.mail_account import MailAccount
 from db.models.mail_message import MailMessage
 
 from api.mail import providers, service
-from api.mail.sync_types import Reread, SyncChanges, addresses, body_text, common, reread_http
+from api.mail.sync_types import Reread, SyncChanges, addresses, body_text, common, inbox_labels, reread_http
 
 
 async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int) -> SyncChanges:
@@ -72,11 +72,29 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
                 continue
             response.raise_for_status()
             message = response.json()
-            if "INBOX" not in message.get("labelIds", []):
-                changes.moved_out.append(uid)
+            labels = message.get("labelIds") or []
+            if not inbox_labels(labels):
+                changes.moved_from_inbox(uid, labels)
                 continue
             changes.upserts.append(parse_message(message, max_body_chars=max_body_chars))
     return changes
+
+
+async def current_labels(account: MailAccount, candidates: set[str]) -> dict[str, list[str]]:
+    credentials = await service.load_credentials(account)
+    token = await service.valid_access_token(account, credentials)
+    labels = {}
+    async with httpx.AsyncClient(timeout=30, base_url=providers.GMAIL_API, headers={"Authorization": f"Bearer {token}"}) as client:
+        for uid in candidates:
+            response = await client.get(f"/messages/{quote(uid, safe='')}", params={"format": "minimal"})
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+            item = response.json()
+            if item.get("id") != uid or not isinstance(item.get("labelIds"), list):
+                raise ValueError("Missing Gmail message labels")
+            labels[uid] = item["labelIds"]
+    return labels
 
 
 async def fetch_bodies(account: MailAccount, messages: list[MailMessage], *, max_body_chars: int) -> Reread:

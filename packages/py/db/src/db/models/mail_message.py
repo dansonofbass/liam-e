@@ -1,7 +1,7 @@
 """One synced mail message of one account — the searchable index the chat agent works on.
 
 ``provider_uid`` is the provider's own id (Gmail message id, IMAP UID per folder, Graph id), unique
-per (account, folder). ``body_text`` is capped at ``MAIL_SYNC_MAX_BODY_CHARS`` during sync so one
+per (account, folder). Confirmed IMAP trash moves store the destination as UIDVALIDITY:UID. ``body_text`` is capped at ``MAIL_SYNC_MAX_BODY_CHARS`` during sync so one
 huge mail cannot dominate the index. ``recipients_json``/``cc_json``/``reply_to_json``/``labels_json``
 are JSON arrays of strings.
 ``folder`` is normalized to INBOX, ARCHIVE, TRASH, or another MAIL_SYNC_FOLDERS folder.
