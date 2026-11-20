@@ -397,6 +397,15 @@ async def test_location_correction_does_not_choose_or_exclude_a_calendar(monkeyp
     assert (command.source_id, command.after.location) == (default, 'Home')
     explicit = replace(ctx, user_text=text + ', put it in the Home calendar.')
     assert (await chat.prepare(values, explicit)).source_id == 'home'
+    for ending in ('but not in the Work calendar', 'and do not put it in the Work calendar'):
+        after_location = replace(ctx, user_text=f'Schedule lunch tomorrow at noon at Café Central {ending}.')
+        args = {**values, 'location': 'Café Central'}
+        if default == 'work':
+            with pytest.raises(writes.WriteError, match='calendar_name_required'):
+                await chat.prepare(args, after_location)
+        else:
+            card = await chat.prepare(args, after_location)
+            assert (card.source_id, card.after.location) == ('personal', 'Café Central')
 
 
 @pytest.mark.parametrize('default, request_text, expected', [
@@ -410,6 +419,10 @@ async def test_location_correction_does_not_choose_or_exclude_a_calendar(monkeyp
     ('personal', 'Schedule a meeting titled “Not Work” in the Work calendar', 'work'),
     ('personal', 'Add tomorrow’s 10:00 review to Home instead of Work.', 'home'),
     ('personal', 'Schedule home inspection tomorrow, but do not use the Work calendar.', 'personal'),
+    ('personal', 'Put lunch in my calendar next Monday at noon', 'personal'),
+    ('personal', 'Put lunch in my calendar on Thursday', 'personal'),
+    ('personal', 'Put lunch in my calendar after the morning meeting', 'personal'),
+    ('personal', 'Trage Mittagessen in meinem Kalender nächsten Montag um zwölf ein', 'personal'),
 ])
 async def test_calendar_create_keeps_an_excluded_destination_out(monkeypatch, default, request_text, expected):
     from dataclasses import replace
@@ -433,7 +446,7 @@ async def test_calendar_create_keeps_an_excluded_destination_out(monkeypatch, de
         if 'home inspection' in request_text:
             with pytest.raises(writes.WriteError, match='calendar_name_required'):
                 await chat.prepare({**args, 'calendar_name': 'Home'}, ctx)
-        if ctx.requested_calendar.excluded_source_ids and ctx.requested_calendar.source_id is None:
+        if ctx.requested_calendar and ctx.requested_calendar.excluded_source_ids and ctx.requested_calendar.source_id is None:
             settings.default_source_id = 'work'
             reply = replace(ctx, calendar_choice=ctx.requested_calendar, user_text='Tomorrow at noon')
             with pytest.raises(writes.WriteError, match='calendar_name_required'):

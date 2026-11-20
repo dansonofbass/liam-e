@@ -36,6 +36,13 @@ _NAME_WORD = (r"(?!(?:the|a|my|den|dem|der|das|in|im|into|on|for|at|from|to|am|u
               r"and|und|or|oder|calendar|kalender)\b)\w+(?:[-&/'’]\w+)*")
 _NAME_FIRST = re.compile(rf"(?<!\w){_PREFIX}(?P<name>{_NAME_WORD}(?:\s+(?:(?:&|and|und)\s+)?{_NAME_WORD})*)\s+{_CALENDAR}\b", re.I)
 _CALENDAR_FIRST = re.compile(rf"(?<!\w){_PREFIX}{_CALENDAR}\s+(?P<name>{_NAME_WORD}(?:\s+{_NAME_WORD})*)", re.I)
+_DAY_OR_PERIOD = (r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week(?:end)?|month|year|"
+                  r"morning|afternoon|evening|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|"
+                  r"woche(?:nende)?|monat|jahr|vormittag|nachmittag|abend)")
+_DATE_TAIL = (rf"(?:(?:next|this|coming|following|last|every|nächste[nrms]?|diese[nrms]?|kommende[nrms]?|"
+              rf"on|at|after|before|during|between|from|until|am|um|nach|vor|ab|bis|zwischen)\b|"
+              rf"{_DAY_OR_PERIOD}\b|today\b|tomorrow\b|heute\b|morgen\b|\d{{1,4}}[./:-]\d)")
+_GENERIC_CALENDAR_DATE = re.compile(rf"(?<!\w){_PREFIX}{_CALENDAR}\b(?=\s+{_DATE_TAIL})", re.I)
 _DEFAULT = re.compile(
     r"\b(?:use|choose|pick|in|into|on|to)\s+(?:(?:my|the)\s+)?default calendar\b"
     r"|\b(?:nimm|nutze|verwende|im|in|auf|zum|den)\s+(?:doch\s+)?(?:(?:meinen|meinem|den|dem)\s+)?standardkalender\b", re.I)
@@ -85,11 +92,18 @@ def _selection_words(text: str, title: str | None, entries) -> OwnerSelection:
         known = {source.name.strip().casefold() for source, _ in entries} | _DEFAULT_NAMES
         # Keep a boundary for other quoted text so its neighbouring list items cannot collapse.
         alternatives = _QUOTED.sub(lambda match: match[0][1:-1] if match[0][1:-1].strip().casefold() in known else "\ufffc", text)
-    return OwnerSelection(_QUOTED.sub(quoted, text), tuple(names), alternatives_text=alternatives)
+    positive = _QUOTED.sub(quoted, text)
+    # A date after the generic calendar noun supplies appointment timing. Exact
+    # quoted names and names before "calendar" still identify real destinations.
+    return OwnerSelection(_GENERIC_CALENDAR_DATE.sub(" ", positive), tuple(names),
+                          alternatives_text=_GENERIC_CALENDAR_DATE.sub(" ", alternatives))
 
 
 _EXCLUSION = re.compile(r"(?<!\w)(?:do not|don['’]t|not|never|except(?: for)?|instead of|rather than|avoid|excluding|"
                         r"nicht|nie|keinesfalls|außer|statt|ohne)\b", re.I)
+_TARGET_VERB = (r"(?:(?:put|place|schedule|book|add|use|choose|pick|select|nutze|verwende|nimm)\s+"
+                r"(?:(?:it|this (?:event|appointment)|den Termin|ihn)\s+)?)?")
+_NEGATIVE_CALENDAR_PREFIX = re.compile(rf"{_EXCLUSION.pattern}\s*{_TARGET_VERB}$", re.I)
 _DEFAULT_NAMES = frozenset(("default calendar", "standardkalender"))
 
 
@@ -108,9 +122,15 @@ def _without_locations(text: str, location: str | None) -> str:
         start = field.end()
         if isinstance(location, str) and text[start:start + len(location)].casefold() == location.casefold():
             start += len(location)
-        ends = [match.start() for pattern in (_FIELD_END, _NAME_FIRST, _CALENDAR_FIRST)
-                if (match := pattern.search(masked, start))]
-        end = min(ends, default=len(text))
+        boundary = _FIELD_END.search(masked, start)
+        end = boundary.start() if boundary else len(text)
+        for pattern in (_NAME_FIRST, _CALENDAR_FIRST):
+            if match := pattern.search(masked, start, end):
+                calendar_start = match.start()
+                # The negation before a separately named calendar belongs with
+                # its destination, even without punctuation after the venue.
+                prefix = _NEGATIVE_CALENDAR_PREFIX.search(masked, start, calendar_start)
+                end = prefix.start() if prefix else calendar_start
         text = text[:field.start()] + " " * (end - field.start()) + text[end:]
     return text
 
@@ -132,8 +152,7 @@ def owner_selection(text: str, title: str | None = None, *, entries=(), location
     names = _DEFAULT_NAMES.union(_declared_names(masked), (value for source, _ in entries for value in (source.name.strip(), source.id) if value))
     choices = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
     operand = re.compile(
-        rf"\s*(?:(?:put|place|schedule|book|add|use|choose|pick|select|nutze|verwende|nimm)\s+"
-        rf"(?:(?:it|this (?:event|appointment)|den Termin|ihn)\s+)?)?"
+        rf"\s*{_TARGET_VERB}"
         rf"(?:{_PREFIX}|(?:the|my|den|dem|meinen|meinem)\s+)?(?:{_CALENDAR}\s+)?"
         rf"""["'“„‘‚«»]?(?P<name>{choices})(?![\w-])["'”’“‘»«]?(?:\s+{_CALENDAR}\b)?""", re.I)
     positive, blocked = [], set()
