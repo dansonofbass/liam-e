@@ -22,21 +22,24 @@ def test_only_one_pending_proposal_per_conversation(pg_db):
 def test_claim_proposal_is_atomic(pg_db):
     async def run():
         from db.accessors import chat_message as m
-        row = await m.add_message(conversation_id="a", role="proposal", proposal_status="pending")
+        from db.accessors import chat_context
+        conversation, context, _ = await chat_context.resolve(conversation_id=None, title='Test', model=None,
+            revision_id=None, account_id=None, app_prompt_version='test')
+        row = await m.add_message(conversation_id=conversation.id, context_id=context.id, role="proposal", proposal_status="pending")
         results = await asyncio.gather(*(m.claim_proposal(row.id) for _ in range(2)))
         assert sum(x is not None for x in results) == 1
         assert next(x for x in results if x is not None).proposal_status == "running"
     asyncio.run(run())
 
 
-def test_claim_requires_live_context_or_legacy(pg_db):
+def test_claim_requires_live_context_and_allows_legacy_cancellation(pg_db):
     async def run():
         from db.accessors import chat_message as m
         from db.engine import get_session_maker
         from db.models.chat_context import ChatContext
         async with get_session_maker()() as session:
-            live = ChatContext(conversation_id="live", app_prompt_version="1", account_scope_json="{}")
-            revoked = ChatContext(conversation_id="revoked", app_prompt_version="1", account_scope_json="{}", revoked=True)
+            live = ChatContext(conversation_id="live", app_prompt_version="1", account_scope_json='{"selection":null,"account_ids":[]}', mail_scope_version=1)
+            revoked = ChatContext(conversation_id="revoked", app_prompt_version="1", account_scope_json='{"selection":null,"account_ids":[]}', mail_scope_version=1, revoked=True)
             session.add_all([live, revoked])
             await session.commit()
         denied = await m.add_message(conversation_id="revoked", role="proposal", proposal_status="pending", context_id=revoked.id)
@@ -46,7 +49,8 @@ def test_claim_requires_live_context_or_legacy(pg_db):
         allowed = await m.add_message(conversation_id="live", role="proposal", proposal_status="pending", context_id=live.id)
         assert (await m.claim_proposal(allowed.id)).proposal_status == "running"
         legacy = await m.add_message(conversation_id="legacy", role="proposal", proposal_status="pending")
-        assert (await m.claim_proposal(legacy.id)).proposal_status == "running"
+        assert await m.claim_proposal(legacy.id) is None
+        assert (await m.cancel_proposal(legacy.id)).proposal_status == "cancelled"
     asyncio.run(run())
 
 

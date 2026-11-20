@@ -99,7 +99,7 @@ def test_parallel_calendar_confirm_claims_once(pg_db, monkeypatch):
         from db.models.chat_message import ChatMessage
         source = CalendarSource(provider="google", connection_ref="synthetic", external_id="synthetic", name="Example",
                                 timezone="UTC", capabilities_json='["read","write"]')
-        context = ChatContext(conversation_id="synthetic-conversation", app_prompt_version="8", account_scope_json="{}",
+        context = ChatContext(conversation_id="synthetic-conversation", app_prompt_version="8", mail_scope_version=1, account_scope_json='{"selection":null,"account_ids":[]}',
                               calendar_scope_json=json.dumps([source.id]))
         command = CalendarCommand(action="create", source_id=source.id, connection_ref=source.connection_ref, timezone="UTC",
             after=CalendarValues(title="Example", start_date="2026-12-05", end_date="2026-12-06"))

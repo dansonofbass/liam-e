@@ -600,15 +600,17 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   conversation is waiting for an answer or streaming one. Each answer shows the model reported by
   its own turn. Older streams or messages without this information omit the model label.
 - **Composer:** the text field grows to 200 px high. Enter sends, Shift+Enter starts a new line.
-  The account chip bottom left („Alle Konten“ or an account name) determines which accounts the
-  assistant searches. Beside it the task chip determines which tasks the assistant may read
+  Settings → Chat controls which mail accounts the assistant can use. Each active account has a
+  checkbox. The initial selection is empty and Save applies it across devices. The composer’s
+  task chip determines which tasks the assistant may read
   (default „Keine Aufgaben“). Its menu shows single selection with explanatory lines; in a
   conversation with history the other entries say „Braucht eine neue Unterhaltung.“ The bar wraps,
   the send button stays at the end. Selections belong as chips in this bar, not a chip group above
   the composer: on small phones such a group pushes the composer off screen.
 - **Mail context:** „Im Chat fragen“ opens the home page with the mail as context. Above the composer
   its mail card appears with the icon button „Bezug entfernen“ (`x`). The composer starts in the
-  referenced account with focus in the question field. The reference shows its subject, sender
+  referenced account with focus in the question field when the account has chat access. An
+  excluded reference shows the reason and can be removed. The reference shows its subject, sender
   and account and opens the full mail on tap. Each mail keeps its own unsent question.
   The calendar control shows the number selected and expands to edit the selection.
 

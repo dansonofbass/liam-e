@@ -89,6 +89,23 @@
             "title": "Auth Type",
             "type": "string"
           },
+          "chat_eligibility": {
+            "anyOf": [
+              {
+                "enum": [
+                  "eligible",
+                  "inactive",
+                  "inbox_only",
+                  "awaiting_verification"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Eligibility"
+          },
           "color_index": {
             "title": "Color Index",
             "type": "integer"
@@ -1158,6 +1175,50 @@
         "title": "ChatModelPrice",
         "type": "object"
       },
+      "ChatSettingsOut": {
+        "properties": {
+          "account_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Account Ids",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "account_ids",
+          "version"
+        ],
+        "title": "ChatSettingsOut",
+        "type": "object"
+      },
+      "ChatSettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "account_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Account Ids",
+            "type": "array"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version",
+          "account_ids"
+        ],
+        "title": "ChatSettingsUpdate",
+        "type": "object"
+      },
       "ChatStreamRequest": {
         "properties": {
           "account_id": {
@@ -1217,6 +1278,18 @@
               }
             ],
             "title": "Conversation Id"
+          },
+          "expected_mail_scope_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Mail Scope Version"
           },
           "locale": {
             "default": "en",
@@ -1347,6 +1420,18 @@
             "description": "Leer lassen f\u00fcr eine neue Unterhaltung",
             "title": "Conversation Id",
             "type": "string"
+          },
+          "expected_mail_scope_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Mail Scope Version"
           },
           "locale": {
             "default": "en",
@@ -1503,6 +1588,17 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "mail_scope_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Scope Version"
           },
           "preference_resolver_version": {
             "default": "1",
@@ -2801,6 +2897,17 @@
             ],
             "title": "Last Sync At"
           },
+          "mail_scope_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Scope Version"
+          },
           "newsletter_senders": {
             "title": "Newsletter Senders",
             "type": "integer"
@@ -2979,6 +3086,11 @@
           },
           "is_read": {
             "title": "Is Read",
+            "type": "boolean"
+          },
+          "local_reference_only": {
+            "default": false,
+            "title": "Local Reference Only",
             "type": "boolean"
           },
           "needs_reply": {
@@ -8321,6 +8433,71 @@
         "summary": "Confirm"
       }
     },
+    "/api/v1/chat/references/{message_id}": {
+      "get": {
+        "operationId": "chat_mail_reference_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "context_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Context Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailRefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mail Reference"
+      }
+    },
     "/api/v1/chat/stream": {
       "post": {
         "description": "Streams one agent turn. It never sends mail itself; proposals require explicit confirmation.",
@@ -9199,8 +9376,20 @@
     },
     "/api/v1/mail/summary": {
       "get": {
-        "description": "Return unread inbox counts and sync status for all connected accounts.",
+        "description": "Return inbox counts and sync status, optionally limited to the current chat grant.",
         "operationId": "mail_summary",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "chat_scope",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Chat Scope",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -9211,6 +9400,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Mail Summary"
@@ -9781,6 +9980,60 @@
           }
         },
         "summary": "Update Settings"
+      }
+    },
+    "/api/v1/settings/chat": {
+      "get": {
+        "operationId": "chat_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Chat Settings"
+      },
+      "patch": {
+        "operationId": "chat_settings_update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Chat Settings"
       }
     },
     "/api/v1/settings/ui": {

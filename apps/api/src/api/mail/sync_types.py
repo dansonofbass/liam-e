@@ -23,6 +23,9 @@ class SyncChanges:
     moved_out: list[str] = field(default_factory=list)
     cursor: str = ""
     full_rebuild: bool = False
+    deferred_threads: list[str] = field(default_factory=list)
+    unconfirmed_uids: set[str] = field(default_factory=set)
+    restored_members: dict[str, dict[str, list[str]]] = field(default_factory=dict)
 
 
 @dataclass
@@ -32,6 +35,7 @@ class SyncResult:
     cursor: str
     error_code: str
     new_message_ids: list[str] = field(default_factory=list)
+    refresh_insights: bool = False
 
 
 def addresses(value: str) -> str:

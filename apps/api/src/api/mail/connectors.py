@@ -13,6 +13,7 @@ directly: ``GET /v1/connectors``, ``GET /v1/connectors/{name}/tools``,
 from __future__ import annotations
 
 import json
+from contextvars import ContextVar
 from typing import Any
 from urllib.parse import quote
 
@@ -21,6 +22,8 @@ from utils.mistral import mistral_api_url, mistral_app_token
 
 # auth_type of accounts that live on a Mistral Studio connector.
 CONNECTOR = "mistral_connector"
+# Bound operations keep using this credential even when Studio changes the workspace default.
+mailbox_credential: ContextVar[str | None] = ContextVar("mailbox_credential", default=None)
 
 # Connector names whose tool sets are mail tools (search_threads / get_thread / send_email / ...).
 MAIL_CONNECTOR_NAMES = ("gmail", "outlook", "google_mail")
@@ -87,8 +90,12 @@ class ToolNotAllowedError(ValueError):
 async def _call_tool(connector: str, tool: str, arguments: dict[str, Any], timeout: float = 120) -> str:
     """Call one connector tool; returns the joined text content of the MCP-style result."""
     ref = quote(connector, safe="")
+    path = f"/v1/connectors/{ref}/tools/{quote(tool, safe='')}/call"
+    credential = mailbox_credential.get()
+    if credential is not None:
+        path += f"?credentials_name={quote(credential, safe='')}"
     data = await _post(
-        f"/v1/connectors/{ref}/tools/{quote(tool, safe='')}/call",
+        path,
         {"arguments": arguments},
         **({"timeout": timeout} if timeout != 120 else {}),
     )
@@ -109,8 +116,16 @@ async def call_read_tool_json(connector: str, tool: str, arguments: dict[str, An
     return json.loads(await call_read_tool(connector, tool, arguments))
 
 
-async def call_write_tool(connector: str, tool: str, arguments: dict[str, Any]) -> str:
+async def call_write_tool(account, tool: str, arguments: dict[str, Any], *, target=None) -> str:
     """Call an allowed mutation; reserved for send and confirmed mail actions."""
     if tool not in WRITE_TOOLS:
         raise ToolNotAllowedError("Tool is not a permitted write tool")
-    return await _call_tool(connector, tool, arguments)
+    from api.mail.connector_mailbox import bound_inbox_message, bound_mailbox, inbox_only
+    if target is not None and tool in {"label_message", "unlabel_message"} and inbox_only(account):
+        if arguments.get("messageId") != target.provider_uid:
+            raise ToolNotAllowedError("Label target does not match the verified message")
+        guard = bound_inbox_message(account, target)
+    else:
+        guard = bound_mailbox(account)
+    async with guard:
+        return await _call_tool(account.provider, tool, arguments)

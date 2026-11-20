@@ -75,6 +75,10 @@ export type AccountOut = {
      */
     auth_type: string;
     /**
+     * Chat Eligibility
+     */
+    chat_eligibility?: 'eligible' | 'inactive' | 'inbox_only' | 'awaiting_verification' | null;
+    /**
      * Color Index
      */
     color_index: number;
@@ -647,6 +651,34 @@ export type ChatModelPrice = {
 };
 
 /**
+ * ChatSettingsOut
+ */
+export type ChatSettingsOut = {
+    /**
+     * Account Ids
+     */
+    account_ids: Array<string>;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * ChatSettingsUpdate
+ */
+export type ChatSettingsUpdate = {
+    /**
+     * Account Ids
+     */
+    account_ids: Array<string>;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+};
+
+/**
  * ChatStreamRequest
  */
 export type ChatStreamRequest = {
@@ -674,6 +706,10 @@ export type ChatStreamRequest = {
      * Conversation Id
      */
     conversation_id?: string | null;
+    /**
+     * Expected Mail Scope Version
+     */
+    expected_mail_scope_version?: number | null;
     /**
      * Locale
      *
@@ -738,6 +774,10 @@ export type ChatTurnRequest = {
      * Leer lassen für eine neue Unterhaltung
      */
     conversation_id?: string;
+    /**
+     * Expected Mail Scope Version
+     */
+    expected_mail_scope_version?: number | null;
     /**
      * Locale
      *
@@ -838,6 +878,10 @@ export type ContextOut = {
      * Id
      */
     id: string;
+    /**
+     * Mail Scope Version
+     */
+    mail_scope_version?: number | null;
     /**
      * Preference Resolver Version
      */
@@ -1560,6 +1604,10 @@ export type MailSummaryOut = {
      */
     last_sync_at: string | null;
     /**
+     * Mail Scope Version
+     */
+    mail_scope_version?: number | null;
+    /**
      * Newsletter Senders
      */
     newsletter_senders: number;
@@ -1674,6 +1722,10 @@ export type MessageDetailOut = {
      * Is Read
      */
     is_read: boolean;
+    /**
+     * Local Reference Only
+     */
+    local_reference_only?: boolean;
     /**
      * Needs Reply
      */
@@ -4746,6 +4798,45 @@ export type ChatProposalConfirmResponses = {
 
 export type ChatProposalConfirmResponse = ChatProposalConfirmResponses[keyof ChatProposalConfirmResponses];
 
+export type ChatMailReferenceGetData = {
+    body?: never;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query: {
+        /**
+         * Expected Version
+         */
+        expected_version: number;
+        /**
+         * Context Id
+         */
+        context_id?: string | null;
+    };
+    url: '/api/v1/chat/references/{message_id}';
+};
+
+export type ChatMailReferenceGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatMailReferenceGetError = ChatMailReferenceGetErrors[keyof ChatMailReferenceGetErrors];
+
+export type ChatMailReferenceGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MailRefOut;
+};
+
+export type ChatMailReferenceGetResponse = ChatMailReferenceGetResponses[keyof ChatMailReferenceGetResponses];
+
 export type ChatStreamData = {
     body: ChatStreamRequest;
     path?: never;
@@ -5305,9 +5396,23 @@ export type MailMessageOriginalResponse = MailMessageOriginalResponses[keyof Mai
 export type MailSummaryData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Chat Scope
+         */
+        chat_scope?: boolean;
+    };
     url: '/api/v1/mail/summary';
 };
+
+export type MailSummaryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MailSummaryError = MailSummaryErrors[keyof MailSummaryErrors];
 
 export type MailSummaryResponses = {
     /**
@@ -5760,6 +5865,47 @@ export type SettingsUpdateResponses = {
 };
 
 export type SettingsUpdateResponse = SettingsUpdateResponses[keyof SettingsUpdateResponses];
+
+export type ChatSettingsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/chat';
+};
+
+export type ChatSettingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatSettingsOut;
+};
+
+export type ChatSettingsGetResponse = ChatSettingsGetResponses[keyof ChatSettingsGetResponses];
+
+export type ChatSettingsUpdateData = {
+    body: ChatSettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/chat';
+};
+
+export type ChatSettingsUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatSettingsUpdateError = ChatSettingsUpdateErrors[keyof ChatSettingsUpdateErrors];
+
+export type ChatSettingsUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatSettingsOut;
+};
+
+export type ChatSettingsUpdateResponse = ChatSettingsUpdateResponses[keyof ChatSettingsUpdateResponses];
 
 export type SettingsUiGetData = {
     body?: never;

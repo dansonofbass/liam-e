@@ -12,6 +12,7 @@ class ChatContext(SQLModel, table=True):
     prompt_revision_id: str | None = Field(default=None, index=True)
     prompt_hash: str | None = None
     app_prompt_version: str
+    mail_scope_version: int | None = None
     account_scope_json: str
     calendar_scope_json: str = Field(default="[]", sa_column=Column(Text, nullable=False, server_default="[]"))
     task_scope_json: str = Field(default='{"source":"none"}', sa_column=Column(Text, nullable=False, server_default='{"source":"none"}'))

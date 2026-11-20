@@ -13,7 +13,7 @@ function TestRouter({ children }: { children: ReactNode }) {
   const [router] = useState(() => createRouter({ routeTree: cardRoot, history: createMemoryHistory({ initialEntries: ['/'] }) }))
   return <RouterContextProvider router={router}><ChatSessionProvider>{children}</ChatSessionProvider></RouterContextProvider>
 }
-// Every card restarts from its conversation, so the scope comes from the cached conversation list.
+// Every card restarts from its conversation, so the conversation can have a saved account focus.
 function testClient() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(['conversations'], [{ id: 'c', title: 'Test', account_scope_json: JSON.stringify({ account_ids: ['a'], selection: 'a' }) }])
@@ -24,8 +24,8 @@ function message(status = 'pending', result?: ProposalResult): ChatMessageOut {
   return { id: 'p', conversation_id: 'c', role: 'proposal', content: '', tool_name: '', created_at: '', extras: {}, stopped: false, proposal_status: status, proposal: { kind: 'unsubscribe', reason: 'Nicht mehr gelesen.', items: [{ id: 'a', kind: 'sender', title: 'Alpha', subtitle: '12 Mails', method: 'post' }, { id: 'b', kind: 'sender', title: 'Beta', subtitle: '2 Mails', method: 'manual' }], result } }
 }
 function StartProbe() {
-  const { scope, composerTexts } = useChatSession()
-  return <div data-testid="start" data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} />
+  const { composerTexts } = useChatSession()
+  return <div data-testid="start" data-draft={composerTexts.new ?? ''} />
 }
 function TypeDraft() {
   const { setComposerText } = useChatSession()
@@ -192,6 +192,24 @@ test('task card edits survive the replacement by the history row and are confirm
   await waitFor(() => expect((screen.getByRole('button', { name: 'Bestätigen' }) as HTMLButtonElement).disabled).toBe(false))
   fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' }))
   await waitFor(() => expect(confirm.mock.calls[0]?.[0]?.body?.task_edit).toMatchObject({ title: 'Edited example', start: '2027-02-01T09:30' }))
+})
+
+test('task cards fetch their mail link only with the current grant and turn', async () => {
+  const card = message()
+  card.proposal = { kind: 'task', reason: 'Example', items: [], task: { action: 'archive', series_id: 'task', expected_version: 1, title: 'Task', source_message_id: 'mail' } }
+  card.context = { id: 'turn', mail_scope_version: 4, app_prompt_version: '10', prompt_revision_id: null, prompt_hash: null, preference_revision_id: null, account_scope_json: '{}', revoked: false }
+  const inbox = spyOn(sdk, 'mailMessageGet')
+  const scoped = spyOn(sdk, 'chatMailReferenceGet').mockResolvedValue({ data: { id: 'mail' } } as never)
+  const client = testClient()
+  const view = (version?: number) => <QueryClientProvider client={client}><TestRouter><ProposalCard message={card} grantVersion={version} /></TestRouter></QueryClientProvider>
+  const mounted = render(view())
+  expect(scoped).not.toHaveBeenCalled()
+  mounted.rerender(view(5))
+  expect(scoped).not.toHaveBeenCalled()
+  mounted.rerender(view(4))
+  await waitFor(() => expect(scoped).toHaveBeenCalledTimes(1))
+  expect(scoped.mock.calls[0]?.[0]).toMatchObject({ path: { message_id: 'mail' }, query: { expected_version: 4, context_id: 'turn' } })
+  expect(inbox).not.toHaveBeenCalled()
 })
 
 test('cancelling a task card never confirms or invalidates tasks', async () => {
@@ -410,13 +428,13 @@ test('revoked proposal offers a new conversation', async () => {
   expect(screen.getByRole('button', { name: 'Neue Unterhaltung' })).toBeTruthy()
 })
 
-test('restart from a revoked proposal carries the account and unsent text', async () => {
+test('restart from a revoked proposal carries the unsent text', async () => {
   spyOn(sdk, 'chatProposalConfirm').mockImplementation((async () => { throw { detail: { code: 'proposal_context_revoked' } } }) as never)
   setup(message())
   fireEvent.click(await screen.findByRole('button', { name: 'type' }))
   fireEvent.click(await screen.findByRole('button', { name: '2 abbestellen und archivieren' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Neue Unterhaltung' }))
-  await waitFor(() => expect(screen.getByTestId('start').dataset.scope).toBe('a'))
+  await screen.findByTestId('start')
   expect(screen.getByTestId('start').dataset.draft).toBe('Noch offen')
 })
 

@@ -146,12 +146,15 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Preferences | GET | `/api/v1/preferences/contexts/{context_id}` | `preference_context_get` |
 | Settings | GET | `/api/v1/settings` | `settings_get` |
 | Settings / independent preference opt-ins | PATCH | `/api/v1/settings` | `settings_update` |
+| Settings | GET | `/api/v1/settings/chat` | `chat_settings_get` |
+| Settings | PATCH | `/api/v1/settings/chat` | `chat_settings_update` |
 | Settings | GET | `/api/v1/settings/ui` | `settings_ui_get` |
 | Settings | PATCH | `/api/v1/settings/ui` | `settings_ui_update` |
 | Chat | POST | `/api/v1/chat` | `chat_turn` |
 | Chat | POST | `/api/v1/chat/stream` | `chat_stream` |
 | Chat | GET | `/api/v1/chat/conversations` | `chat_conversations_list` |
 | Chat | PATCH | `/api/v1/chat/conversations/{conversation_id}` | `chat_conversation_update` |
+| Chat | GET | `/api/v1/chat/references/{message_id}` | `chat_mail_reference_get` |
 | Chat | GET | `/api/v1/chat/history` | `chat_history` |
 | Chat | GET | `/api/v1/chat/models` | `chat_models_list` |
 | Chat | POST | `/api/v1/chat/proposals/{proposal_id}/confirm` | `chat_proposal_confirm` |
@@ -618,8 +621,7 @@ POST accepts `name` and `text`, PATCH additionally `expected_version`, DELETE `e
 as query parameter. GET of a template also returns `revisions` (newest first), so older revisions
 can be explicitly selected. New turns store revision reference/hash, app prompt version and the
 resolved account scope in `chat_context`; `chat_message.context_id` links history to it. The JSON
-account scope contains `account_ids`, `selection` (account ID or `null` for all) and, for
-unproven legacy history, `legacy_mixed: true`. `preference_revision_id` remains empty for old
+account scope contains the sorted granted `account_ids` and a `selection` (a focused account or `null` for the full grant). `preference_revision_id` remains empty for old
 clients; actually used preference revisions are now in `preference_revision_ids_json` with
 `preference_resolver_version` and `preferences_enabled`. Text is given to the model only as user
 content, never stored as an app rule or chat extra. Deletion removes template and revision content,
@@ -630,8 +632,35 @@ thereafter does not undo an already accepted confirmation. The agent checks revo
 before each model call and tool and every ten deltas during streaming; a revoked stream is closed
 and reports `context_revoked`. For a history, associated contexts are loaded in one database query.
 Inbox undo requests are aborted after 15 seconds; if the result is unclear, the action remains
-available for another attempt for ten more seconds. Account switching with history requires a new
-conversation; “Alle Konten” (UI text) remains the same selection even when accounts are added or removed.
+available for another attempt for ten more seconds. A conversation with messages can continue only with its original grant revision, effective accounts and focus.
+
+Studio mail connector operations pin the named OAuth credential with `credentials_name`. The
+first identity-checked sync verifies existing inbox rows in place by provider UID and follows stored pages. Pre-migration connector
+messages, including archived rows, stay outside chat reads until a verified sync rewrites them. It requires a provider
+Sent message from the registered mailbox and retains its opaque thread and message IDs as an
+anchor alongside the verified pagination cursor. The ordinary sync cursor stays numeric for older workers. Sync and body rereads check it before and after fetching.
+Writes check the mailbox immediately before dispatch. An incoming-only placeholder can change labels from the inbox only when a named credential verifies the thread, message, sender and subject and is used for the write. Chat cannot use these accounts. A verified batch publishes rows and progress atomically after checking the stored generation. A sync attempt has its own generation. The last successful proof has a separate revision. A definite mismatch still withdraws the grant while a newer poll is waiting for evidence. A later failure cannot overwrite a newer success. Sync workers renew their job lease during provider reads. Database transactions from older workers cannot insert or overwrite verified provider content. Independent new-mail and historical cursors keep new arrivals visible even when a historical page fails and needs retry. Malformed historical messages go on a per-mailbox retry list. Each poll checks up to five deferred threads alongside its normal pages. The normal scan and deferred reads require evidence that each message belongs in the inbox. When the search result supplies its labels, those labels also set its read and starred state. Historical pages and deferred reads both apply archived-message removals to the index. A single-message inbox match without labels preserves independently established read and star flags. Connector restores and archives reuse the local row for that provider UID. If an old worker already created two copies, the sync keeps the current inbox identity or the verified archive when only an unverified inbox copy left. For two verified copies, the surviving message retains the earlier local IDs as links within the same account and folder permissions. A confirmed mailbox mismatch invalidates these links. When duplicate copies lack this proof, the retired ID opens its cached content as a read-only source in the owner's mail view. Removing the account clears these copies. Chat and bulk actions resolve verified aliases before applying an action once per message. The regular 14-day listing also checks locally archived messages and queues their threads for a bounded, identity-checked content read before restoring them. When a narrow thread listing has no per-message labels, a fresh recent listing can confirm a restored message and its flags after the content read. An ambiguous sibling remains pending even when both scans see the same thread. Incomplete thread responses also remain pending. A 401 or 403 on a full-content read marks the sync as requiring reauthorization and preserves its last successful cursor. Verification and its bounded jobs for invalidated unread insights commit together. Their queue states keep older workers from claiming them during an upgrade. Each job checks the affected messages in the same account before regenerating them.
+A confirmed missing or mismatched identity withdraws chat access. Temporary transport or provider failures stop the operation and leave the binding available for a later sync. Incoming-only accounts with a placeholder address can sync the ordinary inbox and keep every row outside chat. Settings show the server’s eligibility for each active account and explain incoming-only and pending-verification states. A checkbox edit preserves grants absent from the cached account list. The owner can reselect the account after a
+successful verified sync. A replacement mailbox registers separately and starts without a grant.
+After an anchor is lost, the next sync must establish a fresh verified binding before selection and verify indexed messages page by page. A provider reauthorization under the same credential name
+between the last check and dispatch remains outside the connector's transaction guarantees.
+
+## Chat mail access (#80)
+
+The single owner selects active mail accounts at `/settings/chat`. The initial grant is empty,
+including for existing installations. Saving the complete selection requires its current
+`expected_version`. Changing its membership increments the revision. Adding an account gives it
+no chat access. Reconnecting the same stored account keeps its grant. Removing the account also
+removes its grant in the deletion transaction. A replacement account needs explicit selection.
+
+Each turn records the grant revision and its effective accounts. A mail reference can narrow this
+set. A changed revision, missing historical context or pre-migration history requires a new
+conversation. The owner can still read the original messages and cancel an old pending proposal.
+The claim for confirmation rechecks the grant under the same lock as a settings update. A claim
+that already succeeded can finish. The browser sends the revision seen in its scoped inbox
+summary (or the settings API) with every chat request. History shows the restart action when a grant has changed. Changing the grant stops active or loading speech. An old reply is ineligible for speech synthesis. Quick actions, draft entry points and task account choices use
+the same grant. General task access includes eligible personal tasks and tasks belonging to the
+granted accounts. For new mail with multiple eligible senders, the chat asks which account to use. The draft card shows the sender. Replies and forwards keep the original account. Ordinary inbox access is independent of these chat settings.
 
 ## Explicit preferences (#38)
 
@@ -639,8 +668,7 @@ Fixed app rules and authorized access take precedence over the current request, 
 precedence over the selected template, which takes precedence over matching active preferences.
 Values reach the model exclusively as user content, not as app rules or in chat extras or traces.
 Answer length may apply globally or to one account; an account value overrides the global default
-for this field. Salutation and signature require exactly one existing account. With “Alle Konten”
-(UI text), only global values are resolved; account signatures are never mixed. Existing mail,
+for this field. Salutation and signature require exactly one existing account. A conversation without a focused account resolves only global values; account signatures are never mixed. Existing mail,
 calendar and task scope checks and confirmation mechanics remain unchanged.
 
 `GET /settings` returns only

@@ -2,18 +2,18 @@
 
 Task provenance is independent of preferences: legacy turns have source=none.
 Any task selection change requires a fresh conversation, including expansion.
-A mail-account selection also bounds task sources; it cannot include personal tasks.
+Task sources must also fit the central mail grant and any focused account.
 """
 import json
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from db.accessors import user_preference
+from db.accessors import chat_settings, mail_message, user_preference
 from db.engine import get_session_maker
 from db.models._common import utcnow
 from db.models.chat_context import ChatContext
 from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
-from db.models.mail_account import MailAccount
+from db.models.mail_message import MailMessage
 from db.models.calendar_source import CalendarSource
 from db.models.prompt_revision import PromptRevision
 from db.models.prompt_template import OWNER_SCOPE, PromptTemplate
@@ -73,12 +73,26 @@ async def configure(conversation_id, expected_version, *, revision_id=None, chan
 
 
 async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version, calendar_source_ids=None,
-                  task_source='none', task_source_account_id=None, without_preferences=False):
+                  task_source='none', task_source_account_id=None, without_preferences=False, context_message_id=None, expected_mail_scope_version=None):
     async with get_session_maker()() as session:
+        await user_preference.lock(session)
+        grants = await chat_settings.in_session(session)
+        if expected_mail_scope_version is not None and expected_mail_scope_version != grants.version:
+            raise chat_settings.GrantsChanged
+        accounts = await chat_settings.active_ids(session, grants.account_ids)
+        if account_id is not None and account_id not in accounts:
+            raise chat_settings.AccountNotGranted
+        if context_message_id is not None:
+            source_account = (await session.execute(select(MailMessage.account_id).where(
+                mail_message.matches_ids([context_message_id]), MailMessage.account_id.in_(accounts), MailMessage.unverified_connector.is_(False)
+            ))).scalar_one_or_none()
+            if source_account is None or (account_id is not None and account_id != source_account):
+                raise chat_settings.AccountNotGranted
+            if conversation_id is None:
+                account_id = source_account
         enabled, preference_ids = False, []
         if not without_preferences:
             try:
-                await user_preference.lock(session)
                 enabled, preference_ids = await user_preference.resolve_in_session(session, account_id)
             except SQLAlchemyError:
                 raise PreferencesUnavailable from None
@@ -98,50 +112,25 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
         else:
             conversation = ChatConversation(title=title, model=model or "", prompt_revision_id=selected)
             session.add(conversation)
-        accounts = list((await session.execute(select(MailAccount.id))).scalars())
-        if account_id is not None and account_id not in accounts:
-            raise ValueError("account_invalid")
-        scope = json.dumps(sorted([account_id] if account_id is not None else accounts))
-        provenance = json.dumps({'account_ids': json.loads(scope), 'selection': account_id})
-        has_history = (await session.execute(select(ChatMessage.id).where(
-            ChatMessage.conversation_id == conversation.id).limit(1))).first() is not None
-        legacy_mixed = (has_history and conversation.account_scope_json is None) or (
-            conversation.account_scope_json is not None and
-            json.loads(conversation.account_scope_json).get('legacy_mixed', False))
-        if legacy_mixed:
-            provenance = json.dumps({'account_ids': json.loads(scope), 'selection': account_id, 'legacy_mixed': True})
-        if conversation.account_scope_json is not None:
-            # "Alle Konten" stays the same choice when accounts are added or removed; only another
-            # selection would carry history from one scope into another.
-            if json.loads(conversation.account_scope_json).get('selection') != account_id:
-                raise ScopeChange
-        elif has_history and account_id is not None:
-            # Unknown historical provenance is mixed, never attributed to one account.
-            raise ScopeChange
-        # Any calendar selection change (including expansion) starts fresh. Legacy turns
-        # have no calendar access. Check every historical context, not just the latest turn.
+        account_scope = {'account_ids': [account_id] if account_id else accounts, 'selection': account_id}
+        provenance = json.dumps(account_scope)
+        # Keep missing or cross-conversation context references as an unverified history.
+        history = (await session.execute(select(ChatContext).select_from(ChatMessage).outerjoin(
+            ChatContext, (ChatMessage.context_id == ChatContext.id)
+            & (ChatMessage.conversation_id == ChatContext.conversation_id)
+        ).where(ChatMessage.conversation_id == conversation.id).distinct())).scalars().all() if existing else []
         calendar_ids = sorted(set(calendar_source_ids or []))
         active_ids = set((await session.execute(select(CalendarSource.id).where(
             CalendarSource.is_active.is_(True), CalendarSource.id.in_(calendar_ids)))).scalars()) if calendar_ids else set()
-        previous = list((await session.execute(select(ChatContext).where(
-            ChatContext.conversation_id == conversation.id))).scalars()) if has_history else []
-        if has_history:
-            context_ids = list((await session.execute(select(ChatMessage.context_id).where(
-                ChatMessage.conversation_id == conversation.id))).scalars())
-            by_id = {row.id: row for row in previous}
-            for id in context_ids:
-                prior = json.loads(by_id[id].calendar_scope_json) if id in by_id else []
-                if sorted(prior) != calendar_ids:
-                    raise ScopeChange
-            if active_ids != set(calendar_ids):
+        if active_ids != set(calendar_ids):
+            if history:
                 raise ScopeChange
-        elif active_ids != set(calendar_ids):
             raise ValueError('calendar_invalid')
         if task_source not in {'none', 'all', 'unlinked', 'account', 'account_and_unlinked'}:
             raise ValueError('task_scope_invalid')
         if (task_source in {'account', 'account_and_unlinked'}) != bool(task_source_account_id):
             raise ValueError('task_scope_invalid')
-        if task_source_account_id and task_source_account_id not in accounts:
+        if task_source_account_id and task_source_account_id not in account_scope['account_ids']:
             raise ValueError('task_scope_invalid')
         if account_id is not None and task_source != 'none' and (
             task_source not in {'account', 'account_and_unlinked'} or task_source_account_id != account_id
@@ -152,15 +141,16 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
         task_scope = {'source': task_source}
         if task_source_account_id:
             task_scope['account_id'] = task_source_account_id
-        if has_history:
-            for id in context_ids:
-                prior_task = json.loads(by_id[id].task_scope_json) if id in by_id else {'source': 'none'}
-                if prior_task != task_scope:
-                    raise ScopeChange
+        for prior in history:
+            if (prior is None or prior.mail_scope_version != grants.version
+                    or json.loads(prior.account_scope_json) != account_scope
+                    or sorted(json.loads(prior.calendar_scope_json)) != calendar_ids
+                    or json.loads(prior.task_scope_json) != task_scope):
+                raise ScopeChange
         conversation.account_scope_json = provenance
         snapshot = ChatContext(conversation_id=conversation.id, prompt_revision_id=selected,
                                prompt_hash=revision.content_hash if revision else None,
-                               app_prompt_version=app_prompt_version, account_scope_json=provenance,
+                               app_prompt_version=app_prompt_version, account_scope_json=provenance, mail_scope_version=grants.version,
                                calendar_scope_json=json.dumps(calendar_ids), task_scope_json=json.dumps(task_scope),
                                preferences_enabled=enabled, preference_revision_ids_json=json.dumps(preference_ids))
         session.add(snapshot)
@@ -189,7 +179,7 @@ async def get_contexts(context_ids: set[str]) -> dict[str, ChatContext]:
 async def is_live(context_id: str) -> bool:
     async with get_session_maker()() as session:
         row = await session.get(ChatContext, context_id)
-        if row is None or row.revoked:
+        if row is None or row.revoked or not await chat_settings.permits_context(session, row):
             return False
         ids = json.loads(row.calendar_scope_json)
         if not ids:

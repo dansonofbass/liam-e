@@ -58,6 +58,7 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "mail_messages_bulk_action",
         "mail_sync_all",
         "settings_ui_update",
+        "chat_settings_update",
         "tasks_archive",
         "tasks_create",
         "tasks_delete",
@@ -87,6 +88,8 @@ BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
         "preference_candidates_list",  # Private candidate values and own source messages.
         "preference_context_get",
         "settings_get",
+        "chat_settings_get",
+        "chat_mail_reference_get",
         "mail_account_oauth_authorize",
         "mail_account_oauth_callback",
     }

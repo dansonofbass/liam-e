@@ -109,8 +109,7 @@ async def prepare(arguments, ctx):
     data = CandidateInput.model_validate(arguments)
     if not ctx.source_message_id or data.source_message_id != ctx.source_message_id:
         raise candidates.CandidateGone
-    allowed = ctx.account_ids if ctx.account_ids is not None else ([ctx.account_id] if ctx.account_id else [])
-    if data.scope != '*' and data.scope not in allowed:
+    if data.scope != '*' and data.scope not in ctx.account_ids:
         raise preferences.InvalidPreference
     async with private_session() as session:
         await preferences.lock(session)

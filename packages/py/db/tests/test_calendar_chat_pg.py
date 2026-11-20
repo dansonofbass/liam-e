@@ -55,8 +55,7 @@ def test_calendar_scope_and_model_history_isolation(pg_db, monkeypatch):
         legacy = await chat_conversation.create_conversation()
         await chat_message.add_message(conversation_id=legacy.id, role='assistant', content='Unbelegter Altverlauf')
         with pytest.raises(chat_context.ScopeChange): await resolve(legacy.id, ids)
-        _, legacy_context, _ = await resolve(legacy.id)
-        assert legacy_context.calendar_scope_json == '[]'
+        with pytest.raises(chat_context.ScopeChange): await resolve(legacy.id)
         events = [e async for e in agent.run_turn_events(conversation_id=None, text='Neue Frage', calendar_source_ids=[ids[0]])]
         assert events[-1].event == 'done'
         assert len(requests) == 1

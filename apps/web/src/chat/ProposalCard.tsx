@@ -116,7 +116,7 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
   })}{error && <Notice tone="danger">{texts.proposal.requestError}</Notice>}</>
 }
 
-export function ProposalCard({ message, clock = systemClock }: { message: ChatMessageOut; clock?: Clock }) {
+export function ProposalCard({ message, clock = systemClock, oldGrant = false, grantVersion }: { message: ChatMessageOut; clock?: Clock; oldGrant?: boolean; grantVersion?: number | null }) {
   const { texts } = useI18n()
   const client = useQueryClient()
   const [updated, setUpdated] = useState<ChatMessageOut | null>(null)
@@ -151,7 +151,7 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
       if (confirm) cardState(client, result.id).deadline = clock.now() + 10_000
       if (shown.current === result.id) cardState(client, result.id).focus = true
       setUpdated(result)
-      client.setQueryData<ChatMessageOut[]>(['history', current.conversation_id], rows => rows?.map(row => row.id === result.id ? result : row))
+      client.setQueryData<ChatMessageOut[]>(['history', current.conversation_id], rows => rows?.map(row => row.id === result.id ? { ...result, context: result.context ?? row.context } : row))
       void client.invalidateQueries({ queryKey: ['history', current.conversation_id] })
       void client.invalidateQueries({ queryKey: ['summary'] })
       if (proposal?.kind === 'preference') {
@@ -184,6 +184,10 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
     if (current.proposal_status !== 'pending' && (saved.focus || saved.handoff)) { saved.focus = false; saved.handoff = false; outcome.current?.focus() }
   })
   if (!proposal) return null
+  if (oldGrant && current.proposal_status === 'pending') return <>
+    <Notice tone="info" action={{ label: texts.controls.cancel, onClick: () => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) } }}>{texts.chatAccounts.cancelOnly}</Notice>
+    {error && <Notice tone="danger">{failureText(error, proposal.kind, texts)}</Notice>}
+  </>
   if (proposal.kind === 'calendar') return <CalendarProposal key={current.id} message={current} />
   const settled = (content: ReactNode) => <div ref={outcome} tabIndex={-1} className="le-proposal-outcome">{content}</div>
   if (current.proposal_status === 'running') return settled(<p className="le-hint">{texts.proposal.running}</p>)
@@ -191,7 +195,8 @@ export function ProposalCard({ message, clock = systemClock }: { message: ChatMe
   if (current.proposal_status === 'failed') return settled(<Notice tone="danger">{failureText(proposal.result?.failed?.[0]?.code, proposal.kind, texts)}</Notice>)
   if (current.proposal_status === 'done' || current.proposal_status === 'partial') return settled(<Result key={current.id} message={current} proposal={proposal} clock={clock} onUndone={() => outcome.current?.focus()} />)
   if (current.proposal_status !== 'pending') return null
-  if (proposal.kind === 'task') return <><TaskProposal key={current.id} proposal={proposal} busy={busy} draft={cardState(client, current.id).task ??= {}}
+  if (proposal.kind === 'task') return <><TaskProposal key={current.id} grantVersion={grantVersion ?? undefined}
+    contextId={!oldGrant && grantVersion != null && current.context?.mail_scope_version === grantVersion && !current.context.revoked ? current.context.id : undefined} proposal={proposal} busy={busy} draft={cardState(client, current.id).task ??= {}}
     confirm={task_edit => { void apply(() => unwrap(chatProposalConfirm({ path: { proposal_id: current.id }, body: { selected_ids: [], task_edit }, throwOnError: true })), true) }}
     cancel={() => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) }}
   />{error && <Notice tone="danger" action={error === 'proposal_context_revoked' || error === 'task_scope_invalid' ? { label: texts.shell.newConversation, onClick: restart } : undefined}>{failureText(error, proposal.kind, texts)}</Notice>}</>

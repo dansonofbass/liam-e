@@ -21,6 +21,7 @@ def assert_detail(error, code, text):
 async def test_missing_history_and_mail_and_account(monkeypatch):
     monkeypatch.setattr(history.conversation_access, "get_conversation", AsyncMock(return_value=None))
     monkeypatch.setattr(messages.message_access, "get_message", AsyncMock(return_value=None))
+    monkeypatch.setattr(messages.mail_reference_snapshot, "read", AsyncMock(return_value=None))
     monkeypatch.setattr(accounts.account_access, "get_account", AsyncMock(return_value=None))
     cases = [
         (history.history("missing"), "conversation_not_found", "Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung."),

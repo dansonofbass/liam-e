@@ -2,7 +2,7 @@
 
 import json
 from sqlalchemy.exc import IntegrityError
-from db.accessors import mail_account, mail_action, mail_credential, mail_insight, mail_sync_state, mail_job, mail_message
+from db.accessors import mail_account, mail_action, mail_credential, mail_insight, mail_sync_state, mail_job, mail_message, mail_reference_snapshot
 from db.models.mail_action import MailAction
 from db.models.mail_job import MailJob
 from db.models.mail_account import MailAccount
@@ -22,6 +22,10 @@ class FakeStore:
         for name in ("record", "get_many", "mark_undone", "release", "latest_open", "delete_for_account"):
             monkeypatch.setattr(mail_action, name, getattr(self, "action_" + name))
         monkeypatch.setattr(mail_message, "get_message", self.get_message)
+        monkeypatch.setattr(mail_message, "resolve_aliases", self.resolve_aliases)
+        async def no_snapshot(message_id):
+            return None
+        monkeypatch.setattr(mail_reference_snapshot, "read", no_snapshot)
         monkeypatch.setattr(mail_message, "set_state", self.set_message_state)
         monkeypatch.setattr(mail_message, "delete_duplicate", self.delete_duplicate)
         monkeypatch.setattr(mail_message, "stale_body_texts", self.stale_body_texts)
@@ -31,13 +35,13 @@ class FakeStore:
             monkeypatch.setattr(mail_job, name, getattr(self, "job_" + name))
         monkeypatch.setattr(mail_message, "count_unread", self.count_unread)
         monkeypatch.setattr(mail_message, "count_for_account", self.count_for_account)
-        async def newsletter_senders(*, account_ids=None):
+        async def newsletter_senders(*, account_ids=None, chat_only=False):
             return []
         monkeypatch.setattr(mail_message, "newsletter_senders", newsletter_senders)
         for module, names in (
             (mail_account, ("list_accounts", "get_account", "get_account_by_email", "create_account", "touch_account", "update_display_name", "delete_account")),
             (mail_credential, ("load_credential", "store_credential")),
-            (mail_sync_state, ("get_state", "save_state")),
+            (mail_sync_state, ("get_state", "save_state", "fail_connector")),
         ):
             for name in names:
                 monkeypatch.setattr(module, name, getattr(self, name))
@@ -52,10 +56,18 @@ class FakeStore:
 
     async def get_message(self, message_id):
         row = self.messages.get(message_id)
+        if row is None:
+            target = (await self.resolve_aliases([message_id])).get(message_id)
+            row = self.messages.get(target)
         return row.model_copy() if row else None
 
+    async def resolve_aliases(self, message_ids):
+        return {alias: row.id for row in self.messages.values() if not row.unverified_connector
+                for alias in set(message_ids).intersection(row.connector_alias_ids)}
+
     async def set_message_state(self, message_id, **kwargs):
-        row = self.messages.get(message_id)
+        target = (await self.resolve_aliases([message_id])).get(message_id, message_id)
+        row = self.messages.get(target)
         if row:
             folder = kwargs.get("folder", row.folder)
             uid = kwargs.get("provider_uid", row.provider_uid)
@@ -121,8 +133,8 @@ class FakeStore:
     async def count_for_account(self, account_id):
         return sum(row.account_id == account_id for row in self.messages.values())
 
-    async def count_unread(self, *, folder="INBOX"):
-        return self.unread
+    async def count_unread(self, *, folder="INBOX", account_ids=None, chat_only=False):
+        return {id: count for id, count in self.unread.items() if account_ids is None or id in account_ids}
 
     async def job_enqueue(self, kind, payload, *, dedupe_key, run_after=None):
         if any(j.dedupe_key == dedupe_key and j.status in ("queued", "running") for j in self.jobs.values()):
@@ -205,7 +217,21 @@ class FakeStore:
     async def get_state(self, account_id):
         return self.states.get(account_id)
 
+    async def fail_connector(self, account_id, previous, code):
+        current = self.states.get(account_id)
+        if current and mail_sync_state.same_connector_attempt(current, previous):
+            current.status, current.last_error = "error", code
+
     async def save_state(self, *, account_id, **kwargs):
+        claim_connector = kwargs.pop("claim_connector", False)
+        previous = self.states.get(account_id)
+        for key in ("connector_verified", "connector_cursor", "connector_generation", "connector_proof_revision", "connector_deferred_threads", "cursor"):
+            if kwargs.get(key) is None:
+                kwargs.pop(key, None)
+                if previous:
+                    kwargs[key] = getattr(previous, key)
         state = MailSyncState(account_id=account_id, **kwargs)
+        if claim_connector:
+            state.connector_generation += 1
         self.states[account_id] = state
         return state

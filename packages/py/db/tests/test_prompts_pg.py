@@ -103,36 +103,31 @@ def test_account_scope_and_unknown_history(pg_db):
         async def resolve(id=None, account=None):
             return await c.resolve(conversation_id=id, title='', model='', revision_id=None,
                                    account_id=account, app_prompt_version='test')
-        legacy_single = await conversations.create_conversation()
-        await messages.add_message(conversation_id=legacy_single.id, role='user', content='Unbelegte Herkunft')
-        await resolve(legacy_single.id)
-        with pytest.raises(c.ScopeChange):
-            await resolve(legacy_single.id, a.id)
+        from db.accessors import chat_settings
         b = await accounts.create_account(provider='imap', auth_type='imap_password', email_address='b@example.test')
-        with pytest.raises(ValueError):
+        await chat_settings.update(1, [a.id, b.id])
+        with pytest.raises(chat_settings.AccountNotGranted):
             await resolve(account='invalid')
         for initial, rejected in [(a.id, b.id), (a.id, None), (None, a.id), (b.id, a.id)]:
             conversation, snapshot, _ = await resolve(account=initial)
             assert json.loads(snapshot.account_scope_json)['account_ids'] == sorted([initial] if initial else [a.id, b.id])
-            await messages.add_message(conversation_id=conversation.id, role='user', content='Test')
+            await messages.add_message(conversation_id=conversation.id, role='user', content='Test', context_id=snapshot.id)
             with pytest.raises(c.ScopeChange):
                 await resolve(conversation.id, rejected)
             await resolve(conversation.id, initial)
-        everything, _, _ = await resolve()
-        await messages.add_message(conversation_id=everything.id, role='user', content='Test')
+        everything, snapshot, _ = await resolve()
+        await messages.add_message(conversation_id=everything.id, role='user', content='Test', context_id=snapshot.id)
         added = await accounts.create_account(provider='imap', auth_type='imap_password', email_address='c@example.test')
         _, snapshot, _ = await resolve(everything.id)
-        assert json.loads(snapshot.account_scope_json)['account_ids'] == sorted([a.id, b.id, added.id])
-        with pytest.raises(c.ScopeChange):
+        assert json.loads(snapshot.account_scope_json)['account_ids'] == sorted([a.id, b.id])
+        with pytest.raises(chat_settings.AccountNotGranted):
             await resolve(everything.id, added.id)
         legacy = await conversations.create_conversation()
         await messages.add_message(conversation_id=legacy.id, role='assistant', content='Altverlauf')
         with pytest.raises(c.ScopeChange):
             await resolve(legacy.id, a.id)
-        _, snapshot, _ = await resolve(legacy.id)
-        assert json.loads(snapshot.account_scope_json)['legacy_mixed'] is True
         with pytest.raises(c.ScopeChange):
-            await resolve(legacy.id, a.id)
+            await resolve(legacy.id)
     asyncio.run(run())
 
 

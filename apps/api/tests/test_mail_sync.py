@@ -1,6 +1,7 @@
 """Incremental inbox sync contracts; all providers are faked."""
 
 import imaplib
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -11,6 +12,11 @@ import pytest
 from api.mail import secrets, sync, sync_connector, sync_gmail, sync_graph, sync_imap, sync_types
 from support.fake_imap import FakeIMAP
 from utils.mistral import MistralNotConfiguredError
+
+
+@pytest.fixture(autouse=True)
+def empty_connector_archive(monkeypatch):
+    monkeypatch.setattr(sync_connector.message_access, "archived_connector_members", AsyncMock(return_value=[]))
 
 
 def account(provider="imap", auth_type="imap_password"):
@@ -278,13 +284,13 @@ async def test_connector_backlog_and_boundary_progress(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_connector_invalid_cursor_rebuilds(monkeypatch):
+async def test_connector_invalid_cursor_rescans_without_removing_links(monkeypatch):
     async def known(*_): return {}
     async def call(*_): return {"threads": []}
     monkeypatch.setattr(sync_connector.message_access, "known_uids", known)
     monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
     result = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="not-a-cursor", folders=["INBOX"], limit=2, max_body_chars=100)
-    assert result.full_rebuild
+    assert not result.full_rebuild and result.cursor == "0"
 
 
 @pytest.mark.anyio
@@ -474,7 +480,7 @@ async def test_connector_skips_messages_without_inbox_label(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_connector_scan_keeps_messages_with_unknown_labels(monkeypatch):
+async def test_connector_scan_uses_per_message_listing_when_full_labels_are_missing(monkeypatch):
     async def known(*_): return {}
     async def call(provider, tool, args):
         if tool == "get_thread":
@@ -482,11 +488,40 @@ async def test_connector_scan_keeps_messages_with_unknown_labels(monkeypatch):
                 {"id": "missing", "date": "1970-01-01T00:01:40+00:00"},
                 {"id": "none", "date": "1970-01-01T00:03:20+00:00", "labelIds": None},
             ]}
-        return {"threads": [{"id": "t"}]}
+        return {"threads": [{"id": "t", "messages": [
+            {"id": "missing", "labelIds": ["INBOX", "UNREAD", "STARRED"]}, {"id": "none", "labelIds": ["INBOX"]},
+        ]}]}
     monkeypatch.setattr(sync_connector.message_access, "known_uids", known)
     monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
     result = await sync_connector.fetch_changes(account("gmail", "connector"), cursor="", folders=["INBOX"], limit=10, max_body_chars=100)
     assert [m["provider_uid"] for m in result.upserts] == ["missing", "none"]
+    assert [(row["is_read"], row["is_flagged"], json.loads(row["labels_json"])) for row in result.upserts] == [
+        (False, True, ["INBOX", "UNREAD", "STARRED"]), (True, False, ["INBOX"]),
+    ]
+
+
+@pytest.mark.anyio
+async def test_connector_history_archives_an_old_indexed_sibling(monkeypatch):
+    stamp = datetime(2024, 1, 1, tzinfo=UTC)
+    options = {"folders": ["INBOX"], "limit": 10, "max_body_chars": 100}
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", AsyncMock(return_value={"archived": "local"}))
+    monkeypatch.setattr(sync_connector.message_access, "get_message", AsyncMock(return_value=SimpleNamespace(
+        thread_id="historic", internal_date=stamp)))
+
+    async def provider(_, tool, args):
+        if tool == "search_threads":
+            return {"threads": [{"id": "historic"}] if args.get("pageToken") == "older" else []}
+        return {"id": "historic", "messages": [
+            {"id": "archived", "date": stamp.isoformat(), "labelIds": ["STARRED"]},
+            {"id": "still-here", "date": stamp.isoformat(), "labelIds": ["INBOX"]},
+        ]}
+
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", provider)
+    changes = await sync_connector.fetch_changes(account("gmail", "connector"),
+        cursor='initial:["1800000000", "older"]', **options)
+    assert changes.cursor == "1800000000"
+    assert changes.moved_out == ["archived"]
+    assert [row["provider_uid"] for row in changes.upserts] == ["still-here"]
 
 
 async def connector_reconciliation(monkeypatch, threads, unread_threads):
@@ -802,3 +837,86 @@ async def test_connector_fetch_bodies_returns_what_it_read_when_the_connector_fa
     monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", call)
     found = await sync_connector.fetch_bodies(account("gmail", "connector"), [stored("a", "x1"), stored("b", "x2", thread="t2"), stored("c", "x3", thread="t3")], max_body_chars=100)
     assert list(found) == ["x1"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("bad", [None, [], {"id": "deferred"}, {"id": "wrong", "messages": []}])
+async def test_malformed_full_thread_preserves_valid_initial_and_incremental_mail(monkeypatch, bad):
+    from api.mail import sync
+    client_account = account("gmail", "connector")
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", AsyncMock(return_value={}))
+    stamp = "2026-01-20T10:00:00+00:00"
+    async def provider(_, tool, args):
+        if tool == "get_thread":
+            if args["threadId"] == "deferred":
+                return bad
+            return {"id": "valid", "messages": [{"id": "new", "date": stamp, "labelIds": ["INBOX"]}]}
+        if "newer_than" in args["query"]:
+            return {"threads": []}
+        return {"threads": [{"id": "deferred"}, {"id": "valid"}]}
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", provider)
+    options = {"folders": ["INBOX"], "limit": 10, "max_body_chars": 100}
+    first, pending = await sync._connector_changes(client_account, "", [], options)
+    assert [row["provider_uid"] for row in first.upserts] == ["new"] and pending == ["deferred"]
+    current, still_pending = await sync._connector_changes(client_account, first.cursor, pending, options)
+    assert [row["provider_uid"] for row in current.upserts] == ["new"] and still_pending == ["deferred"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("labels", [None, "missing"])
+@pytest.mark.parametrize("listed,expected", [(False, []), (True, ["old"])])
+async def test_retry_of_old_message_without_labels_requires_current_inbox_match(monkeypatch, labels, listed, expected):
+    row = {"id": "old", "date": "2025-01-20T10:00:00+00:00"}
+    if labels is None:
+        row["labelIds"] = None
+    async def provider(_, tool, args):
+        if tool == "get_thread":
+            return {"id": "held", "messages": [row]}
+        assert args["query"].startswith("in:inbox after:") and "before:" in args["query"]
+        return {"threads": [{"id": "held"}] if listed else []}
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", provider)
+    changes = await sync_connector.retry_threads(account("gmail", "connector"), ["held"], 100)
+    assert [message["provider_uid"] for message in changes.upserts] == expected
+    assert changes.moved_out == ([] if listed else ["old"])
+    assert changes.deferred_threads == []
+
+
+@pytest.mark.anyio
+async def test_retry_does_not_infer_membership_from_another_message_in_the_thread(monkeypatch):
+    stamp = "2025-01-20T10:00:00+00:00"
+    rows = [{"id": "archived", "date": stamp}, {"id": "visible", "date": stamp, "labelIds": ["INBOX"]}]
+    async def provider(_, tool, args):
+        if tool == "get_thread":
+            return {"id": "held", "messages": rows}
+        return {"threads": [{"id": "held", "messages": [rows[1]]}]}
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", provider)
+    changes = await sync_connector.retry_threads(account("gmail", "connector"), ["held"], 100)
+    assert [message["provider_uid"] for message in changes.upserts] == ["visible"]
+    assert changes.deferred_threads == ["held"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("initial_labels", [None, ["INBOX"]])
+@pytest.mark.parametrize("membership_timeout", [False, True])
+async def test_regular_and_deferred_reads_only_publish_confirmed_siblings(monkeypatch, initial_labels, membership_timeout):
+    stamp = "2026-06-01T11:00:00+00:00"
+    visible = {"id": "visible", "date": stamp, "labelIds": ["INBOX"]}
+    reads = 0
+
+    async def provider(_, tool, args):
+        nonlocal reads
+        if tool == "get_thread":
+            reads += 1
+            archived = {"id": "archived", "date": stamp, "labelIds": initial_labels if reads == 1 else None}
+            return {"id": "mixed", "messages": [archived, visible]}
+        if membership_timeout and "before:" in args["query"]:
+            raise httpx.ReadTimeout("Inbox lookup timed out")
+        return {"threads": [{"id": "mixed", "messages": [visible]}]}
+
+    monkeypatch.setattr(sync_connector.connectors, "call_read_tool_json", provider)
+    monkeypatch.setattr(sync_connector.message_access, "known_uids", AsyncMock(return_value={}))
+    options = {"folders": ["INBOX"], "limit": 10, "max_body_chars": 100}
+    changes, pending = await sync._connector_changes(account("gmail", "connector"), "15", ["mixed"], options)
+    assert reads == 2
+    assert [message["provider_uid"] for message in changes.upserts] == ["visible"]
+    assert pending == ["mixed"]

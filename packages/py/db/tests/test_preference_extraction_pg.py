@@ -6,7 +6,6 @@ import pytest
 from db.engine import get_session_maker
 from db.accessors import preference_extraction as ex, personalization_settings as settings
 from db.accessors import preference_candidate as candidates, user_preference as preferences
-from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
 
 pytestmark = pytest.mark.skipif(not os.getenv('RUN_PG_CONTRACT'), reason='RUN_PG_CONTRACT is not set')
@@ -14,10 +13,12 @@ ITEM = SimpleNamespace(key='answer_length', scope='global', value='Kurz')
 
 
 async def source(content='Bitte antworte künftig kurz.', role='user'):
+    from db.accessors import chat_context
+    conversation, context, _ = await chat_context.resolve(conversation_id=None, title='Test', model=None,
+        revision_id=None, account_id=None, app_prompt_version='test')
     async with get_session_maker()() as session:
-        conversation = ChatConversation()
-        message = ChatMessage(conversation_id=conversation.id, role=role, content=content)
-        session.add_all([conversation, message])
+        message = ChatMessage(conversation_id=conversation.id, role=role, context_id=context.id, content=content)
+        session.add(message)
         await session.commit()
         return conversation.id, message.id
 
@@ -166,9 +167,10 @@ def test_exact_stored_duplicates_are_skipped_but_contradictions_remain(pg_db, st
 def test_account_scope_is_bound_to_source_selection_and_rechecked(pg_db):
     async def run():
         import json
-        from db.accessors import mail_account
+        from db.accessors import chat_settings, mail_account
         from db.models.chat_context import ChatContext
         account = await mail_account.create_account(provider='imap', auth_type='imap_password', email_address='person@example.test')
+        grants = await chat_settings.update(1, [account.id])
         await toggle(suggest_preferences=True)
         item = SimpleNamespace(key='signature', scope='account', value='Viele Grüße')
         no_selection = await source()
@@ -177,7 +179,7 @@ def test_account_scope_is_bound_to_source_selection_and_rechecked(pg_db):
         assert await rows() == []
         ids = await source()
         async with get_session_maker()() as session:
-            context = ChatContext(conversation_id=ids[0], app_prompt_version='test-only',
+            context = ChatContext(conversation_id=ids[0], mail_scope_version=grants.version, app_prompt_version='test-only',
                 account_scope_json=json.dumps({'selection': account.id, 'account_ids': [account.id]}))
             message = await session.get(ChatMessage, ids[1])
             message.context_id = context.id
@@ -188,7 +190,7 @@ def test_account_scope_is_bound_to_source_selection_and_rechecked(pg_db):
         assert (await rows())[0].scope == account.id
         activation, _ = await ex.claim(*ids, 2)
         await mail_account.delete_account(account.id)
-        with pytest.raises(preferences.InvalidPreference):
+        with pytest.raises(candidates.CandidateGone):
             await ex.store(*ids, 2, activation, [item])
     asyncio.run(run())
 

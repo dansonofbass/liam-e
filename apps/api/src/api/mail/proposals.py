@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from typing import Literal
 
+from db.accessors import chat_settings
 from db.accessors import chat_message as message_access
 from db.accessors import chat_context as context_access
 from db.accessors import mail_account as account_access
@@ -204,13 +205,13 @@ async def _send(draft: SendDraft, result: ProposalResult) -> None:
         fail("send_failed")
 
 
-async def _apply(item: ProposalItem, kind: ProposalKind, result: ProposalResult) -> None:
+async def _apply(item: ProposalItem, kind: ProposalKind, result: ProposalResult, mail_targets: set[str]) -> None:
     def fail(code: str):
         result.failed.append(ItemProblem(id=item.id, code=code))
 
     try:
         if kind == "unsubscribe":
-            sender = await newsletters.sender_by_id(item.id)
+            sender = await newsletters.sender_by_id(item.id, chat_only=True)
             account = await account_access.get_account(sender.account_id) if sender else None
             if sender is None or account is None:
                 fail("item_gone")
@@ -230,7 +231,14 @@ async def _apply(item: ProposalItem, kind: ProposalKind, result: ProposalResult)
                     result.done += 1
             return
         mail = await mail_access.get_message(item.id)
-        if mail is None or mail.folder != "INBOX":
+        if mail is None:
+            fail("item_gone")
+            return
+        if mail.id in mail_targets:
+            item.selected = False
+            return
+        mail_targets.add(mail.id)
+        if mail.folder != "INBOX" or mail.unverified_connector:
             fail("item_gone")
             return
         action = await actions.apply_action(item.id, kind)
@@ -253,7 +261,7 @@ async def _confirm_task(message: ChatMessage, edit: task_proposals.TaskCreateCom
         claimed = await message_access.claim_proposal_in_session(session, message.id)
         if claimed is None:
             current = await message_access.get_message(message.id)
-            if current and current.proposal_status == 'pending' and current.context_id and not await context_access.is_live(current.context_id):
+            if current and current.proposal_status == 'pending' and (not current.context_id or not await context_access.is_live(current.context_id)):
                 raise ProposalContextRevokedError
             raise ProposalStateError
         proposal = proposal_view(claimed)
@@ -272,7 +280,7 @@ async def _confirm_task(message: ChatMessage, edit: task_proposals.TaskCreateCom
         source = proposal.task.source_account_id
         selection = account_scope.get('selection')
         from api.tasks.chat import allowed_in_selection
-        if not allowed_in_selection(scope, selection, source, proposal.task.source_message_id):
+        if not allowed_in_selection(scope, selection, account_scope.get('account_ids', []), source, proposal.task.source_message_id):
             raise refuse(403, 'task_scope_invalid', 'Die Aufgabe gehört nicht zur gewählten Auswahl.')
         try:
             series_id = await task_proposals.execute(session, proposal.task, proposal_id=claimed.id)
@@ -322,7 +330,7 @@ async def _confirm_calendar(message: ChatMessage) -> ChatMessage:
     claimed = await message_access.claim_proposal(message.id)
     if claimed is None:
         current = await message_access.get_message(message.id)
-        if current and current.proposal_status == "pending" and current.context_id and not await context_access.is_live(current.context_id):
+        if current and current.proposal_status == "pending" and (not current.context_id or not await context_access.is_live(current.context_id)):
             raise ProposalContextRevokedError
         raise ProposalStateError
     proposal = proposal_view(claimed)
@@ -411,9 +419,22 @@ async def confirm(proposal_id: str, *, selected_ids: list[str], body: str | None
         raise ProposalSelectionError("selection_invalid")
     if proposal.kind != "send" and not selected:
         raise ProposalSelectionError("selection_empty")
-    if await message_access.claim_proposal(proposal_id) is None:
+    required_accounts, mail_ids = set(), set()
+    if proposal.kind == 'send' and proposal.draft:
+        required_accounts.add(proposal.draft.account_id)
+        if proposal.draft.reply_to_message_id:
+            mail_ids.add(proposal.draft.reply_to_message_id)
+    elif proposal.kind == 'unsubscribe':
+        required_accounts.update(id.partition('|')[0] for id in selected)
+    else:
+        mail_ids = selected
+    try:
+        claimed = await message_access.claim_proposal(proposal_id, required_accounts=required_accounts, mail_ids=mail_ids)
+    except chat_settings.AccountNotGranted:
+        raise ProposalContextRevokedError from None
+    if claimed is None:
         current = await message_access.get_message(proposal_id)
-        if current and current.proposal_status == "pending" and current.context_id and not await context_access.is_live(current.context_id):
+        if current and current.proposal_status == "pending" and (not current.context_id or not await context_access.is_live(current.context_id)):
             raise ProposalContextRevokedError
         raise ProposalStateError
     result = ProposalResult()
@@ -428,9 +449,10 @@ async def confirm(proposal_id: str, *, selected_ids: list[str], body: str | None
                 proposal.draft.body = body
             await _send(proposal.draft, result)
         else:
+            mail_targets: set[str] = set()
             for item in proposal.items:
                 if item.selected:
-                    await _apply(item, proposal.kind, result)
+                    await _apply(item, proposal.kind, result, mail_targets)
         status = "done" if not result.failed else "partial" if result.done or result.manual else "failed"
     finally:
         updated = await message_access.set_proposal(proposal_id, proposal_json=proposal.model_dump_json(), proposal_status=status)

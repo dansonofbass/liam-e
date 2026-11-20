@@ -26,7 +26,7 @@ async def create_once(session: AsyncSession, row: TaskSeries) -> tuple[TaskSerie
 async def list_page(
     session: AsyncSession, *, scope: str, due_from: str, due_to: str,
     archived: bool | None, source: str, source_account_id: str | None,
-    after: str | None, limit: int,
+    after: str | None, limit: int, allowed_account_ids: list[str] | None = None,
 ) -> list[TaskSeries]:
     """Include schedules whose validity intersects the window, even before catch-up.
 
@@ -45,6 +45,9 @@ async def list_page(
     query = select(TaskSeries).where(TaskSeries.scope == scope, or_(occurrence, schedule))
     if archived is not None:
         query = query.where(TaskSeries.archived == archived)
+    if allowed_account_ids is not None:
+        query = query.where(or_(TaskSeries.source_account_id.in_(allowed_account_ids),
+                               and_(TaskSeries.source_account_id.is_(None), TaskSeries.source_message_id.is_(None))))
     if source == 'unlinked':
         query = query.where(TaskSeries.source_message_id.is_(None))
     elif source == 'account':

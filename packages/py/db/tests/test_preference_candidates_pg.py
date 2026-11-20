@@ -8,12 +8,13 @@ pytestmark = pytest.mark.skipif(not os.getenv('RUN_PG_CONTRACT'), reason='RUN_PG
 
 async def setup_source(role='user'):
     from db.engine import get_session_maker
-    from db.models.chat_conversation import ChatConversation
     from db.models.chat_message import ChatMessage
+    from db.accessors import chat_context
+    conversation, context, _ = await chat_context.resolve(conversation_id=None, title='Test', model=None,
+        revision_id=None, account_id=None, app_prompt_version='test')
     async with get_session_maker()() as session:
-        conversation = ChatConversation()
-        message = ChatMessage(conversation_id=conversation.id, role=role, content='Merke dir: Antworte kurz.')
-        session.add_all([conversation, message])
+        message = ChatMessage(conversation_id=conversation.id, role=role, context_id=context.id, content='Merke dir: Antworte kurz.')
+        session.add(message)
         await session.commit()
         return conversation, message
 
@@ -241,7 +242,9 @@ def test_account_and_source_removal_erase_and_mail_replacement_keeps_candidates(
         assert (await proposals.cancel(reopened.proposal_id)).id == reopened.proposal_id
         async with get_session_maker()() as session:
             assert (await c.get(session, row.id)).status == 'rejected'
+        from db.accessors import chat_settings
         account = await a.create_account(provider='imap', auth_type='imap_password', email_address='candidate@example.test')
+        await chat_settings.update(1, [account.id])
         conversation, message = await setup_source()
         async with get_session_maker()() as session:
             await p.lock(session)
@@ -435,7 +438,8 @@ def test_revoked_turn_context_blocks_confirm_and_keeps_card_pending(pg_db):
         from api.preferences import candidates as service
         async with get_session_maker()() as session:
             conversation = ChatConversation()
-            context = ChatContext(conversation_id=conversation.id, app_prompt_version='1', account_scope_json='{}')
+            context = ChatContext(conversation_id=conversation.id, app_prompt_version='1', mail_scope_version=1,
+                                  account_scope_json='{"selection":null,"account_ids":[]}')
             message = ChatMessage(conversation_id=conversation.id, role='user', content='Merke dir: Antworte kurz.',
                                   context_id=context.id)
             session.add_all([conversation, context, message])

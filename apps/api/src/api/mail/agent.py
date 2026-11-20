@@ -62,7 +62,7 @@ def visible_messages(rows):
     return [r for r in rows if r.role != 'tool' and not (r.role == 'assistant' and r.tool_payload_json)]
 
 
-async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, context_message_id: str | None = None, model: str | None = None, prompt_revision_id: str | None = None, calendar_source_ids: list[str] | None = None, context_occurrence_id: str | None = None, calendar_timezone: str = 'Europe/Berlin', task_source: str = 'none', task_source_account_id: str | None = None, without_preferences: bool = False, locale: Locale = DEFAULT_LOCALE, resolved_context=None) -> AsyncIterator[ChatEvent]:
+async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, expected_mail_scope_version: int | None = None, context_message_id: str | None = None, model: str | None = None, prompt_revision_id: str | None = None, calendar_source_ids: list[str] | None = None, context_occurrence_id: str | None = None, calendar_timezone: str = 'Europe/Berlin', task_source: str = 'none', task_source_account_id: str | None = None, without_preferences: bool = False, locale: Locale = DEFAULT_LOCALE, resolved_context=None) -> AsyncIterator[ChatEvent]:
     """All rounds share one persisted snapshot; revocation is checked at each boundary."""
     try:
         effective_locale = await resolve_locale(locale)
@@ -71,10 +71,12 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         yield ErrorEvent(code='internal')
         return
     conversation, snapshot, template_text = resolved_context or await resolve_context(
-        conversation_id=conversation_id, text=text, account_id=account_id,
+        conversation_id=conversation_id, text=text, account_id=account_id, context_message_id=context_message_id, expected_mail_scope_version=expected_mail_scope_version,
         model=model, prompt_revision_id=prompt_revision_id, calendar_source_ids=calendar_source_ids, calendar_timezone=calendar_timezone,
         task_source=task_source, task_source_account_id=task_source_account_id, without_preferences=without_preferences)
-    scope_ids = json.loads(snapshot.account_scope_json)['account_ids']
+    account_scope = json.loads(snapshot.account_scope_json)
+    scope_ids = account_scope['account_ids']
+    account_id = account_scope.get('selection')
     preference_ids = json.loads(getattr(snapshot, 'preference_revision_ids_json', '[]'))
     try:
         revisions = await preference_revision.get_revisions(preference_ids)
@@ -109,19 +111,16 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         context_ids = {row.context_id for row in history if row.context_id}
         contexts = await chat_context.get_contexts(context_ids)
         # Defense in depth for concurrent turns: no historical text, even a user or
-        # assistant answer, may cross a calendar scope boundary into a model request.
+        # assistant answer, may cross a mail, task or calendar boundary.
         for row in history:
             previous = contexts.get(row.context_id)
-            prior_ids = json.loads(getattr(previous, 'calendar_scope_json', '[]'))
-            prior_task = json.loads(getattr(previous, 'task_scope_json', '{"source":"none"}'))
-            prior_account = json.loads(getattr(previous, 'account_scope_json', '{}')).get('selection')
-            if (set(prior_ids) != set(ctx.calendar_source_ids) or prior_task != ctx.task_scope
-                    or prior_account != json.loads(snapshot.account_scope_json).get('selection')):
+            if (previous is None or snapshot.mail_scope_version is None
+                    or previous.mail_scope_version != snapshot.mail_scope_version
+                    or json.loads(previous.account_scope_json) != account_scope
+                    or set(json.loads(previous.calendar_scope_json)) != set(ctx.calendar_source_ids)
+                    or json.loads(previous.task_scope_json) != ctx.task_scope):
                 yield ErrorEvent(code='context_revoked')
                 return
-        # Only a turn that passed its scope checks may hand its message to the extractor.
-        from api.preferences.extraction import schedule
-        schedule(conversation.id, user.id, model)
         history = [row for row in history if not row.context_id or
                    (row.role not in ('tool', 'proposal', 'draft') and not row.tool_payload_json) or
                    (row.context_id in contexts and not contexts[row.context_id].revoked)]
@@ -132,7 +131,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         if template_text is not None:
             messages.insert(2 if preference_ids else 1, {'role': 'user', 'content': 'Nutzervorlage für diesen Turn:\n' + template_text})
         context_mail = await mail_message.get_message(context_message_id) if context_message_id else None
-        if context_mail and context_mail.account_id in scope_ids:
+        if context_mail and context_mail.account_id in scope_ids and not context_mail.unverified_connector:
             messages.insert(1, {'role':'system', 'content':f'Die Bitte bezieht sich auf die Mail mit der ID {context_message_id}. Lies sie mit get_message, bevor du antwortest.'})
         if context_occurrence_id:
             occurrence = await calendar_occurrence.get_visible(context_occurrence_id)
@@ -147,6 +146,9 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                 if all_text: await save(True)
                 yield ErrorEvent(code='context_revoked')
                 return
+            if round_index == 0:
+                from api.preferences.extraction import schedule
+                schedule(conversation.id, user.id, model)
             calls = []
             calls_by_index = {}
             round_text = ''
@@ -205,6 +207,10 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                 yield ErrorEvent(code='model_unavailable')
                 return
             if not calls:
+                if not await chat_context.is_live(snapshot.id):
+                    if all_text: await save(True)
+                    yield ErrorEvent(code='context_revoked')
+                    return
                 answer = await save(False)
                 await conversation_access.touch_conversation(conversation)
                 if mails:
@@ -214,7 +220,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                     refs = []
                     for id in mails:
                         m = await mail_message.get_message(id)
-                        if m:
+                        if m and m.account_id in scope_ids and not m.unverified_connector:
                             insight = insight_map.get(id)
                             refs.append(MailRefOut(id=m.id, account_id=m.account_id, color_index=colors.get(m.account_id, 0), subject=m.subject, sender_name=headers.sender_name(m.sender), snippet=m.snippet, internal_date=m.internal_date, deadline=insight.deadline if insight else None, is_flagged=m.is_flagged))
                     if refs: yield MailsEvent(mails=refs)

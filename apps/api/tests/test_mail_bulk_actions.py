@@ -55,6 +55,19 @@ def test_partial_order_and_group_undo(client, bulk_store):
     assert backend.revert.await_count == 2
 
 
+@pytest.mark.parametrize("kind", ["archive", "mark_read"])
+def test_alias_and_current_id_dispatch_one_action_and_one_undo(client, bulk_store, kind):
+    store, backend = bulk_store
+    store.messages["one"].connector_alias_ids = ["former"]
+    body = {"message_ids": ["former", "one"], "kind": kind}
+    rows = client.post("/api/v1/mail/messages/actions", json=body).json()["results"]
+    assert [(row["message_id"], row["message"]["id"], row["status"]) for row in rows] == [("former", "one", "done")]
+    assert list(store.actions) == [rows[0]["action_id"]]
+    backend.apply.assert_awaited_once()
+    assert client.post("/api/v1/mail/actions/undo", json={"action_ids": list(store.actions)}).json()["restored"] == list(store.actions)
+    backend.revert.assert_awaited_once()
+
+
 def test_provider_failure_does_not_stop_other_items(client, bulk_store):
     store, backend = bulk_store
 

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from db.models.chat_message import ChatMessage
+from db.models.mail_message import MailMessage
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -29,7 +30,7 @@ async def store(fake_store, monkeypatch):
     async def get(id):
         return rows.get(id)
 
-    async def claim(id):
+    async def claim(id, **targets):
         row = rows.get(id)
         if row and row.proposal_status == "pending":
             row.proposal_status = "running"
@@ -77,7 +78,7 @@ async def test_new_proposal_cancels_previous_open_one(store):
 async def test_confirm_executes_only_selected_items(store, monkeypatch):
     action = AsyncMock(return_value=SimpleNamespace(id="undo"))
     monkeypatch.setattr(proposals.actions, "apply_action", action)
-    monkeypatch.setattr(proposals.mail_access, "get_message", AsyncMock(return_value=SimpleNamespace(folder="INBOX")))
+    monkeypatch.setattr(proposals.mail_access, "get_message", AsyncMock(return_value=SimpleNamespace(id="1", folder="INBOX", unverified_connector=False)))
     row = await proposals.create_proposal("chat", mail_proposal())
     result = await proposals.confirm(row.id, selected_ids=["1"])
     action.assert_awaited_once_with("1", "archive")
@@ -112,9 +113,37 @@ async def test_confirm_twice_runs_once(store, monkeypatch):
     send.assert_awaited_once()
 
 
+async def test_alias_and_current_id_on_new_and_existing_cards_have_one_target(store, fake_store, monkeypatch):
+    from datetime import date
+    from api.mail.agent_tools import TurnContext, execute_tool
+
+    mail = MailMessage(id="current", account_id=store.id, provider_uid="item", connector_alias_ids=["former"])
+    fake_store.messages[mail.id] = mail
+    ids = ["former", mail.id]
+    ctx = TurnContext("chat", None, date.today(), account_ids=[store.id])
+    outcome = await execute_tool("propose_action", {"kind": "archive", "message_ids": ids}, ctx)
+    card = proposals.proposal_view(outcome.proposal_message)
+    assert [item.id for item in card.items] == [mail.id]
+
+    # These items had different local IDs when the card was saved.
+    card.items = [card.items[0].model_copy(update={"id": id}) for id in ids]
+    saved = await proposals.create_proposal("chat", card)
+    async def archive(id, kind):
+        assert ((await fake_store.get_message(id)).id, kind, mail.folder) == (mail.id, "archive", "INBOX")
+        mail.folder = "ARCHIVE"
+        return SimpleNamespace(id="undo")
+    action = AsyncMock(side_effect=archive)
+    monkeypatch.setattr(proposals.actions, "apply_action", action)
+    confirmed = await proposals.confirm(saved.id, selected_ids=ids)
+    result = proposals.proposal_view(confirmed).result
+    assert confirmed.proposal_status == "done" and result.done == 1 and result.undo_action_ids == ["undo"]
+    action.assert_awaited_once()
+
+
 async def test_confirm_skips_items_gone_since_proposal(store, monkeypatch):
     monkeypatch.setattr(proposals.actions, "apply_action", AsyncMock(return_value=SimpleNamespace(id="undo")))
-    monkeypatch.setattr(proposals.mail_access, "get_message", AsyncMock(side_effect=[SimpleNamespace(folder="INBOX"), SimpleNamespace(folder="ARCHIVE"), SimpleNamespace(folder="INBOX")]))
+    mails = [SimpleNamespace(id=str(i), folder=folder, unverified_connector=False) for i, folder in enumerate(["INBOX", "ARCHIVE", "INBOX"])]
+    monkeypatch.setattr(proposals.mail_access, "get_message", AsyncMock(side_effect=mails))
     row = await proposals.create_proposal("chat", mail_proposal())
     await proposals.confirm(row.id, selected_ids=["0", "1", "2"])
     assert row.proposal_status == "partial"
@@ -141,7 +170,7 @@ async def test_confirm_sends_connector_without_credentials(store, monkeypatch):
     row = await proposals.create_proposal("chat", draft(store))
     await proposals.confirm(row.id, selected_ids=[])
     assert row.proposal_status == "done"
-    call.assert_awaited_once_with("gmail", "send_email", {"to": ["toni@example.org"], "subject": "Hallo", "body": "Text"})
+    call.assert_awaited_once_with(store, "send_email", {"to": ["toni@example.org"], "subject": "Hallo", "body": "Text"})
 
 
 @pytest.mark.parametrize("error,code", [(transport.MailHostNotAllowedError("private"), "host_not_allowed"), (RuntimeError("secret-ish provider text"), "send_failed")])
@@ -225,7 +254,7 @@ async def test_unsubscribe_binds_latest_sender_target(store, monkeypatch, old, n
     from db.accessors.mail_message import NewsletterRow
 
     latest = [old]
-    async def rows(*, account_ids=None):
+    async def rows(*, account_ids=None, chat_only=False):
         return [NewsletterRow(store.id, "news@example.org", "News", len(latest), 0, None, f"<{latest[-1]}>", "", "[]")]
 
     monkeypatch.setattr(proposals.newsletters.mail_message, "newsletter_senders", rows)

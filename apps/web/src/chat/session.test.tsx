@@ -10,6 +10,11 @@ import { ChatSessionProvider, useChatSession, useRestartConversation } from './s
 
 const originalFetch = globalThis.fetch, originalMatchMedia = window.matchMedia
 let controller: ReadableStreamDefaultController<Uint8Array>, signal: AbortSignal
+function clientWithGrants() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(['summary', 'chat'], { accounts: [{ id: 'a' }], mail_scope_version: 3 })
+  return client
+}
 function setup() {
   window.matchMedia = (() => ({ matches: true })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; return Promise.resolve(new Response(new ReadableStream({ start(c) { controller = c } }))) }) as typeof fetch
@@ -17,7 +22,7 @@ function setup() {
     const { state, send, stop } = useChatSession()
     return <><button onClick={() => void send({ text: 'Hi' })}>send</button><button onClick={stop}>stop</button><div data-testid="phase">{state.phase}</div><div data-testid="text">{state.text}</div><div data-testid="mails">{state.mails.length}</div>{state.phase === 'stopped' && de.chat.stopped}{state.errorCode && de.errors[state.errorCode]}</>
   }
-  render(<QueryClientProvider client={new QueryClient()}><ChatSessionProvider><Consumer /></ChatSessionProvider></QueryClientProvider>)
+  render(<QueryClientProvider client={clientWithGrants()}><ChatSessionProvider><Consumer /></ChatSessionProvider></QueryClientProvider>)
   fireEvent.click(screen.getByText('send'))
 }
 function frame(value: object) { controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`)) }
@@ -42,7 +47,7 @@ test('preference failure never silently retries; explicit continuation sets only
     const { state, send, retryWithoutPreferences } = useChatSession()
     return <><button onClick={() => void send({ text: 'test-only', account_id: 'a' })}>send</button>{state.errorCode === 'preferences_unavailable' && <button onClick={() => void retryWithoutPreferences()}>{de.preferences.continueWithout}</button>}</>
   }
-  render(<QueryClientProvider client={new QueryClient()}><ChatSessionProvider><Consumer /></ChatSessionProvider></QueryClientProvider>)
+  render(<QueryClientProvider client={clientWithGrants()}><ChatSessionProvider><Consumer /></ChatSessionProvider></QueryClientProvider>)
   fireEvent.click(screen.getByText('send'))
   const continueButton = await screen.findByRole('button', { name: de.preferences.continueWithout })
   expect(bodies).toHaveLength(1)
@@ -55,20 +60,19 @@ test('preference failure never silently retries; explicit continuation sets only
 // Restarting is the only place that hands a conversation's unsent text to the start page.
 function restartHarness(id?: string, seed = true) {
   const sources = spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: [] } as never)
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  const client = clientWithGrants()
   if (seed) client.setQueryData(['conversations'], [{ id: 'c', title: 'Test', account_scope_json: JSON.stringify({ account_ids: ['b'], selection: 'b' }) }])
   function Start() {
-    const { scope, composerTexts, setScope, setComposerText, calendarScopes } = useChatSession()
-    return <><div data-testid="start" data-calendars={JSON.stringify(calendarScopes.new)} data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} /><button onClick={() => { setScope('a'); setComposerText('new', 'Bleibt') }}>draft</button></>
+    const { composerTexts, setComposerText, calendarScopes } = useChatSession()
+    return <><div data-testid="start" data-calendars={JSON.stringify(calendarScopes.new)} data-draft={composerTexts.new ?? ''} /><button onClick={() => { setComposerText('new', 'Bleibt') }}>draft</button></>
   }
   // The harness keeps the open conversation and the composer in its own state so a test can change them mid-flight.
-  const control = { setChatId: (_id?: string) => {}, setText: (_text: string) => {}, setScope: (_scope: string | null) => {} }
+  const control = { setChatId: (_id?: string) => {}, setText: (_text: string) => {} }
   function Chat() {
     const session = useChatSession()
     const [current, setCurrent] = useState(id)
     control.setChatId = setCurrent
     control.setText = text => session.setComposerText(current ?? 'new', text)
-    control.setScope = value => { if (current) session.setConversationScope(current, value) }
     const restart = useRestartConversation(current)
     return <><button onClick={() => void session.send({ text: 'Test', conversation_id: current, calendar_source_ids: ['work'] })}>send-calendar</button><span>{session.state.errorCode}</span><button onClick={restart}>restart</button><button onClick={() => session.setComposerText(current ?? 'new', 'Noch offen')}>type</button>{current && <MobileHeader title="Chat" conversationId={current} onMenu={() => {}} />}</>
   }
@@ -80,7 +84,7 @@ function restartHarness(id?: string, seed = true) {
   const router = createRouter({ routeTree: root.addChildren([index, chat, accounts]), history: createMemoryHistory({ initialEntries: ['/'] }) })
   render(<RouterProvider router={router} />)
   // Wrappers so the test keeps calling into the latest render of the chat.
-  return { router, client, sources, setChatId: (value?: string) => control.setChatId(value), setText: (text: string) => control.setText(text), setScope: (value: string | null) => control.setScope(value) }
+  return { router, client, sources, setChatId: (value?: string) => control.setChatId(value), setText: (text: string) => control.setText(text) }
 }
 
 async function restart(router: ReturnType<typeof restartHarness>['router']) {
@@ -104,76 +108,61 @@ test('restart after 409 preserves calendar selection when an uncached sources re
   expect(sources).toHaveBeenCalledTimes(1)
 })
 
-test('restart without unsent text keeps the start draft and takes the account', async () => {
+test('restart without unsent text keeps the start draft', async () => {
   const { router } = restartHarness('c')
   await restart(router)
-  expect((await screen.findByTestId('start')).dataset.scope).toBe('b')
   expect(screen.getByTestId('start').dataset.draft).toBe('Bleibt')
 })
 
 test('restart without a conversation only navigates', async () => {
   const { router } = restartHarness()
   await restart(router)
-  expect((await screen.findByTestId('start')).dataset.scope).toBe('a')
   expect(screen.getByTestId('start').dataset.draft).toBe('Bleibt')
 })
 
-// A conversation list that stays in flight until the test resolves it.
-const savedB = () => ({ data: [{ id: 'c', title: 'Test', account_scope_json: JSON.stringify({ account_ids: ['b'], selection: 'b' }) }] })
-function deferredList() {
-  let release!: (value: { data: unknown[] }) => void
-  spyOn(sdk, 'chatConversationsList').mockImplementation((() => new Promise(resolve => { release = resolve })) as never)
-  return (value: { data: unknown[] }) => release(value)
+function deferCalendars(sources: ReturnType<typeof restartHarness>['sources']) {
+  let release!: (value: { data: never[] }) => void
+  sources.mockImplementation((() => new Promise(resolve => { release = resolve })) as never)
+  return () => release({ data: [] })
 }
 async function openChat(router: ReturnType<typeof restartHarness>['router']) {
   fireEvent.click(await screen.findByText('draft'))
   await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'c' } }) })
 }
 
-// The conversation list may still be in flight when the plus is pressed: the restart waits for it
-// instead of claiming "all accounts", and keeps the start page's selection when it cannot load.
-test('restart waits for a loading conversation list before taking its account', async () => {
-  const resolveList = deferredList()
+test('a fresh start never waits for the old account selection', async () => {
+  const list = spyOn(sdk, 'chatConversationsList')
   const { router } = restartHarness('c', false)
-  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'c' } }) })
-  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
-  expect(router.state.location.pathname).toBe('/chat/c')
-  await act(async () => { resolveList(savedB()) })
-  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-  const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('b')
-  expect(start.dataset.draft).toBe('Noch offen')
+  await restart(router)
+  expect(list).not.toHaveBeenCalled()
 })
 
 // A waiting restart belongs to the conversation that was open: leaving it or switching it drops the attempt.
 test('a waiting restart changes nothing when the chat is left', async () => {
-  const resolveList = deferredList()
-  const { router } = restartHarness('c', false)
+  const { router, sources } = restartHarness('c', false)
+  const release = deferCalendars(sources)
   await openChat(router)
   fireEvent.click(await screen.findByRole('button', { name: 'type' }))
   fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
   await act(async () => { await router.navigate({ to: '/accounts' }) })
-  await act(async () => { resolveList(savedB()) })
+  await act(async () => { release() })
   expect(router.state.location.pathname).toBe('/accounts')
   await act(async () => { await router.navigate({ to: '/' }) })
   const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('a')
   expect(start.dataset.draft).toBe('Bleibt')
 })
 
 test('a waiting restart changes nothing when its conversation changes', async () => {
-  const resolveList = deferredList()
-  const { router, setChatId } = restartHarness('c', false)
+  const { router, sources, setChatId } = restartHarness('c', false)
+  const release = deferCalendars(sources)
   await openChat(router)
   fireEvent.click(await screen.findByRole('button', { name: 'type' }))
   fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
   await act(async () => { setChatId('d') })
-  await act(async () => { resolveList(savedB()) })
+  await act(async () => { release() })
   expect(router.state.location.pathname).toBe('/chat/c')
   await act(async () => { await router.navigate({ to: '/' }) })
   const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('a')
   expect(start.dataset.draft).toBe('Bleibt')
 })
 
@@ -191,45 +180,16 @@ test('a restart waiting for the calendar list changes nothing when its conversat
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
 })
 
-// The list resolves later: the restart must carry what the composer holds now, not what it held on click.
-test('a waiting restart copies the current account and text', async () => {
-  const resolveList = deferredList()
-  const { router, setText, setScope } = restartHarness('c', false)
+// The composer can change while the calendar list loads.
+test('a waiting restart copies the latest draft', async () => {
+  const { router, sources, setText } = restartHarness('c', false)
+  const release = deferCalendars(sources)
   await openChat(router)
   fireEvent.click(await screen.findByRole('button', { name: 'type' }))
   fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
-  await act(async () => { setText('Second'); setScope('a') })
-  await act(async () => { resolveList(savedB()) })
+  await act(async () => { setText('Second') })
+  await act(async () => { release() })
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('a')
   expect(start.dataset.draft).toBe('Second')
-})
-
-test('restart keeps the start selection when the conversation list fails', async () => {
-  spyOn(sdk, 'chatConversationsList').mockImplementation((async () => { throw new Error('offline') }) as never)
-  const { router } = restartHarness('c', false)
-  fireEvent.click(await screen.findByText('draft'))
-  await act(async () => { await router.navigate({ to: '/chat/$conversationId', params: { conversationId: 'c' } }) })
-  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
-  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-  const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('a')
-  expect(start.dataset.draft).toBe('Noch offen')
-})
-
-test('a waiting restart whose list fails still carries an account chosen meanwhile', async () => {
-  let fail!: (error: Error) => void
-  spyOn(sdk, 'chatConversationsList').mockImplementation((() => new Promise((_resolve, reject) => { fail = reject })) as never)
-  const { router, setScope } = restartHarness('c', false)
-  await openChat(router)
-  fireEvent.click(await screen.findByRole('button', { name: 'type' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
-  await act(async () => { setScope('x') })
-  await act(async () => { fail(new Error('offline')) })
-  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-  const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('x')
-  expect(start.dataset.draft).toBe('Noch offen')
 })

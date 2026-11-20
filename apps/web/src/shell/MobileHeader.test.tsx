@@ -11,16 +11,16 @@ window.matchMedia = ((query: string) => ({ matches: query.includes('640') ? widt
 const summary = { accounts: [{ id: 'a', display_name: 'Privat', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' }], unread_total: 0, last_sync_at: null }
 const conversations = [{ id: 'one', title: 'Erste Unterhaltung', account_scope_json: JSON.stringify({ account_ids: ['a'], selection: 'a' }), updated_at: new Date().toISOString() }]
 function StartProbe() {
-  const { scope, composerTexts } = useChatSession()
-  return <div data-testid="start" data-scope={scope ?? 'all'} data-draft={composerTexts.new ?? ''} />
+  const { composerTexts } = useChatSession()
+  return <div data-testid="start" data-draft={composerTexts.new ?? ''} />
 }
 function ChatRoute() {
   const { setComposerText } = useChatSession()
   return <button onClick={() => setComposerText('one', 'Noch offen')}>type</button>
 }
 function MailRoute() {
-  const { setScope, setComposerText } = useChatSession()
-  return <button onClick={() => { setScope('a'); setComposerText('new', 'Bleibt') }}>start draft</button>
+  const { setComposerText } = useChatSession()
+  return <button onClick={() => { setComposerText('new', 'Bleibt') }}>start draft</button>
 }
 function setup(path: string) {
   width = 375
@@ -38,22 +38,20 @@ function setup(path: string) {
   return router
 }
 afterEach(() => { cleanup(); mock.restore(); resetShellSyncForTest() })
-test('the phone plus carries the open conversation account and unsent text', async () => {
+test('the phone plus carries the open conversation draft', async () => {
   const router = setup('/chat/one')
   fireEvent.click(await screen.findByRole('button', { name: 'type' }))
   fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('a')
   expect(start.dataset.draft).toBe('Noch offen')
 })
-test('the phone plus outside a conversation leaves the start selection and draft alone', async () => {
+test('the phone plus outside a conversation leaves the start draft alone', async () => {
   const router = setup('/mail')
   fireEvent.click(await screen.findByRole('button', { name: 'start draft' }))
   fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('a')
   expect(start.dataset.draft).toBe('Bleibt')
 })
 // The router matches paths case-insensitively; the phone plus reads the conversation from the match.
@@ -63,6 +61,5 @@ test('the phone plus carries state from a conversation path in any spelling', as
   fireEvent.click(screen.getByRole('button', { name: 'Neue Unterhaltung' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   const start = await screen.findByTestId('start')
-  expect(start.dataset.scope).toBe('a')
   expect(start.dataset.draft).toBe('Noch offen')
 })

@@ -50,17 +50,13 @@ async def _visible_reply(reference: SpeechReference) -> str:
     if (
         conversation is None or message is None or message.conversation_id != conversation.id
         or message.role != "assistant" or message.stopped or not message.content.strip()
-        or not visible_messages([message])
+        or not message.context_id or not visible_messages([message])
     ):
         raise audio_error("audio_message_unavailable")
 
-    if message.context_id:
-        context = await chat_context.get_context(message.context_id)
-        if (
-            context is None or context.conversation_id != conversation.id or context.revoked
-            or not await chat_context.is_live(context.id)
-        ):
-            raise audio_error("audio_message_unavailable")
+    context = await chat_context.get_context(message.context_id)
+    if context is None or context.conversation_id != conversation.id or context.revoked or not await chat_context.is_live(context.id):
+        raise audio_error("audio_message_unavailable")
 
     if len(message.content) > _MAX_MARKDOWN_CHARACTERS:
         raise audio_error("audio_text_too_long")

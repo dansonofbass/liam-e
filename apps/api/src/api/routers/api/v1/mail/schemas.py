@@ -51,6 +51,7 @@ class MessageOriginalOut(BaseModel):
 
 
 class MessageDetailOut(MessageListItemOut):
+    local_reference_only: bool = False
     to: list[str]
     cc: list[str]
     body_text: str

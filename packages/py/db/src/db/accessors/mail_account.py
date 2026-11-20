@@ -80,12 +80,13 @@ async def update_display_name(account_id: str, display_name: str) -> MailAccount
 
 
 async def delete_account(account_id: str) -> bool:
-    from db.accessors import user_preference
+    from db.accessors import chat_settings, user_preference
     async with get_session_maker()() as session:
         await user_preference.lock(session)
         account = await session.get(MailAccount, account_id)
         if account is None:
             return False
+        await chat_settings.remove_account(session, account_id)
         await user_preference.remove_account_in_session(session, account_id)
         await session.delete(account)
         await session.commit()

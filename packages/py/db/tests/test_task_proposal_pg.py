@@ -16,7 +16,10 @@ def test_local_proposal_rollback_concurrency_and_retry(pg_db, failure_point):
         from db.engine import get_session_maker
         from api.tasks.create import create
 
-        message = await chat_message.add_message(conversation_id='synthetic', role='proposal',
+        from db.accessors import chat_context
+        conversation, context, _ = await chat_context.resolve(conversation_id=None, title='Test', model=None,
+            revision_id=None, account_id=None, app_prompt_version='test')
+        message = await chat_message.add_message(conversation_id=conversation.id, context_id=context.id, role='proposal',
                                                  proposal_status='pending', proposal_json='{}')
 
         async def execute(fail=False):

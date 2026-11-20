@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
-from db.accessors import mail_account, mail_message
+from db.accessors import chat_context, mail_account, mail_message
 from db.models.chat_message import ChatMessage
 from api.locales import DEFAULT_LOCALE, Locale
 from api.mail import headers, insights, newsletters, proposals, send
@@ -15,7 +15,7 @@ class TurnContext:
     conversation_id: str
     account_id: str | None
     today: date
-    account_ids: list[str] | None = None
+    account_ids: list[str] = field(default_factory=list)
     context_id: str | None = None
     source_message_id: str | None = None
     calendar_source_ids: list[str] = field(default_factory=list)
@@ -72,7 +72,7 @@ TOOLS = [
     _schema('get_insights', 'Get mail insights', {'message_ids': A}, ['message_ids']),
     _schema('find_newsletters', 'Find newsletter senders', {}),
     _schema('propose_action', 'Propose a mail action for confirmation', {'kind': {'type':'string', 'enum':['archive','trash','mark_read','unsubscribe']}, 'message_ids': A, 'sender_ids': A, 'reason': S}, ['kind','reason']),
-    _schema('create_draft', 'Propose a mail to send', {'to': A, 'cc': A, 'subject': S, 'body': S, 'mode': {'type':'string', 'enum':['new','reply','reply_all','forward']}, 'reply_to_message_id': S}, ['to','subject','body']),
+    _schema('create_draft', 'Propose a mail to send. For new mail use the requested sender from list_accounts. Ask which account to use when several are available and the sender is unclear.', {'account_id': S, 'to': A, 'cc': A, 'subject': S, 'body': S, 'mode': {'type':'string', 'enum':['new','reply','reply_all','forward']}, 'reply_to_message_id': S}, ['to','subject','body']),
     _schema('show_mails', 'Display mail cards', {'message_ids': A}, ['message_ids']),
     _schema('suggest_followups', 'Suggest follow-up actions', {'texts': A}, ['texts']),
 ]
@@ -86,7 +86,9 @@ async def tool_status(name, arguments, ctx):
         return None
     count = None
     if name == 'search_messages':
-        count = 1 if arguments.get('account_id') or ctx.account_id else sum(a.is_active for a in await mail_account.list_accounts())
+        ids = ctx.account_ids
+        target = arguments.get('account_id') or ctx.account_id
+        count = int(target in ids) if target else len(ids)
     elif name == 'get_insights':
         count = min(len(arguments.get('message_ids', [])), 20)
     return StatusEvent(code=codes[name], count=count)
@@ -144,7 +146,7 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
     if name in ('search_tasks', 'get_task', 'propose_task'):
         from api.tasks import chat as task_chat
         if name != 'propose_task':
-            return result(await task_chat.read(name, arguments, ctx.task_scope))
+            return result(await task_chat.read(name, arguments, ctx.task_scope, ctx.account_ids))
         try:
             command = await task_chat.prepare(arguments, ctx)
         except (ValueError, TypeError):
@@ -154,68 +156,75 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         from api.mail.calendar_tools import read_calendar
         value, refs = await read_calendar(name, arguments, ctx.calendar_source_ids, ctx.calendar_timezone)
         return result(value, calendars=refs)
-    scope = ctx.account_ids if ctx.account_ids is not None else ([ctx.account_id] if ctx.account_id else None)
-    if scope is not None:
-        if arguments.get('account_id') and arguments['account_id'] not in scope:
-            return result({'error': 'account_out_of_scope'})
-        ids = arguments.get('message_ids', []) + [arguments.get('message_id'), arguments.get('reply_to_message_id')]
-        for id in ids:
-            if id:
-                row = await mail_message.get_message(id)
-                if row is None or row.account_id not in scope:
-                    return result({'error': 'message_not_found'})
-        if arguments.get('sender_ids'):
-            allowed = {s.sender_id for s in await newsletters.find_newsletters(account_ids=scope)} if scope else set()
-            if any(id not in allowed for id in arguments['sender_ids']):
-                return result({'error': 'sender_not_found'})
+    scope = ctx.account_ids
+    if any(id is not None and id not in scope for id in (ctx.account_id, arguments.get('account_id'))):
+        return result({'error': 'account_out_of_scope'})
+    ids = arguments.get('message_ids', []) + [arguments.get('message_id'), arguments.get('reply_to_message_id')]
+    verified_messages = {}
+    for id in ids:
+        if id and id not in verified_messages:
+            row = await mail_message.get_message(id)
+            if row is None or row.account_id not in scope or row.unverified_connector:
+                return result({'error': 'message_not_found'})
+            verified_messages[id] = row
+    if arguments.get('sender_ids'):
+        allowed = {s.sender_id for s in await newsletters.find_newsletters(account_ids=scope, chat_only=True)} if scope else set()
+        if any(id not in allowed for id in arguments['sender_ids']):
+            return result({'error': 'sender_not_found'})
     if name == 'list_accounts':
-        return result([{'id': a.id, 'provider': a.provider, 'email_address': a.email_address, 'is_active': a.is_active} for a in await mail_account.list_accounts() if scope is None or a.id in scope])
+        return result([{'id': a.id, 'provider': a.provider, 'email_address': a.email_address, 'is_active': a.is_active} for a in await mail_account.list_accounts() if a.id in scope])
     if name == 'search_messages':
         account_id = arguments.get('account_id') or ctx.account_id
         if scope == []:
             return result({'untrusted_mails': []})
-        rows = await mail_message.list_page(folder='INBOX', account_ids=[account_id] if account_id else scope, unread_only=arguments.get('unread_only', False), query=arguments.get('query', ''), limit=max(1, min(int(arguments.get('limit', 10)), 50)))
+        rows = await mail_message.list_page(chat_only=True, folder='INBOX', account_ids=[account_id] if account_id else scope, unread_only=arguments.get('unread_only', False), query=arguments.get('query', ''), limit=max(1, min(int(arguments.get('limit', 10)), 50)))
         since = arguments.get('since_days')
         if since is not None:
             cutoff = datetime.now(timezone.utc) - timedelta(days=int(since))
             rows = [m for m in rows if m.internal_date and (m.internal_date.replace(tzinfo=timezone.utc) if m.internal_date.tzinfo is None else m.internal_date) >= cutoff]
         return result({'untrusted_mails': [_summary(m) for m in rows]})
     if name == 'get_message':
-        m = await mail_message.get_message(arguments.get('message_id', ''))
+        m = verified_messages.get(arguments.get('message_id'))
         if not m: return result({'error':'message_not_found'})
         return result({'untrusted_mail': {'id':m.id, 'account_id':m.account_id, 'folder':m.folder, 'subject':m.subject, 'sender':m.sender, 'to':json.loads(m.recipients_json), 'cc':json.loads(m.cc_json), 'reply_to':json.loads(m.reply_to_json), 'date':m.internal_date, 'body_text':m.body_text[:8000], 'has_attachments':m.has_attachments, 'is_read':m.is_read}})
     if name == 'get_insights':
         items = []
         for id in arguments.get('message_ids', [])[:20]:
+            if not ctx.context_id or not await chat_context.is_live(ctx.context_id):
+                return result({'error': 'context_revoked'})
             try:
-                insight = await insights.get_or_compute(id, locale=ctx.browser_locale)
+                insight = await insights.get_or_compute(id, locale=ctx.browser_locale, context_id=ctx.context_id)
                 items.append({'message_id':id, 'points':json.loads(insight.points_json), 'deadline':insight.deadline, 'needs_reply':insight.needs_reply, 'followups':json.loads(insight.followups_json)})
+            except insights.InsightContextRevoked:
+                return result({'error': 'context_revoked'})
             except insights.MessageNotFound:
                 items.append({'message_id':id, 'error':'not_found'})
             except insights.InsightError:
                 items.append({'message_id':id, 'error':'unavailable'})
         return result({'untrusted_insights':items})
     if name == 'find_newsletters':
-        rows = await newsletters.find_newsletters(account_ids=scope) if scope != [] else []
+        rows = await newsletters.find_newsletters(account_ids=scope, chat_only=True) if scope != [] else []
         return result({'untrusted_senders':[{k:getattr(s, k) for k in ('sender_id','address','display_name','total','unread','last_read_at','method')} for s in rows]})
     if name == 'propose_action':
         kind = arguments.get('kind')
         if kind == 'send': return result({'error':'use_create_draft'})
         if kind not in ('archive','trash','mark_read','unsubscribe'): return result({'error':'invalid_arguments'})
         items = []
+        mail_targets = set()
         ids = list(dict.fromkeys(arguments.get('sender_ids' if kind == 'unsubscribe' else 'message_ids', [])))
         for id in ids:
             if len(items) == 50: break
             if kind == 'unsubscribe':
-                s = await newsletters.sender_by_id(id)
+                s = await newsletters.sender_by_id(id, chat_only=True)
                 if not s: continue
                 subtitle = unsubscribe_subtitle(s.total, s.address, s.method, s.link if s.method == 'mailto' else None, locale=ctx.locale)
                 items.append(proposals.ProposalItem(id=id, kind='sender', title=s.display_name, subtitle=subtitle, count=s.total, unread=s.unread, last_read_at=s.last_read_at, method=s.method, target=s.link))
             else:
-                m = await mail_message.get_message(id)
-                if not m or m.folder != 'INBOX' or (kind == 'mark_read' and m.is_read): continue
+                m = verified_messages.get(id)
+                if not m or m.id in mail_targets or m.folder != 'INBOX' or (kind == 'mark_read' and m.is_read): continue
+                mail_targets.add(m.id)
                 account = await mail_account.get_account(m.account_id)
-                items.append(proposals.ProposalItem(id=id, kind='mail', title=m.subject or ('No subject' if ctx.locale == 'en' else 'Ohne Betreff'), subtitle=f'{headers.sender_name(m.sender)} · {account.email_address if account else ""}'))
+                items.append(proposals.ProposalItem(id=m.id, kind='mail', title=m.subject or ('No subject' if ctx.locale == 'en' else 'Ohne Betreff'), subtitle=f'{headers.sender_name(m.sender)} · {account.email_address if account else ""}'))
         if not items: return result({'error':'no_valid_items'})
         return await _proposal(ctx, proposals.Proposal(kind=kind, reason=arguments.get('reason',''), items=items))
     if name == 'create_draft':
@@ -224,13 +233,24 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         to = [] if mode in ('reply', 'reply_all') else arguments.get('to', [])
         cc = arguments.get('cc', [])
         if not _valid_addresses(to + cc): return result({'error':'invalid_address'})
-        original = await mail_message.get_message(arguments.get('reply_to_message_id', '')) if mode != 'new' else None
+        original = verified_messages.get(arguments.get('reply_to_message_id')) if mode != 'new' else None
         if mode != 'new' and not original: return result({'error':'message_not_found'})
+        sender_id = arguments.get('account_id')
         if original:
-            account = await mail_account.get_account(original.account_id)
-        else:
-            account = await mail_account.get_account(ctx.account_id) if ctx.account_id else next((a for a in await mail_account.list_accounts() if a.is_active and (scope is None or a.id in scope)), None)
-        if not account: return result({'error':'no_account'})
+            if sender_id is not None and sender_id != original.account_id:
+                return result({'error': 'sender_must_match_original'})
+            sender_id = original.account_id
+        if sender_id is None:
+            sender_id = ctx.account_id
+        if sender_id is None:
+            if len(scope) > 1:
+                return result({'error': 'sender_account_required'})
+            if not scope:
+                return result({'error': 'no_account'})
+            sender_id = scope[0]
+        account = await mail_account.get_account(sender_id)
+        if not account or not account.is_active:
+            return result({'error': 'no_account'})
         if mode in ('reply','reply_all'):
             to, base_cc = send.reply_recipients(original, account, reply_all=mode == 'reply_all')
             seen = {address.casefold() for address in to}
@@ -243,13 +263,14 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         if not to: return result({'error':'recipients_missing'})
         if not _valid_addresses(to + cc): return result({'error':'invalid_address'})
         to_text = ', '.join(to)
-        reason = {'new':f'Neue Mail an {to_text}.', 'reply':f'Antwort an {to_text}.', 'reply_all':f'Antwort an alle: {to_text}.', 'forward':f'Weiterleitung an {to_text}.'}[mode]
+        new_reason = f'Email from {account.email_address} to {to_text}.' if ctx.locale == 'en' else f'Neue Mail von {account.email_address} an {to_text}.'
+        reason = {'new':new_reason, 'reply':f'Antwort an {to_text}.', 'reply_all':f'Antwort an alle: {to_text}.', 'forward':f'Weiterleitung an {to_text}.'}[mode]
         draft = proposals.SendDraft(account_id=account.id, mode=mode, to=to, cc=cc, subject=arguments.get('subject') or (original.subject if original else ''), body=arguments.get('body', ''), quote=send.quote_original(original) if original else '', reply_to_message_id=original.id if original else None)
         return await _proposal(ctx, proposals.Proposal(kind='send', reason=reason, items=[], draft=draft))
     if name == 'show_mails':
         ids = []
         for id in dict.fromkeys(arguments.get('message_ids', [])):
-            if await mail_message.get_message(id): ids.append(id)
+            if id in verified_messages: ids.append(id)
             if len(ids) == 10: break
         return result({'ok':True}, mails=ids)
     if name == 'suggest_followups':
