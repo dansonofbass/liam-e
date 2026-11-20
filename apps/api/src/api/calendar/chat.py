@@ -1,6 +1,5 @@
 """Prepare calendar cards from scoped server reads, never execute changes."""
 
-import re
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -8,6 +7,7 @@ from db.accessors import calendar_occurrence, calendar_settings, calendar_source
 from pydantic import ValidationError
 
 from api.calendar import writes
+from api.calendar.chat_target import mentions, named_choice, stated_destination
 from api.calendar.proposals import CalendarCommand, CalendarValues, values
 
 
@@ -16,33 +16,33 @@ async def _create_source(arguments, ctx):
     source_id = arguments.get("source_id")
     if source_id and source_id not in ctx.calendar_source_ids:
         raise writes.WriteError("calendar_out_of_scope", 403)
-    if named is None:
-        default_id = (await calendar_settings.get()).default_source_id
-        if source_id and source_id != default_id:
+    target = await stated_destination(ctx.user_text, ctx.calendar_source_ids)
+    pending = target or ctx.requested_calendar or ctx.calendar_choice
+    if named is not None:
+        if not isinstance(named, str) or not named.strip():
             raise writes.WriteError("calendar_name_required", 422)
-        if not default_id:
-            raise writes.WriteError("calendar_default_missing", 422)
-        if default_id not in ctx.calendar_source_ids:
-            raise writes.WriteError("calendar_default_unavailable", 409)
-        return default_id
+        if mentions(ctx.user_text, named):
+            if target and target.name and target.name.strip().casefold() != named.strip().casefold():
+                raise writes.WriteError("calendar_name_required", 422)
+            pending = named_choice(named, await calendar_source.catalog(ids=ctx.calendar_source_ids))
+        elif not pending or pending.name.strip().casefold() != named.strip().casefold():
+            raise writes.WriteError("calendar_name_required", 422)
+    if pending:
+        ctx.requested_calendar = pending
+        if pending.error:
+            raise writes.WriteError(pending.error, 422)
+        if pending.source_id not in ctx.calendar_source_ids or (source_id and source_id != pending.source_id):
+            raise writes.WriteError("calendar_out_of_scope", 403)
+        return pending.source_id
 
-    if not isinstance(named, str) or not named.strip():
+    default_id = (await calendar_settings.get()).default_source_id
+    if source_id and source_id != default_id:
         raise writes.WriteError("calendar_name_required", 422)
-    name = named.strip().casefold()
-    if not re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", ctx.user_text.casefold()):
-        raise writes.WriteError("calendar_name_required", 422)
-    candidates = await calendar_source.catalog(ids=ctx.calendar_source_ids)
-    matches = [
-        source.id for source, state in candidates
-        if source.name.strip().casefold() == name and calendar_source.chat_access(source, state) in calendar_source.READABLE
-    ]
-    if not matches:
-        raise writes.WriteError("calendar_name_unknown", 422)
-    if len(matches) != 1:
-        raise writes.WriteError("calendar_name_ambiguous", 422)
-    if source_id and source_id != matches[0]:
-        raise writes.WriteError("calendar_out_of_scope", 403)
-    return matches[0]
+    if not default_id:
+        raise writes.WriteError("calendar_default_missing", 422)
+    if default_id not in ctx.calendar_source_ids:
+        raise writes.WriteError("calendar_default_unavailable", 409)
+    return default_id
 
 
 async def prepare(arguments: dict, ctx) -> CalendarCommand:
@@ -68,6 +68,9 @@ async def prepare(arguments: dict, ctx) -> CalendarCommand:
     if not entry or calendar_source.chat_access(*entry[0]) != "writable":
         raise writes.WriteError("calendar_not_writable", 403)
     source, _ = entry[0]
+    choice = ctx.requested_calendar
+    if action == "create" and choice and source.id == choice.source_id and source.connection_ref != choice.connection_ref:
+        raise writes.WriteError("calendar_not_writable", 403)
     before = await writes.live(occurrence_id) if action in {"update", "delete"} else None
     if before and (before.source_id != source_id or not before.editable):
         raise writes.WriteError("calendar_event_not_editable")

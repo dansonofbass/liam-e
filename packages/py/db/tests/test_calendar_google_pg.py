@@ -20,7 +20,7 @@ def fixture(name):
 def test_generations_failure_identity_and_schedule_reset(pg_db, monkeypatch):
     async def run():
         from api.calendar import google, ics, sync
-        from db.accessors import calendar_source, mail_job
+        from db.accessors import calendar_feed_sync, calendar_source, mail_job
         from db.engine import get_session_maker
         from db.models.calendar_source import CalendarSource
         from db.models.calendar_occurrence import CalendarOccurrence
@@ -51,7 +51,7 @@ def test_generations_failure_identity_and_schedule_reset(pg_db, monkeypatch):
 
         async def execute(source):
             await mail_job.enqueue("calendar_sync", {"source_id": source.id}, dedupe_key=f"calendar_sync:{source.id}")
-            claim = await mail_job.claim_next(datetime.now(UTC) + timedelta(seconds=1), stale_after=timedelta(minutes=5))
+            claim = await mail_job.claim_next(datetime.now(UTC) + timedelta(minutes=2), stale_after=timedelta(minutes=5))
             try:
                 await sync.run_sync(json.loads(claim.payload_json), claim.id, claim.attempts)
             finally:
@@ -98,25 +98,48 @@ def test_generations_failure_identity_and_schedule_reset(pg_db, monkeypatch):
                 state = await session.get(CalendarSyncState, sources[0].id)
                 assert state.last_success_at == success and state.data_revision == revision + 1
                 assert state.last_error == ("provider_unavailable" if change == "error" else "reconnect_required")
+        # The cached event stays indexed, but chat cannot read it until this source proves access.
+        from api.mail.calendar_tools import read_calendar
+        async def chat_can_read():
+            ids = await calendar_source.readable_ids(None)
+            response, _ = await read_calendar("get_calendar_occurrence", {"occurrence_id": moved.id}, ids, "UTC")
+            return sources[0].id in ids and bool(response.get("untrusted_calendar_data", {}).get("occurrences"))
+
+        assert not await chat_can_read()
+        checked = state.last_checked_at
+        assert not await calendar_feed_sync.enqueue(sources[0].id, now=checked + timedelta(seconds=30), interval=5, manual=True)
+        assert not await chat_can_read()
+        assert await calendar_feed_sync.enqueue(sources[0].id, now=checked + timedelta(minutes=1), interval=5, manual=True)
+        assert not await chat_can_read()
+        primary, mode = "work@example.org", "error"
+        with pytest.raises(google.GoogleError):
+            await execute(sources[0])
+        mode = "moved"
+        await execute(sources[1])
+        assert not await chat_can_read()
         # Pause/resume advances the revision; old provider work cannot activate.
         from db.accessors.calendar_snapshot import LostClaim, replace_window
         await calendar_source.set_active(sources[0].id, False)
         await calendar_source.set_active(sources[0].id, True)
         job = await mail_job.enqueue("calendar_sync", {"source_id": sources[0].id}, dedupe_key="stale-google")
-        claim = await mail_job.claim_next(datetime.now(UTC) + timedelta(seconds=1), stale_after=timedelta(minutes=5))
+        claim = await mail_job.claim_next(datetime.now(UTC) + timedelta(minutes=2), stale_after=timedelta(minutes=5))
         with pytest.raises(LostClaim):
             await replace_window(source_id=sources[0].id, job_id=job.id, attempt=claim.attempts,
                                  start=start, end=end, start_date=start.date(), end_date=end.date(),
                                  events=[], occurrences=[], expected_revision=sources[0].revision,
                                  replace_all=True, reset_schedule=True)
         assert [r.id for r in await rows(sources[0])] == [moved.id]
+        assert not await chat_can_read()
+        await mail_job.finish(job.id, claim.attempts)
+        await execute(sources[0])
+        assert await chat_can_read()
     asyncio.run(run())
 
 
 @pytest.mark.parametrize("code", ["reconnect_required", "calendar_unavailable"])
 def test_google_gate_stops_and_manual_cooldown_lifts_stop(pg_db, code):
     async def run():
-        from db.accessors import calendar_feed_sync
+        from db.accessors import calendar_feed_sync, calendar_source
         from db.engine import get_session_maker
         from db.models.calendar_source import CalendarSource
         from db.models.calendar_sync_state import CalendarSyncState
@@ -126,7 +149,10 @@ def test_google_gate_stops_and_manual_cooldown_lifts_stop(pg_db, code):
             session.add(source)
             session.add(CalendarSyncState(source_id=source.id, last_checked_at=now, last_error=code, failure_count=3))
             await session.commit()
+        assert source.id not in await calendar_source.readable_ids(None)
         assert not await calendar_feed_sync.enqueue(source.id, now=now + timedelta(minutes=10), interval=5, manual=False)
         assert not await calendar_feed_sync.enqueue(source.id, now=now + timedelta(seconds=30), interval=5, manual=True)
+        assert source.id not in await calendar_source.readable_ids(None)
         assert await calendar_feed_sync.enqueue(source.id, now=now + timedelta(minutes=1), interval=5, manual=False)
+        assert source.id not in await calendar_source.readable_ids(None)
     asyncio.run(run())

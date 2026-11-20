@@ -69,7 +69,7 @@ class DoneEvent(EventModel):
 
 class ErrorEvent(EventModel):
     event: Literal['error'] = 'error'
-    code: Literal['model_unavailable', 'aborted', 'internal', 'context_revoked', 'preferences_unavailable']
+    code: Literal['model_unavailable', 'aborted', 'internal', 'context_revoked', 'calendar_reference_unavailable', 'preferences_unavailable']
 
 
 ChatEvent = Annotated[StartEvent | StatusEvent | DeltaEvent | MailsEvent | CalendarsEvent | ProposalEvent | SuggestionsEvent | DoneEvent | ErrorEvent, Field(discriminator='event')]

@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from db.accessors import calendar_source, chat_settings, mail_message, user_preference
 from db.engine import get_session_maker
 from db.models._common import utcnow
+from db.models.calendar_occurrence import CalendarOccurrence
 from db.models.chat_context import ChatContext
 from db.models.chat_conversation import ChatConversation
 from db.models.chat_message import ChatMessage
@@ -24,6 +25,10 @@ class PreferencesUnavailable(Exception):
 
 
 class ContextUnavailable(Exception):
+    pass
+
+
+class CalendarReferenceUnavailable(Exception):
     pass
 
 
@@ -72,7 +77,8 @@ async def configure(conversation_id, expected_version, *, revision_id=None, chan
 
 
 async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version, calendar_source_ids=None,
-                  task_source='none', task_source_account_id=None, without_preferences=False, context_message_id=None, expected_mail_scope_version=None):
+                  task_source='none', task_source_account_id=None, without_preferences=False, context_message_id=None,
+                  context_occurrence_id=None, expected_mail_scope_version=None):
     async with get_session_maker()() as session:
         await user_preference.lock(session)
         grants = await chat_settings.in_session(session)
@@ -119,6 +125,10 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             & (ChatMessage.conversation_id == ChatContext.conversation_id)
         ).where(ChatMessage.conversation_id == conversation.id).distinct())).scalars().all() if existing else []
         calendar_ids = await calendar_source.readable_ids(session, calendar_source_ids)
+        if context_occurrence_id is not None:
+            source_id = await session.scalar(select(CalendarOccurrence.source_id).where(CalendarOccurrence.id == context_occurrence_id))
+            if source_id not in calendar_ids:
+                raise CalendarReferenceUnavailable
         if calendar_source_ids is not None and set(calendar_ids) != set(calendar_source_ids):
             if history:
                 raise ScopeChange

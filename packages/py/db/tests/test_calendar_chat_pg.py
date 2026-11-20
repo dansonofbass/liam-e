@@ -171,6 +171,7 @@ def test_automatic_calendar_scope_and_coverage_beyond_fifty_sources(pg_db):
 
 def test_calendar_default_revision_and_proposal_target(pg_db, monkeypatch):
     async def run():
+        from dataclasses import replace
         from datetime import date
         from db.accessors import calendar_settings, calendar_source
         from db.accessors.prompt_template import StaleVersion
@@ -214,21 +215,26 @@ def test_calendar_default_revision_and_proposal_target(pg_db, monkeypatch):
             proposals.Proposal(kind='calendar', reason='Test', items=[], calendar=card), context_id=snapshot.id)
         other = first if chosen.default_source_id == second.id else second
         await calendar_settings.update(2, other.id)
+        async with get_session_maker().begin() as session:
+            session.add(source('newly-connected', 'Additional'))
+        assert await chat_context.is_live(snapshot.id)
         assert saved.proposal_status == 'pending' and dispatched == []
         assert (await proposals.confirm(saved.id, selected_ids=[])).proposal_status == 'done'
         with pytest.raises(proposals.ProposalStateError):
             await proposals.confirm(saved.id, selected_ids=[])
         assert dispatched == [(chosen.default_source_id, saved.id)]
         assert (await chat.prepare(values, ctx)).source_id == other.id
-        ctx.user_text = 'Bitte im Kalender PRIVAT eintragen'
-        explicit = await chat.prepare({**values, 'calendar_name': 'Privat'}, ctx)
+        named = replace(ctx, user_text='Bitte im Kalender PRIVAT eintragen')
+        explicit = await chat.prepare({**values, 'calendar_name': 'Privat'}, named)
         assert explicit.source_id == second.id
         with pytest.raises(writes.WriteError, match='calendar_name_required'):
-            await chat.prepare({**values, 'calendar_name': 'Team'}, ctx)
+            await chat.prepare({**values, 'calendar_name': 'Team'}, named)
         for name, code in [('Team', 'calendar_name_ambiguous'), ('Wunsch', 'calendar_name_unknown'), ('Ferien', 'calendar_not_writable')]:
-            ctx.user_text = f'Bitte in {name} eintragen'
+            named = replace(ctx, user_text=f'Bitte in {name} eintragen')
             with pytest.raises(writes.WriteError, match=code):
-                await chat.prepare({**values, 'calendar_name': name}, ctx)
+                await chat.prepare({**values, 'calendar_name': name}, named)
+            with pytest.raises(writes.WriteError, match=code):
+                await chat.prepare(values, named)
         with pytest.raises(writes.WriteError, match='calendar_name_required'):
             await chat.prepare({**values, 'source_id': chosen.default_source_id}, ctx)
         later = await proposals.create_proposal(conversation.id,
@@ -246,4 +252,41 @@ def test_calendar_default_revision_and_proposal_target(pg_db, monkeypatch):
         with pytest.raises(writes.WriteError, match='calendar_default_unavailable'):
             await chat.prepare(values, ctx)
         assert (await calendar_settings.update(3, None)).default_source_id is None
+    asyncio.run(run())
+
+
+def test_missing_explicit_event_rejected_before_either_chat_endpoint_calls_model(pg_db, monkeypatch):
+    async def run():
+        from datetime import date
+        from fastapi import HTTPException
+        from sqlalchemy import func, select
+        from db.accessors import calendar_source
+        from db.engine import get_session_maker
+        from db.models.calendar_source import CalendarSource
+        from db.models.calendar_occurrence import CalendarOccurrence
+        from db.models.chat_conversation import ChatConversation
+        from api.mail import agent
+        from api.routers.api.v1.chat.route import ChatTurnRequest, chat_turn
+        from api.routers.api.v1.chat.stream import ChatStreamRequest, chat_stream
+
+        make = get_session_maker()
+        async with make.begin() as session:
+            for key in ('a', 'b'):
+                session.add(CalendarSource(id=key, provider='google', name=key, connection_ref='test',
+                                           external_id=key, capabilities_json='["read"]', timezone='UTC'))
+            session.add(CalendarOccurrence(id='selected', source_id='a', event_id='event', external_id='event',
+                                          start_date=date(2026, 11, 13), end_date=date(2026, 11, 14)))
+        await calendar_source.set_active('a', False)
+        assert await calendar_source.readable_ids(None) == ['b']
+        monkeypatch.setattr(agent, 'mistral_client', lambda: pytest.fail('unexpected model call'))
+        for occurrence_id in ('selected', 'absent'):
+            args = {'context_occurrence_id': occurrence_id}
+            for call in (lambda: chat_turn(ChatTurnRequest(message='This event?', **args)),
+                         lambda: chat_stream(ChatStreamRequest(text='This event?', **args), NS())):
+                with pytest.raises(HTTPException) as error:
+                    await call()
+                assert error.value.status_code == 404
+                assert error.value.detail['code'] == 'calendar_reference_unavailable'
+        async with make() as session:
+            assert not await session.scalar(select(func.count()).select_from(ChatConversation))
     asyncio.run(run())

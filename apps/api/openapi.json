@@ -1970,6 +1970,7 @@
               "aborted",
               "internal",
               "context_revoked",
+              "calendar_reference_unavailable",
               "preferences_unavailable"
             ],
             "title": "Code",

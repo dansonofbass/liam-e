@@ -41,6 +41,8 @@ async def chat_turn(body: ChatTurnRequest) -> schemas.ChatTurnResponse:
             if event.event == 'start':
                 conversation_id, user_id = event.conversation_id, event.user_message_id
             elif event.event == 'error':
+                if event.code == 'calendar_reference_unavailable':
+                    raise refuse(404, event.code, 'Dieser Termin ist für den Chat nicht mehr verfügbar.')
                 if event.code == 'context_revoked':
                     raise refuse(409, 'context_revoked', 'Die Vorlage, Präferenzen oder die Auswahl von Konten, Kalendern oder Aufgaben sind nicht mehr gültig. Starte eine neue Unterhaltung.')
                 if event.code == 'preferences_unavailable':

@@ -35,7 +35,7 @@ def capabilities(source: CalendarSource) -> list[str]:
 def chat_access(source: CalendarSource, state: CalendarSyncState | None) -> ChatAccess:
     if not source.is_active:
         return "paused"
-    if not source.connection_ref or (state and state.last_error in STOP_ERRORS):
+    if not source.connection_ref or (state and (state.access_blocked or state.last_error in STOP_ERRORS)):
         return "disconnected"
     rights = capabilities(source)
     if "read" not in rights:

@@ -13,7 +13,7 @@ import { ChatHeader } from './ChatHeader'
 import { ProposalCard } from './ProposalCard'
 import { useFollowScroll } from './useFollowScroll'
 import { SafeMarkdown } from './SafeMarkdown'
-import { CalendarReference, calendarScopeChanged, readableCalendar } from './CalendarContext'
+import { CalendarReference, calendarScopeAvailable, readableCalendar } from './CalendarContext'
 import { composerDraftKey, useChatSession, useConversationScope, useRestartConversation, useTaskScope, type ComposerMail } from './session'
 import { TaskScopeSelector } from './TaskContext'
 import { PreferenceContext } from './PreferenceContext'
@@ -102,9 +102,14 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const accounts = summary?.accounts ?? []
   const messages = history.data ?? []
   const grantVersion = summary?.mail_scope_version
-  const readable = new Set(sources.data?.filter(readableCalendar).map(source => source.id))
-  const oldCalendar = sources.isSuccess && messages.some(message => calendarScopeChanged(message.context?.calendar_scope_json, readable))
+  const readable = new Set(sources.isSuccess ? sources.data.filter(readableCalendar).map(source => source.id) : [])
+  const oldCalendar = sources.isSuccess && messages.some(message => !calendarScopeAvailable(message.context?.calendar_scope_json, readable, true))
   const oldGrant = oldCalendar || grantVersion != null && messages.some(message => message.context?.mail_scope_version !== grantVersion)
+  const cardUnavailable = (message: ChatMessageOut) => {
+    const context = message.context
+    return !context || context.revoked || grantVersion == null || context.mail_scope_version !== grantVersion ||
+      !calendarScopeAvailable(context.calendar_scope_json, readable)
+  }
   const speechEnabled = grantVersion != null && !oldGrant && tts?.status === 'available' && tts.formats.includes('audio/mpeg') &&
     typeof Audio !== 'undefined' && typeof URL.createObjectURL === 'function'
   const speech = useSpeechPlayback(conversationId, speechEnabled, audioDraftLocked)
@@ -124,7 +129,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
   const renderMessage = (message: ChatMessageOut) => {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
-    if (message.role === 'proposal' || message.role === 'draft') return <ProposalCard key={message.id} message={message} oldGrant={oldGrant} grantVersion={grantVersion} />
+    if (message.role === 'proposal' || message.role === 'draft') return <ProposalCard key={message.id} message={message} oldGrant={cardUnavailable(message)} grantVersion={grantVersion} />
     if (message.role !== 'assistant') return null
     return <>{message.context && <PreferenceContext context={message.context} />}{message.context?.revoked && <Notice tone="info" action={{ label: texts.prompts.restart, onClick: restart }}>{message.context.preferences_enabled ? texts.errors.context_revoked : texts.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>
       {speechEnabled && !message.stopped && !message.context?.revoked && message.content.trim() &&
@@ -141,7 +146,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
     {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={modelLabel(state.model)} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{texts.chat.askAgain}</Button></div>}
       {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : state.errorCode && NEEDS_NEW_CONVERSATION.has(state.errorCode) ? newConversation : { label: texts.chat.retry, onClick: () => { void retry() } }}>{state.errorCode === 'conversation_scope_change_requires_new' ? texts.taskChat.scopeConflict : texts.errors[state.errorCode ?? 'internal']}</Notice>}
-      {state.phase === 'done' && <>{!oldGrant && state.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} oldGrant={oldGrant} grantVersion={grantVersion} />}{!oldGrant && <Suggestions items={state.suggestions} onSend={submitSuggestion} />}</>}
+      {state.phase === 'done' && <>{!oldGrant && state.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && <ProposalCard key={state.proposal.id} message={state.proposal} oldGrant={cardUnavailable(state.proposal)} grantVersion={grantVersion} />}{!oldGrant && <Suggestions items={state.suggestions} onSend={submitSuggestion} />}</>}
     </div>}
     <div className="le-sr" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
   </div>{showEnd && <div className="le-chat-end"><Button variant="secondary" onClick={scrollToEnd}>{texts.chat.toEnd}</Button></div>}<div className="le-chat-composer">{oldGrant ? <Notice tone="info" action={{ label: texts.prompts.restart, onClick: restart }}>{oldCalendar ? texts.calendarSettings.restart : texts.chatAccounts.restart}</Notice> : <ChatComposer conversationId={conversationId} onRecordingStart={speech.stop} autoFocus={busy && state.conversationId === conversationId} />}</div></div>

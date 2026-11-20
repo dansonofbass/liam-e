@@ -375,10 +375,10 @@ const calendarOptions = [
   { id: 'old', name: 'Veraltet', is_active: false, chat_access: 'paused' },
 ]
 
-function calendarForm(initial: string | null = null) {
+function calendarForm(initial: string | null = null, sources = calendarOptions) {
   let stored = { version: 1, default_source_id: initial }
   const view = setup('/settings/calendar', async request => {
-    if (request.url.endsWith('/calendar/sources')) return Response.json(calendarOptions)
+    if (request.url.endsWith('/calendar/sources')) return Response.json(sources)
     if (!request.url.endsWith('/settings/calendar')) return undefined
     if (request.method === 'PATCH') {
       const body = await request.json() as { expected_version: number; default_source_id: string | null }
@@ -428,4 +428,17 @@ test('a removed default stays visible until the owner changes it', async () => {
   expect(select.selectedOptions[0]?.textContent).toBe(de.calendarSettings.missing)
   expect((screen.getByRole('button', { name: de.settingsUi.save }) as HTMLButtonElement).disabled).toBe(true)
   expect(requests.filter(r => r.method === 'PATCH')).toHaveLength(0)
+})
+
+test('the owner can select the second calendar with the same name by its stable identifier', async () => {
+  const twin = { ...calendarOptions[0]!, id: 'second-team' }
+  calendarForm(null, [calendarOptions[0]!, twin])
+  const select = await screen.findByRole<HTMLSelectElement>('combobox', { name: de.calendarSettings.title })
+  expect(screen.getByRole<HTMLOptionElement>('option', { name: 'Team · work' }).value).toBe('work')
+  const target = screen.getByRole<HTMLOptionElement>('option', { name: 'Team · second-team' })
+  fireEvent.change(select, { target: { value: target.value } })
+  fireEvent.click(screen.getByRole('button', { name: de.settingsUi.save }))
+  await screen.findByText(de.settingsUi.saved)
+  expect(select.selectedOptions[0]?.textContent).toBe('Team · second-team')
+  expect(requests.filter(r => r.method === 'PATCH').map(r => r.body)).toEqual([{ default_source_id: 'second-team', expected_version: 1 }])
 })

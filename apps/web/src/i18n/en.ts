@@ -392,6 +392,7 @@ export const en = {
     conversation_not_found: 'This conversation is gone. Start a new one.',
     preferences_unavailable: 'Preferences couldn’t be loaded. Try again or choose to continue without them.',
     context_revoked: 'The template, preferences, or selected accounts, calendars, or tasks are no longer available. Start a new conversation. You can still read this one.',
+    calendar_reference_unavailable: 'This event is no longer available to chat. Remove the reference or open another event.',
     conversation_scope_change_requires_new: 'Start a new conversation for the new selection. You can still read this one.',
     context_unavailable: 'The conversation or its template is no longer available. Start a new conversation.',
     context_invalid: 'An account or calendar in your selection is unavailable. Check the selection and try again.',

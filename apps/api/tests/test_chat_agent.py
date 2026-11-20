@@ -81,18 +81,17 @@ async def test_calendar_context_reference_only_reaches_model_when_visible_and_in
     events, fake = await run(store, monkeypatch, [['Antwort']], context_occurrence_id=requested,
         calendar_source_ids=scope, resolved_context=(conversation, snapshot, None))
     visible.assert_awaited_once_with(requested)
+    if case != 'in_scope':
+        assert [(event.event, event.code) for event in events] == [('error', 'calendar_reference_unavailable')]
+        assert fake.requests == [] and store.rows == []
+        return
     assert events[-1].event == 'done'
     messages = fake.requests[0]['messages']
     references = [message for message in messages if message.get('content', '').startswith('Strukturierter Terminbezug')]
-    if case == 'in_scope':
-        assert len(references) == 1
-        assert references[0]['role'] == 'user'
-        assert json.loads(references[0]['content'].split(': ', 1)[1]) == {
-            'occurrence_id': occurrence.id, 'source_id': occurrence.source_id,
-        }
-    else:
-        assert references == []
-        assert requested not in json.dumps(messages)
+    assert len(references) == 1 and references[0]['role'] == 'user'
+    assert json.loads(references[0]['content'].split(': ', 1)[1]) == {
+        'occurrence_id': occurrence.id, 'source_id': occurrence.source_id,
+    }
     assert occurrence.title not in json.dumps(messages)
     assert not any(event.event == 'calendars' and event.calendars for event in events)
     assert all(requested not in row.content and requested not in row.extras_json for row in store.rows)
@@ -598,3 +597,56 @@ async def test_insight_batch_stops_and_discards_prior_results_after_revocation(s
     result = await agent_tools.execute_tool('get_insights', {'message_ids': [m.id for m in rows]}, ctx)
     assert json.loads(result.content) == {'error': 'context_revoked'}
     cached.assert_awaited_once_with(rows[0].id, locale=ctx.browser_locale, context_id='turn')
+
+
+@pytest.mark.parametrize('case', ['named', 'implicit', 'tool_clarification', 'write_revoked', 'fresh_request', 'switch', 'reschedule'])
+async def test_calendar_create_keeps_owner_target_through_scheduling_question(store, monkeypatch, case):
+    from db.accessors import calendar_settings, calendar_source
+    from db.models.calendar_source import CalendarSource
+
+    def source(key):
+        return CalendarSource(id=key, name=key.title(), provider='google', connection_ref='synthetic-' + key,
+                              external_id=key, capabilities_json='["read","write"]', timezone='UTC')
+
+    work, personal = source('work'), source('personal')
+    async def catalog(*, ids):
+        return [(row, None) for row in (work, personal) if row.id in ids]
+
+    monkeypatch.setattr(calendar_source, 'catalog', catalog)
+    monkeypatch.setattr(calendar_settings, 'get', AsyncMock(return_value=NS(default_source_id=personal.id)))
+    conversation = await store.create()
+    snapshot = store.snapshot('with-calendars', calendar_scope_json=json.dumps([work.id, personal.id]))
+    first = {'action': 'create', 'reason': 'Review', 'title': 'Review', 'calendar_name': 'Work'}
+    choose = {'action': 'create', 'reason': 'Review', 'title': 'Review', 'start_local': '2026-11-21T10:00',
+              'end_local': '2026-11-21T11:00', 'timezone': 'UTC'}
+    if case == 'named':
+        choose['calendar_name'] = 'Work'
+    rounds = [[chunk('propose_calendar_change', first)]] if case == 'tool_clarification' else []
+    fake = FakeMistral(streams=[*rounds, ['When should the review start?'],
+                                [chunk('propose_calendar_change', choose)], ['Response']])
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+
+    async def turn(text):
+        return [event async for event in agent.run_turn_events(conversation_id=conversation.id, text=text,
+            resolved_context=(conversation, snapshot, None))]
+
+    opened = await turn('Create a review in the Work calendar')
+    assert opened[-1].event == 'done' and all(event.event != 'proposal' for event in opened)
+    if case == 'write_revoked':
+        work.capabilities_json = '["read"]'
+    second = {
+        'fresh_request': 'Create another appointment tomorrow at ten',
+        'switch': 'Tomorrow at ten, in the Personal calendar instead',
+        'reschedule': 'Schedule the review tomorrow at ten',
+    }.get(case, 'Tomorrow at ten')
+    finished = await turn(second)
+    assert finished[-1].event == 'done'
+    cards = [event.message for event in finished if event.event == 'proposal']
+    if case == 'write_revoked':
+        assert not cards
+        assert any('calendar_not_writable' in row.content for row in store.rows if row.role == 'tool')
+    else:
+        assert len(cards) == 1 and cards[0].proposal_status == 'pending'
+        assert cards[0].proposal.calendar.source_id == (personal.id if case in ('fresh_request', 'switch') else work.id)
+        assert cards[0].context.calendar_scope_json == snapshot.calendar_scope_json
+    assert 'calendar_clarification' not in json.dumps(fake.requests, default=str)

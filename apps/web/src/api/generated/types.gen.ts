@@ -1100,7 +1100,7 @@ export type ErrorEvent = {
     /**
      * Code
      */
-    code: 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | 'preferences_unavailable';
+    code: 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | 'calendar_reference_unavailable' | 'preferences_unavailable';
     /**
      * Event
      */

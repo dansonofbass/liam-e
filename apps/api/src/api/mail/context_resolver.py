@@ -8,7 +8,7 @@ from api.mail.agent_prompt import APP_PROMPT_VERSION
 
 
 async def resolve_context(*, conversation_id=None, text, model=None, prompt_revision_id=None,
-                          account_id=None, context_message_id=None, expected_mail_scope_version=None, calendar_source_ids=None, calendar_timezone='UTC',
+                          account_id=None, context_message_id=None, context_occurrence_id=None, expected_mail_scope_version=None, calendar_source_ids=None, calendar_timezone='UTC',
                           task_source='none', task_source_account_id=None, without_preferences=False, **_):
     try:
         ZoneInfo(calendar_timezone)
@@ -18,11 +18,13 @@ async def resolve_context(*, conversation_id=None, text, model=None, prompt_revi
         return await chat_context.resolve(conversation_id=conversation_id, title=' '.join(text.split())[:60],
                                           model=model, revision_id=prompt_revision_id, account_id=account_id,
                                           app_prompt_version=APP_PROMPT_VERSION, calendar_source_ids=calendar_source_ids,
-                                          context_message_id=context_message_id, expected_mail_scope_version=expected_mail_scope_version,
+                                          context_message_id=context_message_id, context_occurrence_id=context_occurrence_id, expected_mail_scope_version=expected_mail_scope_version,
                                           task_source=task_source, task_source_account_id=task_source_account_id,
                                           without_preferences=without_preferences)
     except chat_context.PreferencesUnavailable:
         raise refuse(503, 'preferences_unavailable', 'Die Präferenzen konnten nicht geladen werden. Du kannst ausdrücklich ohne Präferenzen fortfahren.') from None
+    except chat_context.CalendarReferenceUnavailable:
+        raise refuse(404, 'calendar_reference_unavailable', 'Dieser Termin ist für den Chat nicht mehr verfügbar.') from None
     except chat_context.ContextUnavailable:
         raise refuse(404, 'context_unavailable', 'Die Unterhaltung oder Vorlage ist nicht verfügbar. Starte eine neue Unterhaltung.') from None
     except chat_context.ScopeChange:

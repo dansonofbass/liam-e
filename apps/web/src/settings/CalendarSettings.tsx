@@ -4,6 +4,7 @@ import { calendarSettingsUpdate } from '../api/generated/sdk.gen'
 import type { CalendarSettingsOut } from '../api/generated/types.gen'
 import { calendarSettingsQuery, chatCalendarSourcesQuery } from '../api/queries'
 import { errorCode } from '../api/unwrap'
+import { calendarTargetLabel } from '../calendar/state'
 import { Button, Notice } from '../ds'
 import { useI18n } from '../i18n/I18n'
 import './settings.css'
@@ -70,7 +71,7 @@ export function CalendarSettings() {
           <option value="">{t.clear}</option>
           {missing && <option disabled value={shown.default_source_id!}>{t.missing}</option>}
           {choices.map(source => <option value={source.id} key={source.id} disabled={source.chat_access !== 'writable'}>
-            {source.name}{source.chat_access !== 'writable' && ' · ' + t.reason[source.chat_access ?? 'unreadable']}
+            {calendarTargetLabel(source, choices)}{source.chat_access !== 'writable' && ' · ' + t.reason[source.chat_access ?? 'unreadable']}
           </option>)}
         </select>
         {!choices.some(source => source.chat_access === 'writable') && <Notice tone="info">{t.noWritable}</Notice>}

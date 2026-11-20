@@ -144,3 +144,23 @@ def test_grant_migration_keeps_existing_turns_unverified(scratch: tuple[Config, 
     assert preserved == 1
     assert asyncio.run(_scalar(url, "SELECT count(*) FROM chat_settings")) == 0
     assert asyncio.run(_scalar(url, "SELECT unverified_connector FROM mail_message WHERE id='previous-mail'")) is True
+
+
+def test_calendar_upgrade_keeps_unverified_retries_blocked(scratch):
+    config, url = scratch
+    command.upgrade(config, "9c647152d2eb")
+    asyncio.run(_admin_on(url, """
+        INSERT INTO calendar_source (id, provider, connection_ref, external_id, name, timezone, capabilities_json, is_active)
+        SELECT id, 'google', 'synthetic', id, id, 'UTC', '["read"]', true
+        FROM unnest(ARRAY['verified', 'stopped', 'queued']) AS id
+    """))
+    asyncio.run(_admin_on(url, """
+        INSERT INTO calendar_sync_state (source_id, incomplete, last_success_at, last_validated_at, last_checked_at, last_error)
+        SELECT id, false, now() - interval '1 day', now() - interval '1 day',
+               CASE WHEN id = 'queued' THEN now() ELSE now() - interval '1 day' END,
+               CASE WHEN id = 'stopped' THEN 'reconnect_required' ELSE NULL END FROM calendar_source
+    """))
+    command.upgrade(config, "heads")
+    assert asyncio.run(_scalar(url, """
+        SELECT array_agg(source_id ORDER BY source_id) FROM calendar_sync_state WHERE access_blocked
+    """)) == ['queued', 'stopped']

@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from db.accessors import chat_context, mail_account, mail_message
 from db.models.chat_message import ChatMessage
+from api.calendar.chat_target import CalendarChoice
 from api.locales import DEFAULT_LOCALE, Locale
 from api.mail import headers, insights, newsletters, proposals, send
 from api.mail.chat_events import StatusEvent
@@ -24,6 +25,8 @@ class TurnContext:
     locale: Locale = DEFAULT_LOCALE
     browser_locale: Locale = DEFAULT_LOCALE
     user_text: str = ""
+    calendar_choice: CalendarChoice | None = None
+    requested_calendar: CalendarChoice | None = None
 
 
 @dataclass
@@ -46,7 +49,7 @@ def _schema(name, description, properties, required=()):
 S = {'type': 'string'}
 A = {'type': 'array', 'items': S}
 TOOLS = [
-    _schema('propose_calendar_change', 'Propose a single appointment for confirmation. For create, omit the target for the saved default. If the owner explicitly names another calendar, pass that exact name as calendar_name. Ask if a target is unavailable or ambiguous. Read the occurrence before update/delete.', {
+    _schema('propose_calendar_change', 'Propose a single appointment for confirmation. For create, omit the target for the saved default. If the owner explicitly names another calendar, pass that exact name as calendar_name. Keep the named calendar during scheduling clarifications. Ask if a target is unavailable or ambiguous. Read the occurrence before update/delete.', {
         'action': {'type': 'string', 'enum': ['create', 'update', 'delete']}, 'reason': S,
         'source_id': S, 'calendar_name': S, 'occurrence_id': S, 'title': S, 'start_local': S, 'end_local': S,
         'start_date': S, 'end_date': S, 'timezone': S, 'location': S, 'description': S,

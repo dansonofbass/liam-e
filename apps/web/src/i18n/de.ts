@@ -382,6 +382,7 @@ export const de = {
     conversation_not_found: 'Diese Unterhaltung gibt es nicht mehr. Starte eine neue Unterhaltung.',
     preferences_unavailable: 'Die Präferenzen konnten nicht geladen werden. Versuch es noch einmal oder fahre ausdrücklich ohne Präferenzen fort.',
     context_revoked: 'Die Vorlage, Präferenzen oder die Auswahl von Konten, Kalendern oder Aufgaben sind nicht mehr gültig. Starte eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
+    calendar_reference_unavailable: 'Dieser Termin ist für den Chat nicht mehr verfügbar. Entferne den Terminbezug oder öffne einen anderen Termin.',
     conversation_scope_change_requires_new: 'Diese Unterhaltung gilt für andere Konten oder Kalender. Starte für die neue Auswahl eine neue Unterhaltung; der bisherige Verlauf bleibt erhalten.',
     context_unavailable: 'Die Unterhaltung oder ihre Vorlage ist nicht mehr verfügbar. Starte eine neue Unterhaltung.',
     context_invalid: 'Ein Konto oder Kalender aus deiner Auswahl ist nicht verfügbar. Prüfe deine Auswahl und versuch es noch mal.',

@@ -12,11 +12,11 @@ export function readableCalendar(source: SourceOut) {
   return source.is_active && (source.chat_access === 'writable' || source.chat_access === 'read_only')
 }
 
-export function calendarScopeChanged(snapshot: string | undefined, ids: Set<string>) {
+export function calendarScopeAvailable(snapshot: string | undefined, ids: Set<string>, exact = false) {
   try {
     const previous: unknown = JSON.parse(snapshot ?? '[]')
-    return !Array.isArray(previous) || new Set(previous).size !== ids.size || !previous.every(id => typeof id === 'string' && ids.has(id))
-  } catch { return true }
+    return Array.isArray(previous) && (!exact || new Set(previous).size === ids.size) && previous.every(id => typeof id === 'string' && ids.has(id))
+  } catch { return false }
 }
 
 function occurrenceGone(error: unknown): boolean {

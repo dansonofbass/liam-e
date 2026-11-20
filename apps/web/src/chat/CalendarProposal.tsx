@@ -9,7 +9,7 @@ import { Button, Notice } from '../ds'
 import { Dot } from '../ds/Chip'
 import { formatMinuteOfDay } from '../i18n/format'
 import { useI18n } from '../i18n/I18n'
-import { addDays, calendarDate } from '../calendar/state'
+import { addDays, calendarDate, calendarTargetLabel } from '../calendar/state'
 import { writeError } from '../calendar/write-state'
 import './calendar-proposal.css'
 
@@ -76,7 +76,7 @@ export function CalendarProposal({ message }: { message: ChatMessageOut }) {
       {sources.isError && <Notice tone="danger" action={{ label: texts.calendar.retry, onClick: () => { void sources.refetch() } }}>{texts.calendar.error}</Notice>}
       {sources.isSuccess && !source?.is_active && <Notice tone="info">{texts.calendar.writeErrors.calendar_unavailable}</Notice>}
       {sources.isSuccess && source?.is_active && source.chat_access !== 'writable' && <Notice tone="info">{texts.calendar.writeErrors.calendar_not_writable}</Notice>}
-      {source?.is_active && !sources.isError && <><p><Dot colorIndex={sources.data!.filter(s => s.is_active).findIndex(s => s.id === source.id)} /> {source.name}</p><p>{current.proposal?.reason}</p>
+      {source?.is_active && !sources.isError && <><p><Dot colorIndex={sources.data!.filter(s => s.is_active).findIndex(s => s.id === source.id)} /> {calendarTargetLabel(source, sources.data!)}</p><p>{current.proposal?.reason}</p>
         <div className="le-calendar-proposal-values">{command.before && <section><h4>{texts.calendar.cardBefore}</h4><Values value={command.before} zone={command.timezone} /></section>}{command.after && <section><h4>{texts.calendar.cardAfter}</h4><Values value={command.after} zone={command.timezone} /></section>}</div>
         <p>{texts.calendar.eventZone}: {command.timezone}</p>
         {command.action === 'delete' && <p>{texts.calendar.deleteWarning}</p>}<p className="le-hint">{texts.calendar.writeRisk}</p>

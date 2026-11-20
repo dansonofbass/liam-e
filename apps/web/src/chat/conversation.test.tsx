@@ -729,3 +729,29 @@ test.each(['loading', 'playing'])('changing a grant stops %s speech', async phas
     else Reflect.deleteProperty(globalThis, 'Audio')
   }
 })
+
+test('adding another readable calendar still allows confirmation of the original named target', async () => {
+  const { client } = setup('/chat/c')
+  await screen.findByPlaceholderText('Frag etwas zu deinen Mails …')
+  const sources = ['work', 'second-team'].map(id => ({ id, name: 'Team', is_active: true, chat_access: 'writable' }))
+  const card: ChatMessageOut = {
+    ...historyRow('bound', 'proposal'), context: { ...currentContext, calendar_scope_json: '["second-team"]' },
+    proposal: { kind: 'calendar', reason: 'Test', items: [], calendar: {
+      action: 'create', source_id: 'second-team', timezone: 'UTC', after: { title: 'Review', start_date: '2026-11-21', end_date: '2026-11-22' },
+    } },
+  }
+  history = [card]
+  spyOn(sdk, 'calendarSourcesList').mockResolvedValue({ data: sources } as never)
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: { ...card, proposal_status: 'done' }, response: { status: 200 } } as never)
+  act(() => {
+    client.setQueryData(['calendar', 'sources'], sources)
+    client.setQueryData(['history', 'c'], history)
+  })
+  await screen.findByText(de.calendarSettings.restart)
+  expect(screen.queryByPlaceholderText('Frag etwas zu deinen Mails …')).toBeNull()
+  await screen.findByText('Team · second-team')
+  expect(screen.queryByText('Team · work')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: de.calendar.cardConfirm }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+  expect(confirm.mock.calls[0]?.[0]).toEqual({ path: { proposal_id: 'bound' }, body: { selected_ids: [] } })
+})
