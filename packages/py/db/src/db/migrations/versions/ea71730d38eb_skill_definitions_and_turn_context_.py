@@ -1,7 +1,7 @@
 """skill definitions and turn context binding
 
 Revision ID: ea71730d38eb
-Revises: c8c67942c08d
+Revises: 10d2e525afe6
 Create Date: 2026-11-21 00:34:27.464686
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 
 revision: str = 'ea71730d38eb'
-down_revision: str | Sequence[str] | None = 'c8c67942c08d'
+down_revision: str | Sequence[str] | None = '10d2e525afe6'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
