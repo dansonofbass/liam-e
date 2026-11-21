@@ -93,6 +93,30 @@ describe("RouteError", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  test("shows offline copy without auto-reload when a chunk fails while offline", async () => {
+    const reload = spyOn(page, "reload").mockImplementation(() => {
+      /* jsdom cannot reload */
+    });
+    const originalOnLine = Object.getOwnPropertyDescriptor(window.navigator, "onLine");
+    Object.defineProperty(window.navigator, "onLine", { configurable: true, value: false });
+
+    try {
+      renderPageFailingWith(() => {
+        throw missingChunk();
+      }, german);
+      expect(await screen.findByText("Du bist offline")).toBeTruthy();
+      expect(screen.getByText("Verbinde dich mit dem Internet, um liam-e zu öffnen.")).toBeTruthy();
+      expect(screen.queryByText("liam-e wurde aktualisiert")).toBeNull();
+      expect(reload).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
+      expect(reload).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalOnLine) Object.defineProperty(window.navigator, "onLine", originalOnLine);
+      else delete (window.navigator as unknown as { onLine?: boolean }).onLine;
+    }
+  });
+
   test("shows any other error under a title, its message folded away", async () => {
     const reload = spyOn(page, "reload");
 
