@@ -90,6 +90,11 @@ export default defineConfig(async ({ mode }) => ({
       // to a browser that accepts them: `node .output/server/index.mjs` compresses nothing on the
       // fly, so without them a page's JS and CSS cross the wire uncompressed.
       compressPublicAssets: { brotli: true, gzip: true },
+      // Ensure browsers and intermediate proxies revalidate the worker script and web manifest.
+      routeRules: {
+        "/service-worker.js": { headers: { "cache-control": "no-cache" } },
+        "/manifest.webmanifest": { headers: { "cache-control": "no-cache" } },
+      },
     }),
     viteReact({ compiler: true }),
     ...(await contributedPlugins()),

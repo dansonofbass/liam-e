@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { ApiError, apiErrorMessage } from "./api/unwrap";
 import { catalogue } from "./i18n/catalogue";
 import { isLocale } from "./i18n/locales";
+import { offline } from "./i18n/offline";
 
 import { useRootScreens } from "./root-screens";
 import type { ErrorScreenProps, MissingChunkScreenProps } from "./root-screens";
@@ -78,6 +79,16 @@ const PlainMissingChunk = ({ texts, onReload }: MissingChunkScreenProps) => (
 const MissingChunk = ({ error }: { error: Error }) => {
   const { screens, texts } = useRootScreens();
   const Screen = screens.MissingChunk ?? PlainMissingChunk;
+  const offlineError = typeof window !== "undefined" && !window.navigator.onLine;
+  const offlineCopy = isLocale(texts.lang) ? offline[texts.lang] : offline.en;
+  const displayTexts = offlineError
+    ? {
+        ...texts,
+        missingChunkTitle: offlineCopy.title,
+        missingChunk: offlineCopy.detail,
+        reload: offlineCopy.retry,
+      }
+    : texts;
 
   useEffect(() => {
     reloadOnce(error);
@@ -85,7 +96,7 @@ const MissingChunk = ({ error }: { error: Error }) => {
 
   return (
     <Screen
-      texts={texts}
+      texts={displayTexts}
       onReload={() => {
         page.reload();
       }}
