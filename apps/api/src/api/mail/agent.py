@@ -102,8 +102,9 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
             yield ErrorEvent(code='calendar_reference_unavailable')
             return
     active_skill = None
+    snapshot_skill_id = getattr(snapshot, 'skill_id', None)
     snapshot_skill_revision_id = getattr(snapshot, 'skill_revision_id', None)
-    if snapshot_skill_revision_id is not None:
+    if snapshot_skill_revision_id is not None or snapshot_skill_id is not None:
         try:
             active_skill = await load_active_skill(snapshot_skill_revision_id)
         except (SkillNotFoundError, SkillRevisionUnavailableError, SkillDisabledError, SkillToolUnavailableError):

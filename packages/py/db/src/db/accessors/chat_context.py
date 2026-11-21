@@ -54,12 +54,20 @@ class SkillToolUnavailable(Exception):
     pass
 
 
-async def lock_skill_revision(session, *, skill_id=None, skill_revision_id=None, allowed_tool_names=None):
-    """Lock the active skill and resolve its immutable revision before conversation locks."""
+async def lock_skill_revision(session, *, skill_id=None, skill_revision_id=None, registered_tool_names=None):
+    """Lock the active skill and verify its allowed tools against the API server registry.
+
+    ``db`` cannot import ``api.skills.TOOL_REGISTRY`` directly, so the API layer supplies
+    ``registered_tool_names`` to confirm every tool named in ``revision.allowed_tools_json``
+    is implemented in server code. Execution turns remain restricted strictly to the skill
+    revision's own ``allowed_tools_json``, never to all registered tools.
+    """
     if skill_id is None and skill_revision_id is None:
         return None, None
     if skill_revision_id is not None:
-        revision = await session.get(SkillRevision, skill_revision_id)
+        if not isinstance(skill_revision_id, str) or not skill_revision_id.strip():
+            raise SkillRevisionUnavailable
+        revision = await session.get(SkillRevision, skill_revision_id.strip())
         if revision is None or revision.removed or revision.owner_scope != OWNER_SCOPE:
             raise SkillRevisionUnavailable
         skill = (await session.execute(select(SkillDefinition).where(
@@ -70,14 +78,17 @@ async def lock_skill_revision(session, *, skill_id=None, skill_revision_id=None,
         await session.refresh(revision)
         if revision.removed:
             raise SkillRevisionUnavailable
-        if skill_id is not None and skill_id not in (skill.id, skill.slug):
+        if skill_id is not None and skill_id.strip() not in (skill.id, skill.slug):
             raise SkillRevisionUnavailable
         if skill.status != 'active':
             raise SkillDisabled
     else:
+        if not isinstance(skill_id, str) or not skill_id.strip():
+            raise SkillNotFound
+        normalized_skill_id = skill_id.strip()
         skill = (await session.execute(select(SkillDefinition).where(
             SkillDefinition.owner_scope == OWNER_SCOPE,
-            (SkillDefinition.id == skill_id) | (SkillDefinition.slug == skill_id),
+            (SkillDefinition.id == normalized_skill_id) | (SkillDefinition.slug == normalized_skill_id),
         ).with_for_update())).scalar_one_or_none()
         if skill is None:
             raise SkillNotFound
@@ -86,9 +97,14 @@ async def lock_skill_revision(session, *, skill_id=None, skill_revision_id=None,
         revision = await session.get(SkillRevision, skill.revision_id)
         if revision is None or revision.removed or revision.skill_id != skill.id:
             raise SkillRevisionUnavailable
-    if allowed_tool_names is not None:
-        required = set(json.loads(revision.allowed_tools_json or '[]'))
-        if not required.issubset(allowed_tool_names):
+    if registered_tool_names is not None:
+        try:
+            parsed_tools = json.loads(revision.allowed_tools_json or '[]')
+        except (TypeError, ValueError) as error:
+            raise SkillToolUnavailable from error
+        if not isinstance(parsed_tools, list) or not all(isinstance(name, str) and name for name in parsed_tools):
+            raise SkillToolUnavailable
+        if not set(parsed_tools).issubset(registered_tool_names):
             raise SkillToolUnavailable
     return skill, revision
 
@@ -136,7 +152,7 @@ async def configure(conversation_id, expected_version, *, revision_id=None, chan
 async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version, calendar_source_ids=None,
                   task_source='none', task_source_account_id=None, without_preferences=False, context_message_id=None,
                   context_occurrence_id=None, expected_mail_scope_version=None, skill_id=None, skill_revision_id=None,
-                  allowed_tool_names=None):
+                  registered_tool_names=None):
     async with get_session_maker()() as session:
         await user_preference.lock(session)
         grants = await chat_settings.in_session(session)
@@ -168,7 +184,7 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
         selected = existing.prompt_revision_id if existing else revision_id
         revision = await lock_revision(session, selected)
         skill, skill_revision = await lock_skill_revision(
-            session, skill_id=skill_id, skill_revision_id=skill_revision_id, allowed_tool_names=allowed_tool_names
+            session, skill_id=skill_id, skill_revision_id=skill_revision_id, registered_tool_names=registered_tool_names
         )
         if existing:
             await session.refresh(existing, with_for_update=True)
@@ -262,7 +278,9 @@ async def permits_skill_in_session(session, row: ChatContext | None) -> bool:
     if row is None:
         return False
     if row.skill_revision_id is None:
-        return True
+        return row.skill_id is None
+    if not row.skill_revision_id.strip():
+        return False
     revision = await session.get(SkillRevision, row.skill_revision_id)
     if revision is None or revision.removed or revision.owner_scope != OWNER_SCOPE:
         return False

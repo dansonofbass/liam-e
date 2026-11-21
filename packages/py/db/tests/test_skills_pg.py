@@ -91,7 +91,7 @@ def test_skill_turn_binding_revocation_tombstones_and_proposal_claims(pg_db):
             account_id=None,
             app_prompt_version="15",
             skill_id=custom.slug,
-            allowed_tool_names={"get_message", "search_messages"},
+            registered_tool_names={"get_message", "search_messages"},
         )
         assert snap1.skill_id == custom.id
         assert snap1.skill_revision_id == first_rev_id
@@ -147,7 +147,7 @@ def test_skill_turn_binding_revocation_tombstones_and_proposal_claims(pg_db):
             account_id=None,
             app_prompt_version="15",
             skill_id=custom.slug,
-            allowed_tool_names={"search_messages"},
+            registered_tool_names={"search_messages"},
         )
         prop3 = await m.add_message(
             conversation_id=conv2.id,
@@ -214,13 +214,44 @@ def test_skill_turn_binding_revocation_tombstones_and_proposal_claims(pg_db):
                 account_id=None,
                 app_prompt_version="15",
                 skill_id=recreated.slug,
-                allowed_tool_names={"search_messages"},
+                registered_tool_names={"search_messages"},
+            )
+        with pytest.raises(c.SkillNotFound):
+            await c.resolve(
+                conversation_id=None,
+                title="Blank skill",
+                model="",
+                revision_id=None,
+                account_id=None,
+                app_prompt_version="15",
+                skill_id="   ",
+                registered_tool_names={"search_messages"},
+            )
+        with pytest.raises(c.SkillRevisionUnavailable):
+            await c.resolve(
+                conversation_id=None,
+                title="Blank rev",
+                model="",
+                revision_id=None,
+                account_id=None,
+                app_prompt_version="15",
+                skill_revision_id="",
+                registered_tool_names={"search_messages"},
             )
         async with get_session_maker()() as session:
-            # Verify no context leaked on SkillToolUnavailable
+            # Verify no context leaked on SkillToolUnavailable and corrupt skill_id without revision fails closed
             from sqlalchemy import select
             from db.models.chat_context import ChatContext
             leaked = (await session.execute(select(ChatContext).where(ChatContext.skill_id == recreated.id))).scalars().all()
             assert leaked == []
+            corrupt = ChatContext(
+                conversation_id="corrupt-conv",
+                app_prompt_version="15",
+                account_scope_json='{"account_ids":[],"selection":null}',
+                mail_scope_version=1,
+                skill_id=recreated.id,
+                skill_revision_id=None,
+            )
+            assert not await c.permits_skill_in_session(session, corrupt)
 
     asyncio.run(run())

@@ -286,23 +286,27 @@ async def skill_runtime(monkeypatch):
         expected_mail_scope_version=None,
         skill_id=None,
         skill_revision_id=None,
-        allowed_tool_names=None,
+        registered_tool_names=None,
     ):
         skill = None
         skill_rev = None
         if skill_revision_id is not None:
-            skill_rev = revisions.get(skill_revision_id)
+            if not isinstance(skill_revision_id, str) or not skill_revision_id.strip():
+                raise chat_context.SkillRevisionUnavailable
+            skill_rev = revisions.get(skill_revision_id.strip())
             if skill_rev is None or skill_rev.removed:
                 raise chat_context.SkillRevisionUnavailable
             skill = skills.get(skill_rev.skill_id)
             if skill is None:
                 raise chat_context.SkillNotFound
-            if skill_id is not None and skill_id not in (skill.id, skill.slug):
+            if skill_id is not None and skill_id.strip() not in (skill.id, skill.slug):
                 raise chat_context.SkillRevisionUnavailable
             if skill.status != "active":
                 raise chat_context.SkillDisabled
         elif skill_id is not None:
-            skill = await get_skill(skill_id)
+            if not isinstance(skill_id, str) or not skill_id.strip():
+                raise chat_context.SkillNotFound
+            skill = await get_skill(skill_id.strip())
             if skill is None:
                 raise chat_context.SkillNotFound
             if skill.status != "active":
@@ -310,8 +314,14 @@ async def skill_runtime(monkeypatch):
             skill_rev = revisions.get(skill.revision_id)
             if skill_rev is None or skill_rev.removed:
                 raise chat_context.SkillRevisionUnavailable
-        if skill_rev is not None and allowed_tool_names is not None:
-            if not set(json.loads(skill_rev.allowed_tools_json or "[]")).issubset(allowed_tool_names):
+        if skill_rev is not None and registered_tool_names is not None:
+            try:
+                parsed_tools = json.loads(skill_rev.allowed_tools_json or "[]")
+            except (TypeError, ValueError) as error:
+                raise chat_context.SkillToolUnavailable from error
+            if not isinstance(parsed_tools, list) or not all(isinstance(n, str) and n for n in parsed_tools):
+                raise chat_context.SkillToolUnavailable
+            if not set(parsed_tools).issubset(registered_tool_names):
                 raise chat_context.SkillToolUnavailable
 
         conv = conversations.get(conversation_id) if conversation_id else None
@@ -682,6 +692,46 @@ async def test_skill_error_codes_for_unknown_disabled_and_missing_tool(skill_run
     skill_runtime.revisions[created["revision_id"]].allowed_tools_json = json.dumps(["legacy_deleted_tool"])
     missing_tool = client.post("/api/v1/chat", json={"message": "Test", "skill_id": "custom_reader"})
     assert missing_tool.status_code == 422 and missing_tool.json()["detail"]["code"] == "skill_tool_unavailable"
+
+    blank_skill = client.post("/api/v1/chat", json={"message": "Test", "skill_id": "  "})
+    assert blank_skill.status_code == 404 and blank_skill.json()["detail"]["code"] == "skill_not_found"
+    blank_rev = client.post("/api/v1/chat", json={"message": "Test", "skill_id": "custom_reader", "skill_revision_id": " "})
+    assert blank_rev.status_code == 404 and blank_rev.json()["detail"]["code"] == "skill_revision_unavailable"
+
+    from api.skills import SkillRevisionUnavailableError, load_active_skill
+
+    rev_calls = 0
+    orig_get_revision = skill_revision.get_revision
+
+    async def tracked_get_revision(rev_id: str):
+        nonlocal rev_calls
+        rev_calls += 1
+        return await orig_get_revision(rev_id)
+
+    monkeypatch.setattr(skill_revision, "get_revision", tracked_get_revision)
+    for bad_rev_id in (None, "", "   "):
+        with pytest.raises(SkillRevisionUnavailableError):
+            await load_active_skill(bad_rev_id)
+    assert rev_calls == 0
+
+    corrupt_conv = ChatConversation(title="Corrupt", model="")
+    corrupt_snap = ChatContext(
+        conversation_id=corrupt_conv.id,
+        app_prompt_version="15",
+        account_scope_json='{"account_ids":[],"selection":null}',
+        mail_scope_version=1,
+        skill_id="daily_briefing",
+        skill_revision_id=None,
+    )
+    corrupt_events = [
+        e
+        async for e in agent.run_turn_events(
+            conversation_id=None,
+            text="Test",
+            resolved_context=(corrupt_conv, corrupt_snap, None),
+        )
+    ]
+    assert corrupt_events == [agent.ErrorEvent(code="context_revoked")]
     assert fake.requests == []
 
 

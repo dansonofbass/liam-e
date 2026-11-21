@@ -279,9 +279,11 @@ def active_skill_from_rows(skill: SkillDefinition, revision: SkillRevision) -> A
     )
 
 
-async def load_active_skill(skill_revision_id: str) -> ActiveSkill:
+async def load_active_skill(skill_revision_id: str | None) -> ActiveSkill:
     """Load an already-resolved pinned skill revision without syncing catalog rows."""
-    revision = await revision_access.get_revision(skill_revision_id)
+    if not isinstance(skill_revision_id, str) or not skill_revision_id.strip():
+        raise SkillRevisionUnavailableError()
+    revision = await revision_access.get_revision(skill_revision_id.strip())
     if revision is None or revision.removed:
         raise SkillRevisionUnavailableError()
     skill = await skill_access.get_skill(revision.skill_id)
@@ -296,17 +298,20 @@ async def resolve_skill(*, skill_id: str | None = None, skill_revision_id: str |
         return None
     await ensure_builtin_skills()
     if skill_revision_id is not None:
-        revision = await revision_access.get_revision(skill_revision_id)
+        if not isinstance(skill_revision_id, str) or not skill_revision_id.strip():
+            raise SkillRevisionUnavailableError()
+        revision = await revision_access.get_revision(skill_revision_id.strip())
         if revision is None or revision.removed:
             raise SkillRevisionUnavailableError()
         skill = await skill_access.get_skill(revision.skill_id)
         if skill is None:
             raise SkillNotFoundError()
-        if skill_id is not None and skill_id not in {skill.id, skill.slug}:
+        if skill_id is not None and skill_id.strip() not in {skill.id, skill.slug}:
             raise SkillRevisionUnavailableError()
         return active_skill_from_rows(skill, revision)
-    assert skill_id is not None
-    skill = await skill_access.get_skill(skill_id)
+    if not isinstance(skill_id, str) or not skill_id.strip():
+        raise SkillNotFoundError()
+    skill = await skill_access.get_skill(skill_id.strip())
     if skill is None:
         raise SkillNotFoundError()
     revision = await revision_access.get_revision(skill.revision_id)
