@@ -416,6 +416,48 @@ test('sticky persistence keeps active skill across follow-up clarifying turns un
   expect(sentBodies[2]!.skill_id).toBeUndefined()
 })
 
+test.each(['home', 'conversation'])('context_revoked clears only the sticky skill used in the turn from %s', async origin => {
+  const { router } = setup({ path: '/?about=mail1' })
+  const home = { to: '/' } as const
+  const conversation = { to: '/chat/$conversationId', params: { conversationId: 'c1' } } as const
+  const fromHome = origin === 'home'
+  const other = fromHome ? conversation : home
+  const targetId = fromHome ? 'c2' : 'c1'
+  async function choose(placeholder: string, command: string, skill: SkillOut) {
+    const field = await screen.findByPlaceholderText(placeholder)
+    fireEvent.change(field, { target: { value: command, selectionStart: command.length } })
+    fireEvent.click(await screen.findByRole('option', { name: new RegExp(skill.name) }))
+  }
+
+  await choose(de.inbox.mailQuestionPlaceholder, '/postfach', digestSkill)
+  await act(() => router.navigate(other))
+  await choose(de.chat.placeholder, '/daily', dailySkill)
+  await act(() => router.navigate(fromHome ? home : conversation))
+  await choose(de.chat.placeholder, '/daily', dailySkill)
+  fireEvent.click(screen.getByRole('button', { name: de.skills.keepForFollowUps }))
+  fireEvent.change(screen.getByPlaceholderText(de.skills.placeholderWithSkill(dailySkill.name)), { target: { value: 'Briefing' } })
+  fireEvent.click(screen.getByRole('button', { name: de.controls.send }))
+  expect(sentBodies[0]).toMatchObject({ skill_id: dailySkill.id, skill_revision_id: dailySkill.revision_id })
+  expect(sentBodies[0]?.conversation_id).toBe(fromHome ? undefined : targetId)
+
+  await act(async () => {
+    emitFrame({ event: 'start', conversation_id: targetId, user_message_id: 'u1', model: 'm1' })
+    emitFrame({ event: 'delta', text: 'Angefangen' })
+  })
+  await waitFor(() => expect(router.state.location.pathname).toBe(`/chat/${targetId}`))
+  expect(await screen.findByText(de.skills.durationUntilStopped)).toBeTruthy()
+  spyOn(sdk, 'skillsList').mockResolvedValue({ data: [{ ...dailySkill, status: 'disabled' }, digestSkill] } as never)
+  await act(async () => { emitFrame({ event: 'error', code: 'context_revoked' }) })
+  expect(await screen.findByText(de.errors.context_revoked)).toBeTruthy()
+  expect(screen.queryByText(de.skills.activeSkill(dailySkill.name))).toBeNull()
+  expect(screen.queryByText(de.skills.unavailableSelection)).toBeNull()
+
+  await act(() => router.navigate(other))
+  expect(await screen.findByText(de.skills.activeSkill(dailySkill.name))).toBeTruthy()
+  await act(() => router.navigate({ to: '/', search: { about: 'mail1' } }))
+  expect(await screen.findByText(de.skills.activeSkill(digestSkill.name))).toBeTruthy()
+})
+
 test('quick action and mail-context route both forward an explicitly selected skill', async () => {
   setup()
   const field = await screen.findByPlaceholderText(de.chat.placeholder)

@@ -136,7 +136,12 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
           case 'error':
             writer.flushNow(); writer.cancel(); active.current = null
             if (event.code === 'context_revoked' && request.skill_id) {
-              setSelectedSkills(previous => ({ ...previous, [composerKey]: null }))
+              const key = turn.conversationId ?? composerKey
+              setSelectedSkills(previous => {
+                const skill = previous[key]?.skill
+                if (skill?.id !== request.skill_id || (request.skill_revision_id != null && skill?.revision_id !== request.skill_revision_id)) return previous
+                return { ...previous, [key]: null }
+              })
               void client.invalidateQueries({ queryKey: skillsQuery().queryKey })
             }
             setState(s => ({ ...s, phase: 'error', status: undefined, errorCode: event.code }))
