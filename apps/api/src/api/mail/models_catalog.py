@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from typing import Literal, NamedTuple
 
 from pydantic import BaseModel
+from db.accessors import chat_model_settings
 from env.mail import env as mail_env
 from utils.mistral import mistral_client
 from api.errors import refuse
@@ -69,11 +70,23 @@ class ChatModelOut(BaseModel):
     label: str
     description: str
     is_default: bool
+    is_app_default: bool = False
     availability: Availability = 'available'
     group: ModelGroup = 'other'
     resolved_id: str | None = None
     price: ChatModelPrice | None = None
     recommended: bool = False
+
+
+DefaultModelStatus = Literal['app_default', 'available', 'unlisted', 'unverified']
+
+
+class DefaultModelState(NamedTuple):
+    default_model: str | None
+    effective_default_model: str
+    app_default_model: str
+    status: DefaultModelStatus
+    models: list[ChatModelOut] | None = None
 
 
 def reset_cache():
@@ -94,7 +107,7 @@ def _group(model_id: str) -> ModelGroup:
 
 
 def _model(model_id: str, default: str, availability: Availability, resolved_id: str | None = None,
-           group: ModelGroup | None = None) -> ChatModelOut:
+           group: ModelGroup | None = None, *, app_default: str | None = None) -> ChatModelOut:
     family = _group(resolved_id or model_id)
     selection_family = _group(model_id)
     group = group or (selection_family if selection_family in ('third_party', 'specialist') else family)
@@ -103,8 +116,10 @@ def _model(model_id: str, default: str, availability: Availability, resolved_id:
     label, description = MODEL_TEXTS.get(model_id, (listed.label if listed and model_id == resolved_id else model_id, ''))
     price = ChatModelPrice(input_per_million=listed.input_rate, output_per_million=listed.output_rate,
                            source=listed.source, checked_on=PRICE_DATE) if listed else None
+    app_model = mail_env.mail_chat_model if app_default is None else app_default
     return ChatModelOut(id=model_id, label=label, description=description, is_default=model_id == default,
-                        availability=availability, group=group, resolved_id=resolved_id, price=price)
+                        is_app_default=model_id == app_model, availability=availability, group=group,
+                        resolved_id=resolved_id, price=price)
 
 
 def _expired(value):
@@ -118,7 +133,8 @@ def _expired(value):
     return False
 
 
-def _workspace_models(cards, default: str) -> list[ChatModelOut]:
+def _workspace_models(cards, default: str, *, app_default: str | None = None) -> list[ChatModelOut]:
+    app_model = mail_env.mail_chat_model if app_default is None else app_default
     bindings: dict[str, set[str]] = defaultdict(set)
     primary_ids: set[str] = set()
     unsupported: set[str] = set()
@@ -144,6 +160,8 @@ def _workspace_models(cards, default: str) -> list[ChatModelOut]:
         choices = moving or {model_id}
         if default in names:
             choices.add(default)
+        if app_model in names:
+            choices.add(app_model)
         for choice in choices:
             bindings[choice].update(targets)
 
@@ -158,7 +176,7 @@ def _workspace_models(cards, default: str) -> list[ChatModelOut]:
         if name in unsupported:
             continue
         version = next(iter(targets)) if len(targets) == 1 and targets.isdisjoint(unsupported) else None
-        models.append(_model(name, default, 'available', version, groups.get(name)))
+        models.append(_model(name, default, 'available', version, groups.get(name), app_default=app_model))
     # Prefer Small 4 for everyday tool use. If absent, choose the cheapest listed
     # input rate among the other verified Mistral generalists, then output rate.
     generalists = [model for model in models if model.group == 'general' and model.price]
@@ -166,30 +184,104 @@ def _workspace_models(cards, default: str) -> list[ChatModelOut]:
         min(generalists, key=lambda m: (m.resolved_id != 'mistral-small-2603', m.price.input_per_million,
                                         m.price.output_per_million, not m.is_default, m.id)).recommended = True
     if not any(model.is_default for model in models):
-        models.append(_model(default, default, 'unlisted'))
+        models.append(_model(default, default, 'unlisted', app_default=app_model))
+    if app_model != default and not any(model.is_app_default for model in models):
+        models.append(_model(app_model, default, 'unlisted', app_default=app_model))
     return sorted(models, key=lambda m: (not m.is_default, m.label))
 
 
+def _has_available_model(model_id: str, models: list[ChatModelOut]) -> bool:
+    return bool(model_id and model_id.strip()) and any(
+        model_id in (model.id, model.resolved_id) and model.availability == 'available'
+        for model in models
+    )
+
+
 def require_available_model(model_id: str, models: list[ChatModelOut]) -> None:
+    if not model_id or not model_id.strip():
+        raise refuse(422, 'model_unknown', 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.')
     if any(model.availability == 'unverified' for model in models):
         raise refuse(503, 'model_catalog_unavailable', 'Die Modellliste konnte nicht geladen werden. Versuch es noch einmal.')
-    if not any(model_id in (model.id, model.resolved_id) and model.availability == 'available' for model in models):
+    if not _has_available_model(model_id, models):
         raise refuse(422, 'model_unknown', 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.')
 
 
-async def list_chat_models() -> list[ChatModelOut]:
+async def _workspace_cards():
     global _cache, _cached_at
     async with _refresh_lock:
-        default = mail_env.mail_chat_model
-        if _cache is not None and time.monotonic() - _cached_at < 600 and _cache[0].id == default:
+        if _cache is not None and time.monotonic() - _cached_at < 600:
             return list(_cache)
         try:
             response = await mistral_client().models.list_async()
         except Exception as error:
             logger.warning('%s', type(error).__name__)
-            return [_model(default, default, 'unverified')]
-        if getattr(response, 'data', None) is None:
-            return [_model(default, default, 'unverified')]
-        models = _workspace_models(response.data, default)
-        _cache, _cached_at = models, time.monotonic()
-        return list(models)
+            return None
+        data = getattr(response, 'data', None)
+        if data is None:
+            return None
+        cards = list(data)
+        _cache, _cached_at = cards, time.monotonic()
+        return list(cards)
+
+
+async def list_chat_models(default: str | None = None, *, app_default: str | None = None) -> list[ChatModelOut]:
+    app_model = mail_env.mail_chat_model if app_default is None else app_default
+    effective = app_model if default is None else default
+    cards = await _workspace_cards()
+    if cards is None:
+        out = [_model(effective, effective, 'unverified', app_default=app_model)]
+        if app_model != effective:
+            out.append(_model(app_model, effective, 'unverified', app_default=app_model))
+        return out
+    return _workspace_models(cards, effective, app_default=app_model)
+
+
+async def default_model_state(stored: str | None, *, include_models: bool = True) -> DefaultModelState:
+    app_default = mail_env.mail_chat_model
+    if stored is None:
+        models = await list_chat_models(app_default, app_default=app_default) if include_models else None
+        return DefaultModelState(
+            default_model=None,
+            effective_default_model=app_default,
+            app_default_model=app_default,
+            status='app_default',
+            models=models,
+        )
+    candidate = await list_chat_models(stored, app_default=app_default)
+    if any(model.availability == 'unverified' for model in candidate):
+        return DefaultModelState(
+            default_model=stored,
+            effective_default_model=stored,
+            app_default_model=app_default,
+            status='unverified',
+            models=candidate if include_models else None,
+        )
+    if _has_available_model(stored, candidate):
+        return DefaultModelState(
+            default_model=stored,
+            effective_default_model=stored,
+            app_default_model=app_default,
+            status='available',
+            models=candidate if include_models else None,
+        )
+    fallback = await list_chat_models(app_default, app_default=app_default) if include_models else None
+    return DefaultModelState(
+        default_model=stored,
+        effective_default_model=app_default,
+        app_default_model=app_default,
+        status='unlisted',
+        models=fallback,
+    )
+
+
+async def resolve_default_chat_model() -> str:
+    row = await chat_model_settings.get()
+    state = await default_model_state(row.default_model, include_models=False)
+    return state.effective_default_model
+
+
+async def list_effective_chat_models() -> list[ChatModelOut]:
+    row = await chat_model_settings.get()
+    state = await default_model_state(row.default_model, include_models=True)
+    assert state.models is not None
+    return state.models

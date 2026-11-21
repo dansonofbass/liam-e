@@ -7,7 +7,7 @@ import './prompts.css'
 // Add implemented preferences and controls sections here; no placeholder destinations.
 export const settingsSections = (texts: Catalogue) => [
   { to: '/settings/prompts', label: texts.prompts.title },
-  { to: '/settings/chat', label: texts.chatAccounts.section },
+  { to: '/settings/chat', label: texts.shell.chat },
   { to: '/settings/calendar', label: texts.calendarSettings.title },
   { to: '/settings/controls', label: texts.settingsUi.section },
   { to: '/settings/preferences', label: texts.preferences.title },
