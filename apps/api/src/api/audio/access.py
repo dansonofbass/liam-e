@@ -7,12 +7,13 @@ from typing import Annotated
 from uuid import UUID
 
 from env.audio import env
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
+from starlette.requests import HTTPConnection
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from utils.mistral import MistralNotConfiguredError, caller_credentials
 
-AudioOwnerVerifier = Callable[[Request], Awaitable[bool]]
+AudioOwnerVerifier = Callable[[HTTPConnection], Awaitable[bool]]
 _LOG = logging.getLogger(__name__)
 _MAX_IDENTITY_BYTES = 16 * 1024
 
@@ -37,13 +38,13 @@ class _StudioUser(BaseModel):
     api_key: None
 
 
-async def _verify_studio_owner(request: Request) -> bool:
+async def _verify_studio_owner(request: HTTPConnection) -> bool:
     configured = env.audio_studio_owner
     if not configured or len(configured) > 1024 or "x-api-key" in request.headers:
         return False
     try:
         owner = _StudioOwner.model_validate_json(configured)
-        if request.method not in {"GET", "HEAD"} and request.headers.get("origin") != owner.origin:
+        if (request.scope["type"] == "websocket" or request.scope.get("method") not in {"GET", "HEAD"}) and request.headers.get("origin") != owner.origin:
             return False
         credentials = caller_credentials()
     except (MistralNotConfiguredError, ValidationError):
@@ -83,7 +84,7 @@ def get_audio_owner_verifier() -> AudioOwnerVerifier:
 
 
 async def require_audio_owner(
-    request: Request,
+    request: HTTPConnection,
     verify: Annotated[AudioOwnerVerifier, Depends(get_audio_owner_verifier)],
 ) -> None:
     if await verify(request) is not True:

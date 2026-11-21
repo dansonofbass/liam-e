@@ -18,6 +18,7 @@ import { composerDraftKey, useChatSession, useConversationScope, useRestartConve
 import { TaskScopeSelector } from './TaskContext'
 import { PreferenceContext } from './PreferenceContext'
 import { AudioRecorder, supportedAudioFormat } from './AudioRecorder'
+import { LiveVoice } from './LiveVoice'
 import { useAudioCapabilities } from './audio-capabilities'
 import { SpeechControls, useSpeechPlayback } from './SpeechPlayback'
 import { ActiveSkillBanner } from './ActiveSkillBanner'
@@ -40,8 +41,10 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
   const tasks = useTaskScope(conversationId, contextMessageId)
   const stt = useAudioCapabilities()?.stt
   const format = supportedAudioFormat(stt)
+  const stopLiveVoice = useRef<(() => void) | null>(null)
+  const registerVoiceStop = useCallback((stop: (() => void) | null) => { stopLiveVoice.current = stop }, [])
   const lockDraft = useCallback((locked: boolean) => {
-    if (locked) onRecordingStart?.()
+    if (locked) { stopLiveVoice.current?.(); onRecordingStart?.() }
     setAudioDraftLocked(locked)
   }, [onRecordingStart, setAudioDraftLocked])
   const draftKey = composerDraftKey(conversationId, contextMessageId)
@@ -201,6 +204,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
       }}
       onSubmit={() => {
         if (busy || audioDraftLocked || !ready || !tasks.ready || !value.trim()) return
+        stopLiveVoice.current?.()
         onSend?.()
         void send({
           text: value,
@@ -254,9 +258,14 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
         />
         <TaskScopeSelector conversationId={conversationId} contextMail={contextMail} disabled={busy || audioDraftLocked} />
       </>}
-      audioControls={stt && format && <AudioRecorder key={voiceContext} format={format}
+      audioControls={<>{conversationId && <LiveVoice conversationId={conversationId} contextKey={voiceContext} disabled={busy || !ready || !tasks.ready || audioDraftLocked} registerStop={registerVoiceStop} onStart={onRecordingStart}
+        stopChat={stop} send={text => send({ text, account_id: scope, conversation_id: conversationId,
+          context_message_id: contextMessageId, context_occurrence_id: contextOccurrenceId,
+          task_source: tasks.scope.source, task_source_account_id: tasks.scope.account_id,
+          ...(activeSkillEntry ? { skill_id: activeSkillEntry.skill.id, skill_revision_id: activeSkillEntry.skill.revision_id } : {}) }, { preserveDraft: true })} />}
+        {stt && format && <AudioRecorder key={voiceContext} format={format}
         limits={stt.app_limits} disabled={busy || !ready || !tasks.ready}
-        onLock={lockDraft} onTranscript={appendTranscript} />}
+        onLock={lockDraft} onTranscript={appendTranscript} />}</>}
     />
     <SlashPicker
       open={slashOpen}

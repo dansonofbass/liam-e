@@ -1659,6 +1659,16 @@ export type LiveEvent = {
 };
 
 /**
+ * LiveStatus
+ */
+export type LiveStatus = {
+    /**
+     * Available
+     */
+    available: boolean;
+};
+
+/**
  * MailRefOut
  */
 export type MailRefOut = {
@@ -4409,6 +4419,50 @@ export type AudioDeviceTestSampleResponses = {
 };
 
 export type AudioDeviceTestSampleResponse = AudioDeviceTestSampleResponses[keyof AudioDeviceTestSampleResponses];
+
+export type AudioLiveSpeechData = {
+    /**
+     * SpeechReference
+     */
+    body: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/live/speech';
+};
+
+export type AudioLiveSpeechResponses = {
+    /**
+     * Successful Response
+     */
+    200: Blob | File;
+};
+
+export type AudioLiveSpeechResponse = AudioLiveSpeechResponses[keyof AudioLiveSpeechResponses];
+
+export type AudioLiveStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/audio/live/status';
+};
+
+export type AudioLiveStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: LiveStatus;
+};
+
+export type AudioLiveStatusResponse = AudioLiveStatusResponses[keyof AudioLiveStatusResponses];
 
 export type AudioSpeechData = {
     /**
