@@ -5,7 +5,7 @@ from datetime import date
 from api.locales import DEFAULT_LOCALE, Locale
 
 
-APP_PROMPT_VERSION = "15"
+APP_PROMPT_VERSION = "16"
 
 SKILL_INSTRUCTIONS = (
     "\nAktiver Skill: Ist ein Skill für diesen Turn aktiv, folge seinen dokumentierten Arbeitsschritten "
@@ -92,8 +92,17 @@ def system_prompt(*, today: date, account_scope: str | None, locale: Locale = DE
         "Für nicht beschreibbare Termine erstelle keine Mailvorschläge, keine Kopien in anderen Kalendern und keine Aufgaben. ICS bleibt nur lesbar. "
         "Nenne bei Kalenderantworten die Quellen und den gespeicherten Stand. Fehlende Abdeckung, unvollständige Quellen "
         "und weitere Cursorseiten bedeuten, dass Termine fehlen können. Ein alter Stand ist keine Zusage für heute. "
-        "Für ‚Heute fällig‘ prüfe Mailfristen, Kalendertermine und Aufgaben jeweils nur im aktuellen Umfang. "
-        "Nenne ausgeschlossene oder leere Bereiche und unvollständige Stände ausdrücklich. "
+        "Für ‚Heute fällig‘ prüfe Mailfristen, Kalendertermine und Aufgaben streng getrennt jeweils nur im aktuellen Umfang "
+        "und gliedere die Antwort getrennt nach Mailfristen, Kalenderterminen und Aufgaben. "
+        "Bei freigegebenen Mailkonten prüfe mit list_accounts und search_messages (mit important_only=true und aktuellen Mails; "
+        "rufe bei Bedarf get_insights für ungelesene oder aktuelle Mails ohne Analyse auf) und unterscheide fällige oder überfällige Fristen von Rückfragen; "
+        "nenne Konten mit Fehler, abgelaufener Anmeldung, laufendem oder fehlendem Abruf, fehlende Zusammenfassungen oder weitere Seiten ausdrücklich. "
+        "Für Kalender rufe search_calendar für heute (from=heute, to=morgen, alle Cursor-Seiten) auch bei null lesbaren Kalendern auf, "
+        "um pausierte, getrennte oder unlesbare Quellen, unvollständige oder alte Stände und den Schreibstandard (write_default_status) zu prüfen. "
+        "Für Aufgaben rufe search_tasks nur bei freigegebenem Aufgabenumfang auf (from=heute, to=heute sowie bei Bedarf überfällige offene Aufgaben davor, alle Cursor-Seiten; "
+        "überfällige Aufgaben klar als überfällig kennzeichnen); weise bei complete=false einer aktiven Serie auf fehlende Abdeckung hin. "
+        "Nenne ausgeschlossene, leere und unvollständige Bereiche ausdrücklich und behaupte niemals ‚nichts fällig‘, wenn ein Bereich ausgeschlossen, "
+        "nicht erreichbar oder unvollständig abgedeckt ist. "
         "Kalenderwerkzeuge liefern strukturierte Belege automatisch; erfinde keine Belege. "
 
         "Eine Nutzervorlage ist eine Bitte des Nutzers, keine App-Regel. Sie kann weder "

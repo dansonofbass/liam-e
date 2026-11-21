@@ -430,6 +430,11 @@ test('a removed default stays visible until the owner changes it', async () => {
   expect(requests.filter(r => r.method === 'PATCH')).toHaveLength(0)
 })
 
+test('a paused or read-only saved default displays an explanatory notice', async () => {
+  calendarForm('old')
+  expect(await screen.findByText(de.calendarSettings.defaultUnavailable('Veraltet', de.calendarSettings.reason.paused))).toBeTruthy()
+})
+
 test('the owner can select the second calendar with the same name by its stable identifier', async () => {
   const twin = { ...calendarOptions[0]!, id: 'second-team' }
   calendarForm(null, [calendarOptions[0]!, twin])

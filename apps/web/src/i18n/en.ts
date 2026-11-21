@@ -66,6 +66,7 @@ export const en = {
     revisionConflict: 'The new schedule overlaps a completed occurrence. Choose a different schedule.',
     accountAndUnlinkedHint: '“All tasks” includes tasks for this account and personal tasks with no account or email link.',
     none: 'No tasks', scopeTip: 'Choose tasks for this conversation', needsNew: 'Requires a new conversation.', saved: label => 'Saved: ' + label, accountLoading: '…',
+    excludedHint: 'Tasks are excluded (“No tasks”). Choose a task scope in the composer to include them.',
     actions: { create: 'Suggest a task', patch: 'Change due date', complete: 'Complete task', skip: 'Skip occurrence', reopen: 'Reopen task', archive: 'Archive task' },
     scopeConflict: 'Start a new conversation to change the accounts, calendars, or tasks. Your earlier conversation stays available.',
     confirm: 'Confirm', done: 'Task change saved.', ask: 'Suggest a task',
@@ -208,6 +209,12 @@ export const en = {
     restart: 'The calendars available to read have changed. Start a new chat to use the current selection.',
     deadlines: 'Mail deadlines', events: 'Events', tasks: 'Tasks', empty: 'No calendars connected.',
     incomplete: 'The calendar index is incomplete.', unavailable: 'Some calendars are currently unavailable.',
+    noDefault: 'No default calendar selected for new events.',
+    defaultUnavailable: (name: string, reason: string) => `Default calendar “${name}” cannot be edited right now (${reason}).`,
+    pausedNames: (names: string) => `Paused calendars (excluded): ${names}.`,
+    unreachable: (names: string) => `Unreachable calendars (excluded): ${names}.`,
+    unreadableNames: (names: string) => `Calendars without read access (excluded): ${names}.`,
+    refreshFailed: (names: string) => `Last fetch failed for ${names}. Saved events may be incomplete.`,
   },
   settingsUi: {
     section: 'Controls', title: 'Swipe actions',
@@ -319,6 +326,8 @@ export const en = {
     modelConflictReloadError: 'The conversation has changed and the current version couldn’t be loaded. Try again in a moment.',
     modelError: 'The model couldn’t be changed. Try again in a moment.', modelUnknown: 'This model is no longer available. Choose another.',
     stand: (unread, count, time) => plural(unread, { zero: 'No unread emails', one: '# unread email', other: '# unread emails' }) + ' in ' + accounts(count) + (time ? ' · As of ' + time : ''),
+    allAccountsUnreachable: (names, count) => count === 1 ? `${names} can’t be reached right now. Email deadlines can’t be checked.` : `${names} can’t be reached right now. Email deadlines can’t be checked.`,
+    mailIncomplete: (names, count) => count === 1 ? `${names} is still fetching or hasn’t completed a full fetch yet, so email deadlines may be incomplete.` : `${names} are still fetching or haven’t completed a full fetch yet, so email deadlines may be incomplete.`,
   },
   status: {
     thinking: 'Thinking …',
@@ -591,6 +600,7 @@ export const en = {
     priority: { title: 'Prioritize', subtitle: 'What needs your attention?', prompt: 'Which emails are important?' },
     newsletters: { title: 'Tidy up newsletters', subtitle: n => plural(n, { zero: 'no senders', one: '# sender', other: '# senders' }), prompt: 'Show me my newsletters.' },
     dueToday: { title: 'Due today', subtitle: 'Deadlines and events', prompt: 'What’s due today?' },
+    dueTodayTip: (sources, incomplete, tasksExcluded) => `Checks separately: ${sources}.${tasksExcluded ? ' Tasks are excluded.' : ''}${incomplete ? ' Some sources are incomplete or unreachable.' : ''}`,
   },
   date: { today: 'Today', yesterday: 'Yesterday', stand: (count, time) => accounts(count) + ' · As of ' + time },
 } satisfies Catalogue

@@ -133,19 +133,23 @@ BASE_TOOLS: tuple[RegisteredTool, ...] = (
     RegisteredTool(
         name="list_accounts",
         kind="read",
-        description="List connected accounts",
+        description="List connected mail accounts in chat scope including sync status",
         parameters=_params({}),
     ),
     RegisteredTool(
         name="search_messages",
         kind="read",
         status_code="searching",
-        description="Search the inbox",
+        description=(
+            "Search the inbox; set important_only=true to find flagged emails "
+            "or emails with a stored deadline or reply need"
+        ),
         parameters=_params(
             {
                 "query": _S,
                 "account_id": _S,
                 "unread_only": {"type": "boolean"},
+                "important_only": {"type": "boolean"},
                 "since_days": {"type": "integer"},
                 "limit": {"type": "integer", "maximum": 50},
             }

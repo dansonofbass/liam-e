@@ -3,7 +3,7 @@ from collections import Counter
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from db.accessors import calendar_occurrence, calendar_source
+from db.accessors import calendar_occurrence, calendar_settings, calendar_source
 from fastapi import HTTPException
 from api.routers.api.v1.calendar.occurrences import _decode, _encode
 from api.routers.api.v1.calendar.schemas import OccurrenceOut
@@ -65,8 +65,18 @@ async def read_calendar(name, arguments, source_ids, timezone):
         if state and (state.last_error or (state.last_success_at and state.last_success_at < freshness_cutoff)):
             status['stale'] = True
         statuses.append(status)
+    settings = await calendar_settings.get()
+    default_id = settings.default_source_id
+    if not default_id:
+        write_default_status = 'missing'
+    elif default_id in sources and calendar_source.chat_access(*sources[default_id]) == 'writable':
+        write_default_status = 'configured'
+    else:
+        write_default_status = 'unavailable'
     return {'untrusted_calendar_data': {'occurrences': [OccurrenceOut.model_validate(row, from_attributes=True).model_dump(mode='json') for row in rows],
         'sources': statuses}, 'unavailable_source_counts': dict(unavailable), 'source_count': len(selected),
+        'write_default_status': write_default_status,
+        'write_default_source_id': default_id if write_default_status == 'configured' else None,
         'index_complete_for_window': bool(selected) and not more and all(s['window_covered'] and not s['stale'] and not s['incomplete'] for s in statuses),
         'next_cursor': next_cursor, 'read_only': True,
         'note': 'Gespeicherter Index, keine Zusage zur Aktualität beim Anbieter. Fehlende Abdeckung und weitere Seiten ausdrücklich nennen.'}, [

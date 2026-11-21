@@ -60,6 +60,7 @@ async def test_collect_daily_briefing_merges_authorized_calendar_tasks_and_mail_
     )
     monkeypatch.setattr(briefing.calendar_tools.calendar_source, "catalog", AsyncMock(return_value=[(source, state)]))
     monkeypatch.setattr(briefing.calendar_tools.calendar_occurrence, "page_visible", AsyncMock(return_value=[occ]))
+    monkeypatch.setattr(briefing.calendar_tools.calendar_settings, "get", AsyncMock(return_value=NS(default_source_id=None)))
 
     async def fake_task_read(name, args, scope, account_ids):
         assert name == "search_tasks"
@@ -144,6 +145,7 @@ async def test_collect_daily_briefing_merges_authorized_calendar_tasks_and_mail_
 async def test_collect_daily_briefing_reports_excluded_and_incomplete_scopes_honestly(monkeypatch):
     monkeypatch.setattr(briefing.calendar_tools.calendar_source, "catalog", AsyncMock(return_value=[]))
     monkeypatch.setattr(briefing.calendar_tools.calendar_occurrence, "page_visible", AsyncMock(return_value=[]))
+    monkeypatch.setattr(briefing.calendar_tools.calendar_settings, "get", AsyncMock(return_value=NS(default_source_id=None)))
     list_page = AsyncMock()
     monkeypatch.setattr(briefing.mail_message, "list_page", list_page)
 

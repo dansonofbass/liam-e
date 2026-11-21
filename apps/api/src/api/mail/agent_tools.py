@@ -3,11 +3,11 @@ import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
-from db.accessors import chat_context, mail_account, mail_message
+from db.accessors import chat_context, mail_account, mail_insight, mail_job, mail_message, mail_sync_state
 from db.models.chat_message import ChatMessage
 from api.calendar.chat_target import CalendarChoice, appointment_part, appointment_parts, pending_for_request
 from api.locales import DEFAULT_LOCALE, Locale
-from api.mail import headers, insights, newsletters, proposals, send
+from api.mail import headers, insights, newsletters, proposals, send, state
 from api.mail.chat_events import StatusEvent
 from api.skills.registry import TOOL_REGISTRY
 from api.skills.runtime import check_tool_allowed
@@ -78,8 +78,43 @@ async def tool_status(name, arguments, ctx):
     return StatusEvent(code=codes[name], count=count)
 
 
-def _summary(m):
-    return {'id': m.id, 'account_id': m.account_id, 'subject': m.subject, 'sender': m.sender, 'date': m.internal_date, 'snippet': m.snippet, 'is_read': m.is_read}
+def _summary(m, insight=None):
+    return {
+        'id': m.id,
+        'account_id': m.account_id,
+        'subject': m.subject,
+        'sender': m.sender,
+        'date': m.internal_date,
+        'snippet': m.snippet,
+        'is_read': m.is_read,
+        'is_flagged': m.is_flagged,
+        'deadline': insight.deadline if insight else None,
+        'needs_reply': insight.needs_reply if insight else None,
+        'has_insight': insight is not None,
+    }
+
+
+async def _account_statuses(account_ids: list[str]) -> list[dict]:
+    if not account_ids:
+        return []
+    wanted = set(account_ids)
+    accounts = [a for a in await mail_account.list_accounts() if a.id in wanted]
+    statuses = []
+    for account in accounts:
+        sync_state = await mail_sync_state.get_state(account.id)
+        open_job = await mail_job.latest_for_account(account.id, kind='sync', open_only=True)
+        account_state = state.account_status(account, sync_state, open_job)
+        statuses.append({
+            'id': account.id,
+            'display_name': account.display_name,
+            'provider': account.provider,
+            'email_address': account.email_address,
+            'is_active': account.is_active,
+            'state': account_state.state,
+            'error_code': account_state.error_code,
+            'last_sync_at': account_state.last_sync_at,
+        })
+    return statuses
 
 
 async def _proposal(ctx, proposal):
@@ -195,17 +230,43 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         if any(id not in allowed for id in arguments['sender_ids']):
             return result({'error': 'sender_not_found'})
     if name == 'list_accounts':
-        return result([{'id': a.id, 'provider': a.provider, 'email_address': a.email_address, 'is_active': a.is_active} for a in await mail_account.list_accounts() if a.id in scope])
+        return result(await _account_statuses(scope))
     if name == 'search_messages':
         account_id = arguments.get('account_id') or ctx.account_id
         if scope == []:
-            return result({'untrusted_mails': []})
-        rows = await mail_message.list_page(chat_only=True, folder='INBOX', account_ids=[account_id] if account_id else scope, unread_only=arguments.get('unread_only', False), query=arguments.get('query', ''), limit=max(1, min(int(arguments.get('limit', 10)), 50)))
+            return result({'untrusted_mails': [], 'account_ids': [], 'account_statuses': [], 'has_more': False, 'mail_scope_empty': True})
+        target_ids = [account_id] if account_id else scope
+        requested = max(1, min(int(arguments.get('limit', 10)), 50))
+        rows = await mail_message.list_page(
+            chat_only=True,
+            folder='INBOX',
+            account_ids=target_ids,
+            unread_only=bool(arguments.get('unread_only', False)),
+            important_only=bool(arguments.get('important_only', False)),
+            query=arguments.get('query', ''),
+            limit=requested + 1,
+        )
+        has_more = len(rows) > requested
+        rows = rows[:requested]
         since = arguments.get('since_days')
         if since is not None:
             cutoff = datetime.now(timezone.utc) - timedelta(days=int(since))
             rows = [m for m in rows if m.internal_date and (m.internal_date.replace(tzinfo=timezone.utc) if m.internal_date.tzinfo is None else m.internal_date) >= cutoff]
-        return result({'untrusted_mails': [_summary(m) for m in rows]})
+        insight_map = await mail_insight.get_for_messages([m.id for m in rows]) if rows else {}
+        statuses = await _account_statuses(target_ids)
+        payload = {
+            'untrusted_mails': [_summary(m, insight_map.get(m.id)) for m in rows],
+            'account_ids': target_ids,
+            'account_statuses': statuses,
+            'has_more': has_more,
+            'missing_insight_count': sum(1 for m in rows if m.id not in insight_map),
+        }
+        if arguments.get('important_only') and not rows:
+            other = await mail_message.list_page(chat_only=True, folder='INBOX', account_ids=target_ids, limit=1)
+            payload['inbox_has_other_mails'] = bool(other)
+            if other:
+                payload['note'] = 'Keine markierten Mails oder gespeicherten Fristen gefunden; im Posteingang liegen weitere Mails ohne Frist-Analyse.'
+        return result(payload)
     if name == 'get_message':
         m = verified_messages.get(arguments.get('message_id'))
         if not m: return result({'error':'message_not_found'})

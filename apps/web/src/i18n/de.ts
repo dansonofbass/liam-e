@@ -59,6 +59,7 @@ export const de = {
     revisionConflict: 'Die neue Wiederholung überschneidet sich mit einer erledigten Fälligkeit. Wähle einen anderen Zeitplan.',
     accountAndUnlinkedHint: '„Alle Aufgaben“ zeigt hier Aufgaben dieses Kontos und persönliche Aufgaben ohne Konto- und Mailbezug. Andere Konten bleiben ausgeschlossen.',
     none: 'Keine Aufgaben', scopeTip: 'Aufgaben für diese Unterhaltung wählen', needsNew: 'Braucht eine neue Unterhaltung.', saved: (label: string) => `Gespeichert: ${label}`, accountLoading: '…',
+    excludedHint: 'Aufgaben sind ausgeschlossen („Keine Aufgaben“). Wähle im Eingabefeld Aufgaben aus, wenn sie berücksichtigt werden sollen.',
     actions: { create: 'Aufgabe vorschlagen', patch: 'Fälligkeit ändern', complete: 'Aufgabe erledigen', skip: 'Fälligkeit überspringen', reopen: 'Aufgabe wieder öffnen', archive: 'Aufgabe archivieren' },
     scopeConflict: 'Für andere Konten, Kalender oder Aufgaben brauchst du eine neue Unterhaltung. Der bisherige Verlauf bleibt erhalten.',
     confirm: 'Bestätigen', done: 'Aufgabenänderung gespeichert.', ask: 'Aufgabe vorschlagen',
@@ -198,6 +199,12 @@ export const de = {
     restart: 'Die lesbaren Kalender haben sich geändert. Starte einen neuen Chat für den aktuellen Umfang.',
     deadlines: 'Mailfristen', events: 'Termine', tasks: 'Aufgaben', empty: 'Keine Kalender verbunden.',
     incomplete: 'Der Kalenderstand ist unvollständig.', unavailable: 'Einige Kalender sind derzeit nicht lesbar.',
+    noDefault: 'Kein Standardkalender für neue Termine gewählt.',
+    defaultUnavailable: (name: string, reason: string) => `Standardkalender „${name}“ ist derzeit nicht beschreibbar (${reason}).`,
+    pausedNames: (names: string) => `Pausierte Kalender (ausgeschlossen): ${names}.`,
+    unreachable: (names: string) => `Nicht erreichbare Kalender (ausgeschlossen): ${names}.`,
+    unreadableNames: (names: string) => `Kalender ohne Lesezugriff (ausgeschlossen): ${names}.`,
+    refreshFailed: (names: string) => `Letzter Abruf fehlgeschlagen für ${names}. Gespeicherte Termine können unvollständig sein.`,
   },
   settingsUi: {
     section: 'Bedienung', title: 'Wischaktionen',
@@ -309,6 +316,8 @@ export const de = {
     modelConflictReloadError: 'Die Unterhaltung wurde inzwischen geändert, aber der aktuelle Stand konnte nicht geladen werden. Versuch es gleich noch mal.',
     modelError: 'Das Modell konnte nicht geändert werden. Versuch es gleich noch mal.', modelUnknown: 'Dieses Modell gibt es nicht mehr. Wähle ein anderes.',
     stand: (unread: number, accounts: number, time?: string) => `${plural(unread, { zero: 'Keine ungelesenen Mails', one: '# ungelesene Mail', other: '# ungelesene Mails' })} in ${plural(accounts, { one: '# Konto', other: '# Konten' })}${time ? ` · Stand ${time}` : ''}`,
+    allAccountsUnreachable: (names: string, count: number) => count === 1 ? `${names} ist gerade nicht erreichbar. Mailfristen lassen sich zurzeit nicht prüfen.` : `${names} sind gerade nicht erreichbar. Mailfristen lassen sich zurzeit nicht prüfen.`,
+    mailIncomplete: (names: string, count: number) => count === 1 ? `${names} wird noch abgerufen oder hat noch keinen vollständigen Stand – Mailfristen können unvollständig sein.` : `${names} werden noch abgerufen oder haben noch keinen vollständigen Stand – Mailfristen können unvollständig sein.`,
   },
   status: {
     thinking: 'Denke nach …',
@@ -571,6 +580,7 @@ export const de = {
     priority: { title: 'Priorisieren', subtitle: 'Was wartet auf dich?', prompt: 'Welche Mails sind wichtig?' },
     newsletters: { title: 'Newsletter aufräumen', subtitle: (n: number) => plural(n, { zero: 'keine Absender', one: '# Absender', other: '# Absender' }), prompt: 'Zeig mir meine Newsletter.' },
     dueToday: { title: 'Heute fällig', subtitle: 'Fristen und Termine', prompt: 'Was ist heute fällig?' },
+    dueTodayTip: (sources: string, incomplete: boolean, tasksExcluded: boolean) => `Prüft getrennt: ${sources}.${tasksExcluded ? ' Aufgaben sind ausgeschlossen.' : ''}${incomplete ? ' Einige Quellen sind unvollständig oder nicht erreichbar.' : ''}`,
   },
   date: {
     today: 'Heute', yesterday: 'Gestern',
