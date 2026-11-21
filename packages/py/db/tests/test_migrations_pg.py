@@ -300,3 +300,107 @@ def test_mail_move_upgrade_preserves_open_undo_and_index(scratch, monkeypatch):
 
     asyncio.run(undo_on_new_api())
     assert asyncio.run(_scalar(url, "SELECT provider_uid FROM mail_message WHERE id='old-mail'")) == "returned"
+
+
+def _assert_imap_downgrade_handoff(config, url, monkeypatch):
+    import json
+    import subprocess
+    import sys
+
+    from bulk_mailboxes import Mailboxes
+    from test_mail_imap_generation_pg import flag_inbox_delivery
+    from test_mail_trash_sync_pg import MAIL, client
+    from api.mail import sync
+    from db import engine as db_engine
+    from db.accessors import mail_message
+
+    async def hide_delivery():
+        await db_engine.dispose_engine()
+        try:
+            provider = Mailboxes(["Yahoo"], False, "move")
+            await provider.connect(monkeypatch)
+            account = provider.accounts["Yahoo"]
+            ids = await mail_message.known_uids(account.id, "INBOX")
+            async with client() as browser:
+                marked = await browser.post(f"{MAIL}/messages/{ids['12']}/actions", json={"kind": "mark_read"})
+                assert marked.status_code == 200
+                token = marked.json()["action_id"]
+                assert token
+            flag_inbox_delivery(monkeypatch, provider)
+            assert (await sync.sync_account(account.id)).status == "ok"
+            assert ids["11"] not in (await mail_message.known_uids(account.id, "INBOX")).values()
+            # Neither an expired generation nor an occupied raw UID is eligible for handoff.
+            withheld = {}
+            for key in ("6:10", "7:12"):
+                row = await mail_message.upsert_message(account_id=account.id, folder="IMAP_DELETED",
+                                                        provider_uid=key, imap_uidvalidity=key.split(":")[0])
+                withheld[key] = row.id
+            return account.id, ids, withheld, token
+        finally:
+            await db_engine.dispose_engine()
+    account_id, ids, withheld, token = asyncio.run(hide_delivery())
+    command.downgrade(config, "c8c67942c08d")
+    # With the previous checkout available, run its own ORM, HTTP handlers and worker on this database.
+    if previous := os.getenv("MAIL_TEST_PREVIOUS_ROOT"):
+        root = Path(previous).resolve()
+        source = [str(root / path) for path in ("apps/api/src", "packages/py/db/src", "packages/py/env/src", "packages/py/utils/src")]
+        subprocess.run([sys.executable, str(Path(__file__).with_name("previous_imap_poll.py"))], cwd=root,
+                       env=os.environ | {"PYTHONPATH": os.pathsep.join(source), "DATABASE_URL": url}, check=True,
+                       input=json.dumps({"account_id": account_id, "ids": ids, "token": token}), text=True, timeout=30)
+    # The previous worker polls flags for these exact raw UIDs and retains their local IDs.
+    assert asyncio.run(_scalar(url, "SELECT json_object_agg(provider_uid,id) FROM mail_message WHERE folder='INBOX'")) == ids
+    assert asyncio.run(_scalar(url, "SELECT json_object_agg(provider_uid,id) FROM mail_message WHERE folder='IMAP_DELETED'")) == withheld
+    assert asyncio.run(_scalar(url, "SELECT cursor FROM mail_sync_state")) == "7:14"
+
+
+def test_imap_downgrade_keeps_the_hidden_delivery_on_the_base_workers_cursor(scratch, monkeypatch):
+    config, url = scratch
+    command.upgrade(config, "10d2e525afe6")
+    _assert_imap_downgrade_handoff(config, url, monkeypatch)
+
+
+def test_autogenerate_reproduces_mail_move_upgrade_and_downgrade(scratch, tmp_path, monkeypatch):
+    import ast
+    from unittest.mock import Mock
+
+    from alembic.script import ScriptDirectory
+
+    revision, parent = "10d2e525afe6", "c8c67942c08d"
+    config, url = scratch
+    history = ScriptDirectory.from_config(config)
+    shipped = history.get_revision(revision)
+    assert shipped.down_revision == parent
+    command.upgrade(config, "heads")
+    # Retain later, unrelated schema changes while actually downgrading the mail schema to its parent.
+    files = {Path(item.path).name for item in history.walk_revisions(head=revision)}
+    scripts = shutil.copytree(config.get_main_option("script_location"), tmp_path / "migrations",
+                              ignore=shutil.ignore_patterns("__pycache__"))
+    for file in (scripts / "versions").glob("*.py"):
+        if file.name not in files:
+            file.unlink()
+    config.set_main_option("script_location", str(scripts))
+    expected = [("mail_action", "inbox_source_uid"), ("mail_action", "imap_source_uidvalidity"),
+                ("mail_message", "imap_uidvalidity")]
+    command.stamp(config, revision, purge=True)
+    command.downgrade(config, parent)
+    assert asyncio.run(_scalar(url, "SELECT version_num FROM alembic_version")) == parent
+    (scripts / "versions" / Path(shipped.path).name).unlink()
+    generated = command.revision(config, message="record mail move identity", rev_id=revision, autogenerate=True)
+    assert (generated.revision, generated.down_revision) == (revision, parent)
+
+    for script in (shipped, generated):
+        recorder = Mock(spec_set=["add_column"])
+        with monkeypatch.context() as patch:
+            patch.setattr(script.module, "op", recorder)
+            script.module.upgrade()
+        assert [(table, col.name) for (table, col), _ in recorder.add_column.call_args_list] == expected
+        for (_, column), _ in recorder.add_column.call_args_list:
+            assert str(column.type) == "VARCHAR" and column.nullable and column.server_default is None
+
+    def operations(script):
+        return {f.name: ast.dump(f) for f in ast.parse(Path(script.path).read_text()).body if isinstance(f, ast.FunctionDef)}
+
+    assert operations(generated) == operations(shipped)
+    command.upgrade(config, revision)
+    command.check(config)
+    _assert_imap_downgrade_handoff(config, url, monkeypatch)

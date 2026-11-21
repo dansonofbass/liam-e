@@ -16,7 +16,7 @@ from logging.config import fileConfig
 
 import db.models  # noqa: F401  (import populates SQLModel.metadata)
 from alembic import context
-from alembic.autogenerate import comparators
+from alembic.autogenerate import comparators, rewriter
 from alembic.operations import ops
 from db import metadata as target_metadata
 from db.migrations import row_triggers  # noqa: F401 (register the model trigger comparator and renderer)
@@ -56,6 +56,28 @@ def compare_removed_checks(autogen_context, modify_ops, schema, name, reflected,
         modify_ops.ops.append(ops.DropConstraintOp.from_constraint(constraint))
 
 
+mail_downgrade = rewriter.Rewriter()
+
+
+@mail_downgrade.rewrites(ops.DropColumnOp)
+def resume_base_imap_poll(context, revision, operation):
+    """Freeze the data handoff into the downgrade that removes the IMAP generation column."""
+    if (operation.table_name, operation.column_name) != ("mail_message", "imap_uidvalidity"):
+        return operation
+    return [ops.ExecuteSQLOp("""
+        UPDATE mail_message AS hidden
+        SET folder = 'INBOX', provider_uid = split_part(hidden.provider_uid, ':', 2)
+        FROM mail_sync_state AS state JOIN mail_account AS account ON account.id = state.account_id
+        WHERE account.provider = 'imap' AND hidden.account_id = account.id AND hidden.folder = 'IMAP_DELETED'
+          AND hidden.provider_uid ~ '^[0-9]+:[0-9]+$'
+          AND hidden.imap_uidvalidity = split_part(hidden.provider_uid, ':', 1)
+          AND hidden.imap_uidvalidity = split_part(state.cursor, ':', 1)
+          AND NOT EXISTS (SELECT 1 FROM mail_message AS current
+                          WHERE current.account_id = hidden.account_id AND current.folder = 'INBOX'
+                            AND current.provider_uid = split_part(hidden.provider_uid, ':', 2))
+    """), operation]
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=env.async_database_url,
@@ -75,6 +97,7 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         compare_type=True,
         include_object=include_object,
+        process_revision_directives=mail_downgrade,
     )
     with context.begin_transaction():
         connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_LOCK_KEY})

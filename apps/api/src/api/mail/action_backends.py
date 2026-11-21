@@ -203,8 +203,19 @@ def _search(connection, message: MailMessage, uid: str | None = None) -> str:
     return uids[0].decode()
 
 
-def _message_uid(connection, message: MailMessage) -> str:
+def imap_locatable(message: MailMessage) -> bool:
+    # Sync observed an INBOX disappearance. Neither marker is a physical Archive UID.
+    return message.folder != "IMAP_DELETED" and not (
+        message.folder == "ARCHIVE" and message.provider_uid.startswith(("inbox:", "retired:")))
+
+
+def _message_uid(connection, message: MailMessage, *, expected: str | None = None) -> str:
+    if not imap_locatable(message):
+        raise ActionUnsupportedError()
     if message.folder == "INBOX":
+        generation = expected or getattr(message, "imap_uidvalidity", None)
+        if generation and _uidvalidity(connection) != generation:
+            raise RuntimeError("Indexed IMAP UIDVALIDITY changed")
         return message.provider_uid
     if message.folder == "TRASH" and ":" in message.provider_uid:
         validity, uid = message.provider_uid.split(":", 1)
@@ -234,8 +245,7 @@ class ImapBackend:
         return await self._run(message, previous["folder"], previous["is_read"])
 
     async def _run(self, message: MailMessage, folder: str, is_read: bool | None) -> dict:
-        # After an expunge or generation reset the index cannot locate this delivery in Archive.
-        if message.folder == "ARCHIVE" and message.provider_uid.startswith("retired:"):
+        if not imap_locatable(message):
             raise ActionUnsupportedError()
         expected = message.imap_uidvalidity
         if message.folder == "INBOX" and folder == "TRASH" and expected is None:
@@ -262,14 +272,14 @@ class ImapBackend:
                 # Undo must be able to locate the message after its folder UID changes.
                 raise ActionUnsupportedError()
             _ok(connection.select(_quoted(source)))
-            uid = _message_uid(connection, message)
+            uid = _message_uid(connection, message, expected=expected)
             if not uid.isdigit():
                 raise ActionUnsupportedError()
             updates = {}
             if moving and folder == "TRASH" and message.folder == "INBOX":
                 # An IMAP UID command can return OK even if it matched no message.
-                if _uidvalidity(connection) != expected:
-                    raise RuntimeError("Indexed IMAP UIDVALIDITY changed")
+                if not expected:
+                    raise RuntimeError("Missing indexed IMAP UIDVALIDITY")
                 _search(connection, message, uid)
                 updates["imap_source_uidvalidity"] = expected
                 updates["imap_uidvalidity"] = None

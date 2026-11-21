@@ -166,7 +166,7 @@ async def message_original(message_id: str) -> MessageOriginalOut:
     if message is None:
         raise refuse(404, "message_not_found", "Die Mail ist nicht mehr da.")
     account = await account_access.get_account(message.account_id)
-    if not original.available(account):
+    if not original.available(account, message):
         raise refuse(409, "original_unavailable", "Bei dieser Mail lässt sich das Original nicht abrufen.")
     try:
         result = await original.fetch(account, message)
@@ -196,5 +196,5 @@ async def get_message(message_id: str) -> MessageDetailOut:
         to=json.loads(message.recipients_json), cc=json.loads(message.cc_json),
         body_text=message.body_text, attachments=json.loads(message.attachments_json),
         thread_id=message.thread_id, can_unsubscribe=not local_reference and bool(message.list_unsubscribe),
-        can_show_original=not local_reference and original.available(account), local_reference_only=local_reference,
+        can_show_original=not local_reference and original.available(account, message), local_reference_only=local_reference,
     )

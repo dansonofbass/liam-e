@@ -539,7 +539,6 @@ async def commit_trash_move(message: MailMessage, updates: dict, *, action: Mail
         stable_uid = account.auth_type == "mistral_connector" or account.provider == "google"
         updates = updates.copy()
         validity = updates.pop("imap_source_uidvalidity", None)
-        target_uid = updates.get("provider_uid", message.provider_uid)
         left_inbox = message.folder == "INBOX" and updates["folder"] == "TRASH"
         if left_inbox and not stable_uid and account.provider in ("microsoft", "imap"):
             record = await session.get(MailAction, undo_id) if undo_id else action
@@ -554,6 +553,18 @@ async def commit_trash_move(message: MailMessage, updates: dict, *, action: Mail
             # A native full rebuild can remove this row between dispatch and success.
             # Carry its public ID and undo history into the confirmed destination.
             keep = MailMessage(**message.model_dump(exclude={"search_tsv"}))
+        target_uid = updates.get("provider_uid", message.provider_uid)
+        if account.provider == "imap" and updates["folder"] == "INBOX" and (destination := updates.get("imap_uidvalidity")):
+            cursor = await session.scalar(select(MailSyncState.cursor).where(MailSyncState.account_id == account.id))
+            occupant = await session.scalar(select(MailMessage.imap_uidvalidity).where(MailMessage.account_id == account.id,
+                MailMessage.folder == "INBOX", MailMessage.provider_uid == target_uid))
+            # RFC 9051 §2.3.1.1: a reset that invalidates previous UIDs increases UIDVALIDITY.
+            if any(g and g.isdigit() and int(g) > int(destination) for g in ((cursor or "").partition(":")[0], occupant)):
+                if (keep.folder, keep.provider_uid) == (message.folder, message.provider_uid):
+                    updates = {"folder": "ARCHIVE", "provider_uid": f"retired:{keep.id}", "imap_uidvalidity": destination}
+                else:
+                    updates = {"folder": keep.folder, "provider_uid": keep.provider_uid}
+                target_uid = updates["provider_uid"]
         if stable_uid:
             match = MailMessage.provider_uid == message.provider_uid
         else:

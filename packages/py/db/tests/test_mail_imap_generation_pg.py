@@ -144,3 +144,95 @@ def test_null_generation_trash_origin_cannot_consume_a_later_delivery(pg_db, mon
             assert await listed(browser, "ARCHIVE") == {ids["11"]}
             assert await mail_insight.get(ids["11"]) is not None
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("occupied", [True, False])
+def test_restore_ack_after_newer_generation_poll_leaves_its_inbox_intact(pg_db, monkeypatch, occupied):
+    async def run():
+        provider = Mailboxes(["Yahoo"], False, "move")
+        await provider.connect(monkeypatch)
+        account = provider.accounts["Yahoo"]
+        ids = await mail_message.known_uids(account.id, "INBOX")
+        generation = b"7"
+        response = YahooConnection.response
+        def selected(connection, name):
+            if name == "UIDVALIDITY" and connection.folder == "INBOX":
+                return name, [generation]
+            return response(connection, name)
+        monkeypatch.setattr(YahooConnection, "response", selected)
+        async with client() as browser:
+            token = (await browser.post(f"{MAIL}/messages/{ids['12']}/actions", json={"kind": "trash"})).json()["action_id"]
+            commit = mail_message.commit_trash_move
+            newer_uid = "212" if occupied else "241"
+            fresh_id = ""
+            async def publish_newer_first(message, updates, **kwargs):
+                nonlocal generation, fresh_id
+                assert updates["imap_uidvalidity"] == "7" and updates["provider_uid"] == "212"
+                generation = b"8"
+                provider.yahoo_folders["INBOX"] = {newer_uid: "different"}
+                provider.labels["Yahoo"]["different"] = {"INBOX"}
+                assert (await sync.sync_account(account.id)).status == "ok"
+                fresh_id = (await mail_message.known_uids(account.id, "INBOX"))[newer_uid]
+                await commit(message, updates, **kwargs)
+            monkeypatch.setattr(mail_message, "commit_trash_move", publish_newer_first)
+            undo = await browser.post(MAIL + "/actions/undo", json={"action_ids": [token]})
+            assert undo.status_code == 200 and undo.json()["restored"] == [token]
+            for _ in range(2):
+                listing = (await browser.get(MAIL + "/messages")).json()["items"]
+                assert [(r["id"], r["subject"]) for r in listing] == [(fresh_id, "Yahoo different")]
+                assert (await sync.sync_account(account.id)).status == "ok"
+            assert (await mail_message.get_message(ids["12"])).id == ids["12"]
+            assert (await browser.post(MAIL + "/actions/undo", json={"action_ids": [token]})).json()["skipped"] == [token]
+    asyncio.run(run())
+
+
+def test_direct_imap_expunge_cannot_dispatch_to_an_unselected_archive_copy(pg_db, monkeypatch):
+    async def run():
+        provider = Mailboxes(["Yahoo"], False, "move")
+        await provider.connect(monkeypatch)
+        account = provider.accounts["Yahoo"]
+        ids = await mail_message.known_uids(account.id, "INBOX")
+        del provider.yahoo_folders["INBOX"]["11"]
+        writes = flag_inbox_delivery(monkeypatch, provider)
+        assert (await sync.sync_account(account.id)).status == "ok"
+        async with client() as browser:
+            assert ids["11"] in await listed(browser, "ARCHIVE")
+            result = await browser.post(MAIL + "/messages/actions", json={"message_ids": [ids["11"]], "kind": "trash"})
+            row, = result.json()["results"]
+            assert row["status"] == "unsupported" and row["action_id"] is None
+            assert writes == [] and provider.yahoo_folders["ARCHIVE"] == {"91": "91"}
+            assert await listed(browser, "TRASH") == set()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("flag_before_expunge", [True, False])
+def test_unlocated_imap_original_cannot_show_separate_archive_bytes(pg_db, monkeypatch, flag_before_expunge):
+    async def run():
+        provider = Mailboxes(["Yahoo"], False, "move")
+        await provider.connect(monkeypatch)
+        account = provider.accounts["Yahoo"]
+        ids = await mail_message.known_uids(account.id, "INBOX")
+        url = f"{MAIL}/messages/{ids['11']}"
+        async with client() as browser:
+            source = await browser.get(url + "/original")
+            assert source.status_code == 200 and "Synthetic message 11." in source.json()["source"]
+        flag_inbox_delivery(monkeypatch, provider)
+        if flag_before_expunge:
+            assert (await sync.sync_account(account.id)).status == "ok"
+        del provider.yahoo_folders["INBOX"]["11"]
+        assert (await sync.sync_account(account.id)).status == "ok"
+        reads = []
+        fetch = YahooConnection.uid
+        def wire(connection, command, *args):
+            if command.upper() == "FETCH" and connection.folder == "ARCHIVE":
+                reads.append(args[0])
+                return "OK", [(b"1 (UID 91 RFC822.SIZE 70)", b"Subject: Other archive copy\r\n\r\nOther delivery source bytes")]
+            return fetch(connection, command, *args)
+        monkeypatch.setattr(YahooConnection, "uid", wire)
+        async with client() as browser:
+            detail = await browser.get(url)
+            source = await browser.get(url + "/original")
+            assert (source.status_code, detail.json()["can_show_original"], reads) == (409, False, [])
+            assert source.json()["detail"]["code"] == "original_unavailable"
+            assert (await browser.get(f"{MAIL}/messages/{ids['14']}/original")).status_code == 200
+    asyncio.run(run())

@@ -11,16 +11,17 @@ from urllib.parse import quote
 import httpx
 
 from api.mail import connectors, providers, service, transport
-from api.mail.action_backends import _folder, _headers, _message_uid, _ok, _quoted
+from api.mail.action_backends import _folder, _headers, _message_uid, _ok, _quoted, imap_locatable
 from api.mail.actions import ActionUnsupportedError
 from api.mail.seed_ids import is_seed_account
 
 MAX_SOURCE_BYTES = 262_144
 
 
-def available(account) -> bool:
+def available(account, message) -> bool:
     return bool(account and not is_seed_account(account.id) and account.auth_type != connectors.CONNECTOR
-                and account.provider in (providers.IMAP, providers.GOOGLE, providers.MICROSOFT))
+                and (account.provider in (providers.GOOGLE, providers.MICROSOFT)
+                     or (account.provider == providers.IMAP and imap_locatable(message))))
 
 
 def parse_headers(raw: bytes) -> list[dict[str, str]]:
@@ -58,7 +59,7 @@ def _imap_fetch(account, message, host, port, password):
 
 
 async def fetch(account, message):
-    if not available(account):
+    if not available(account, message):
         raise ActionUnsupportedError()
     if account.provider == providers.IMAP:
         credentials = await service.load_credentials(account)
