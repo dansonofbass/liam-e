@@ -232,11 +232,9 @@ test('voice survives automatic one-turn skill consumption but stops on an explic
   }
   Object.assign(globalThis, { AudioContext: FakeContext, WebSocket: FakeSocket, isSecureContext: true })
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop: () => { stopped++ } }] }) } })
-  setup({ path: '/chat/c1' })
+  const { client } = setup({ path: '/chat/c1' })
   spyOn(sdk, 'audioLiveStatus').mockResolvedValue({ data: { available: true } } as never)
-  const streamFetch = globalThis.fetch
-  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => String(url).endsWith('/speech')
-    ? Promise.resolve(new Response(new Uint8Array([0, 1]))) : streamFetch(url, init)) as typeof fetch
+  spyOn(sdk, 'audioLiveSpeech').mockImplementation((async () => ({ data: new Response(new Uint8Array([0, 1])).body })) as never)
   const field = await screen.findByPlaceholderText(de.chat.placeholder)
   fireEvent.change(field, { target: { value: '/daily', selectionStart: 6 } })
   await screen.findByRole('listbox')
@@ -260,6 +258,18 @@ test('voice survives automatic one-turn skill consumption but stops on an explic
   fireEvent.keyDown(field, { key: 'Enter' })
   await waitFor(() => expect(stopped).toBe(1))
   expect(screen.getByLabelText('Sprachmodus starten')).toBeTruthy()
+  for (const change of [{ model: 'm2' }, { prompt_revision_id: 'pr-rev-2' }]) {
+    fireEvent.click(screen.getByLabelText('Sprachmodus starten'))
+    await screen.findByText('Zuhören')
+    await act(async () => {
+      for (const event of [{ type: 'turn.start' }, { type: 'transcription.text.delta', text: 'Alter Kontext' }, { type: 'turn.end' }]) socket.onmessage?.({ data: JSON.stringify(event) })
+      client.setQueryData<ConversationOut[]>(['conversations'], previous => previous?.map(item => ({ ...item, ...change })))
+    })
+    await waitFor(() => expect(screen.getByLabelText('Sprachmodus starten')).toBeTruthy())
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 510)) })
+    expect(sentBodies).toHaveLength(1)
+  }
+  expect(stopped).toBe(3)
 })
 
 test('detectSlashQuery ignores ordinary slash text and strips only the active slash command token', () => {

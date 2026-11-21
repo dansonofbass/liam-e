@@ -323,6 +323,8 @@ export const en = {
     themes: { light: 'Light', dark: 'Dark', system: 'Use system setting' },
   },
   audio: {
+    liveStart: 'Start voice mode', liveStop: 'End voice mode', liveStarting: 'Starting microphone',
+    liveListening: 'Listening', liveAnswering: 'Answering', liveError: 'Voice mode unavailable',
     speech: 'Read reply aloud', speechStop: 'Stop reading', speechPlay: 'Start playback',
     speechLoading: 'Generating audio …', speechPlaying: 'Reading the reply aloud.',
     speechReady: 'Audio is ready. Start playback.', speechFinished: 'Playback finished.',

@@ -37,7 +37,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
   const navigate = useNavigate()
   const { state, send, stop, composerTexts, setComposerText, selectedSkills, setSelectedSkill, setSkillPersistence, audioDraftLocked, setAudioDraftLocked } = useChatSession()
   const contextMessageId = contextMail?.id
-  const { scope, ready } = useConversationScope(conversationId, contextMail)
+  const { scope, ready, saved } = useConversationScope(conversationId, contextMail)
   const tasks = useTaskScope(conversationId, contextMessageId)
   const stt = useAudioCapabilities()?.stt
   const format = supportedAudioFormat(stt)
@@ -68,7 +68,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
   const voiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, model, promptRevisionId, activeSkillEntry?.skill.revision_id,
     tasks.scope.source, tasks.scope.account_id, format])
   // A turn-scoped skill is consumed when the stream starts; that must not stop the answer.
-  const liveVoiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, model, promptRevisionId,
+  const liveVoiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, conversationId ? saved?.model : model, templateSelection.selected,
     tasks.scope.source, tasks.scope.account_id, format])
   const busy = state.phase === 'working' || state.phase === 'streaming'
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiBaseUrl } from '../api/client-config'
-import { audioLiveStatus } from '../api/generated/sdk.gen'
+import { audioLiveSpeech, audioLiveStatus } from '../api/generated/sdk.gen'
 import { unwrap } from '../api/unwrap'
 import { IconButton } from '../ds'
 import { useI18n } from '../i18n/I18n'
@@ -21,9 +21,11 @@ function pcm(input: Float32Array, inputRate: number): ArrayBuffer {
 }
 
 async function playReply(context: AudioContext, reply: Reply, signal: AbortSignal) {
-  const response = await fetch(`${apiBaseUrl()}/api/v1/audio/live/speech`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: reply.conversationId, message_id: reply.messageId }), signal })
-  if (!response.ok || !response.body) throw new Error('audio_unavailable')
-  const reader = response.body.getReader(), sources = new Set<AudioBufferSourceNode>()
+  // The generated schema describes binary output as Blob, but parseAs: stream returns response.body.
+  const stream = await unwrap(audioLiveSpeech({ body: { conversation_id: reply.conversationId, message_id: reply.messageId }, parseAs: 'stream', signal, throwOnError: true })) as unknown as ReadableStream<Uint8Array> | null
+  if (!stream) throw new Error('audio_unavailable')
+  if (signal.aborted) { await stream.cancel(); return }
+  const reader = stream.getReader(), sources = new Set<AudioBufferSourceNode>()
   let next = context.currentTime, remaining: number | undefined, gotAudio = false
   const abort = () => { void reader.cancel(); sources.forEach(source => { try { source.stop() } catch { /* already stopped */ } }) }
   signal.addEventListener('abort', abort, { once: true })
@@ -52,7 +54,7 @@ async function playReply(context: AudioContext, reply: Reply, signal: AbortSigna
 }
 
 export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat, registerStop, onStart }: Props) {
-  const { locale } = useI18n()
+  const { texts } = useI18n()
   const [available, setAvailable] = useState(false)
   const [state, setState] = useState<'idle' | 'starting' | 'listening' | 'answering' | 'error'>('idle')
   const active = useRef<{ stop: () => void } | null>(null)
@@ -101,7 +103,7 @@ export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat
     } catch { if (active.current === session) { stop(); setState('error') } }
   }
   if (!available) return null
-  const label = state === 'idle' || state === 'error' ? (locale === 'de' ? 'Sprachmodus starten' : 'Start voice mode') : (locale === 'de' ? 'Sprachmodus beenden' : 'End voice mode')
-  const status = state === 'starting' ? (locale === 'de' ? 'Mikrofon wird gestartet' : 'Starting microphone') : state === 'listening' ? (locale === 'de' ? 'Zuhören' : 'Listening') : state === 'answering' ? (locale === 'de' ? 'Antworten' : 'Answering') : state === 'error' ? (locale === 'de' ? 'Sprachmodus nicht verfügbar' : 'Voice mode unavailable') : ''
+  const label = state === 'idle' || state === 'error' ? texts.audio.liveStart : texts.audio.liveStop
+  const status = state === 'starting' ? texts.audio.liveStarting : state === 'listening' ? texts.audio.liveListening : state === 'answering' ? texts.audio.liveAnswering : state === 'error' ? texts.audio.liveError : ''
   return <div className="le-audio-controls"><span className="le-audio-status" role="status">{status}</span><IconButton size="lg" icon={state === 'idle' || state === 'error' ? 'mic' : 'square'} label={label} disabled={disabled && state === 'idle'} onClick={() => { if (active.current) stop(); else void start() }} /></div>
 }
