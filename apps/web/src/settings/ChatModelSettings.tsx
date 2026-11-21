@@ -32,7 +32,7 @@ export function ChatModelSettings() {
     {settings.isError
       ? <Notice tone="danger" action={{ label: texts.settingsUi.reload, onClick: () => { void settings.refetch(); void catalogue.refetch() } }}>{texts.settingsUi.error}</Notice>
       : !settings.data || catalogue.isPending ? <p role="status">{texts.settingsUi.loading}</p>
-      : <ChatModelSettingsForm settings={settings.data} catalogue={catalogue} reload={reload} />}
+      : <ChatModelSettingsForm settings={settings.data} catalogue={catalogue} reload={reload} refreshSettings={() => { void settings.refetch() }} />}
   </section>
 }
 
@@ -40,10 +40,12 @@ function ChatModelSettingsForm({
   settings,
   catalogue,
   reload,
+  refreshSettings,
 }: {
   settings: ChatModelSettingsOut
   catalogue: ReturnType<typeof useQuery<ChatModelOut[]>>
   reload: () => Promise<ChatModelSettingsOut>
+  refreshSettings: () => void
 }) {
   const { texts } = useI18n()
   const client = useQueryClient()
@@ -57,12 +59,26 @@ function ChatModelSettingsForm({
   const [rejectedCode, setRejectedCode] = useState<'model_unknown' | 'model_catalog_unavailable'>()
   const lock = useRef(false)
 
-  if (settings.version > base.version && draft === base.default_model && !busy && outcome !== 'conflict') {
-    setBase(settings); setDraft(settings.default_model); setOutcome(undefined)
+  const metadataChanged =
+    settings.status !== base.status
+    || settings.effective_default_model !== base.effective_default_model
+    || settings.app_default_model !== base.app_default_model
+    || settings.default_model !== base.default_model
+
+  if (!busy && outcome !== 'conflict') {
+    if (settings.version > base.version && draft === base.default_model) {
+      setBase(settings); setDraft(settings.default_model); setOutcome(undefined)
+    } else if (settings.version === base.version && metadataChanged) {
+      // Derived availability status changes when the catalog recovers without bumping settings.version.
+      setBase(settings)
+    }
   }
 
   const unverified = catalogue.isError || catalogue.isPending || models.some(item => item.availability === 'unverified')
-  const refreshCatalogue = () => { void catalogue.refetch() }
+  const refreshCatalogue = () => {
+    void catalogue.refetch()
+    refreshSettings()
+  }
   const refreshAll = async () => {
     try {
       const current = await reload()
@@ -134,7 +150,7 @@ function ChatModelSettingsForm({
         placement="down-start"
         label={texts.chatModel.choiceLabel}
         items={items}
-        onOpen={() => { if (catalogue.isStale || unverified) refreshCatalogue() }}
+        onOpen={() => { if (catalogue.isStale || unverified || base.status === 'unlisted' || base.status === 'unverified') refreshCatalogue() }}
         trigger={triggerProps => (
           <Chip {...triggerProps} quiet disabled={busy || outcome === 'conflict'} aria-labelledby={labelId}>
             <span className="le-model-label">{shownLabel}</span>

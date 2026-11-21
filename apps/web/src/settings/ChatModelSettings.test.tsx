@@ -2,7 +2,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { client as api } from '../api/generated/client.gen'
 import type { ChatModelOut, ChatModelSettingsOut } from '../api/generated/types.gen'
 import { de } from '../i18n/de'
@@ -262,4 +262,100 @@ test('handles catalog unavailability, specialist notice, and rejected save codes
   rejectCode = 'model_catalog_unavailable'
   fireEvent.click(screen.getAllByRole('button', { name: de.settingsUi.save })[0]!)
   expect(await screen.findByText(de.errors.model_catalog_unavailable)).toBeTruthy()
+})
+
+test('refreshing after catalog recovery updates same-version status and clears stale warnings', async () => {
+  let recovered = false
+  setup(async request => {
+    const url = new URL(request.url)
+    if (url.pathname.endsWith('/settings/chat/model')) {
+      return Response.json({
+        version: 4,
+        default_model: 'mistral-small-latest',
+        effective_default_model: recovered ? 'mistral-small-latest' : 'mistral-medium-latest',
+        app_default_model: 'mistral-medium-latest',
+        status: recovered ? 'available' : 'unlisted',
+      } satisfies ChatModelSettingsOut)
+    }
+    if (url.pathname.endsWith('/chat/models')) {
+      return Response.json(
+        recovered
+          ? modelsFixture.map(m => ({ ...m, is_default: m.id === 'mistral-small-latest' }))
+          : [modelsFixture[0]!],
+      )
+    }
+    return undefined
+  })
+
+  expect(await screen.findByText(de.chatModel.unlistedNotice('mistral-small-latest', 'Mistral Medium'))).toBeTruthy()
+  recovered = true
+  fireEvent.click(screen.getByRole('button', { name: de.chat.modelRefresh }))
+  await waitFor(() => expect(screen.queryByText(de.chatModel.unlistedNotice('mistral-small-latest', 'Mistral Medium'))).toBeNull())
+  expect((screen.getByRole('button', { name: de.chatModel.choiceLabel })).textContent).toContain('Mistral Small')
+})
+
+test('same-version status recovery preserves an edited draft while clearing unverified notice', async () => {
+  let online = false
+  let state: ChatModelSettingsOut = {
+    version: 5,
+    default_model: 'mistral-small-latest',
+    effective_default_model: 'mistral-small-latest',
+    app_default_model: 'mistral-medium-latest',
+    status: 'unverified',
+  }
+  const { query } = setup(async request => {
+    const url = new URL(request.url)
+    if (url.pathname.endsWith('/settings/chat/model')) {
+      if (request.method === 'PATCH') {
+        const body = await request.json() as { expected_version: number; default_model: string | null }
+        state = {
+          version: state.version + 1,
+          default_model: body.default_model,
+          effective_default_model: body.default_model ?? 'mistral-medium-latest',
+          app_default_model: 'mistral-medium-latest',
+          status: 'available',
+        }
+      } else if (online) {
+        state = { ...state, status: 'available' }
+      }
+      return Response.json(state)
+    }
+    if (url.pathname.endsWith('/chat/models')) {
+      if (!online) return Response.json({ detail: { code: 'model_catalog_unavailable' } }, { status: 503 })
+      return Response.json([
+        ...modelsFixture,
+        { id: 'mistral-large-latest', label: 'Mistral Large', description: 'Komplex', is_default: false, is_app_default: false, availability: 'available', group: 'general' },
+      ])
+    }
+    return undefined
+  })
+
+  expect(await screen.findByText(de.chatModel.unverifiedNotice)).toBeTruthy()
+  online = true
+  fireEvent.click(screen.getByRole('button', { name: de.chat.modelRefresh }))
+  await waitFor(() => expect(screen.queryByText(de.chatModel.unverifiedNotice)).toBeNull())
+
+  // Simulate another outage followed by user editing draft before same-version status recovery.
+  const picker = screen.getByRole('button', { name: de.chatModel.choiceLabel })
+  fireEvent.click(picker)
+  fireEvent.click(screen.getByRole('menuitemradio', { name: /Mistral Large/ }))
+  expect(picker.textContent).toContain('Mistral Large')
+
+  online = false
+  await act(async () => {
+    await query.refetchQueries({ queryKey: ['chat-model-settings'] })
+    await query.refetchQueries({ queryKey: ['models'] })
+  })
+  online = true
+  await act(async () => {
+    await query.refetchQueries({ queryKey: ['chat-model-settings'] })
+    await query.refetchQueries({ queryKey: ['models'] })
+  })
+
+  await waitFor(() => expect(picker.textContent).toContain('Mistral Large'))
+  fireEvent.click(screen.getAllByRole('button', { name: de.settingsUi.save })[0]!)
+  await screen.findByText(de.settingsUi.saved)
+  expect(requests.filter(r => r.method === 'PATCH').map(r => r.body)).toEqual([
+    { expected_version: 5, default_model: 'mistral-large-latest' },
+  ])
 })
