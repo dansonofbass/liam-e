@@ -14,7 +14,7 @@ const removes = (kind: Kind | 'remove'): kind is Removal => kind === 'archive' |
 type Toast = { tone: 'success' | 'danger'; text: string; undoable: boolean }
 type Change = { key: QueryKey; page: number; index: number; row: MessageListItemOut }
 type GroupItem = { actionId: string; messageId: string; changes: Change[]; previousRead?: boolean }
-export type UndoEntry = { actionId: string; messageId: string; kind: Kind; changes: Change[]; previousRead?: boolean; group?: GroupItem[]; text: string; label: string; deadline: number; pending: boolean }
+export type UndoEntry = { actionId: string; messageId: string; kind: Kind; changes: Change[]; previousRead?: boolean; group?: GroupItem[]; partial?: boolean; text: string; label: string; deadline: number; pending: boolean }
 const LIMIT = 20
 // A provider can stop responding; release the queue after fifteen seconds.
 const UNDO_TIMEOUT_MS = 15_000
@@ -209,7 +209,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         const text = texts.inbox.bulkResult(kind, group.length, ids.length)
         if (group.length) {
           setNotice(null)
-          publish([...entriesRef.current, { ...group[0]!, group, kind, text, label: text, deadline: clock.now() + 10_000, pending: false }])
+          publish([...entriesRef.current, { ...group[0]!, group, partial: group.length < ids.length, kind, text, label: text, deadline: clock.now() + 10_000, pending: false }])
         } else notify(text)
         reconcile.current = true
         void client.invalidateQueries({ queryKey: ['summary'] })
@@ -280,7 +280,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     return work
   }
   const latest = entries.at(-1)
-  const toast: Toast | null = notice ? { tone: 'danger', text: notice, undoable: false } : latest ? { tone: 'success', text: latest.text, undoable: true } : null
+  const toast: Toast | null = notice ? { tone: 'danger', text: notice, undoable: false } : latest ? { tone: latest.partial ? 'danger' : 'success', text: latest.text, undoable: true } : null
   return { run, runBulk, undo, notify, toast, entries, checkCapacity, isBusy: (id: string) => queues.current.has(id), capacityAvailable: entries.filter(entry => entry.pending || entry.deadline > clock.now()).length + reserved < LIMIT }
 }
 

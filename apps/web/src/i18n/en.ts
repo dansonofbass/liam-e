@@ -401,7 +401,7 @@ export const en = {
     unreachable: 'The account can’t be reached. Try again in a moment.',
     host_not_allowed: 'liam-e can’t connect to this server. Check its address or add it to MAIL_IMAP_ALLOWED_HOSTS in Mistral Studio.',
     provider_error: 'The provider isn’t responding. Try again in a moment.',
-    provider_failed: 'The provider couldn’t apply the change. The email stays as it was.',
+    provider_failed: 'The provider didn’t confirm the change. Check the email after the next sync.',
     action_uncertain: 'The result is uncertain. Reload the inbox to see where the email is now.',
     account_exists: 'This address is already connected another way. Remove the account before changing how it connects.',
     secret_not_allowed: 'Use a name ending in “-app-password” with lowercase letters, digits, and hyphens only, such as “yahoo-app-password”. Create the secret in Mistral Studio with that name.',
@@ -506,7 +506,8 @@ export const en = {
         mark_unread: ['Marked', ' as unread'],
       }[kind]
       if (done === total) return action[0] + ' ' + emails(total) + action[1] + '.'
-      return action[0] + ' ' + numberFormat.format(done) + ' of ' + emails(total) + action[1] + '.'
+      const result = action[0] + ' ' + numberFormat.format(done) + ' of ' + emails(total) + action[1] + '.'
+      return kind === 'trash' ? result + ' The move is unconfirmed for ' + emails(total - done) + '.' : result
     },
     bulkUndoFailed: n => plural(n, { one: 'Couldn’t undo # action.', other: 'Couldn’t undo # actions.' }),
     title: 'Inbox', groups: { today: 'Today', yesterday: 'Yesterday', week: 'This week', older: 'Older' },

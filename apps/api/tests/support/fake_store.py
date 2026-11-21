@@ -1,6 +1,7 @@
 """In-memory accessor replacement for mail tests, scoped to each fixture invocation."""
 
 import json
+from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
 from db.accessors import mail_account, mail_action, mail_credential, mail_insight, mail_sync_state, mail_job, mail_message, mail_reference_snapshot
 from db.models.mail_action import MailAction
@@ -22,6 +23,10 @@ class FakeStore:
         for name in ("record", "get_many", "mark_undone", "release", "latest_open", "delete_for_account"):
             monkeypatch.setattr(mail_action, name, getattr(self, "action_" + name))
         monkeypatch.setattr(mail_message, "get_message", self.get_message)
+        monkeypatch.setattr(mail_message, "known_uids", self.known_uids)
+        monkeypatch.setattr(mail_message, "legacy_imap_uidvalidity", self.legacy_imap_uidvalidity)
+        monkeypatch.setattr(mail_message, "commit_trash_move", self.commit_trash_move)
+        monkeypatch.setattr(mail_sync_state, "sync_transaction", self.sync_transaction)
         monkeypatch.setattr(mail_message, "resolve_aliases", self.resolve_aliases)
         async def no_snapshot(message_id):
             return None
@@ -41,7 +46,7 @@ class FakeStore:
         for module, names in (
             (mail_account, ("list_accounts", "get_account", "get_account_by_email", "create_account", "touch_account", "update_display_name", "delete_account")),
             (mail_credential, ("load_credential", "store_credential")),
-            (mail_sync_state, ("get_state", "save_state", "fail_connector")),
+            (mail_sync_state, ("get_state", "save_state", "fail_poll")),
         ):
             for name in names:
                 monkeypatch.setattr(module, name, getattr(self, name))
@@ -60,6 +65,37 @@ class FakeStore:
             target = (await self.resolve_aliases([message_id])).get(message_id)
             row = self.messages.get(target)
         return row.model_copy() if row else None
+
+    async def known_uids(self, account_id, folder, *, verified_only=False, session=None):
+        return {row.provider_uid: row.id for row in self.messages.values()
+                if row.account_id == account_id and row.folder == folder and (not verified_only or not row.unverified_connector)}
+
+    async def legacy_imap_uidvalidity(self, message):
+        row = self.messages.get(message.id)
+        state = self.states.get(message.account_id)
+        if row is None or state is None or (row.account_id, row.folder, row.provider_uid, row.rfc_message_id) != (
+            message.account_id, "INBOX", message.provider_uid, message.rfc_message_id
+        ):
+            return None
+        validity, _, position = state.cursor.partition(":")
+        return validity if validity.isdigit() and position.partition(":")[0].isdigit() else None
+
+    @asynccontextmanager
+    async def sync_transaction(self, account_id, previous, *, verified, connector=True):
+        yield None, self.states[account_id]
+
+    async def commit_trash_move(self, message, updates, *, action=None, undo_id=None):
+        updates = updates.copy()
+        validity = updates.pop("imap_source_uidvalidity", None)
+        if message.folder == "INBOX" and updates.get("folder") == "TRASH" and self.accounts[message.account_id].provider in ("imap", "microsoft"):
+            record = action or self.actions[undo_id]
+            record.inbox_source_uid = message.provider_uid
+            record.imap_source_uidvalidity = validity
+        await self.set_message_state(message.id, **updates)
+        if "imap_uidvalidity" in updates:
+            self.messages[message.id].imap_uidvalidity = updates["imap_uidvalidity"]
+        if action:
+            self.actions[action.id] = action
 
     async def resolve_aliases(self, message_ids):
         return {alias: row.id for row in self.messages.values() if not row.unverified_connector
@@ -82,7 +118,7 @@ class FakeStore:
     def _stale(self, account_id, folder, version):
         return [row for row in self.messages.values() if row.account_id == account_id and row.folder == folder and row.body_version < version]
 
-    async def stale_body_texts(self, account_id, folder, version, uids):
+    async def stale_body_texts(self, account_id, folder, version, uids, *, session=None):
         return {row.provider_uid: row.body_text for row in self._stale(account_id, folder, version) if row.provider_uid in uids}
 
     async def stale_bodies(self, account_id, folder, version, *, limit, exclude=()):
@@ -217,13 +253,13 @@ class FakeStore:
     async def get_state(self, account_id):
         return self.states.get(account_id)
 
-    async def fail_connector(self, account_id, previous, code):
+    async def fail_poll(self, account_id, previous, code):
         current = self.states.get(account_id)
         if current and mail_sync_state.same_connector_attempt(current, previous):
             current.status, current.last_error = "error", code
 
     async def save_state(self, *, account_id, **kwargs):
-        claim_connector = kwargs.pop("claim_connector", False)
+        claim_poll = kwargs.pop("claim_poll", False)
         previous = self.states.get(account_id)
         for key in ("connector_verified", "connector_cursor", "connector_generation", "connector_proof_revision", "connector_deferred_threads", "cursor"):
             if kwargs.get(key) is None:
@@ -231,7 +267,7 @@ class FakeStore:
                 if previous:
                     kwargs[key] = getattr(previous, key)
         state = MailSyncState(account_id=account_id, **kwargs)
-        if claim_connector:
+        if claim_poll:
             state.connector_generation += 1
         self.states[account_id] = state
         return state

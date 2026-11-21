@@ -11,16 +11,17 @@ from urllib.parse import quote
 import httpx
 
 from api.mail import connectors, providers, service, transport
-from api.mail.action_backends import _folder, _headers, _ok, _quoted, _search
+from api.mail.action_backends import _folder, _headers, _message_uid, _ok, _quoted, imap_locatable
 from api.mail.actions import ActionUnsupportedError
 from api.mail.seed_ids import is_seed_account
 
 MAX_SOURCE_BYTES = 262_144
 
 
-def available(account) -> bool:
+def available(account, message) -> bool:
     return bool(account and not is_seed_account(account.id) and account.auth_type != connectors.CONNECTOR
-                and account.provider in (providers.IMAP, providers.GOOGLE, providers.MICROSOFT))
+                and (account.provider in (providers.GOOGLE, providers.MICROSOFT)
+                     or (account.provider == providers.IMAP and imap_locatable(message))))
 
 
 def parse_headers(raw: bytes) -> list[dict[str, str]]:
@@ -39,8 +40,7 @@ def _imap_fetch(account, message, host, port, password):
         listing = _ok(connection.list('""', '"*"')) if message.folder != "INBOX" else []
         folder = _folder(message.folder, listing)
         _ok(connection.select(_quoted(folder), readonly=True))
-        # The stored UID is only valid while the row is in INBOX; elsewhere it may be stale.
-        uid = message.provider_uid if message.folder == "INBOX" else _search(connection, message)
+        uid = _message_uid(connection, message)
         if not uid.isdigit():
             raise ActionUnsupportedError()
         data = _ok(connection.uid("FETCH", uid, f"(RFC822.SIZE BODY.PEEK[]<0.{MAX_SOURCE_BYTES}>)"))
@@ -59,7 +59,7 @@ def _imap_fetch(account, message, host, port, password):
 
 
 async def fetch(account, message):
-    if not available(account):
+    if not available(account, message):
         raise ActionUnsupportedError()
     if account.provider == providers.IMAP:
         credentials = await service.load_credentials(account)

@@ -98,6 +98,23 @@ executes selected entries after confirmation, `.../cancel` discards them. The ag
 sends nothing without a confirmed card. Individual inbox actions initiated by the user instead
 run directly through the mail action endpoints.
 
+A trash action moves the selected provider message and stores its local folder and undo record
+together after the provider confirms the move. Trash and undo invalidate older sync batches for
+that account. A later listing that repeats a trashed message needs a current, message-specific
+INBOX read before it can bring the message back. Gmail uses the message ID, Graph also tracks
+the ID from before the move, and IMAP checks the source mailbox's UIDVALIDITY and UID.
+Normal polls also check existing INBOX/TRASH duplicates with no new provider events. Label
+providers compare the exact message ID, Graph uses the recorded pre-move ID, and IMAP checks
+the current INBOX UID flags. An ambiguous Studio thread keeps its existing rows until the
+provider supplies message-specific evidence.
+
+Studio also rotates point reads through stored trash, so a restore outside the recent search
+window can reach the inbox without a new message in the thread. For native moves the action
+records the exact departing inbox ID, including an undo that moves a restored message back
+to trash. IMAP binds that ID to the source UIDVALIDITY. Its sync cursor stores `UIDVALIDITY:last_uid`.
+The worker rechecks `\Deleted` deliveries in `IMAP_DELETED` rows until the flag clears, the UID
+disappears, or the mailbox generation changes.
+
 ### API endpoints
 
 Inventory from `apps/api/openapi.json`; each row names method, path and `operation_id`.

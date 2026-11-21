@@ -17,7 +17,7 @@ def account(provider="imap", auth_type="imap_password"):
 
 
 def message(**kwargs):
-    return MailMessage(id="m", account_id="a", provider_uid="12", rfc_message_id="<invented@example.test>", **kwargs)
+    return MailMessage(id="m", account_id="a", provider_uid="12", imap_uidvalidity="7", rfc_message_id="<invented@example.test>", **kwargs)
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def imap(monkeypatch):
     connection.select.return_value = ("OK", [])
     connection.list.return_value = ("OK", [b'(\\HasNoChildren \\Archive) "/" "Archiv"', b'(\\Trash) "/" "Bin"'])
     connection.uid.side_effect = lambda command, *args: ("OK", [b"91"] if command.upper() == "SEARCH" else [])
-    connection.response.return_value = ("COPYUID", [b"1 12 91"])
+    connection.response.side_effect = lambda name: (name, [b"1 12 91"] if name == "COPYUID" else [b"7"])
     monkeypatch.setattr(transport, "open_imap", Mock(return_value=connection))
     monkeypatch.setattr(transport, "check_mail_host", AsyncMock())
     monkeypatch.setattr(service, "load_credentials", AsyncMock(return_value={"imap_host": "imap.example.test"}))
@@ -52,6 +52,7 @@ async def test_imap_restore_keeps_inbox_uid_policy(imap, fake_store):
 @pytest.mark.anyio
 @pytest.mark.parametrize("failed_command", ["STORE", "MOVE"])
 async def test_imap_revert_retry_uses_source_message_id(imap, failed_command):
+    imap.response.side_effect = lambda name: (name, [b"1 91 91"] if name == "COPYUID" else [b"7"])
     calls = []
     failed = False
     def execute(command, *args):
@@ -149,7 +150,7 @@ async def test_imap_undo_read_state_in_inbox_uses_stored_uid(imap):
 
 @pytest.mark.anyio
 async def test_imap_restore_searches_inbox_when_copyuid_missing(imap):
-    imap.response.return_value = (None, [None])
+    imap.response.side_effect = lambda name: (name, [None] if name == "COPYUID" else [b"7"])
     result = await backends.backend_for(account()).apply(message(folder="ARCHIVE"), "restore")
     imap.select.assert_any_call('"INBOX"')
     assert result["provider_uid"] == "91"
@@ -253,10 +254,14 @@ async def test_graph_revert_uses_current_id_and_preserves_it_for_read_only_undo(
 
 @pytest.mark.anyio
 async def test_connector_retry_repeats_idempotent_labels(monkeypatch):
+    from contextlib import nullcontext
+    from api.mail import connector_mailbox
+    monkeypatch.setattr(connector_mailbox, "bound_mailbox", lambda _: nullcontext())
     call = AsyncMock(side_effect=["{}", RuntimeError(), "{}", "{}"])
-    monkeypatch.setattr(connectors, "call_write_tool", call)
+    monkeypatch.setattr(connectors, "_call_tool", call)
+    monkeypatch.setattr(connectors, "thread_labels", AsyncMock(return_value={"12": ["TRASH"]}))
     backend = backends.backend_for(account("gmail", connectors.CONNECTOR))
-    row = message(labels_json='["INBOX"]')
+    row = message(thread_id="thread", labels_json='["INBOX"]')
     with pytest.raises(RuntimeError):
         await backend.apply(row, "trash")
     await backend.apply(row, "trash")
@@ -348,10 +353,52 @@ async def test_imap_spam_unsupported(imap, reason):
 
 @pytest.mark.anyio
 async def test_connector_trash_uses_label_or_reports_unsupported(monkeypatch):
+    from contextlib import nullcontext
+    from api.mail import connector_mailbox
+    monkeypatch.setattr(connector_mailbox, "bound_mailbox", lambda _: nullcontext())
     call = AsyncMock(return_value="{}")
-    monkeypatch.setattr(connectors, "call_write_tool", call)
+    monkeypatch.setattr(connectors, "_call_tool", call)
+    monkeypatch.setattr(connectors, "thread_labels", AsyncMock(return_value={"12": ["TRASH"]}))
     sender = account("gmail", connectors.CONNECTOR)
-    result = await backends.backend_for(sender).apply(message(labels_json='["INBOX"]'), "trash")
-    call.assert_any_await(sender, "label_message", {"messageId": "12", "labelIds": ["TRASH"]})
-    call.assert_any_await(sender, "unlabel_message", {"messageId": "12", "labelIds": ["INBOX"]})
+    result = await backends.backend_for(sender).apply(message(thread_id="thread", labels_json='["INBOX", "TRASH"]'), "trash")
+    call.assert_any_await(sender.provider, "label_message", {"messageId": "12", "labelIds": ["TRASH"]})
+    call.assert_any_await(sender.provider, "unlabel_message", {"messageId": "12", "labelIds": ["INBOX"]})
     assert json.loads(result["labels_json"]) == ["TRASH"]
+
+
+@pytest.mark.anyio
+async def test_imap_trash_keeps_destination_uid_and_reverts_exact_copy(imap):
+    imap.list.return_value = ("OK", [b'(\\Trash) "/" "Deleted"'])
+    imap.response.side_effect = lambda name: (name, [b"7 12 91"] if name == "COPYUID" else [b"7"])
+    def command(name, *args):
+        if name == "SEARCH":
+            return ("OK", [args[2].encode()] if args[1] == "UID" else [b"90 91"])
+        return "OK", []
+    imap.uid.side_effect = command
+    backend = backends.backend_for(account())
+    moved = await backend.apply(message(), "trash")
+    assert moved["provider_uid"] == "7:91"
+    imap.response.side_effect = lambda name: (name, [b"9 91 50"] if name == "COPYUID" else [b"7"])
+    row = message(folder="TRASH")
+    row.provider_uid = moved["provider_uid"]
+    assert (await backend.revert(row, {"folder": "INBOX", "is_read": False}))["provider_uid"] == "50"
+    imap.uid.assert_any_call("MOVE", "91", '"INBOX"')
+
+
+@pytest.mark.anyio
+async def test_imap_missing_source_uid_cannot_report_a_trash_move(imap):
+    imap.list.return_value = ("OK", [b'(\\Trash) "/" "Deleted"'])
+    imap.uid.side_effect = lambda *_: ("OK", [b""])
+    imap.response.side_effect = lambda name: (name, [None] if name == "COPYUID" else [b"7"])
+    with pytest.raises(RuntimeError):
+        await backends.backend_for(account()).apply(message(), "trash")
+    assert not any(call.args[0] in {"MOVE", "COPY", "STORE", "EXPUNGE"} for call in imap.uid.call_args_list)
+
+
+@pytest.mark.anyio
+async def test_imap_undo_refuses_a_reused_qualified_trash_uid(imap):
+    original = message(folder="TRASH")
+    original.provider_uid = "6:91"
+    with pytest.raises(RuntimeError, match="UIDVALIDITY changed"):
+        await backends.backend_for(account()).revert(original, {"folder": "INBOX", "is_read": False})
+    imap.uid.assert_not_called()

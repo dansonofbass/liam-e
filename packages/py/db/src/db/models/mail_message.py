@@ -1,10 +1,12 @@
 """One synced mail message of one account — the searchable index the chat agent works on.
 
 ``provider_uid`` is the provider's own id (Gmail message id, IMAP UID per folder, Graph id), unique
-per (account, folder). ``body_text`` is capped at ``MAIL_SYNC_MAX_BODY_CHARS`` during sync so one
+per (account, folder). Confirmed IMAP trash moves store the destination as UIDVALIDITY:UID. ``body_text`` is capped at ``MAIL_SYNC_MAX_BODY_CHARS`` during sync so one
 huge mail cannot dominate the index. ``recipients_json``/``cc_json``/``reply_to_json``/``labels_json``
 are JSON arrays of strings.
-``folder`` is normalized to INBOX, ARCHIVE, TRASH, or another MAIL_SYNC_FOLDERS folder.
+``IMAP_DELETED`` holds a reversibly flagged INBOX delivery under UIDVALIDITY:UID until
+an IMAP poll observes its flag cleared or the delivery expunged.
+``IMAP_RETIRED`` is a local archive reference without a known physical provider folder.
 """
 
 from datetime import datetime
@@ -14,6 +16,8 @@ from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlmodel import Field, SQLModel
 
 from db.models._common import new_id, utc_datetime_column, utcnow
+
+IMAP_RETIRED = "IMAP_RETIRED"
 
 
 class MailMessage(SQLModel, table=True):
@@ -36,6 +40,8 @@ class MailMessage(SQLModel, table=True):
     account_id: str = Field(index=True)
     folder: str = "INBOX"
     provider_uid: str
+    # IMAP UIDs identify a delivery only within one mailbox generation.
+    imap_uidvalidity: str | None = None
     thread_id: str = ""
     subject: str = ""
     sender: str = ""

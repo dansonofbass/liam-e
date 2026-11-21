@@ -31,7 +31,7 @@ def test_label_free_retry_keeps_confirmed_unread_and_existing_star(pg_db, monkey
     async def run():
         account, state, anchor = await connected()
         now = datetime.now(UTC)
-        async with mail_sync_state.connector_transaction(account.id, state, verified=True) as (session, locked):
+        async with mail_sync_state.sync_transaction(account.id, state, verified=True) as (session, locked):
             row = await mail_message.upsert_message(session=session, account_id=account.id, folder="INBOX", thread_id="held",
                 provider_uid="item", internal_date=now, is_read=True, is_flagged=True, labels_json='["INBOX","STARRED"]')
             locked.connector_deferred_threads = ["held"]
@@ -93,7 +93,7 @@ def test_connector_provider_restore_and_rearchive_commit_with_new_arrival(pg_db,
         arrivals.clear()
         if legacy_copy:
             # A prior version restored the provider message as a second, verified inbox row.
-            async with mail_sync_state.connector_transaction(account.id, state, verified=True) as (session, _):
+            async with mail_sync_state.sync_transaction(account.id, state, verified=True) as (session, _):
                 restored = MailMessage(account_id=account.id, folder="INBOX", provider_uid="held", thread_id="held",
                                        internal_date=stamps["held"], labels_json='["INBOX","UNREAD"]')
                 session.add(restored)
@@ -216,7 +216,7 @@ def test_restore_checks_recent_per_message_labels_after_reading_mixed_thread(pg_
         account, state, anchor = await connected()
         now = datetime.now(UTC)
         yesterday = now - timedelta(days=1)
-        async with mail_sync_state.connector_transaction(account.id, state, verified=True) as (session, locked):
+        async with mail_sync_state.sync_transaction(account.id, state, verified=True) as (session, locked):
             watermark = str(int(now.timestamp()))
             locked.cursor = watermark
             locked.connector_cursor = connector_mailbox.encode(("named", "anchor", "proof"), watermark)

@@ -26,6 +26,36 @@ class SyncChanges:
     deferred_threads: list[str] = field(default_factory=list)
     unconfirmed_uids: set[str] = field(default_factory=set)
     restored_members: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    confirmed_inbox: set[str] = field(default_factory=set)
+    trashed: set[str] = field(default_factory=set)
+    imap_undeleted: dict[str, str] = field(default_factory=dict)
+    # A reversible IMAP flag keeps its physical INBOX identity outside the visible lists.
+    imap_hidden: dict[str, str] = field(default_factory=dict)
+    imap_new_hidden: list[dict[str, Any]] = field(default_factory=list)
+    imap_retired: dict[str, str] = field(default_factory=dict)
+
+    def moved_from_inbox(self, uid: str, labels) -> None:
+        self.moved_out.append(uid)
+        if isinstance(labels, list) and "TRASH" in labels:
+            self.trashed.add(uid)
+
+    def observe_current_labels(self, uid: str, labels: list[str] | None, row: dict | None) -> None:
+        """A point read supersedes the folder and flags from a search or history page."""
+        self.trashed.discard(uid)
+        if labels is not None and inbox_labels(labels):
+            self.confirmed_inbox.add(uid)
+            self.read_updates[uid] = "UNREAD" not in labels
+            self.flag_updates[uid] = "STARRED" in labels
+            if row is not None:
+                row.update(labels_json=json.dumps(labels), is_read=self.read_updates[uid], is_flagged=self.flag_updates[uid])
+        else:
+            self.moved_from_inbox(uid, labels)
+            self.read_updates.pop(uid, None)
+            self.flag_updates.pop(uid, None)
+
+
+def inbox_labels(labels) -> bool:
+    return "INBOX" in labels and "TRASH" not in labels
 
 
 @dataclass

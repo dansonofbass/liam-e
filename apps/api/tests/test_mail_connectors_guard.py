@@ -100,6 +100,7 @@ async def test_connector_change_during_sync_discards_the_unverified_page(fake_st
     invalidated = AsyncMock()
     monkeypatch.setattr(connector_mailbox.chat_settings, 'invalidate_connector', invalidated)
     monkeypatch.setattr(sync_connector, 'fetch_changes', AsyncMock(return_value=SyncChanges(cursor='29', full_rebuild=True)))
+    monkeypatch.setattr(sync.message_access, 'trash_conflicts', AsyncMock(return_value={}))
     replace = AsyncMock()
     monkeypatch.setattr(sync.message_access, 'delete_folder', replace)
     result = await sync.sync_account(account.id)

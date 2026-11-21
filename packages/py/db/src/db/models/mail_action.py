@@ -15,5 +15,8 @@ class MailAction(SQLModel, table=True):
     account_id: str
     kind: str
     previous_json: str
+    # Kept outside the state snapshot so older API instances can still undo this move.
+    inbox_source_uid: str | None = None
+    imap_source_uidvalidity: str | None = None
     created_at: datetime = Field(default_factory=utcnow, sa_column=utc_datetime_column())
     undone_at: datetime | None = Field(default=None, sa_column=utc_datetime_column(nullable=True))

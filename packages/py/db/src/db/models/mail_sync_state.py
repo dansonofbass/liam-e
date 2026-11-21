@@ -25,6 +25,7 @@ class MailSyncState(SQLModel, table=True):
     account_id: str = Field(index=True)
     cursor: str = ""
     connector_cursor: str = Field(default="", sa_column_kwargs={"server_default": ""})
+    # This existing generation also fences native polls against confirmed folder changes.
     connector_generation: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     connector_proof_revision: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     connector_deferred_threads: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'")))

@@ -19,7 +19,7 @@ from db.models.mail_account import MailAccount
 from db.models.mail_message import MailMessage
 
 from api.mail import connectors
-from api.mail.sync_types import Reread, SyncChanges, attachments, body_text, common
+from api.mail.sync_types import Reread, SyncChanges, attachments, body_text, common, inbox_labels
 
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,8 @@ def merge_observations(current: SyncChanges, later: SyncChanges) -> None:
         returned.add(uid)
     current.upserts = list(rows.values())
     current.moved_out = list(dict.fromkeys([uid for uid in current.moved_out if uid not in returned] + later.moved_out))
+    current.trashed.difference_update(returned | set(later.moved_out))
+    current.trashed.update(later.trashed)
     current.unconfirmed_uids.difference_update(returned)
     current.unconfirmed_uids.update(later.unconfirmed_uids)
     current.read_updates.update(later.read_updates)
@@ -130,6 +132,40 @@ async def _thread_messages(provider: str, thread_id: str):
         return None
     messages = thread.get("messages")
     return messages if isinstance(messages, list) else None
+
+
+async def confirm_trash_conflicts(account, changes: SyncChanges, candidates: dict[str, str]) -> None:
+    """Search and history can replay an old folder after a move in either direction."""
+    rows = {row["provider_uid"]: row for row in changes.upserts}
+    by_thread: dict[str, set[str]] = {}
+    uncertain = set()
+    for uid, thread in candidates.items():
+        by_thread.setdefault(rows.get(uid, {}).get("thread_id") or thread, set()).add(uid)
+    for thread, uids in by_thread.items():
+        try:
+            latest = await connectors.thread_labels(account.provider, thread, uids) if thread else {}
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code == 404:
+                latest = dict.fromkeys(uids, [])
+            elif error.response.status_code in (400, 410, 422):
+                latest = {}
+            else:
+                raise
+        except json.JSONDecodeError:
+            # A text tool error for this thread does not invalidate the other inbox observations.
+            latest = {}
+        for uid in uids:
+            if uid in latest:
+                changes.observe_current_labels(uid, latest[uid], rows.get(uid))
+            else:
+                uncertain.add(uid)
+                changes.read_updates.pop(uid, None)
+                changes.flag_updates.pop(uid, None)
+    if uncertain:
+        # A missing member in an incomplete thread cannot settle a legacy conflict.
+        changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in uncertain]
+        changes.moved_out = [uid for uid in changes.moved_out if uid not in uncertain]
+        changes.trashed.difference_update(uncertain)
 
 
 async def _history_page(account, cursor, limit, max_body_chars):
@@ -197,7 +233,7 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
                         changes.upserts.append(parsed)
                         seen.add(uid)
                     elif not belongs:
-                        changes.moved_out.append(uid)
+                        changes.moved_from_inbox(uid, json.loads(parsed["labels_json"] or "[]"))
                 if thread_latest is not None:
                     frontier = min(thread_latest, upper) if upper is not None else thread_latest
             token = next_token
@@ -238,14 +274,14 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
                           for uid, labels in (members or {}).items()}
         indexed = set(known) | {row["provider_uid"] for row in changes.upserts}
         candidates = [uid for uid, (_, labels) in listed_members.items()
-                      if uid not in indexed and (not isinstance(labels, list) or "INBOX" in labels)]
+                      if uid not in indexed and (not isinstance(labels, list) or inbox_labels(labels))]
         bare_threads = [thread_id for thread_id, members in members_by_thread.items() if members == {}]
         cutoff = datetime.now(UTC) - timedelta(days=14)
         for uid, stored_thread in await message_access.archived_connector_members(account.id, candidates, bare_threads, cutoff):
             thread_id, labels = listed_members.get(uid, (stored_thread, None))
             if uid not in indexed:
                 evidence = changes.restored_members.setdefault(thread_id, {})
-                if isinstance(labels, list) and "INBOX" in labels:
+                if isinstance(labels, list) and inbox_labels(labels):
                     evidence[uid] = labels
         fallback = {}
         for uid, local_id in known.items():
@@ -257,8 +293,8 @@ async def _fetch_page(account: MailAccount, *, cursor: str, limit: int, max_body
                 continue
             if uid in listed_members and isinstance(listed_members[uid][1], list):
                 _, labels = listed_members[uid]
-                if "INBOX" not in labels:
-                    changes.moved_out.append(uid)
+                if not inbox_labels(labels):
+                    changes.moved_from_inbox(uid, labels)
                 else:
                     changes.read_updates[uid] = "UNREAD" not in labels
                     changes.flag_updates[uid] = "STARRED" in labels
@@ -297,14 +333,14 @@ def _label_fields(labels: list) -> dict[str, Any]:
 
 def _apply_inbox_evidence(message, labels, thread_size, members) -> bool | None:
     if isinstance(labels, list):
-        return "INBOX" in labels
+        return inbox_labels(labels)
     if members is None:
         return None
     uid = message["provider_uid"]
     matched_labels = members.get(uid)
     if isinstance(matched_labels, list):
         message.update(_label_fields(matched_labels))
-        return "INBOX" in matched_labels
+        return inbox_labels(matched_labels)
     if thread_size == 1 and (not members or set(members) == {uid}):
         message.update(labels_json=None, is_read=None, is_flagged=None)
         return True
@@ -332,7 +368,7 @@ async def _inbox_evidence(provider: str, thread_id: str, stamp: int):
 
 async def _message_in_inbox(provider, thread_id, message, labels, thread_size, evidence, restored) -> bool | None:
     if isinstance(labels, list):
-        return "INBOX" in labels
+        return inbox_labels(labels)
     stamp = int(message["internal_date"].timestamp())
     if stamp not in evidence:
         try:
@@ -378,7 +414,7 @@ async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_ch
             elif in_inbox:
                 recovered.upserts.append(parsed)
             else:
-                recovered.moved_out.append(uid)
+                recovered.moved_from_inbox(uid, json.loads(parsed["labels_json"] or "[]"))
         if pending:
             recovered.deferred_threads.append(thread_id)
     if recheck:
@@ -399,11 +435,11 @@ async def retry_threads(account: MailAccount, thread_ids: list[str], max_body_ch
             if labels is None:
                 recovered.unconfirmed_uids.add(uid)
                 recovered.deferred_threads.append(thread_id)
-            elif "INBOX" in labels:
+            elif inbox_labels(labels):
                 parsed.update(_label_fields(labels))
                 recovered.upserts.append(parsed)
             else:
-                recovered.moved_out.append(uid)
+                recovered.moved_from_inbox(uid, labels)
     return recovered
 
 

@@ -90,7 +90,8 @@ async def test_original_refusals(monkeypatch):
     with pytest.raises(HTTPException) as error:
         await messages.message_original("m")
     assert_detail(error, "original_unavailable", "Bei dieser Mail lässt sich das Original nicht abrufen.")
-    monkeypatch.setattr(original, "available", lambda account: True)
+    account = SimpleNamespace(id="a", provider="google", auth_type="oauth2")
+    monkeypatch.setattr(messages.account_access, "get_account", AsyncMock(return_value=account))
     monkeypatch.setattr(original, "fetch", AsyncMock(side_effect=TimeoutError()))
     with pytest.raises(HTTPException) as error:
         await messages.message_original("m")

@@ -16,7 +16,7 @@ from logging.config import fileConfig
 
 import db.models  # noqa: F401  (import populates SQLModel.metadata)
 from alembic import context
-from alembic.autogenerate import comparators
+from alembic.autogenerate import comparators, rewriter
 from alembic.operations import ops
 from db import metadata as target_metadata
 from db.migrations import row_triggers  # noqa: F401 (register the model trigger comparator and renderer)
@@ -56,6 +56,48 @@ def compare_removed_checks(autogen_context, modify_ops, schema, name, reflected,
         modify_ops.ops.append(ops.DropConstraintOp.from_constraint(constraint))
 
 
+mail_downgrade = rewriter.Rewriter()
+
+
+@mail_downgrade.rewrites(ops.DropColumnOp)
+def resume_base_imap_poll(context, revision, operation):
+    """Freeze the data handoff into the downgrade that removes the IMAP generation column."""
+    if (operation.table_name, operation.column_name) != ("mail_message", "imap_uidvalidity"):
+        return operation
+    # Take the column drop's lock before reading the rows. An in-flight insight writer
+    # holds a share lock on its mail until its new cache entry commits.
+    return [ops.ExecuteSQLOp("LOCK TABLE mail_message IN ACCESS EXCLUSIVE MODE"), ops.ExecuteSQLOp("""
+        UPDATE mail_message AS hidden
+        SET folder = 'INBOX', provider_uid = split_part(hidden.provider_uid, ':', 2)
+        FROM mail_sync_state AS state JOIN mail_account AS account ON account.id = state.account_id
+        WHERE account.provider = 'imap' AND hidden.account_id = account.id AND hidden.folder = 'IMAP_DELETED'
+          AND hidden.provider_uid ~ '^[0-9]+:[0-9]+$'
+          AND hidden.imap_uidvalidity = split_part(hidden.provider_uid, ':', 1)
+          AND hidden.imap_uidvalidity = split_part(state.cursor, ':', 1)
+          AND NOT EXISTS (SELECT 1 FROM mail_message AS current
+                          WHERE current.account_id = hidden.account_id AND current.folder = 'INBOX'
+                            AND current.provider_uid = split_part(hidden.provider_uid, ':', 2))
+    """), ops.ExecuteSQLOp("""
+        WITH archived AS (
+            DELETE FROM mail_message AS mail USING mail_account AS account
+            WHERE mail.account_id = account.id AND account.provider = 'imap'
+              AND (mail.folder = 'IMAP_RETIRED' OR (mail.folder = 'ARCHIVE'
+                   AND (mail.provider_uid LIKE 'retired:%' OR mail.provider_uid LIKE 'inbox:%')))
+            RETURNING mail.id, mail.account_id, mail.connector_alias_ids, mail.subject, mail.sender,
+                      mail.sender_address, mail.recipients_json, mail.cc_json, mail.snippet, mail.body_text,
+                      mail.internal_date, mail.is_read, mail.is_flagged, mail.attachments_json, mail.has_attachments
+        ), links AS (
+            SELECT link.id, archived.account_id, (to_jsonb(archived) - ARRAY['id','account_id','connector_alias_ids'])::text AS content
+            FROM archived CROSS JOIN LATERAL unnest(array_prepend(archived.id, archived.connector_alias_ids)) AS link(id)
+        ), cleared AS (
+            DELETE FROM mail_insight WHERE message_id IN (SELECT id FROM links)
+        )
+        INSERT INTO mail_reference_snapshot (id, account_id, content_json)
+        SELECT id, account_id, content FROM links
+        ON CONFLICT (id) DO NOTHING
+    """), operation]
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=env.async_database_url,
@@ -75,6 +117,7 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         compare_type=True,
         include_object=include_object,
+        process_revision_directives=mail_downgrade,
     )
     with context.begin_transaction():
         connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_LOCK_KEY})

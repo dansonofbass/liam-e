@@ -60,6 +60,21 @@ async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str]
     return changes
 
 
+async def confirm_inbox(account: MailAccount, uids) -> set[str]:
+    credentials = await service.load_credentials(account)
+    token = await service.valid_access_token(account, credentials)
+    confirmed = set()
+    async with httpx.AsyncClient(timeout=30, base_url=GRAPH_API, headers={"Authorization": f"Bearer {token}"}) as client:
+        for uid in uids:
+            response = await client.get(f"/me/mailFolders/inbox/messages/{quote(uid, safe='')}", params={"$select": "id"})
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+            if response.json().get("id") == uid:
+                confirmed.add(uid)
+    return confirmed
+
+
 async def fetch_attachments(
     client: httpx.AsyncClient, message_id: str, headers: dict[str, str]
 ) -> list[dict[str, Any]] | None:

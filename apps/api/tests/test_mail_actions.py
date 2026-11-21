@@ -101,7 +101,7 @@ def test_provider_failure_restores_index_and_returns_502(client, setup, caplog):
     backend.apply.side_effect = RuntimeError("private provider diagnostic")
     response = client.post("/api/v1/mail/messages/m/actions", json={"kind": "archive"})
     assert response.status_code == 502
-    assert response.json()["detail"] == {"code": "provider_failed", "message": "Das hat beim Anbieter nicht geklappt. Die Mail ist unverändert."}
+    assert response.json()["detail"] == {"code": "provider_failed", "message": "Der Anbieter hat die Änderung nicht bestätigt. Prüfe die Mail nach dem nächsten Abruf."}
     assert "private" not in response.text
     assert "private" not in caplog.text
     assert store.messages["m"].folder == "INBOX"

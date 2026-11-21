@@ -16,6 +16,8 @@ from utils.mistral import MistralNotConfiguredError
 
 @pytest.fixture(autouse=True)
 def empty_connector_archive(monkeypatch):
+    monkeypatch.setattr(sync_connector.message_access, "trash_origins", AsyncMock(return_value={}))
+    monkeypatch.setattr(sync_connector.message_access, "trash_conflicts", AsyncMock(return_value={}))
     monkeypatch.setattr(sync_connector.message_access, "archived_connector_members", AsyncMock(return_value=[]))
 
 
@@ -135,19 +137,15 @@ async def test_connector_uses_after_query_and_reconciles_unread(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_sync_account_applies_changes_and_reports_new_ids(monkeypatch):
+async def test_sync_account_applies_changes_and_reports_new_ids(monkeypatch, fake_store):
     stored = {}
     async def get_account(_): return account()
-    async def get_state(_): return None
-    async def save_state(**kwargs): return SimpleNamespace(**kwargs)
-    async def known(*_): return {"old": "local-old"}
+    async def known(*_, session=None): return {"old": "local-old"}
     async def fetch(*_, **__):
         return sync_types.SyncChanges(upserts=[{"folder": "INBOX", "provider_uid": "old"}, {"folder": "INBOX", "provider_uid": "new"}], read_updates={"old": True}, flag_updates={"old": True}, moved_out=[], cursor="7:2", full_rebuild=False)
     async def upsert(**kwargs): return SimpleNamespace(id="local-new")
-    async def set_state(id, **kwargs): stored[id] = kwargs
+    async def set_state(id, *, session=None, **kwargs): stored[id] = kwargs
     monkeypatch.setattr(sync.account_access, "get_account", get_account)
-    monkeypatch.setattr(sync.sync_state_access, "get_state", get_state)
-    monkeypatch.setattr(sync.sync_state_access, "save_state", save_state)
     monkeypatch.setattr(sync.message_access, "known_uids", known)
     monkeypatch.setattr(sync.message_access, "upsert_message", upsert)
     monkeypatch.setattr(sync.message_access, "set_state", set_state)
@@ -156,7 +154,7 @@ async def test_sync_account_applies_changes_and_reports_new_ids(monkeypatch):
     monkeypatch.setattr(sync_imap, "fetch_changes", fetch)
     result = await sync.sync_account("a")
     assert result.new_message_ids == ["local-new"]
-    assert stored["local-old"] == {"is_read": True, "is_flagged": True}
+    assert stored["local-old"] == {"is_read": True, "is_flagged": True, "imap_uidvalidity": "7"}
 
 
 @pytest.mark.anyio
@@ -166,11 +164,9 @@ async def test_sync_moved_out_leaves_spam_untouched(monkeypatch, fake_store):
 
     fake_store.accounts["a"] = account()
     fake_store.messages["m"] = MailMessage(id="m", account_id="a", provider_uid="old", folder="SPAM")
-    async def known(account_id, folder):
+    async def known(account_id, folder, *, session=None):
         return {row.provider_uid: row.id for row in fake_store.messages.values() if row.account_id == account_id and row.folder == folder}
     monkeypatch.setattr(sync.message_access, "known_uids", known)
-    monkeypatch.setattr(sync.sync_state_access, "get_state", AsyncMock(return_value=None))
-    monkeypatch.setattr(sync.sync_state_access, "save_state", AsyncMock())
     monkeypatch.setattr(sync_imap, "fetch_changes", AsyncMock(return_value=sync_types.SyncChanges(moved_out=["old"], cursor="1")))
     result = await sync.sync_account("a")
     assert result.status == "ok"
@@ -333,19 +329,14 @@ async def test_graph_rejects_network_path_delta_link(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_sync_error_stores_code_not_provider_text(monkeypatch):
-    states = []
+async def test_sync_error_stores_code_not_provider_text(fake_store, monkeypatch):
     async def get_account(_): return account()
-    async def get_state(_): return None
-    async def save_state(**kwargs): states.append(kwargs); return SimpleNamespace(**kwargs)
     async def fetch(*_, **__): raise ValueError("token=abc failed")
     monkeypatch.setattr(sync.account_access, "get_account", get_account)
-    monkeypatch.setattr(sync.sync_state_access, "get_state", get_state)
-    monkeypatch.setattr(sync.sync_state_access, "save_state", save_state)
     monkeypatch.setattr(sync_imap, "fetch_changes", fetch)
     result = await sync.sync_account("a")
     assert result.error_code == "provider_error"
-    assert states[-1]["last_error"] == "provider_error"
+    assert fake_store.states["a"].last_error == "provider_error"
 
 
 @pytest.mark.anyio
@@ -439,27 +430,22 @@ async def test_connector_one_second_gap_is_kept(monkeypatch):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(("exception_type", "code"), [(sync_imap.imaplib.IMAP4.abort, "unreachable"), (sync_imap.imaplib.IMAP4.readonly, "unreachable"), (sync_imap.imaplib.IMAP4.error, "auth_expired")])
-async def test_imap_login_error_classification(monkeypatch, exception_type, code):
-    states = []
+async def test_imap_login_error_classification(fake_store, monkeypatch, exception_type, code):
     class Server:
         def login(self, *_): raise exception_type("login failed")
         def logout(self): pass
     async def get_account(_): return account()
-    async def get_state(_): return None
-    async def save_state(**kwargs): states.append(kwargs)
     async def credentials(_): return {"imap_host": "example.org"}
     async def password(_): return "placeholder"
     async def check(_): pass
     monkeypatch.setattr(sync.account_access, "get_account", get_account)
-    monkeypatch.setattr(sync.sync_state_access, "get_state", get_state)
-    monkeypatch.setattr(sync.sync_state_access, "save_state", save_state)
     monkeypatch.setattr(sync_imap.service, "load_credentials", credentials)
     monkeypatch.setattr(sync_imap.service, "imap_password", password)
     monkeypatch.setattr(sync_imap.transport, "check_mail_host", check)
     monkeypatch.setattr(sync_imap.transport, "open_imap", lambda *_: Server())
     result = await sync.sync_account("a")
     assert result.error_code == code
-    assert states[-1]["last_error"] == code
+    assert fake_store.states["a"].last_error == code
 
 
 @pytest.mark.anyio
@@ -596,7 +582,7 @@ def refresh_store(monkeypatch, fake_store, rows, fetch_bodies, upserts=()):
     for row in rows:
         fake_store.messages[row.id] = row
         fake_store.insights[row.id] = "old insight"
-    async def known(account_id, folder):
+    async def known(account_id, folder, *, session=None):
         return {row.provider_uid: row.id for row in fake_store.messages.values() if row.account_id == account_id and row.folder == folder}
     async def upsert(*, account_id, provider_uid, body_version, drop_insight=False, **fields):
         row = next(row for row in fake_store.messages.values() if row.provider_uid == provider_uid)
@@ -920,3 +906,12 @@ async def test_regular_and_deferred_reads_only_publish_confirmed_siblings(monkey
     assert reads == 2
     assert [message["provider_uid"] for message in changes.upserts] == ["visible"]
     assert pending == ["mixed"]
+
+
+@pytest.mark.anyio
+async def test_imap_deleted_source_no_longer_belongs_to_inbox(monkeypatch):
+    server = FakeIMAP([12, 13], flags={12: r"\Deleted"})
+    page = await imap_run(monkeypatch, server)
+    assert [row["provider_uid"] for row in page.upserts] == ["13"]
+    flags = await imap_run(monkeypatch, server, cursor="7:13", known={"12": "old", "13": "other"})
+    assert flags.moved_out == ["12"]
