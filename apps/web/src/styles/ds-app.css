@@ -110,6 +110,7 @@
 .le-chat-thread { width: 100%; max-width: var(--chat-width); align-self: center; box-sizing: border-box; }
 .le-chat-messages .le-greeting { padding: 0; }
 .le-chat-header { display: flex; justify-content: flex-end; padding: var(--space-3) var(--space-5) 0; }
+.le-chat-header:empty { display: none; }
 .le-chat-topbar { flex-wrap: nowrap; }
 .le-chat-crumb-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .le-chat-view--mail-question { overflow-y: auto; }

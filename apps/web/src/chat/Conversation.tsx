@@ -1,14 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useCallback, useRef } from 'react'
-import { chatCalendarSourcesQuery, chatMailReferenceQuery, historyQuery, modelsQuery, summaryQuery } from '../api/queries'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { chatCalendarSourcesQuery, chatMailReferenceQuery, historyQuery, modelsQuery, skillsQuery, summaryQuery } from '../api/queries'
 import { errorCode } from '../api/unwrap'
 import type { AccountSummaryOut, ChatMessageOut, MailRefOut } from '../api/generated/types.gen'
-import { Button, ChatMessage, Chip, Composer, MailReference, Notice } from '../ds'
+import { Button, ChatMessage, Chip, Composer, MailReference, Notice, Tag } from '../ds'
 import { providerLabel } from '../ds/providerLabel'
 import { useI18n } from '../i18n/I18n'
 import { ModelMenu } from './ModelMenu'
-import { TemplateMenu } from '../prompts/TemplateMenu'
+import { ActiveTemplateBanner, useTemplateSelection } from '../prompts/TemplateMenu'
 import { ChatHeader } from './ChatHeader'
 import { ProposalCard } from './ProposalCard'
 import { useFollowScroll } from './useFollowScroll'
@@ -20,14 +20,21 @@ import { PreferenceContext } from './PreferenceContext'
 import { AudioRecorder, supportedAudioFormat } from './AudioRecorder'
 import { useAudioCapabilities } from './audio-capabilities'
 import { SpeechControls, useSpeechPlayback } from './SpeechPlayback'
+import { ActiveSkillBanner } from './ActiveSkillBanner'
+import { SkillFavoritesMenu } from './SkillFavoritesMenu'
+import { SlashPicker } from './SlashPicker'
+import { useFavoriteSkills } from './skill-favorites'
+import { buildSlashOptions, detectSlashQuery, stripSlashToken, toActiveSkillSelection, type SlashOption } from './skill-selection'
+import { SKILL_REFUSALS } from './transport'
 
 type Accounts = AccountSummaryOut[]
 // A retry would send the same request and be refused again.
 const NEEDS_NEW_CONVERSATION = new Set(['conversation_not_found', 'conversation_scope_change_requires_new', 'context_unavailable', 'context_revoked', 'chat_account_not_granted', 'chat_settings_changed'])
 
-export function ChatComposer({ conversationId, contextMail, contextOccurrenceId, model, promptRevisionId, onSend, autoFocus, onRecordingStart }: { conversationId?: string; contextMail?: ComposerMail; contextOccurrenceId?: string; model?: string; promptRevisionId?: string | null; onSend?: () => void; autoFocus?: boolean; onRecordingStart?: () => void }) {
+export function ChatComposer({ conversationId, contextMail, contextOccurrenceId, model, promptRevisionId, onPromptRevisionChange, onSend, autoFocus, onRecordingStart }: { conversationId?: string; contextMail?: ComposerMail; contextOccurrenceId?: string; model?: string; promptRevisionId?: string | null; onPromptRevisionChange?: (id: string | null) => void; onSend?: () => void; autoFocus?: boolean; onRecordingStart?: () => void }) {
   const { texts } = useI18n()
-  const { state, send, stop, composerTexts, setComposerText, audioDraftLocked, setAudioDraftLocked } = useChatSession()
+  const navigate = useNavigate()
+  const { state, send, stop, composerTexts, setComposerText, selectedSkills, setSelectedSkill, setSkillPersistence, audioDraftLocked, setAudioDraftLocked } = useChatSession()
   const contextMessageId = contextMail?.id
   const { scope, ready } = useConversationScope(conversationId, contextMail)
   const tasks = useTaskScope(conversationId, contextMessageId)
@@ -42,17 +49,235 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
   const setValue = (text: string) => setComposerText(draftKey, text)
   const appendTranscript = (text: string) => setComposerText(draftKey, previous =>
     previous ? previous + (previous.endsWith('\n\n') ? '' : previous.endsWith('\n') ? '\n' : '\n\n') + text : text)
-  const voiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, model, promptRevisionId,
+  const activeSkillEntry = selectedSkills[draftKey] ?? null
+  const { favoriteIds, toggleFavorite } = useFavoriteSkills()
+  const skills = useQuery(skillsQuery())
+  const templateSelection = useTemplateSelection({ conversationId, revision: promptRevisionId, onChange: onPromptRevisionChange })
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const slashListId = useId()
+  const [cursorPos, setCursorPos] = useState(0)
+  const [manualSlashOpen, setManualSlashOpen] = useState(false)
+  const [dismissedToken, setDismissedToken] = useState<string | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  const voiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, model, promptRevisionId, activeSkillEntry?.skill.revision_id,
     tasks.scope.source, tasks.scope.account_id, format])
   const busy = state.phase === 'working' || state.phase === 'streaming'
-  return <Composer value={value} locked={audioDraftLocked} onChange={setValue} onSubmit={() => {
-    if (busy || audioDraftLocked || !ready || !tasks.ready || !value.trim()) return
-    onSend?.()
-    void send({ text: value, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId, context_occurrence_id: contextOccurrenceId, task_source: tasks.scope.source, task_source_account_id: tasks.scope.account_id, model, ...(!conversationId ? { prompt_revision_id: promptRevisionId } : {}) })
-  }} onStop={stop} busy={busy} placeholder={contextMessageId ? texts.inbox.mailQuestionPlaceholder : texts.chat.placeholder} autoFocus={autoFocus} controls={<TaskScopeSelector conversationId={conversationId} contextMail={contextMail} disabled={busy || audioDraftLocked} />}
-    audioControls={stt && format && <AudioRecorder key={voiceContext} format={format}
-      limits={stt.app_limits} disabled={busy || !ready || !tasks.ready}
-      onLock={lockDraft} onTranscript={appendTranscript} />} />
+
+  const safeCursor = Math.min(cursorPos, value.length)
+  const slashMatch = detectSlashQuery(value, safeCursor)
+  const tokenKey = slashMatch ? `${slashMatch.start}:${slashMatch.query}` : null
+  const slashOpen = !audioDraftLocked && !busy && (manualSlashOpen || (slashMatch !== null && dismissedToken !== tokenKey))
+
+  useEffect(() => {
+    if (tokenKey === null && dismissedToken !== null) setDismissedToken(null)
+  }, [tokenKey, dismissedToken])
+
+  useEffect(() => {
+    setManualSlashOpen(false)
+    setDismissedToken(null)
+    setActiveIndex(0)
+  }, [draftKey])
+
+  const slashOptions = useMemo(() => buildSlashOptions({
+    query: slashMatch?.query ?? '',
+    skills: skills.data ?? [],
+    prompts: templateSelection.prompts,
+    promptDetails: templateSelection.promptDetails,
+    favoriteIds,
+    selectedSkillId: activeSkillEntry?.skill.id ?? null,
+    selectedPromptRevisionId: templateSelection.selected,
+    busy: templateSelection.busy || busy,
+    texts,
+  }), [slashMatch?.query, skills.data, templateSelection.prompts, templateSelection.promptDetails, favoriteIds, activeSkillEntry?.skill.id, templateSelection.selected, templateSelection.busy, busy, texts])
+
+  const clampedActiveIndex = slashOptions.length === 0 ? -1 : Math.min(Math.max(activeIndex, 0), slashOptions.length - 1)
+  const activeOption = clampedActiveIndex >= 0 ? slashOptions[clampedActiveIndex] : undefined
+  const optionId = (option: SlashOption) => `${slashListId}-${option.key}`
+
+  const closeSlash = useCallback(() => {
+    setManualSlashOpen(false)
+    if (tokenKey !== null) setDismissedToken(tokenKey)
+  }, [tokenKey])
+
+  const restoreFocusAt = (cursor: number) => {
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      try { el.setSelectionRange(cursor, cursor) } catch { /* noop */ }
+    })
+  }
+
+  const handleSelectSlashOption = (option: SlashOption) => {
+    if (option.disabled) return
+    setManualSlashOpen(false)
+    setDismissedToken(null)
+    if (slashMatch) {
+      const stripped = stripSlashToken(value, slashMatch)
+      setValue(stripped.nextText)
+      setCursorPos(stripped.nextCursor)
+      restoreFocusAt(stripped.nextCursor)
+    } else {
+      requestAnimationFrame(() => textareaRef.current?.focus())
+    }
+    if (option.kind === 'skill') {
+      setSelectedSkill(
+        draftKey,
+        toActiveSkillSelection(option.skill),
+        activeSkillEntry?.skill.id === option.skill.id ? activeSkillEntry.persistence : 'turn',
+      )
+    } else if (option.kind === 'template') {
+      void templateSelection.choose(option.revisionId)
+    } else if (option.kind === 'clear-skill') {
+      setSelectedSkill(draftKey, null)
+    } else if (option.kind === 'clear-template') {
+      void templateSelection.choose(null)
+    } else if (option.kind === 'manage-templates') {
+      void navigate({ to: '/settings/prompts' })
+    }
+  }
+
+  const onTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!slashOpen) return
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeSlash()
+      return
+    }
+    if (event.key === 'ArrowDown' && slashOptions.length > 0) {
+      event.preventDefault()
+      setActiveIndex((clampedActiveIndex + 1) % slashOptions.length)
+      return
+    }
+    if (event.key === 'ArrowUp' && slashOptions.length > 0) {
+      event.preventDefault()
+      setActiveIndex((clampedActiveIndex - 1 + slashOptions.length) % slashOptions.length)
+      return
+    }
+    if ((event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) || event.key === 'Tab') {
+      if (slashOptions.length > 0 && activeOption) {
+        event.preventDefault()
+        if (!activeOption.disabled) handleSelectSlashOption(activeOption)
+      } else if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+        event.preventDefault()
+      }
+    }
+  }
+
+  const hasTopContext = Boolean(
+    activeSkillEntry
+    || templateSelection.selected !== null
+    || templateSelection.error,
+  )
+  const topContext = hasTopContext ? (
+    <div className="le-composer-selection">
+      {activeSkillEntry && (
+        <ActiveSkillBanner
+          entry={activeSkillEntry}
+          liveSkill={skills.data?.find(item => item.id === activeSkillEntry.skill.id)}
+          skillsLoaded={skills.isSuccess}
+          disabled={busy || audioDraftLocked}
+          onChangePersistence={persistence => setSkillPersistence(draftKey, persistence)}
+          onRemove={() => setSelectedSkill(draftKey, null)}
+        />
+      )}
+      <ActiveTemplateBanner
+        conversationId={conversationId}
+        selection={templateSelection}
+      />
+    </div>
+  ) : undefined
+
+  return <>
+    <Composer
+      value={value}
+      locked={audioDraftLocked}
+      onChange={nextValue => {
+        setValue(nextValue)
+        setActiveIndex(0)
+      }}
+      onSubmit={() => {
+        if (busy || audioDraftLocked || !ready || !tasks.ready || !value.trim()) return
+        onSend?.()
+        void send({
+          text: value,
+          account_id: scope,
+          conversation_id: conversationId,
+          context_message_id: contextMessageId,
+          context_occurrence_id: contextOccurrenceId,
+          task_source: tasks.scope.source,
+          task_source_account_id: tasks.scope.account_id,
+          model,
+          ...(!conversationId ? { prompt_revision_id: promptRevisionId } : {}),
+          ...(activeSkillEntry ? { skill_id: activeSkillEntry.skill.id, skill_revision_id: activeSkillEntry.skill.revision_id } : {}),
+        })
+      }}
+      onStop={stop}
+      busy={busy}
+      placeholder={activeSkillEntry ? texts.skills.placeholderWithSkill(activeSkillEntry.skill.name) : contextMessageId ? texts.inbox.mailQuestionPlaceholder : texts.chat.placeholder}
+      autoFocus={autoFocus}
+      topContext={topContext}
+      containerRef={containerRef}
+      textareaRef={textareaRef}
+      onTextareaKeyDown={onTextareaKeyDown}
+      onCursorChange={setCursorPos}
+      textareaProps={{
+        role: 'combobox',
+        'aria-autocomplete': 'list',
+        'aria-expanded': slashOpen,
+        'aria-controls': slashOpen ? slashListId : undefined,
+        'aria-activedescendant': slashOpen && activeOption ? optionId(activeOption) : undefined,
+      }}
+      controls={<>
+        <SkillFavoritesMenu
+          disabled={busy || audioDraftLocked}
+          favoriteIds={favoriteIds}
+          selectedSkillId={activeSkillEntry?.skill.id ?? null}
+          onSelectSkill={skill => {
+            setSelectedSkill(
+              draftKey,
+              toActiveSkillSelection(skill),
+              activeSkillEntry?.skill.id === skill.id ? activeSkillEntry.persistence : 'turn',
+            )
+            requestAnimationFrame(() => textareaRef.current?.focus())
+          }}
+          onToggleFavorite={toggleFavorite}
+          onOpenSlash={() => {
+            setDismissedToken(null)
+            setManualSlashOpen(true)
+            setActiveIndex(0)
+            requestAnimationFrame(() => textareaRef.current?.focus())
+          }}
+        />
+        <TaskScopeSelector conversationId={conversationId} contextMail={contextMail} disabled={busy || audioDraftLocked} />
+      </>}
+      audioControls={stt && format && <AudioRecorder key={voiceContext} format={format}
+        limits={stt.app_limits} disabled={busy || !ready || !tasks.ready}
+        onLock={lockDraft} onTranscript={appendTranscript} />}
+    />
+    <SlashPicker
+      open={slashOpen}
+      id={slashListId}
+      anchorRef={containerRef}
+      query={slashMatch?.query ?? ''}
+      options={slashOptions}
+      activeIndex={clampedActiveIndex}
+      onActiveIndexChange={setActiveIndex}
+      loading={skills.isPending || templateSelection.isPending}
+      skillError={skills.isError}
+      templateError={templateSelection.isError}
+      onRetry={() => {
+        if (skills.isError) void skills.refetch()
+        if (templateSelection.isError) templateSelection.refetchPrompts()
+      }}
+      onSelect={handleSelectSlashOption}
+      onClose={closeSlash}
+      optionId={optionId}
+    />
+  </>
 }
 
 type Draft = { onDraft: (id: string) => void; disabled: boolean }
@@ -93,7 +318,8 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const mailSummary = useQuery(summaryQuery(true))
   const summary = mailSummary.isSuccess ? mailSummary.data : undefined
   const { data: models = [] } = useQuery(modelsQuery())
-  const { state, send, retry, retryWithoutPreferences, audioDraftLocked } = useChatSession()
+  const skills = useQuery(skillsQuery())
+  const { state, send, retry, retryWithoutPreferences, audioDraftLocked, selectedSkills } = useChatSession()
   const tts = useAudioCapabilities()?.tts
   const { scope, ready } = useConversationScope(conversationId)
   const sources = useQuery(chatCalendarSourcesQuery())
@@ -107,6 +333,15 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const oldCalendar = messages.some(message => message.context?.calendar_sources_replaced ||
     (sources.isSuccess && !calendarScopeAvailable(message.context?.calendar_scope_json, readable, true)))
   const oldGrant = oldCalendar || grantVersion != null && messages.some(message => message.context?.mail_scope_version !== grantVersion)
+  const isSkillRevokedOnly = (context: ChatMessageOut['context'] | null | undefined) => Boolean(
+    context?.revoked
+    && context.skill_revision_id
+    && !context.prompt_revision_id
+    && !context.preferences_enabled
+    && !context.calendar_sources_replaced
+    && (grantVersion == null || context.mail_scope_version === grantVersion)
+    && (!sources.isSuccess || calendarScopeAvailable(context.calendar_scope_json, readable)),
+  )
   const renderProposal = (message: ChatMessageOut) => {
     const context = message.context
     const revoked = !context || context.revoked || context.calendar_sources_replaced ||
@@ -123,7 +358,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
         ? <Notice tone="danger" action={{ label: texts.calendar.retry, onClick: () => { void sources.refetch() } }}>{texts.calendar.error}</Notice>
         : <p role="status">{texts.calendar.loading}</p>
     }
-    return <ProposalCard key={message.id} message={message} oldGrant={revoked} grantVersion={grantVersion} />
+    return <ProposalCard key={message.id} message={message} oldGrant={revoked} grantVersion={grantVersion} skillRevoked={isSkillRevokedOnly(context)} />
   }
   const speechEnabled = grantVersion != null && !oldGrant && tts?.status === 'available' && tts.formats.includes('audio/mpeg') &&
     typeof Audio !== 'undefined' && typeof URL.createObjectURL === 'function'
@@ -137,16 +372,34 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const userIndex = state.userMessageId ? messages.findIndex(message => message.id === state.userMessageId) : -1
   const savedPartial = (state.phase === 'stopped' || state.phase === 'error') && userIndex >= 0 && messages.slice(userIndex + 1).some(message => message.role === 'assistant')
   const busy = state.phase === 'working' || state.phase === 'streaming'
-  // Follow-ups use the same mail scope and server-resolved calendars as a typed question.
-  const submitSuggestion = (text: string) => { if (audioDraftLocked || !ready) return; void send({ text, account_id: scope, conversation_id: conversationId }) }
-  // The pencil on a mail card asks for a reply draft to that mail in this conversation, like the button on the open mail.
-  const draft: Draft = { onDraft: id => { if (audioDraftLocked || !ready) return; void send({ text: texts.mail.draftPrompt, account_id: scope, conversation_id: conversationId, context_message_id: id }) }, disabled: oldGrant || !ready || busy || audioDraftLocked }
+  const sendFollowUp = (text: string, contextMessageId?: string) => {
+    if (audioDraftLocked || !ready) return
+    const skill = selectedSkills[conversationId]?.skill
+    void send({
+      text, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId,
+      ...(skill ? { skill_id: skill.id, skill_revision_id: skill.revision_id } : {}),
+    })
+  }
+  const draft: Draft = { onDraft: id => sendFollowUp(texts.mail.draftPrompt, id), disabled: oldGrant || !ready || busy || audioDraftLocked }
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
+  const skillLabel = (skill?: { id: string; slug: string; version: number } | null) => {
+    if (!skill) return undefined
+    const name = skills.data?.find(item => item.id === skill.id)?.name ?? skill.slug
+    return texts.skills.usedTag(name, skill.version)
+  }
+  const liveSkillId = state.request?.skill_id
+  const liveSkillRevisionId = state.request?.skill_revision_id
+  const liveSkillMeta = liveSkillId
+    ? (skills.data?.find(item => item.id === liveSkillId && (!liveSkillRevisionId || item.revision_id === liveSkillRevisionId))
+      ?? skills.data?.find(item => item.id === liveSkillId))
+    : undefined
   const renderMessage = (message: ChatMessageOut) => {
     if (message.role === 'user') return <ChatMessage role="user">{message.content}</ChatMessage>
     if (message.role === 'proposal' || message.role === 'draft') return renderProposal(message)
     if (message.role !== 'assistant') return null
-    return <>{message.context && <PreferenceContext context={message.context} />}{message.context?.revoked && <Notice tone="info" action={{ label: texts.prompts.restart, onClick: restart }}>{message.context.preferences_enabled ? texts.errors.context_revoked : texts.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>
+    const usedSkillLabel = skillLabel(message.extras.skill)
+    const skillRevokedNotice = isSkillRevokedOnly(message.context)
+    return <>{message.context && <PreferenceContext context={message.context} />}{usedSkillLabel && <div><Tag tone="on-surface" icon="sparkle">{usedSkillLabel}</Tag></div>}{message.context?.revoked && <Notice tone="info" action={{ label: texts.prompts.restart, onClick: restart }}>{message.context.preferences_enabled ? texts.errors.context_revoked : skillRevokedNotice ? texts.skills.revoked : texts.prompts.removed}</Notice>}<ChatMessage role="assistant" model={modelLabel(message.extras.model)} stopped={message.stopped}><SafeMarkdown text={message.content} /></ChatMessage>
       {speechEnabled && !message.stopped && !message.context?.revoked && message.content.trim() &&
         <SpeechControls messageId={message.id} player={speech} disabled={audioDraftLocked} />}
       {message.extras.mails?.map(id => !oldGrant && grantVersion != null && message.context && !message.context.revoked ? <HistoryReference key={id} id={id} accounts={accounts} draft={draft} version={grantVersion} contextId={message.context.id} /> : <p className="le-hint" key={id}>{texts.chat.referenceError}</p>)}{!oldGrant && message.extras.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}</>
@@ -154,14 +407,15 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const status = state.status?.code === 'searching' ? texts.status.searching(state.status.count ?? 0) : state.status ? texts.status[state.status.code] : null
   const historyGone = errorCode(history.error instanceof Error ? history.error.cause : history.error) === 'conversation_not_found'
   const newConversation = { label: texts.shell.newConversation, onClick: restart }
-  return <div className="le-chat-view"><ChatHeader conversationId={conversationId} modelMenu={<ModelMenu disabled={audioDraftLocked} key={`${conversationId}:model`} conversationId={conversationId} />}><TemplateMenu key={`${conversationId}:template`} conversationId={conversationId} /></ChatHeader><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
+  const skillFailure = Boolean(state.errorCode && SKILL_REFUSALS.has(state.errorCode))
+  return <div className="le-chat-view"><ChatHeader conversationId={conversationId} modelMenu={<ModelMenu disabled={audioDraftLocked} key={`${conversationId}:model`} conversationId={conversationId} />} /><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
     {history.isPending && <p className="le-hint">{texts.chat.loadingHistory}</p>}
     {history.isError && <Notice tone="danger" action={historyGone ? newConversation : { label: texts.chat.retry, onClick: () => { void history.refetch() } }}>{historyGone ? texts.errors.conversation_not_found : texts.chat.historyError}</Notice>}
-    {ordered.map((message, index) => <div className="le-chat-entry" id={`message-${message.id}`} key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && !oldGrant && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={submitSuggestion} />}</div>)}
-    {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={modelLabel(state.model)} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
+    {ordered.map((message, index) => <div className="le-chat-entry" id={`message-${message.id}`} key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && !oldGrant && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={sendFollowUp} />}</div>)}
+    {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}{liveSkillMeta && <div><Tag tone="on-surface" icon="sparkle">{texts.skills.usedTag(liveSkillMeta.name, liveSkillMeta.version)}</Tag></div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={modelLabel(state.model)} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{texts.chat.askAgain}</Button></div>}
-      {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : state.errorCode && NEEDS_NEW_CONVERSATION.has(state.errorCode) ? newConversation : { label: texts.chat.retry, onClick: () => { void retry() } }}>{state.errorCode === 'conversation_scope_change_requires_new' ? texts.taskChat.scopeConflict : texts.errors[state.errorCode ?? 'internal']}</Notice>}
-      {state.phase === 'done' && <>{!oldGrant && state.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && renderProposal(state.proposal)}{!oldGrant && <Suggestions items={state.suggestions} onSend={submitSuggestion} />}</>}
+      {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : skillFailure ? undefined : state.errorCode && NEEDS_NEW_CONVERSATION.has(state.errorCode) ? newConversation : { label: texts.chat.retry, onClick: () => { void retry() } }}>{state.errorCode === 'conversation_scope_change_requires_new' ? texts.taskChat.scopeConflict : texts.errors[state.errorCode ?? 'internal']}</Notice>}
+      {state.phase === 'done' && <>{!oldGrant && state.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && renderProposal(state.proposal)}{!oldGrant && <Suggestions items={state.suggestions} onSend={sendFollowUp} />}</>}
     </div>}
     <div className="le-sr" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
   </div>{showEnd && <div className="le-chat-end"><Button variant="secondary" onClick={scrollToEnd}>{texts.chat.toEnd}</Button></div>}<div className="le-chat-composer">{oldGrant ? <Notice tone="info" action={{ label: texts.prompts.restart, onClick: restart }}>{oldCalendar ? texts.calendarSettings.restart : texts.chatAccounts.restart}</Notice> : <ChatComposer conversationId={conversationId} onRecordingStart={speech.stop} autoFocus={busy && state.conversationId === conversationId} />}</div></div>

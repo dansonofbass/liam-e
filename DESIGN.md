@@ -581,10 +581,10 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
 ### 9.6 Header, composer and mail context
 
 - **Header:** on `desktop` and `tablet` a bar above history shows „Chat“ and, in a conversation,
-  „/ Titel“. A long title ends in an ellipsis, the full title is in the tooltip. On the right are
-  the template chip followed by the model menu immediately beside „Neue Unterhaltung“ (`plus`).
+  „/ Titel“. A long title ends in an ellipsis, the full title is in the tooltip. On the right is
+  the model menu immediately beside „Neue Unterhaltung“ (`plus`).
   On `mobile` the chat uses that same model control beside the plus in the global header (§7.3).
-  The template chip sits below. Long model names shorten in the header and wrap inside the menu.
+  Long model names shorten in the header and wrap inside the menu.
 - **Model menu:** a chip with model name and `chevron-down`, tooltip „Modell für diese Unterhaltung
   wählen“. The menu offers available general-purpose mail models and lists each verified version
   once. A previously selected specialist stays identifiable as the current selection. At most one verified
@@ -600,6 +600,12 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   conversation is waiting for an answer or streaming one. Each answer shows the model reported by
   its own turn. Older streams or messages without this information omit the model label.
 - **Composer:** the text field grows to 200 px high. Enter sends, Shift+Enter starts a new line.
+  Skills and saved personal templates live directly inside the composer rather than as a separate header
+  template button: a clearly labeled `+ Favoriten` chip opens device-local favorite skills, and
+  typing `/` searches active skills alongside personal templates and their stored revisions in a
+  floating menu (`body` portal). Picking an entry attaches it visibly in the composer without sending;
+  sending stays explicit. Skills default to a single turn (`Nur für diese Nachricht`) and can
+  optionally be kept across clarifying follow-up turns until explicitly ended.
   Settings → Chat controls which mail accounts the assistant can use. Each active account has a
   checkbox. The initial selection is empty and Save applies it across devices. The composer’s
   task chip determines which tasks the assistant may read
@@ -626,10 +632,11 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   is explicit; errors preserve inputs. A version conflict offers the current version without itself
   overwriting. Deletion requires a dialog with focus management and names consequences including
   stored versions.
-- In chat the template chip is in the header area, separate from the account in the composer. The control
-  row wraps. The menu shows full instruction text; selection in existing conversations becomes active
-  only after the server response. Older pinned versions offer „Version übernehmen“. Selection is
-  disabled during an answer.
+- In chat, saved templates (including older revisions) are invoked via `/` in the composer, while
+  `/settings/prompts` explains this entry point. When a template or older revision is active, the
+  composer shows its tag, duration and a clear remove action (`x`); older pinned versions offer
+  „Version übernehmen“. Selection in existing conversations becomes active only after the server
+  response and is disabled while an answer is streaming.
 - On a rejected account switch, „Neue Unterhaltung“ leads to the home page without prior history.
   Account selection and not-yet-accepted composer text remain.
 

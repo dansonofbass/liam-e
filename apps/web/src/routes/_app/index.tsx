@@ -2,13 +2,13 @@ import { oldSource } from '../../calendar/state'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link, redirect, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { calendarSettingsQuery, chatCalendarSourcesQuery, chatMailReferenceQuery, MessageNotFoundError, modelsQuery, summaryQuery } from '../../api/queries'
+import { calendarSettingsQuery, chatCalendarSourcesQuery, chatMailReferenceQuery, MessageNotFoundError, modelsQuery, skillsQuery, summaryQuery } from '../../api/queries'
 import { CalendarReference, readableCalendar } from '../../chat/CalendarContext'
 import { ChatComposer } from '../../chat/Conversation'
 import { ModelMenu } from '../../chat/ModelMenu'
-import { TemplateMenu } from '../../prompts/TemplateMenu'
 import { ChatHeader } from '../../chat/ChatHeader'
-import { useChatSession, useTaskScope } from '../../chat/session'
+import { composerDraftKey, useChatSession, useTaskScope } from '../../chat/session'
+import { SKILL_REFUSALS } from '../../chat/transport'
 import { Button as ActionButton, IconButton, MailReference, Notice, QuickAction } from '../../ds'
 import { providerLabel } from '../../ds/providerLabel'
 import { useI18n } from '../../i18n/I18n'
@@ -28,7 +28,7 @@ export const Route = createFileRoute('/_app/')({
 function Greeting() {
   const { texts, locale } = useI18n()
   const client = useQueryClient()
-  const { state, send, retry, retryWithoutPreferences, audioDraftLocked } = useChatSession()
+  const { state, selectedSkills, send, retry, retryWithoutPreferences, audioDraftLocked } = useChatSession()
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
   const calendarAbout = typeof search.calendarAbout === 'string' ? search.calendarAbout : undefined
@@ -49,6 +49,7 @@ function Greeting() {
   const invalidFocusedAccount = Boolean(focusedId && summary.isSuccess && !focusedAccount)
   const effectiveAccounts = focusedId ? (focusedAccount ? [focusedAccount] : []) : grantedAccounts
   const mail = reference.isSuccess ? reference.data : undefined
+  const activeSkill = selectedSkills[composerDraftKey(undefined, mail?.id)] ?? null
   const account = mail && data?.accounts.find(item => item.id === mail.account_id)
   const mailScope = about ? mail?.account_id : focusedAccount?.id
   const taskScopeValid = (!tasks.scope.account_id || grantedAccounts.some(item => item.id === tasks.scope.account_id)) &&
@@ -71,17 +72,22 @@ function Greeting() {
       context_occurrence_id: calendarAbout,
       model,
       prompt_revision_id: revision,
+      ...(activeSkill ? { skill_id: activeSkill.skill.id, skill_revision_id: activeSkill.skill.revision_id } : {}),
       task_source: effectiveTaskScope.source,
       task_source_account_id: effectiveTaskScope.account_id,
     })
   }
   const modelGone = started && state.phase === 'error' && !state.conversationId && state.errorCode === 'model_unknown'
+  const skillGone = started && state.phase === 'error' && !state.conversationId && Boolean(state.errorCode && SKILL_REFUSALS.has(state.errorCode))
   useEffect(() => {
     if (modelGone) {
       setModel(undefined)
       void client.invalidateQueries({ queryKey: modelsQuery().queryKey })
     }
-  }, [modelGone, client])
+    if (skillGone) {
+      void client.invalidateQueries({ queryKey: skillsQuery().queryKey })
+    }
+  }, [modelGone, skillGone, client])
   useEffect(() => {
     if (started && state.conversationId) {
       setStarted(false)
@@ -111,13 +117,11 @@ function Greeting() {
   const turnError = started && state.phase === 'error' && !state.conversationId
   const resetFocus = () => { void navigate({ to: '/', search: { about, calendarAbout } }) }
   return <div className={about ? 'le-chat-view le-chat-view--mail-question' : 'le-chat-view'}>
-    <ChatHeader modelMenu={<ModelMenu disabled={audioDraftLocked} model={model} onChange={setModel} />}>
-      <TemplateMenu revision={revision} onChange={setRevision} />
-    </ChatHeader>
+    <ChatHeader modelMenu={<ModelMenu disabled={audioDraftLocked} model={model} onChange={setModel} />} />
     {about && <h1 className="le-sr">{texts.mail.askInChat}</h1>}
     {(!about || turnError || summary.isError) && <div className="le-chat-messages le-chat-thread le-chat-start-scroll"><div className="le-chat-start">
       {!about && <h1 className="display le-greeting">{texts.chat.greetingFirst}<br /><span>{texts.chat.greetingSecond}</span></h1>}
-      {turnError && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : modelGone ? undefined : state.errorCode === 'chat_account_not_granted' && search.chatAccount ? { label: texts.shell.newConversation, onClick: resetFocus } : { label: texts.chat.retry, onClick: () => { void retry() } }}>{texts.errors[state.errorCode ?? 'internal']}</Notice>}
+      {turnError && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : modelGone || skillGone ? undefined : state.errorCode === 'chat_account_not_granted' && search.chatAccount ? { label: texts.shell.newConversation, onClick: resetFocus } : { label: texts.chat.retry, onClick: () => { void retry() } }}>{texts.errors[state.errorCode ?? 'internal']}</Notice>}
       {invalidFocusedAccount && <Notice tone="info" action={{ label: texts.shell.newConversation, onClick: resetFocus }}>{texts.errors.chat_account_not_granted}</Notice>}
       {summary.isPending && <p className="le-hint">{texts.chat.loadingSummary}</p>}
       {summary.isError && <Notice tone="danger" action={{ label: texts.chat.retry, onClick: () => { void summary.refetch() } }}>{texts.chat.summaryError}</Notice>}
@@ -164,7 +168,7 @@ function Greeting() {
         {mail && account && <MailReference compact mail={mail} accountLabel={account && providerLabel(account)} onOpen={() => { void navigate({ to: '/mail/$messageId', params: { messageId: mail.id } }) }} />}
         <IconButton icon="x" label={texts.chat.removeReference} onClick={() => { void navigate({ to: '/', search: { about: undefined } }) }} />
       </div>}
-      {(!about || (mail && account)) && <ChatComposer key={about} autoFocus={Boolean(about)} contextMail={mail} contextOccurrenceId={calendarAbout} model={model} promptRevisionId={revision} onSend={() => setStarted(true)} />}
+      {(!about || (mail && account)) && <ChatComposer key={about} autoFocus={Boolean(about)} contextMail={mail} contextOccurrenceId={calendarAbout} model={model} promptRevisionId={revision} onPromptRevisionChange={setRevision} onSend={() => setStarted(true)} />}
     </div>}
   </div>
 }
