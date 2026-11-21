@@ -838,7 +838,8 @@ def test_quiet_legacy_duplicate_heals_on_normal_sync(pg_db, monkeypatch, provide
                 assert await visible("INBOX") == ({sibling.id, original.id} if evidence == "INBOX" else {sibling.id})
                 assert await visible("TRASH") == (set() if evidence == "INBOX" else {original.id})
                 if provider == "imap":
-                    assert await listed(browser, "ARCHIVE") == {archive.id}
+                    # The old action has no UIDVALIDITY. Preserve the unlinked row and its identity.
+                    assert await listed(browser, "ARCHIVE") == {archive.id, ghost.id}
     asyncio.run(run())
 
 

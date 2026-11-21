@@ -234,6 +234,9 @@ class ImapBackend:
         return await self._run(message, previous["folder"], previous["is_read"])
 
     async def _run(self, message: MailMessage, folder: str, is_read: bool | None) -> dict:
+        # After an expunge or generation reset the index cannot locate this delivery in Archive.
+        if message.folder == "ARCHIVE" and message.provider_uid.startswith("retired:"):
+            raise ActionUnsupportedError()
         expected = message.imap_uidvalidity
         if message.folder == "INBOX" and folder == "TRASH" and expected is None:
             expected = await message_access.legacy_imap_uidvalidity(message)

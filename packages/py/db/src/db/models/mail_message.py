@@ -4,7 +4,8 @@
 per (account, folder). Confirmed IMAP trash moves store the destination as UIDVALIDITY:UID. ``body_text`` is capped at ``MAIL_SYNC_MAX_BODY_CHARS`` during sync so one
 huge mail cannot dominate the index. ``recipients_json``/``cc_json``/``reply_to_json``/``labels_json``
 are JSON arrays of strings.
-``folder`` is normalized to INBOX, ARCHIVE, TRASH, or another MAIL_SYNC_FOLDERS folder.
+``IMAP_DELETED`` holds a reversibly flagged INBOX delivery under UIDVALIDITY:UID until
+an IMAP poll observes its flag cleared or the delivery expunged.
 """
 
 from datetime import datetime

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import String, and_, any_, bindparam, cast, delete, exists, func, or_, select, tuple_, update
+from sqlalchemy import String, and_, any_, bindparam, case, cast, delete, exists, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import aliased
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -446,8 +446,8 @@ async def trash_conflicts(account_id: str, inbox: Collection[str], moved_out: Co
         return candidates
 
 
-async def trash_origins(account_id: str, uids: Collection[str], *, check_existing: bool = False, imap_validity: str | None = None) -> dict[str, str]:
-    """Recover pre-move provider IDs from the undo records, including legacy actions."""
+async def trash_origins(account_id: str, uids: Collection[str], *, check_existing: bool = False, imap_validity: str | None = None) -> dict[str, str | None]:
+    """A legacy IMAP UID can prompt a point read; only a bound generation identifies the old row."""
     if not uids and not check_existing:
         return {}
     previous = cast(MailAction.previous_json, JSONB)
@@ -459,7 +459,8 @@ async def trash_origins(account_id: str, uids: Collection[str], *, check_existin
         or_(MailMessage.folder == "TRASH", MailMessage.provider_uid != source))
     if imap_validity is not None:
         validity = func.coalesce(MailAction.imap_source_uidvalidity, previous["imap_source_uidvalidity"].astext)
-        stmt = stmt.where(or_(validity.is_(None), validity == imap_validity))
+        stmt = stmt.with_only_columns(source, case((validity == imap_validity, MailMessage.id))).where(
+            or_(validity.is_(None), validity == imap_validity))
     async with get_session_maker()() as session:
         found = {}
         if check_existing:
@@ -468,7 +469,9 @@ async def trash_origins(account_id: str, uids: Collection[str], *, check_existin
                                               other.provider_uid == source, other.id != MailMessage.id))
             found.update(await _legacy_conflicts(session, account_id, existing.distinct().order_by(source)))
         if uids:
-            found.update((await session.execute(stmt.where(source.in_(uids)))).all())
+            for uid, original in await session.execute(stmt.where(source.in_(uids))):
+                if original is not None or uid not in found:
+                    found[uid] = original
         return found
 
 
@@ -476,17 +479,38 @@ def imap_archive_uid(validity: str, uid: str) -> str:
     return f"inbox:{validity}:{uid}"
 
 
+async def apply_imap_hidden(session: AsyncSession, account_id: str, validity: str, hidden: dict[str, str], retired: dict[str, str]) -> None:
+    for uid, local_id in hidden.items():
+        await session.execute(update(MailMessage).where(MailMessage.id == local_id, MailMessage.account_id == account_id,
+            MailMessage.folder.in_(("INBOX", "ARCHIVE")), MailMessage.provider_uid.in_((uid, imap_archive_uid(validity, uid)))
+        ).values(folder="IMAP_DELETED", provider_uid=f"{validity}:{uid}", imap_uidvalidity=validity))
+    for qualified, local_id in retired.items():
+        await session.execute(update(MailMessage).where(MailMessage.id == local_id, MailMessage.account_id == account_id,
+            MailMessage.folder == "IMAP_DELETED", MailMessage.provider_uid == qualified
+        ).values(folder="ARCHIVE", provider_uid=f"retired:{local_id}"))
+
+
 async def restore_imap_flagged(session: AsyncSession, account_id: str, uid: str, local_id: str, validity: str) -> bool:
     """Reuse the exact row archived by a reversible IMAP flag in this UIDVALIDITY."""
     result = await session.execute(update(MailMessage).where(MailMessage.id == local_id, MailMessage.account_id == account_id,
-        MailMessage.provider_uid.in_((uid, imap_archive_uid(validity, uid))), MailMessage.folder == "ARCHIVE",
+        or_(and_(MailMessage.folder == "IMAP_DELETED", MailMessage.provider_uid == f"{validity}:{uid}"),
+            and_(MailMessage.folder == "ARCHIVE", MailMessage.provider_uid.in_((uid, imap_archive_uid(validity, uid))))),
         or_(MailMessage.imap_uidvalidity.is_(None), MailMessage.imap_uidvalidity == validity)
     ).values(folder="INBOX", provider_uid=uid, imap_uidvalidity=validity))
     return bool(result.rowcount)
 
 
+async def imap_inbox_moves_in_generation(session: AsyncSession, account_id: str, validity: str) -> set[str]:
+    """A move into this generation can commit before the first poll of its new UIDVALIDITY."""
+    rows = await session.scalars(select(MailMessage.provider_uid).where(MailMessage.account_id == account_id,
+        MailMessage.folder == "INBOX", MailMessage.imap_uidvalidity == validity,
+        exists(select(MailAction.id).where(MailAction.account_id == account_id, MailAction.message_id == MailMessage.id,
+            MailAction.kind.in_(("trash", "restore"))))))
+    return set(rows)
+
+
 async def reconcile_native_trash(session: AsyncSession, account_id: str, uid: str, original: str,
-                                 *, in_inbox: bool, graph: bool) -> bool:
+                                 *, in_inbox: bool, graph: bool, imap_validity: str | None) -> bool:
     keep = await session.get(MailMessage, original)
     if keep is None or keep.account_id != account_id:
         return False
@@ -495,8 +519,9 @@ async def reconcile_native_trash(session: AsyncSession, account_id: str, uid: st
     duplicate = await session.scalar(select(MailMessage).where(MailMessage.account_id == account_id,
         MailMessage.provider_uid == uid, MailMessage.folder == "INBOX", MailMessage.id != keep.id))
     if duplicate:
-        if not graph and (not keep.rfc_message_id or duplicate.rfc_message_id != keep.rfc_message_id):
-            return False  # A legacy action can lack UIDVALIDITY. Keep an unrelated removal in ARCHIVE.
+        if not graph and (duplicate.imap_uidvalidity != imap_validity or not keep.rfc_message_id
+                          or duplicate.rfc_message_id != keep.rfc_message_id):
+            return False
         # Only Graph proves identity across folders. Preserve an old IMAP reference
         # as read-only: another UIDVALIDITY may have reused its numeric source UID.
         await _merge_copy(session, keep, duplicate, verified=graph)
@@ -544,6 +569,14 @@ async def commit_trash_move(message: MailMessage, updates: dict, *, action: Mail
         copies = await session.scalars(select(MailMessage).where(MailMessage.account_id == account.id,
             MailMessage.id != keep.id, match).order_by(MailMessage.id).with_for_update())
         for other in copies:
+            if account.provider == "imap" and updates["folder"] == "INBOX":
+                destination = updates.get("imap_uidvalidity")
+                indexed = other.imap_uidvalidity
+                if not destination or destination != indexed or other.rfc_message_id != message.rfc_message_id:
+                    # The provider already moved the selected mail. Keep the unrelated local ID,
+                    # its actions and insight, and vacate this folder UID before publishing the move.
+                    other.folder, other.provider_uid = "ARCHIVE", f"retired:{other.id}"
+                    continue
             if account.provider == "imap" and (not message.rfc_message_id or message.rfc_message_id != other.rfc_message_id):
                 raise ValueError("Conflicting IMAP folder UID")
             await _merge_copy(session, keep, other, verified=True)

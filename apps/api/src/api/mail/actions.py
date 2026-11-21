@@ -72,6 +72,8 @@ async def apply_action(message_id: str, kind: ActionKind) -> MailAction:
     message = await message_access.get_message(message_id)
     if message is None:
         raise refuse(404, "message_not_found", "Die Mail ist nicht mehr da.")
+    if message.folder == "IMAP_DELETED":
+        raise ActionUnsupportedError()
     sources = {"archive": ("INBOX",), "trash": ("INBOX", "ARCHIVE"), "spam": ("INBOX", "ARCHIVE"), "restore": ("ARCHIVE", "TRASH")}
     if kind in sources and message.folder not in sources[kind]:
         raise ActionUnsupportedError()

@@ -29,6 +29,10 @@ class SyncChanges:
     confirmed_inbox: set[str] = field(default_factory=set)
     trashed: set[str] = field(default_factory=set)
     imap_undeleted: dict[str, str] = field(default_factory=dict)
+    # A reversible IMAP flag keeps its physical INBOX identity outside the visible lists.
+    imap_hidden: dict[str, str] = field(default_factory=dict)
+    imap_new_hidden: list[dict[str, Any]] = field(default_factory=list)
+    imap_retired: dict[str, str] = field(default_factory=dict)
 
     def moved_from_inbox(self, uid: str, labels) -> None:
         self.moved_out.append(uid)

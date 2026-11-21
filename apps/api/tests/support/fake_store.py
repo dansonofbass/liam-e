@@ -23,6 +23,7 @@ class FakeStore:
         for name in ("record", "get_many", "mark_undone", "release", "latest_open", "delete_for_account"):
             monkeypatch.setattr(mail_action, name, getattr(self, "action_" + name))
         monkeypatch.setattr(mail_message, "get_message", self.get_message)
+        monkeypatch.setattr(mail_message, "known_uids", self.known_uids)
         monkeypatch.setattr(mail_message, "legacy_imap_uidvalidity", self.legacy_imap_uidvalidity)
         monkeypatch.setattr(mail_message, "commit_trash_move", self.commit_trash_move)
         monkeypatch.setattr(mail_sync_state, "sync_transaction", self.sync_transaction)
@@ -64,6 +65,10 @@ class FakeStore:
             target = (await self.resolve_aliases([message_id])).get(message_id)
             row = self.messages.get(target)
         return row.model_copy() if row else None
+
+    async def known_uids(self, account_id, folder, *, verified_only=False, session=None):
+        return {row.provider_uid: row.id for row in self.messages.values()
+                if row.account_id == account_id and row.folder == folder and (not verified_only or not row.unverified_connector)}
 
     async def legacy_imap_uidvalidity(self, message):
         row = self.messages.get(message.id)

@@ -138,10 +138,13 @@ async def _check_native_returns(account, changes):
         confirmed = await sync_graph.confirm_inbox(account, origins)
     else:
         confirmed = await sync_imap.confirm_inbox(account, origins, changes.cursor)
+        # Unknown-generation records tell us what to check, never which local ID to merge.
+        unbound_absent = {uid for uid, original in origins.items() if original is None and uid not in confirmed}
+        changes.moved_out = list((set(changes.moved_out) - confirmed) | unbound_absent)
     changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in origins or row["provider_uid"] in confirmed]
     # Graph's old ID can return to the same row. An IMAP UID in a new UIDVALIDITY
     # identifies an independent message even when the numeric value is identical.
-    return {uid: (original, uid in confirmed) for uid, original in origins.items()}
+    return {uid: (original, uid in confirmed) for uid, original in origins.items() if original is not None}
 
 
 async def _connector_changes(account, progress, deferred, options):
@@ -174,11 +177,19 @@ async def _apply_changes(account, changes, session, verified, native_moves):
     imap_validity = changes.cursor.partition(":")[0] if account.provider == providers.IMAP and not connector else None
     restored_ids = {}
     for uid, (original, in_inbox) in native_moves.items():
-        if await message_access.reconcile_native_trash(session, account_id, uid, original, in_inbox=in_inbox, graph=graph):
+        if await message_access.reconcile_native_trash(session, account_id, uid, original, in_inbox=in_inbox,
+                                                      graph=graph, imap_validity=imap_validity):
             moved.discard(uid)
     if changes.full_rebuild:
         retained = changes.confirmed_inbox | moved if label_folders else {uid for uid, (_, present) in native_moves.items() if graph and present}
+        if imap_validity and known:
+            retained |= await message_access.imap_inbox_moves_in_generation(session, account_id, imap_validity)
         await message_access.delete_folder(account_id, "INBOX", session=session, exclude_uids=retained)
+    if changes.imap_hidden or changes.imap_retired:
+        await message_access.apply_imap_hidden(session, account_id, imap_validity, changes.imap_hidden, changes.imap_retired)
+        moved.difference_update(changes.imap_hidden)
+    for row in changes.imap_new_hidden:
+        await message_access.upsert_message(account_id=account_id, **row, body_version=BODY_VERSION, session=session)
     if label_folders:
         changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in moved]
         blocked, restored_ids = await message_access.reconcile_label_folders(session, account_id,
