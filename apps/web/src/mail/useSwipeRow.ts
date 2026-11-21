@@ -76,14 +76,14 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     paint(0)
     setPreview(null)
   }
-  const disarmToScroll = (gesture: Active, x: number, y: number) => {
+  const disarmToScroll = (gesture: Active, x?: number, y?: number) => {
     if (gesture.state.phase !== 'scrolling') {
       gesture.state = gesture.state.phase === 'undecided' ? scrollSwipe(gesture.state) : { ...gesture.state, phase: 'scrolling', dx: 0 }
       gesture.lockedScroll = null
       paint(0)
       setPreview(null)
     }
-    markDragged(gesture, x, y)
+    if (x !== undefined && y !== undefined) markDragged(gesture, x, y)
   }
   const observeDocument = (doc: Document) => {
     detachDocument()
@@ -98,7 +98,7 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
       const target = event.target === doc ? doc.scrollingElement : event.target instanceof Element ? event.target : null
       if (!target || !target.contains(node)) return
       if (blocksScroll(gesture.state)) {
-        if (!gesture.lockedScroll || scrollDeltaExceeded(gesture.lockedScroll, target, SCROLL_LOCK_TOLERANCE_PX, true)) stop()
+        if (!gesture.lockedScroll || scrollDeltaExceeded(gesture.lockedScroll, target, SCROLL_LOCK_TOLERANCE_PX, true)) disarmToScroll(gesture)
         return
       }
       if (gesture.state.phase === 'undecided' && scrollDeltaExceeded(gesture.scrollOrigins, target, SWIPE_INTENT_PX)) {
@@ -116,7 +116,7 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     const value = current.current
     if (!value.enabled || !value.basis || !value.valid(gesture.state.basis) || value.navigation !== gesture.navigation) { stop(); return }
     const wasBlocked = blocksScroll(gesture.state)
-    if (wasBlocked && anyScrollExceeded(gesture.lockedScroll, SCROLL_LOCK_TOLERANCE_PX, true)) { stop(); return }
+    if (wasBlocked && anyScrollExceeded(gesture.lockedScroll, SCROLL_LOCK_TOLERANCE_PX, true)) { disarmToScroll(gesture, x, y); return }
     if (gesture.state.phase === 'undecided' && anyScrollExceeded(gesture.scrollOrigins, SWIPE_INTENT_PX)) {
       gesture.state = scrollSwipe(gesture.state)
     }

@@ -264,17 +264,38 @@ test('undecided touch locks at the inclusive 12 px scroll boundary while a stati
   expect(open).toHaveBeenCalledTimes(1)
 })
 
-test('continued list scrolling after preview cancels the swipe before release', () => {
-  const { element, scroller, action } = setup()
+test('continued list scrolling after preview disarms the swipe and suppresses delayed release click until a fresh tap', () => {
+  const { element, scroller, action, open } = setup()
+  const now = spyOn(performance, 'now').mockReturnValue(1000)
   scroller.scrollTop = 100
   down(element)
-  expect(touchMove(element, 160)).toBe(true)
+  move(element, 184)
   expect(screen.getByRole('status').textContent).toBe('Archivieren')
   scroller.scrollTop = 102.5
   fireEvent.scroll(scroller)
   expect(screen.getByRole('status').textContent).toBe('')
+  now.mockReturnValue(1700)
   up(element, 80)
   expect(action).not.toHaveBeenCalled()
+  fireEvent.click(element)
+  expect(open).not.toHaveBeenCalled()
+
+  // Also cover scroll exceeding tolerance detected on a subsequent move before a scroll event arrives.
+  scroller.scrollTop = 100
+  down(element)
+  move(element, 184)
+  expect(screen.getByRole('status').textContent).toBe('Archivieren')
+  scroller.scrollTop = 102.5
+  move(element, 160)
+  expect(screen.getByRole('status').textContent).toBe('')
+  now.mockReturnValue(2400)
+  up(element, 160)
+  expect(action).not.toHaveBeenCalled()
+  fireEvent.click(element)
+  expect(open).not.toHaveBeenCalled()
+
+  down(element); up(element, 200); fireEvent.click(element)
+  expect(open).toHaveBeenCalledTimes(1)
 })
 
 test('fractional scroll settle beyond 2 px cancels an armed swipe on release while exact 2 px commits', async () => {
