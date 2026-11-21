@@ -76,6 +76,15 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
     paint(0)
     setPreview(null)
   }
+  const disarmToScroll = (gesture: Active, x: number, y: number) => {
+    if (gesture.state.phase !== 'scrolling') {
+      gesture.state = gesture.state.phase === 'undecided' ? scrollSwipe(gesture.state) : { ...gesture.state, phase: 'scrolling', dx: 0 }
+      gesture.lockedScroll = null
+      paint(0)
+      setPreview(null)
+    }
+    markDragged(gesture, x, y)
+  }
   const observeDocument = (doc: Document) => {
     detachDocument()
     const interrupt = (event: globalThis.PointerEvent) => {
@@ -139,14 +148,14 @@ export function useSwipeRow(basis: SwipeBasis | undefined, enabled: boolean, nav
       if (!gesture) return
       if (event.touches.length !== 1) { stop(); return }
       const touch = event.touches[0]!
-      // If scrolling already owns the touch before the row ever prevented it, do not start a doomed swipe preview.
-      if (!event.cancelable && !gesture.scrollHeld) { markDragged(gesture, touch.clientX, touch.clientY); stop(); return }
+      // If scrolling already owns the touch before the row ever prevented it, disarm the swipe while tracking displacement until release.
+      if (!event.cancelable && !gesture.scrollHeld) { disarmToScroll(gesture, touch.clientX, touch.clientY); return }
       // A native touchmove may precede the corresponding pointermove. Decide from
       // this sample while the browser can still yield the gesture to the row.
       updatePosition(gesture, touch.clientX, touch.clientY)
       if (active.current === gesture && blocksScroll(gesture.state)) {
         if (event.cancelable) { event.preventDefault(); gesture.scrollHeld = true }
-        else if (!gesture.scrollHeld) stop()
+        else if (!gesture.scrollHeld) disarmToScroll(gesture, touch.clientX, touch.clientY)
       }
     }
     const node = row.current

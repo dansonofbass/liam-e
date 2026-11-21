@@ -297,12 +297,41 @@ test('fractional scroll settle beyond 2 px cancels an armed swipe on release whi
 })
 
 test('non-cancelable touchmove from active browser scrolling cancels without showing a preview', () => {
-  const { element, action } = setup()
+  const { element, action, open } = setup()
+  const now = spyOn(performance, 'now').mockReturnValue(1000)
   down(element)
   expect(touchMove(element, 100, 100, 1, false)).toBe(false)
   expect(screen.getByRole('status').textContent).toBe('')
+  now.mockReturnValue(1700)
   up(element, 100)
   expect(action).not.toHaveBeenCalled()
+  fireEvent.click(element)
+  expect(open).not.toHaveBeenCalled()
+
+  down(element); up(element, 200); fireEvent.click(element)
+  expect(open).toHaveBeenCalledTimes(1)
+})
+
+test('a small non-cancelable move followed by a drag suppresses its release click while a fresh tap opens', () => {
+  const { element, action, open } = setup()
+  down(element)
+  expect(touchMove(element, 204, 100, 1, false)).toBe(false)
+  move(element, 220)
+  expect(screen.getByRole('status').textContent).toBe('')
+  up(element, 220)
+  expect(action).not.toHaveBeenCalled()
+  fireEvent.click(element)
+  expect(open).not.toHaveBeenCalled()
+
+  down(element)
+  expect(touchMove(element, 204, 100, 1, false)).toBe(false)
+  expect(touchMove(element, 220, 100, 1, false)).toBe(false)
+  up(element, 220)
+  fireEvent.click(element)
+  expect(open).not.toHaveBeenCalled()
+
+  down(element); up(element, 200); fireEvent.click(element)
+  expect(open).toHaveBeenCalledTimes(1)
 })
 
 test('touchcancel and a missed pointerup recover cleanly for the next swipe or tap', async () => {
