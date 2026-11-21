@@ -10,7 +10,7 @@ from urllib.parse import quote
 import httpx
 from db.accessors import mail_message as message_access
 from db.models.mail_account import MailAccount
-from db.models.mail_message import MailMessage
+from db.models.mail_message import IMAP_RETIRED, MailMessage
 
 from api.mail import connectors, providers, service, transport
 from api.mail.actions import ActionKind, ActionUnsupportedError, write_connector_labels
@@ -205,7 +205,7 @@ def _search(connection, message: MailMessage, uid: str | None = None) -> str:
 
 def imap_locatable(message: MailMessage) -> bool:
     # Sync observed an INBOX disappearance. Neither marker is a physical Archive UID.
-    return message.folder != "IMAP_DELETED" and not (
+    return message.folder not in {"IMAP_DELETED", IMAP_RETIRED} and not (
         message.folder == "ARCHIVE" and message.provider_uid.startswith(("inbox:", "retired:")))
 
 

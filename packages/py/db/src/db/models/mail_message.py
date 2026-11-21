@@ -6,6 +6,7 @@ huge mail cannot dominate the index. ``recipients_json``/``cc_json``/``reply_to_
 are JSON arrays of strings.
 ``IMAP_DELETED`` holds a reversibly flagged INBOX delivery under UIDVALIDITY:UID until
 an IMAP poll observes its flag cleared or the delivery expunged.
+``IMAP_RETIRED`` is a local archive reference without a known physical provider folder.
 """
 
 from datetime import datetime
@@ -15,6 +16,8 @@ from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlmodel import Field, SQLModel
 
 from db.models._common import new_id, utc_datetime_column, utcnow
+
+IMAP_RETIRED = "IMAP_RETIRED"
 
 
 class MailMessage(SQLModel, table=True):

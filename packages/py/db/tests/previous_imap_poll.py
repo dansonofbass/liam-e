@@ -1,13 +1,15 @@
-"""Normal poll and undo in the previous worker process, on the actually downgraded test DB."""
+"""Run the previous source tree against an upgraded or downgraded scratch database."""
 
 import asyncio
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 from api.mail import service, sync, sync_imap, transport
-from api.routers.api.v1.mail import messages
+from api.routers.api.v1.mail import accounts, messages
 from bulk_mailboxes import Mailboxes, YahooConnection
 from db import engine
 from db.accessors import mail_message, mail_sync_state
@@ -16,13 +18,23 @@ from env.mail import env as mail_env
 from test_mail_trash_sync_pg import MAIL, client
 
 
-async def poll(account_id, ids, token, archived, archive_control):
+def run_previous(url, **scenario):
+    if previous := os.getenv("MAIL_TEST_PREVIOUS_ROOT"):
+        root = Path(previous).resolve()
+        source = [str(root / path) for path in ("apps/api/src", "packages/py/db/src", "packages/py/env/src", "packages/py/utils/src")]
+        subprocess.run([sys.executable, str(Path(__file__).resolve())], cwd=root,
+                       env=os.environ | {"PYTHONPATH": os.pathsep.join(source), "DATABASE_URL": url}, check=True,
+                       input=json.dumps(scenario), text=True, timeout=30)
+
+
+async def poll(*, account_id=None, ids=None, token=None, archived=None, archive_control=None, rolling_id=None):
     for module in (sync, sync_imap, messages, mail_message, message_model):
         assert Path(module.__file__).is_relative_to(Path.cwd()), module.__file__
     assert "imap_uidvalidity" not in message_model.MailMessage.model_fields
     provider = Mailboxes(["Yahoo"], False, "move")
-    provider.yahoo_folders["ARCHIVE"] = {"91": "twin"}
-    provider.labels["Yahoo"]["twin"] = {"ARCHIVE"}
+    twin = "11" if rolling_id else "twin"
+    provider.yahoo_folders["ARCHIVE"] = {"91": twin}
+    provider.labels["Yahoo"][twin] = {"ARCHIVE"}
     flag_ranges, body_reads = [], []
     archive_calls = []
 
@@ -51,6 +63,13 @@ async def poll(account_id, ids, token, archived, archive_control):
     mail_env.mail_sync_page_size = 1
     try:
         async with client() as browser:
+            if rolling_id:
+                original = await browser.get(f"{MAIL}/messages/{rolling_id}/original")
+                result = await browser.post(MAIL + "/messages/actions", json={"message_ids": [rolling_id], "kind": "trash"})
+                row, = result.json()["results"]
+                assert (original.status_code, row["status"], row["action_id"], archive_calls) == (409, "unsupported", None, [])
+                assert provider.yahoo_folders["ARCHIVE"] == {"91": twin} and not provider.yahoo_folders["TRASH"]
+                return
             for _ in range(2):
                 assert (await sync.sync_account(account_id)).status == "ok"
                 listing = await browser.get(MAIL + "/messages")
@@ -74,6 +93,9 @@ async def poll(account_id, ids, token, archived, archive_control):
             assert provider.yahoo_folders["ARCHIVE"] == {"91": "twin"} and not provider.yahoo_folders["TRASH"]
             original = await browser.get(f"{MAIL}/messages/{archive_control}/original")
             assert original.status_code == 200 and "Synthetic message twin." in original.json()["source"]
+            await accounts.delete_account(account_id)
+            for local_id in [*archived, archive_control]:
+                assert (await browser.get(f"{MAIL}/messages/{local_id}/insight")).status_code == 404
     finally:
         await engine.dispose_engine()
 

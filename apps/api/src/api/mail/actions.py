@@ -10,7 +10,7 @@ from db.accessors import mail_account as account_access
 from db.accessors import mail_action as action_access
 from db.accessors import mail_message as message_access
 from db.models.mail_action import MailAction
-from db.models.mail_message import MailMessage
+from db.models.mail_message import IMAP_RETIRED, MailMessage
 from sqlalchemy.exc import IntegrityError
 
 from api.errors import refuse
@@ -72,7 +72,7 @@ async def apply_action(message_id: str, kind: ActionKind) -> MailAction:
     message = await message_access.get_message(message_id)
     if message is None:
         raise refuse(404, "message_not_found", "Die Mail ist nicht mehr da.")
-    if message.folder == "IMAP_DELETED":
+    if message.folder in {"IMAP_DELETED", IMAP_RETIRED}:
         raise ActionUnsupportedError()
     sources = {"archive": ("INBOX",), "trash": ("INBOX", "ARCHIVE"), "spam": ("INBOX", "ARCHIVE"), "restore": ("ARCHIVE", "TRASH")}
     if kind in sources and message.folder not in sources[kind]:

@@ -9,6 +9,7 @@ from db.accessors import mail_account as account_access
 from db.accessors import mail_job
 from db.accessors import mail_message as message_access
 from db.accessors import mail_sync_state as sync_state_access
+from db.models.mail_message import IMAP_RETIRED
 from env.mail import env as mail_env
 from utils.mistral import MistralNotConfiguredError
 
@@ -235,7 +236,7 @@ async def _apply_changes(account, changes, session, verified, native_moves):
         if imap_validity and updates:
             updates["imap_uidvalidity"] = imap_validity
         if uid in moved and not label_folders:
-            updates["folder"] = "ARCHIVE"
+            updates["folder"] = IMAP_RETIRED if imap_validity else "ARCHIVE"
             if imap_validity:
                 updates["provider_uid"] = message_access.imap_archive_uid(imap_validity, uid)
         if updates:

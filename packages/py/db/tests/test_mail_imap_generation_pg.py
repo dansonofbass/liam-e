@@ -218,8 +218,57 @@ def test_direct_imap_expunge_cannot_dispatch_to_an_unselected_archive_copy(pg_db
     asyncio.run(run())
 
 
+def test_flagged_destination_poll_before_undo_keeps_the_restored_public_id(pg_db, monkeypatch):
+    async def run():
+        provider = Mailboxes(["Yahoo"], False, "move")
+        await provider.connect(monkeypatch)
+        account = provider.accounts["Yahoo"]
+        ids = await mail_message.known_uids(account.id, "INBOX")
+        selected = ids["12"]
+        await mail_insight.store_if_missing(selected, points=["Selected"], deadline=None, needs_reply=False, followups=[], model="test")
+        async with client() as browser:
+            token = (await browser.post(f"{MAIL}/messages/{selected}/actions", json={"kind": "trash"})).json()["action_id"]
+            execute = YahooConnection.uid
+            deleted = True
+            def command(connection, cmd, *args):
+                status, data = execute(connection, cmd, *args)
+                if connection.folder == "INBOX" and cmd.upper() == "FETCH":
+                    def flags(header):
+                        if b"UID 212 " not in header:
+                            return header
+                        return header.replace(b"FLAGS ()", b"FLAGS (\\Deleted \\Seen \\Flagged)" if deleted else b"FLAGS (\\Seen \\Flagged)")
+                    data = [(flags(i[0]), i[1]) if isinstance(i, tuple) else flags(i) for i in data]
+                return status, data
+            monkeypatch.setattr(YahooConnection, "uid", command)
+            commit = mail_message.commit_trash_move
+            async def poll_first(message, updates, **kwargs):
+                assert (await sync.sync_account(account.id)).status == "ok"
+                observed = await mail_message.known_uids(account.id, "IMAP_DELETED")
+                assert set(observed) == {"7:212"} and observed["7:212"] != selected
+                await commit(message, updates, **kwargs)
+            monkeypatch.setattr(mail_message, "commit_trash_move", poll_first)
+            undo = await browser.post(MAIL + "/actions/undo", json={"action_ids": [token]})
+            assert undo.status_code == 200 and undo.json()["restored"] == [token]
+            for _ in range(2):
+                assert await listed(browser, "INBOX") == set(ids.values()) - {selected}
+                assert await mail_message.known_uids(account.id, "IMAP_DELETED") == {"7:212": selected}
+                assert (await sync.sync_account(account.id)).status == "ok"
+            deleted = False
+            assert (await sync.sync_account(account.id)).status == "ok"
+            assert await listed(browser, "INBOX") == set(ids.values())
+            assert await mail_message.known_uids(account.id, "IMAP_DELETED") == {}
+            restored = await mail_message.get_message(selected)
+            assert (restored.provider_uid, restored.is_read, restored.is_flagged) == ("212", True, True)
+            assert (await mail_action.get_many([token]))[0].message_id == selected
+            assert json.loads((await mail_insight.get(selected)).points_json) == ["Selected"]
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("flag_before_expunge", [True, False])
 def test_unlocated_imap_original_cannot_show_separate_archive_bytes(pg_db, monkeypatch, flag_before_expunge):
+    import env.db
+    from previous_imap_poll import run_previous
+
     async def run():
         provider = Mailboxes(["Yahoo"], False, "move")
         await provider.connect(monkeypatch)
@@ -248,4 +297,7 @@ def test_unlocated_imap_original_cannot_show_separate_archive_bytes(pg_db, monke
             assert (source.status_code, detail.json()["can_show_original"], reads) == (409, False, [])
             assert source.json()["detail"]["code"] == "original_unavailable"
             assert (await browser.get(f"{MAIL}/messages/{ids['14']}/original")).status_code == 200
+        run_previous(env.db.env.async_database_url, rolling_id=ids["11"])
+        # The base backend only knows the physical INBOX, ARCHIVE, TRASH and SPAM folders.
+        assert (await mail_message.get_message(ids["11"])).folder not in {"INBOX", "ARCHIVE", "TRASH", "SPAM"}
     asyncio.run(run())
