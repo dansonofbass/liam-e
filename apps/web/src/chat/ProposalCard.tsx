@@ -116,7 +116,7 @@ function Result({ message, proposal, clock, onUndone }: { message: ChatMessageOu
   })}{error && <Notice tone="danger">{texts.proposal.requestError}</Notice>}</>
 }
 
-export function ProposalCard({ message, clock = systemClock, oldGrant = false, grantVersion }: { message: ChatMessageOut; clock?: Clock; oldGrant?: boolean; grantVersion?: number | null }) {
+export function ProposalCard({ message, clock = systemClock, oldGrant = false, grantVersion, skillRevoked = false }: { message: ChatMessageOut; clock?: Clock; oldGrant?: boolean; grantVersion?: number | null; skillRevoked?: boolean }) {
   const { texts } = useI18n()
   const client = useQueryClient()
   const [updated, setUpdated] = useState<ChatMessageOut | null>(null)
@@ -185,7 +185,7 @@ export function ProposalCard({ message, clock = systemClock, oldGrant = false, g
   })
   if (!proposal) return null
   if (oldGrant && current.proposal_status === 'pending') return <>
-    <Notice tone="info" action={{ label: texts.controls.cancel, onClick: () => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) } }}>{proposal.kind === 'calendar' ? texts.calendarSettings.cancelOnly : texts.chatAccounts.cancelOnly}</Notice>
+    <Notice tone="info" action={{ label: texts.controls.cancel, onClick: () => { void apply(() => unwrap(chatProposalCancel({ path: { proposal_id: current.id }, throwOnError: true }))) } }}>{skillRevoked ? texts.skills.cancelOnly : proposal.kind === 'calendar' ? texts.calendarSettings.cancelOnly : texts.chatAccounts.cancelOnly}</Notice>
     {error && <Notice tone="danger">{failureText(error, proposal.kind, texts)}</Notice>}
   </>
   if (proposal.kind === 'calendar') return <CalendarProposal key={current.id} message={current} />

@@ -916,3 +916,93 @@ async def test_skill_composite_calls_still_enforce_mail_calendar_and_task_scopes
         {"error": "calendar_out_of_scope"},
         {"error": "task_out_of_scope"},
     ]
+
+
+async def test_stream_skill_prompt_combination_mismatch_and_plain_slash_isolation(skill_runtime, monkeypatch):
+    fake = FakeMistral(
+        streams=[
+            ["Kombiniertes Tagesbriefing."],
+            ["Normale Antwort zu /unknown am 21/11."],
+        ]
+    )
+    monkeypatch.setattr(agent, "mistral_client", lambda: fake)
+    client = TestClient(build_app())
+
+    skills = client.get("/api/v1/skills").json()
+    daily = next(item for item in skills if item["slug"] == "daily_briefing")
+    other = client.post(
+        "/api/v1/skills",
+        json={
+            "slug": "digest_reader",
+            "name": "Postfach-Digest",
+            "description": "Liest Mails",
+            "instructions": "Fasse Mails zusammen.",
+            "workflow_steps": [],
+            "allowed_tools": ["search_messages"],
+        },
+    ).json()
+
+    base_resolve = chat_context.resolve
+    prompt_text = "Fasse alle offenen Fristen mit Datum zusammen."
+
+    async def resolve_with_prompt(**kw):
+        conv, snap, _ = await base_resolve(**kw)
+        rev_id = kw.get("revision_id")
+        if rev_id == "prompt-rev-1":
+            conv.prompt_revision_id = rev_id
+            snap.prompt_revision_id = rev_id
+            return conv, snap, prompt_text
+        return conv, snap, None
+
+    monkeypatch.setattr(chat_context, "resolve", resolve_with_prompt)
+
+    # 1. Explicit stream request binds both skill revision and personal template revision
+    stream_res = client.post(
+        "/api/v1/chat/stream",
+        json={
+            "text": "Bitte Tagesbriefing mit Fristen",
+            "skill_id": daily["id"],
+            "skill_revision_id": daily["revision_id"],
+            "prompt_revision_id": "prompt-rev-1",
+            "task_source": "all",
+        },
+    )
+    assert stream_res.status_code == 200
+    events = [json.loads(line[6:]) for line in stream_res.text.splitlines() if line.startswith("data: ")]
+    assert any(ev["event"] == "start" for ev in events)
+    assert any(ev["event"] == "done" for ev in events)
+    conv_id = next(ev["conversation_id"] for ev in events if ev["event"] == "start")
+
+    req1_tools = {t["function"]["name"] for t in fake.requests[0]["tools"]}
+    assert "collect_daily_briefing" in req1_tools
+    assert any(m["role"] == "user" and prompt_text in m["content"] for m in fake.requests[0]["messages"])
+    assert any(m["role"] == "user" and "Aktiver Skill für diesen Turn" in m["content"] for m in fake.requests[0]["messages"])
+
+    history = client.get(f"/api/v1/chat/history?conversation_id={conv_id}").json()
+    assistant_msg = next(item for item in history if item["role"] == "assistant")
+    assert assistant_msg["context"]["prompt_revision_id"] == "prompt-rev-1"
+    assert assistant_msg["context"]["skill_id"] == daily["id"]
+    assert assistant_msg["context"]["skill_revision_id"] == daily["revision_id"]
+    assert assistant_msg["extras"]["skill"]["slug"] == "daily_briefing"
+
+    # 2. Mismatched skill_id / skill_revision_id pair fails closed before streaming
+    mismatch = client.post(
+        "/api/v1/chat/stream",
+        json={
+            "text": "Test",
+            "skill_id": daily["id"],
+            "skill_revision_id": other["revision_id"],
+        },
+    )
+    assert mismatch.status_code == 404
+    assert mismatch.json()["detail"]["code"] == "skill_revision_unavailable"
+
+    # 3. Ordinary/unknown slash text without skill_id runs as normal chat without exposing skill_only tools
+    plain_res = client.post(
+        "/api/v1/chat/stream",
+        json={"text": "/unknown 21/11 bitte prüfen"},
+    )
+    assert plain_res.status_code == 200
+    req2_tools = {t["function"]["name"] for t in fake.requests[1]["tools"]}
+    assert "collect_daily_briefing" not in req2_tools
+    assert not any(m["role"] == "user" and "Aktiver Skill für diesen Turn" in m["content"] for m in fake.requests[1]["messages"])

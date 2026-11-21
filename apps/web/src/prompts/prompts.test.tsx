@@ -4,11 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { client as api } from '../api/generated/client.gen'
+import { ChatComposer } from '../chat/Conversation'
 import { ChatSessionProvider } from '../chat/session'
 import { Editor } from './Editor'
 import { Library } from './Library'
 import { Settings } from './Settings'
-import { TemplateMenu } from './TemplateMenu'
 
 const originalFetch = globalThis.fetch
 const originalConfig = api.getConfig()
@@ -25,7 +25,19 @@ function setup(path: string, respond?: (request: Request) => Promise<Response | 
     requests.push({ path: url.pathname, search: url.search, method: request.method, body: request.method === 'PATCH' || request.method === 'POST' ? await request.clone().json() as Record<string, unknown> : {} })
     const custom = await respond?.(request)
     if (custom) return custom
-    const data = url.pathname.endsWith('/conversations') ? [conversation] : url.pathname.endsWith('/prompts/p') ? detail : [template]
+    const data = url.pathname.endsWith('/conversations')
+      ? [conversation]
+      : url.pathname.endsWith('/prompts/p')
+        ? detail
+        : url.pathname.endsWith('/prompts')
+          ? [template]
+          : url.pathname.endsWith('/summary')
+            ? { mail_scope_version: 4, accounts: [{ id: 'a', display_name: 'Privat', provider: 'gmail', email_address: 'ich@example.com', color_index: 0, state: 'ok' }], unread_total: 0, newsletter_senders: 0, last_sync_at: null }
+            : url.pathname.endsWith('/settings/chat')
+              ? { version: 4, account_ids: ['a'] }
+              : url.pathname.endsWith('/audio/capabilities')
+                ? { stt: null, tts: null }
+                : []
     return Response.json(data)
   }) as typeof fetch
   const query = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
@@ -34,7 +46,7 @@ function setup(path: string, respond?: (request: Request) => Promise<Response | 
   const list = createRoute({ getParentRoute: () => settings, path: '/prompts', component: Library })
   const fresh = createRoute({ getParentRoute: () => settings, path: '/prompts/new', component: () => <Editor /> })
   const edit = createRoute({ getParentRoute: () => settings, path: '/prompts/$promptId', component: () => <Editor id="p" /> })
-  const chat = createRoute({ getParentRoute: () => root, path: '/chat', component: () => <TemplateMenu conversationId="c" /> })
+  const chat = createRoute({ getParentRoute: () => root, path: '/chat', component: () => <ChatComposer conversationId="c" /> })
   const router = createRouter({ routeTree: root.addChildren([settings.addChildren([list, fresh, edit]), chat]), history: createMemoryHistory({ initialEntries: [path] }) })
   render(<RouterProvider router={router} />)
   return { query, router }
@@ -96,7 +108,7 @@ test('restores a pinned revision and adopts a newer version only after server ac
     if (request.method === 'PATCH') { const response = await new Promise<Response>(resolve => { accept = resolve }); accepted = true; return response }
     return accepted && request.url.endsWith('/conversations') ? Response.json([updated]) : undefined
   })
-  expect(await screen.findByRole('button', { name: 'Vorlage: Fristen' })).toBeTruthy()
+  expect(await screen.findByText(/Vorlage: Fristen/)).toBeTruthy()
   fireEvent.click(await screen.findByRole('button', { name: 'Version übernehmen' }))
   await waitFor(() => expect(accept).toBeDefined())
   expect(query.getQueryData(['conversations'])).toEqual([conversation])
@@ -112,13 +124,13 @@ test('clearing a selection persists null and external changes appear on refetch'
     if (request.method === 'PATCH') { stored = { ...conversation, prompt_revision_id: null, version: 4 }; return Response.json(stored) }
     return request.url.endsWith('/conversations') ? Response.json([stored]) : undefined
   })
-  fireEvent.click(await screen.findByRole('button', { name: 'Vorlage: Fristen' }))
-  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Standard' }))
-  await screen.findByRole('button', { name: 'Vorlage: Standard' })
+  expect(await screen.findByText(/Vorlage: Fristen/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Vorlage entfernen' }))
+  await waitFor(() => expect(screen.queryByText(/Vorlage: Fristen/)).toBeNull())
   expect(requests.find(item => item.method === 'PATCH')?.body.prompt_revision_id).toBeNull()
   stored = { ...conversation, version: 5 }
   await act(async () => { await query.refetchQueries({ queryKey: ['conversations'] }) })
-  expect(await screen.findByRole('button', { name: 'Vorlage: Fristen' })).toBeTruthy()
+  expect(await screen.findByText(/Vorlage: Fristen/)).toBeTruthy()
 })
 
 for (const status of [404, 503]) test(`editor failure ${status} preserves unsaved input`, async () => {
@@ -131,9 +143,11 @@ for (const status of [404, 503]) test(`editor failure ${status} preserves unsave
 
 test('selection failures keep the stored revision and offer an explicit reload', async () => {
   const { query } = setup('/chat', async request => request.method === 'PATCH' ? Response.json({ detail: { code: 'version_conflict' } }, { status: 409 }) : undefined)
-  fireEvent.click(await screen.findByRole('button', { name: 'Vorlage: Fristen' }))
+  expect(await screen.findByText(/Vorlage: Fristen/)).toBeTruthy()
+  const field = screen.getByPlaceholderText('Frag etwas zu deinen Mails …')
+  fireEvent.change(field, { target: { value: '/', selectionStart: 1 } })
   expect(await screen.findByText(template.text)).toBeTruthy()
-  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Standard' }))
+  fireEvent.click(screen.getByRole('option', { name: /Standard/ }))
   expect(await screen.findByRole('button', { name: 'Aktuelle Fassung laden' })).toBeTruthy()
   expect(query.getQueryData(['conversations'])).toEqual([conversation])
 })

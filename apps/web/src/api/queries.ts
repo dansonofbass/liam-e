@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions, type QueryClient } from '@tanstack/react-query'
-import { promptsList, promptGet, mailSummary, calendarSettingsGet, chatSettingsGet, chatMailReferenceGet, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
+import { promptsList, promptGet, skillsList, skillGet, mailSummary, calendarSettingsGet, chatSettingsGet, chatMailReferenceGet, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
 import { REFERENCE_LOCALE, type Locale } from '../i18n/locales'
 import type { SourceOut, MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData, UiSettingsOut } from './generated/types.gen'
 import { calendarIndexCache, readCalendarIndex, refreshChangedIndexes, sourceScope } from '../calendar/cache'
@@ -9,6 +9,8 @@ export class MessageNotFoundError extends Error {}
 
 export const promptsQuery = () => queryOptions({ queryKey: ['prompts'], refetchOnWindowFocus: 'always', queryFn: () => unwrap(promptsList({ throwOnError: true })) })
 export const promptQuery = (id: string) => queryOptions({ queryKey: ['prompts', id], refetchOnWindowFocus: 'always', queryFn: () => unwrap(promptGet({ path: { id }, throwOnError: true })) })
+export const skillsQuery = () => queryOptions({ queryKey: ['skills'], refetchOnWindowFocus: 'always', queryFn: () => unwrap(skillsList({ throwOnError: true })) })
+export const skillQuery = (id: string) => queryOptions({ queryKey: ['skills', id], refetchOnWindowFocus: 'always', queryFn: () => unwrap(skillGet({ path: { skill_id: id }, throwOnError: true })) })
 
 // Poll fast while an account syncs. While idle, keep a slow poll so syncs the worker schedules on
 // its own (every few minutes) still refresh unread counts, the inbox and the sync time. Polling

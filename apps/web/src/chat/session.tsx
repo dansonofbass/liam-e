@@ -2,15 +2,18 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ChatMessageOut, ChatStreamRequest, ConversationOut, MailRefOut, StatusEvent, CalendarRefOut } from '../api/generated/types.gen'
-import { ChatStreamError, streamChatTurn, type ChatRefusal } from './transport'
+import { ChatStreamError, SKILL_REFUSALS, streamChatTurn, type ChatRefusal } from './transport'
 import { useI18n } from '../i18n/I18n'
 import { createTypewriter } from './typewriter'
-import { chatSettingsQuery, conversationsQuery, historyQuery, summaryQuery } from '../api/queries'
+import { chatSettingsQuery, conversationsQuery, historyQuery, skillsQuery, summaryQuery } from '../api/queries'
+import type { ActiveSkillSelection } from './skill-selection'
 
 type ErrorCode = 'model_unavailable' | 'aborted' | 'internal' | 'context_revoked' | ChatRefusal
 type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'error'; status?: StatusEvent; text: string; mails: MailRefOut[]; calendars?: CalendarRefOut[]; proposal: ChatMessageOut | null; suggestions: string[]; errorCode?: ErrorCode; conversationId?: string; messageId?: string; userMessageId?: string; model?: string; request?: ChatStreamRequest }
 export type TaskScope = { source: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked'; account_id?: string }
-type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string | ((previous: string) => string)) => void; audioDraftLocked: boolean; setAudioDraftLocked: (locked: boolean) => void; state: State; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void>; retryWithoutPreferences: () => Promise<void> }
+export type SkillPersistence = 'turn' | 'until_stopped'
+export type SelectedSkillEntry = { skill: ActiveSkillSelection; persistence: SkillPersistence }
+type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string | ((previous: string) => string)) => void; selectedSkills: Record<string, SelectedSkillEntry | null>; setSelectedSkill: (id: string, skill: ActiveSkillSelection | null, persistence?: SkillPersistence) => void; setSkillPersistence: (id: string, persistence: SkillPersistence) => void; audioDraftLocked: boolean; setAudioDraftLocked: (locked: boolean) => void; state: State; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void>; retryWithoutPreferences: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
 
@@ -39,6 +42,17 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const [composerTexts, setComposerTexts] = useState<Record<string, string>>({})
   const setComposerText = (id: string, text: string | ((previous: string) => string)) =>
     setComposerTexts(previous => ({ ...previous, [id]: typeof text === 'function' ? text(previous[id] ?? '') : text }))
+  const [selectedSkills, setSelectedSkills] = useState<Record<string, SelectedSkillEntry | null>>({})
+  const setSelectedSkill = useCallback((id: string, skill: ActiveSkillSelection | null, persistence: SkillPersistence = 'turn') => {
+    setSelectedSkills(previous => ({ ...previous, [id]: skill ? { skill, persistence } : null }))
+  }, [])
+  const setSkillPersistence = useCallback((id: string, persistence: SkillPersistence) => {
+    setSelectedSkills(previous => {
+      const current = previous[id]
+      if (!current || current.persistence === persistence) return previous
+      return { ...previous, [id]: { ...current, persistence } }
+    })
+  }, [])
   const [audioDraftLocked, setAudioDraftLocked] = useState(false)
   const active = useRef<{ controller: AbortController; writer: ReturnType<typeof createTypewriter>; conversationId?: string } | null>(null)
   const last = useRef<ChatStreamRequest | null>(null)
@@ -95,6 +109,15 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
             setComposerTexts(previous => {
               return previous[composerKey] === request.text ? { ...previous, [composerKey]: '' } : previous
             })
+            if (request.skill_id) {
+              setSelectedSkills(previous => {
+                const current = previous[composerKey]
+                if (!current || current.skill.id !== request.skill_id) return previous
+                const next: Record<string, SelectedSkillEntry | null> = { ...previous, [composerKey]: null }
+                if (current.persistence === 'until_stopped') next[event.conversation_id] = current
+                return next
+              })
+            }
             turn.conversationId = conversation.current = event.conversation_id
             setState(s => ({ ...s, conversationId: event.conversation_id, userMessageId: event.user_message_id, model: event.model }))
             void client.invalidateQueries({ queryKey: ['conversations'] }); break
@@ -112,6 +135,10 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
             invalidate(event.conversation_id); return
           case 'error':
             writer.flushNow(); writer.cancel(); active.current = null
+            if (event.code === 'context_revoked' && request.skill_id) {
+              setSelectedSkills(previous => ({ ...previous, [composerKey]: null }))
+              void client.invalidateQueries({ queryKey: skillsQuery().queryKey })
+            }
             setState(s => ({ ...s, phase: 'error', status: undefined, errorCode: event.code }))
             invalidate(turn.conversationId); return
         }
@@ -123,13 +150,17 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
         void client.resetQueries({ queryKey: summaryQuery(true).queryKey, exact: true })
         void client.resetQueries({ queryKey: chatSettingsQuery().queryKey, exact: true })
       }
+      if (error instanceof ChatStreamError && SKILL_REFUSALS.has(error.code)) {
+        setSelectedSkills(previous => ({ ...previous, [composerKey]: null }))
+        void client.invalidateQueries({ queryKey: skillsQuery().queryKey })
+      }
       setState(s => ({ ...s, phase: 'error', status: undefined, errorCode: error instanceof ChatStreamError ? error.code : 'aborted' }))
       invalidate(turn.conversationId)
     }
   }, [client, invalidate, taskScopes, browserLocale])
   const retry = useCallback(async () => { if (last.current) await send({ ...last.current, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
   const retryWithoutPreferences = useCallback(async () => { if (last.current) await send({ ...last.current, without_preferences: true, ...(conversation.current ? { conversation_id: conversation.current } : {}) }) }, [send])
-  return <Context.Provider value={{ state, taskScopes, setTaskScope, composerTexts, setComposerText, audioDraftLocked, setAudioDraftLocked, send, stop, retry, retryWithoutPreferences }}>{children}</Context.Provider>
+  return <Context.Provider value={{ state, taskScopes, setTaskScope, composerTexts, setComposerText, selectedSkills, setSelectedSkill, setSkillPersistence, audioDraftLocked, setAudioDraftLocked, send, stop, retry, retryWithoutPreferences }}>{children}</Context.Provider>
 }
 // A mail entry point narrows the central grant. Existing conversations retain that focus.
 export function useConversationScope(id?: string, mail?: ComposerMail) {
@@ -158,8 +189,12 @@ export function useRestartConversation(id?: string) {
       const valid = (!task.account_id || allowed?.some(account => account.id === task.account_id)) &&
         (task.source !== 'account_and_unlinked' || Boolean(focus && focus === task.account_id))
       session.setTaskScope('new', valid ? task : { source: 'none' })
+      session.setSelectedSkill(id, null)
+      session.setSelectedSkill('new', null)
       const text = session.composerTexts[id]
       if (text) session.setComposerText('new', text)
+    } else {
+      session.setSelectedSkill('new', null)
     }
     void navigate({ to: '/', search: { chatAccount: focus } })
   }
