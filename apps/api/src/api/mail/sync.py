@@ -180,16 +180,23 @@ async def _apply_changes(account, changes, session, verified, native_moves):
         if await message_access.reconcile_native_trash(session, account_id, uid, original, in_inbox=in_inbox,
                                                       graph=graph, imap_validity=imap_validity):
             moved.discard(uid)
+    imap_moves = {}
     if changes.full_rebuild:
         retained = changes.confirmed_inbox | moved if label_folders else {uid for uid, (_, present) in native_moves.items() if graph and present}
         if imap_validity and known:
-            retained |= await message_access.imap_inbox_moves_in_generation(session, account_id, imap_validity)
+            imap_moves = await message_access.imap_inbox_moves_in_generation(session, account_id, imap_validity)
+            retained.update(imap_moves)
         await message_access.delete_folder(account_id, "INBOX", session=session, exclude_uids=retained)
+    for row in changes.imap_new_hidden:
+        # A restore can publish this very delivery before the first page in its new generation.
+        uid = row["provider_uid"].removeprefix(f"{imap_validity}:")
+        if uid in imap_moves:
+            changes.imap_hidden[uid] = imap_moves[uid]
+        else:
+            await message_access.upsert_message(account_id=account_id, **row, body_version=BODY_VERSION, session=session)
     if changes.imap_hidden or changes.imap_retired:
         await message_access.apply_imap_hidden(session, account_id, imap_validity, changes.imap_hidden, changes.imap_retired)
         moved.difference_update(changes.imap_hidden)
-    for row in changes.imap_new_hidden:
-        await message_access.upsert_message(account_id=account_id, **row, body_version=BODY_VERSION, session=session)
     if label_folders:
         changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in moved]
         blocked, restored_ids = await message_access.reconcile_label_folders(session, account_id,

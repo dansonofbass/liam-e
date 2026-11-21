@@ -75,6 +75,19 @@ def resume_base_imap_poll(context, revision, operation):
           AND NOT EXISTS (SELECT 1 FROM mail_message AS current
                           WHERE current.account_id = hidden.account_id AND current.folder = 'INBOX'
                             AND current.provider_uid = split_part(hidden.provider_uid, ':', 2))
+    """), ops.ExecuteSQLOp("""
+        WITH archived AS (
+            DELETE FROM mail_message AS mail USING mail_account AS account
+            WHERE mail.account_id = account.id AND account.provider = 'imap' AND mail.folder = 'ARCHIVE'
+              AND (mail.provider_uid LIKE 'retired:%' OR mail.provider_uid LIKE 'inbox:%')
+            RETURNING mail.id, mail.account_id, mail.connector_alias_ids, mail.subject, mail.sender,
+                      mail.sender_address, mail.recipients_json, mail.cc_json, mail.snippet, mail.body_text,
+                      mail.internal_date, mail.is_read, mail.is_flagged, mail.attachments_json, mail.has_attachments
+        )
+        INSERT INTO mail_reference_snapshot (id, account_id, content_json)
+        SELECT link.id, archived.account_id, (to_jsonb(archived) - ARRAY['id','account_id','connector_alias_ids'])::text
+        FROM archived CROSS JOIN LATERAL unnest(array_prepend(archived.id, archived.connector_alias_ids)) AS link(id)
+        ON CONFLICT (id) DO NOTHING
     """), operation]
 
 

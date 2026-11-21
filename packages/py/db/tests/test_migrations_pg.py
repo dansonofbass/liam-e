@@ -335,10 +335,19 @@ def _assert_imap_downgrade_handoff(config, url, monkeypatch):
                 row = await mail_message.upsert_message(account_id=account.id, folder="IMAP_DELETED",
                                                         provider_uid=key, imap_uidvalidity=key.split(":")[0])
                 withheld[key] = row.id
-            return account.id, ids, withheld, token
+            archived = {}
+            for uid in ("40", "41"):
+                row = await mail_message.upsert_message(account_id=account.id, folder="ARCHIVE", provider_uid=f"inbox:6:{uid}",
+                    rfc_message_id="<yahoo-twin@example.test>", body_text=f"Stored delivery {uid}")
+                if uid == "41":
+                    await mail_message.set_state(row.id, provider_uid=f"retired:{row.id}")
+                archived[row.id] = row.body_text
+            control = await mail_message.upsert_message(account_id=account.id, folder="ARCHIVE", provider_uid="91",
+                                                       rfc_message_id="<yahoo-twin@example.test>", body_text="Physical Archive copy")
+            return account.id, ids, withheld, token, archived, control.id
         finally:
             await db_engine.dispose_engine()
-    account_id, ids, withheld, token = asyncio.run(hide_delivery())
+    account_id, ids, withheld, token, archived, archive_control = asyncio.run(hide_delivery())
     command.downgrade(config, "c8c67942c08d")
     # With the previous checkout available, run its own ORM, HTTP handlers and worker on this database.
     if previous := os.getenv("MAIL_TEST_PREVIOUS_ROOT"):
@@ -346,10 +355,13 @@ def _assert_imap_downgrade_handoff(config, url, monkeypatch):
         source = [str(root / path) for path in ("apps/api/src", "packages/py/db/src", "packages/py/env/src", "packages/py/utils/src")]
         subprocess.run([sys.executable, str(Path(__file__).with_name("previous_imap_poll.py"))], cwd=root,
                        env=os.environ | {"PYTHONPATH": os.pathsep.join(source), "DATABASE_URL": url}, check=True,
-                       input=json.dumps({"account_id": account_id, "ids": ids, "token": token}), text=True, timeout=30)
+                       input=json.dumps({"account_id": account_id, "ids": ids, "token": token, "archived": archived,
+                                         "archive_control": archive_control}), text=True, timeout=30)
     # The previous worker polls flags for these exact raw UIDs and retains their local IDs.
     assert asyncio.run(_scalar(url, "SELECT json_object_agg(provider_uid,id) FROM mail_message WHERE folder='INBOX'")) == ids
     assert asyncio.run(_scalar(url, "SELECT json_object_agg(provider_uid,id) FROM mail_message WHERE folder='IMAP_DELETED'")) == withheld
+    assert asyncio.run(_scalar(url, "SELECT json_object_agg(id, content_json::json->>'body_text') FROM mail_reference_snapshot")) == archived
+    assert asyncio.run(_scalar(url, "SELECT array_agg(id) FROM mail_message WHERE folder='ARCHIVE'")) == [archive_control]
     assert asyncio.run(_scalar(url, "SELECT cursor FROM mail_sync_state")) == "7:14"
 
 

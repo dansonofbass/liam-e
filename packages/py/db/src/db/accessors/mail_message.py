@@ -500,13 +500,13 @@ async def restore_imap_flagged(session: AsyncSession, account_id: str, uid: str,
     return bool(result.rowcount)
 
 
-async def imap_inbox_moves_in_generation(session: AsyncSession, account_id: str, validity: str) -> set[str]:
+async def imap_inbox_moves_in_generation(session: AsyncSession, account_id: str, validity: str) -> dict[str, str]:
     """A move into this generation can commit before the first poll of its new UIDVALIDITY."""
-    rows = await session.scalars(select(MailMessage.provider_uid).where(MailMessage.account_id == account_id,
+    rows = await session.execute(select(MailMessage.provider_uid, MailMessage.id).where(MailMessage.account_id == account_id,
         MailMessage.folder == "INBOX", MailMessage.imap_uidvalidity == validity,
         exists(select(MailAction.id).where(MailAction.account_id == account_id, MailAction.message_id == MailMessage.id,
             MailAction.kind.in_(("trash", "restore"))))))
-    return set(rows)
+    return dict(rows.all())
 
 
 async def reconcile_native_trash(session: AsyncSession, account_id: str, uid: str, original: str,

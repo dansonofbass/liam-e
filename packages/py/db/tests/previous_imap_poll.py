@@ -16,15 +16,24 @@ from env.mail import env as mail_env
 from test_mail_trash_sync_pg import MAIL, client
 
 
-async def poll(account_id, ids, token):
+async def poll(account_id, ids, token, archived, archive_control):
     for module in (sync, sync_imap, messages, mail_message, message_model):
         assert Path(module.__file__).is_relative_to(Path.cwd()), module.__file__
     assert "imap_uidvalidity" not in message_model.MailMessage.model_fields
     provider = Mailboxes(["Yahoo"], False, "move")
+    provider.yahoo_folders["ARCHIVE"] = {"91": "twin"}
+    provider.labels["Yahoo"]["twin"] = {"ARCHIVE"}
     flag_ranges, body_reads = [], []
+    archive_calls = []
 
     class AfterFlagClear(YahooConnection):
+        def list(self, *args):
+            status, folders = super().list(*args)
+            return status, [*folders, b'(\\Archive) "/" "Archive"']
+
         def uid(self, cmd, *args):
+            if self.folder == "ARCHIVE":
+                archive_calls.append(cmd)
             status, data = super().uid(cmd, *args)
             if cmd.upper() == "FETCH":
                 if args[1] == "(FLAGS)":
@@ -53,6 +62,18 @@ async def poll(account_id, ids, token):
             for outcome in ("restored", "skipped"):
                 result = await browser.post(MAIL + "/actions/undo", json={"action_ids": [token]})
                 assert result.status_code == 200 and result.json()[outcome] == [token]
+            for message_id, body in archived.items():
+                uri = f"{MAIL}/messages/{message_id}"
+                detail = (await browser.get(uri)).json()
+                original = await browser.get(uri + "/original")
+                result = await browser.post(MAIL + "/messages/actions", json={"message_ids": [message_id], "kind": "trash"})
+                row, = result.json()["results"]
+                assert (detail["local_reference_only"], detail["can_show_original"], detail["body_text"]) == (True, False, body)
+                assert original.status_code == 404 and row["status"] == "not_found" and row["action_id"] is None
+            assert archive_calls == []
+            assert provider.yahoo_folders["ARCHIVE"] == {"91": "twin"} and not provider.yahoo_folders["TRASH"]
+            original = await browser.get(f"{MAIL}/messages/{archive_control}/original")
+            assert original.status_code == 200 and "Synthetic message twin." in original.json()["source"]
     finally:
         await engine.dispose_engine()
 

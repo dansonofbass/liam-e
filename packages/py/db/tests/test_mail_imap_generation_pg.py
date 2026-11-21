@@ -83,7 +83,8 @@ def test_previous_imap_worker_can_resume_with_pending_uid_and_open_token(pg_db, 
 
 
 @pytest.mark.parametrize("same_header", [False, True])
-def test_imap_undo_into_reused_destination_keeps_both_local_identities(pg_db, monkeypatch, same_header):
+@pytest.mark.parametrize("flag_on_first_poll", [False, True], ids=["visible", "flagged-first-poll"])
+def test_imap_undo_into_reused_destination_keeps_both_local_identities(pg_db, monkeypatch, same_header, flag_on_first_poll):
     async def run():
         provider = Mailboxes(["Yahoo"], False, "move")
         await provider.connect(monkeypatch)
@@ -93,6 +94,8 @@ def test_imap_undo_into_reused_destination_keeps_both_local_identities(pg_db, mo
             async with get_session_maker().begin() as session:
                 (await session.get(MailMessage, ids["11"])).rfc_message_id = "<yahoo-12@example.test>"
         await mail_insight.store_if_missing(ids["11"], points=["Old delivery"], deadline=None, needs_reply=False,
+                                             followups=[], model="test")
+        await mail_insight.store_if_missing(ids["12"], points=["Restored delivery"], deadline=None, needs_reply=False,
                                              followups=[], model="test")
         async with client() as browser:
             old_action = (await browser.post(f"{MAIL}/messages/{ids['11']}/actions", json={"kind": "mark_read"})).json()["action_id"]
@@ -118,8 +121,18 @@ def test_imap_undo_into_reused_destination_keeps_both_local_identities(pg_db, mo
             assert (await mail_message.get_message(ids["11"])).id == ids["11"]
             assert (await mail_action.get_many([old_action]))[0].message_id == ids["11"]
             assert await mail_insight.get(ids["11"]) is not None
+            if flag_on_first_poll:
+                with monkeypatch.context() as flagged:
+                    flag_inbox_delivery(flagged, provider)
+                    assert (await sync.sync_account(account.id)).status == "ok"
+                    assert await mail_message.known_uids(account.id, "IMAP_DELETED") == {"9:11": ids["12"]}
+                    assert await listed(browser, "INBOX") == set()
             assert (await sync.sync_account(account.id)).status == "ok"
             assert await listed(browser, "INBOX") == {ids["12"]}
+            assert await mail_message.known_uids(account.id, "IMAP_DELETED") == {}
+            assert await listed(browser, "ARCHIVE") == {ids["11"]}
+            assert (await mail_action.get_many([trash]))[0].message_id == ids["12"]
+            assert json.loads((await mail_insight.get(ids["12"])).points_json) == ["Restored delivery"]
     asyncio.run(run())
 
 
