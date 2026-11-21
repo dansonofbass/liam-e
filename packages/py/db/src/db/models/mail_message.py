@@ -36,6 +36,8 @@ class MailMessage(SQLModel, table=True):
     account_id: str = Field(index=True)
     folder: str = "INBOX"
     provider_uid: str
+    # IMAP UIDs identify a delivery only within one mailbox generation.
+    imap_uidvalidity: str | None = None
     thread_id: str = ""
     subject: str = ""
     sender: str = ""

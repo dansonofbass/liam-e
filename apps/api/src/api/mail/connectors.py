@@ -171,8 +171,10 @@ async def thread_labels(provider: str, thread_id: str, uids: set[str]) -> dict[s
         if not isinstance(thread, dict) or thread.get("id") != thread_id or not isinstance(thread.get("messages"), list):
             return found
         for item in thread["messages"]:
-            if isinstance(item, dict) and item.get("id") in uids and isinstance(labels := item.get("labelIds"), list):
-                found[item["id"]] = labels
+            if isinstance(item, dict) and isinstance(uid := item.get("id"), str) and uid in uids:
+                labels = item.get("labelIds")
+                if isinstance(labels, list) and all(isinstance(label, str) for label in labels):
+                    found[uid] = labels
         if uids <= found.keys():
             break
     return found

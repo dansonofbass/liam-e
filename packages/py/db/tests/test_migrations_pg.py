@@ -227,3 +227,76 @@ def test_autogenerate_restores_the_calendar_access_proof(scratch, tmp_path, chan
         VALUES ('synthetic-blocked', false, 'calendar_unavailable')
     """))
     assert asyncio.run(_scalar(url, "SELECT access_blocked FROM calendar_sync_state WHERE source_id='synthetic-blocked'"))
+
+
+def test_mail_move_upgrade_preserves_open_undo_and_index(scratch, monkeypatch):
+    import json
+    from unittest.mock import AsyncMock
+
+    import httpx
+    from fastapi import FastAPI
+    from sqlalchemy import MetaData, Table
+
+    from api.mail import service
+    from api.routers.api.v1.mail import actions, messages
+    from db import engine as db_engine
+    from db.models.mail_account import MailAccount
+    from db.models.mail_action import MailAction
+    from db.models.mail_message import MailMessage
+
+    config, url = scratch
+    command.upgrade(config, "c8c67942c08d")
+    account = MailAccount(id="old-account", provider="microsoft", auth_type="oauth2", email_address="old@example.test")
+    mail = MailMessage(id="old-mail", account_id=account.id, folder="TRASH", provider_uid="in-trash")
+    control = MailMessage(id="control", account_id=account.id, folder="INBOX", provider_uid="control")
+    previous = json.dumps({"folder": "INBOX", "provider_uid": "before-move", "is_read": False, "labels_json": "[]"})
+    token = MailAction(id="open-token", account_id=account.id, message_id=mail.id, kind="trash", previous_json=previous)
+
+    async def insert_on_previous_schema():
+        engine = create_async_engine(url)
+        try:
+            async with engine.begin() as connection:
+                def insert(conn):
+                    for row in (account, mail, control, token):
+                        table = Table(row.__tablename__, MetaData(), autoload_with=conn)
+                        values = {col.name: getattr(row, col.name) for col in table.c if col.computed is None}
+                        conn.execute(table.insert().values(**values))
+                await connection.run_sync(insert)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(insert_on_previous_schema())
+    command.upgrade(config, "10d2e525afe6")
+    assert asyncio.run(_scalar(url, """SELECT previous_json FROM mail_action WHERE id='open-token'
+        AND undone_at IS NULL AND inbox_source_uid IS NULL AND imap_source_uidvalidity IS NULL""")) == previous
+    assert asyncio.run(_scalar(url, "SELECT count(*) FROM mail_message WHERE imap_uidvalidity IS NULL")) == 2
+
+    async def undo_on_new_api():
+        await db_engine.dispose_engine()
+        app = FastAPI()
+        app.include_router(actions.router, prefix="/actions")
+        app.include_router(messages.router, prefix="/messages")
+        browser = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+        send = httpx.AsyncClient
+        moved = []
+        def provider(request):
+            if request.method == "PATCH" and request.url.path.endswith("/messages/in-trash"):
+                return httpx.Response(200, json={})
+            assert request.url.path.endswith("/messages/in-trash/move") and json.loads(request.content) == {"destinationId": "inbox"}
+            moved.append("in-trash")
+            return httpx.Response(201, json={"id": "returned"})
+        monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: send(transport=httpx.MockTransport(provider), **kw))
+        monkeypatch.setattr(service, "load_credentials", AsyncMock(return_value={}))
+        monkeypatch.setattr(service, "valid_access_token", AsyncMock(return_value="test"))
+        try:
+            async with browser:
+                for expected in ("restored", "skipped"):
+                    undo = await browser.post("/actions/undo", json={"action_ids": [token.id]})
+                    assert undo.status_code == 200 and undo.json()[expected] == [token.id]
+                assert {row["id"] for row in (await browser.get("/messages")).json()["items"]} == {control.id, mail.id}
+            assert moved == ["in-trash"]
+        finally:
+            await db_engine.dispose_engine()
+
+    asyncio.run(undo_on_new_api())
+    assert asyncio.run(_scalar(url, "SELECT provider_uid FROM mail_message WHERE id='old-mail'")) == "returned"

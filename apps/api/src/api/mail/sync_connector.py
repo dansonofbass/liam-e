@@ -145,9 +145,15 @@ async def confirm_trash_conflicts(account, changes: SyncChanges, candidates: dic
         try:
             latest = await connectors.thread_labels(account.provider, thread, uids) if thread else {}
         except httpx.HTTPStatusError as error:
-            if error.response.status_code != 404:
+            if error.response.status_code == 404:
+                latest = dict.fromkeys(uids, [])
+            elif error.response.status_code in (400, 410, 422):
+                latest = {}
+            else:
                 raise
-            latest = dict.fromkeys(uids, [])
+        except json.JSONDecodeError:
+            # A text tool error for this thread does not invalidate the other inbox observations.
+            latest = {}
         for uid in uids:
             if uid in latest:
                 changes.observe_current_labels(uid, latest[uid], rows.get(uid))

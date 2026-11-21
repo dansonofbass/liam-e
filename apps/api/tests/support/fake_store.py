@@ -23,6 +23,7 @@ class FakeStore:
         for name in ("record", "get_many", "mark_undone", "release", "latest_open", "delete_for_account"):
             monkeypatch.setattr(mail_action, name, getattr(self, "action_" + name))
         monkeypatch.setattr(mail_message, "get_message", self.get_message)
+        monkeypatch.setattr(mail_message, "legacy_imap_uidvalidity", self.legacy_imap_uidvalidity)
         monkeypatch.setattr(mail_message, "commit_trash_move", self.commit_trash_move)
         monkeypatch.setattr(mail_sync_state, "sync_transaction", self.sync_transaction)
         monkeypatch.setattr(mail_message, "resolve_aliases", self.resolve_aliases)
@@ -64,14 +65,30 @@ class FakeStore:
             row = self.messages.get(target)
         return row.model_copy() if row else None
 
+    async def legacy_imap_uidvalidity(self, message):
+        row = self.messages.get(message.id)
+        state = self.states.get(message.account_id)
+        if row is None or state is None or (row.account_id, row.folder, row.provider_uid, row.rfc_message_id) != (
+            message.account_id, "INBOX", message.provider_uid, message.rfc_message_id
+        ):
+            return None
+        validity, _, position = state.cursor.partition(":")
+        return validity if validity.isdigit() and position.partition(":")[0].isdigit() else None
+
     @asynccontextmanager
     async def sync_transaction(self, account_id, previous, *, verified, connector=True):
         yield None, self.states[account_id]
 
     async def commit_trash_move(self, message, updates, *, action=None, undo_id=None):
         updates = updates.copy()
-        updates.pop("imap_source_uidvalidity", None)
+        validity = updates.pop("imap_source_uidvalidity", None)
+        if message.folder == "INBOX" and updates.get("folder") == "TRASH" and self.accounts[message.account_id].provider in ("imap", "microsoft"):
+            record = action or self.actions[undo_id]
+            record.inbox_source_uid = message.provider_uid
+            record.imap_source_uidvalidity = validity
         await self.set_message_state(message.id, **updates)
+        if "imap_uidvalidity" in updates:
+            self.messages[message.id].imap_uidvalidity = updates["imap_uidvalidity"]
         if action:
             self.actions[action.id] = action
 

@@ -113,7 +113,8 @@ def _fetch(host: str, port: int, email_address: str, password: str, cursor: str,
                 pending.setdefault(str(uid), "" if rebuild else known.get(str(uid), ""))
                 continue
             parsed = parse_rfc822(part[1], max_body_chars=max_body_chars)
-            parsed.update(folder="INBOX", provider_uid=str(uid), is_read=b"\\seen" in flags, is_flagged=b"\\flagged" in flags)
+            parsed.update(folder="INBOX", provider_uid=str(uid), imap_uidvalidity=validity,
+                          is_read=b"\\seen" in flags, is_flagged=b"\\flagged" in flags)
             changes.upserts.append(parsed)
             if local_id := pending.pop(str(uid), None):
                 changes.imap_undeleted[str(uid)] = local_id

@@ -171,6 +171,8 @@ async def _apply_changes(account, changes, session, verified, native_moves):
     known = await message_access.known_uids(account_id, "INBOX", session=session)
     moved = set(changes.moved_out) - changes.confirmed_inbox
     graph = account.provider == providers.MICROSOFT
+    imap_validity = changes.cursor.partition(":")[0] if account.provider == providers.IMAP and not connector else None
+    restored_ids = {}
     for uid, (original, in_inbox) in native_moves.items():
         if await message_access.reconcile_native_trash(session, account_id, uid, original, in_inbox=in_inbox, graph=graph):
             moved.discard(uid)
@@ -179,7 +181,7 @@ async def _apply_changes(account, changes, session, verified, native_moves):
         await message_access.delete_folder(account_id, "INBOX", session=session, exclude_uids=retained)
     if label_folders:
         changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in moved]
-        blocked = await message_access.reconcile_label_folders(session, account_id,
+        blocked, restored_ids = await message_access.reconcile_label_folders(session, account_id,
             {row["provider_uid"] for row in changes.upserts} | changes.confirmed_inbox, moved,
             verified=not unverified, restored=changes.confirmed_inbox, trashed=changes.trashed)
         changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in blocked]
@@ -189,7 +191,7 @@ async def _apply_changes(account, changes, session, verified, native_moves):
     for parsed in changes.upserts:
         uid = parsed["provider_uid"]
         if uid not in known and (local_id := changes.imap_undeleted.get(uid)):
-            if await message_access.restore_imap_flagged(session, account_id, uid, local_id):
+            if await message_access.restore_imap_flagged(session, account_id, uid, local_id, imap_validity):
                 known[uid] = local_id
         if connector:
             if uid in changes.read_updates:
@@ -203,6 +205,7 @@ async def _apply_changes(account, changes, session, verified, native_moves):
             new_ids.append(row.id)
         if changes.full_rebuild or label_folders:
             known[parsed["provider_uid"]] = row.id
+    known.update(restored_ids)
     for uid in set(changes.read_updates) | set(changes.flag_updates) | moved:
         if uid not in known:
             continue
@@ -211,8 +214,12 @@ async def _apply_changes(account, changes, session, verified, native_moves):
             updates["is_read"] = changes.read_updates[uid]
         if uid in changes.flag_updates:
             updates["is_flagged"] = changes.flag_updates[uid]
+        if imap_validity and updates:
+            updates["imap_uidvalidity"] = imap_validity
         if uid in moved and not label_folders:
             updates["folder"] = "ARCHIVE"
+            if imap_validity:
+                updates["provider_uid"] = message_access.imap_archive_uid(imap_validity, uid)
         if updates:
             if connector:
                 updates["connector_labels"] = True

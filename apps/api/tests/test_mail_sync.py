@@ -154,7 +154,7 @@ async def test_sync_account_applies_changes_and_reports_new_ids(monkeypatch, fak
     monkeypatch.setattr(sync_imap, "fetch_changes", fetch)
     result = await sync.sync_account("a")
     assert result.new_message_ids == ["local-new"]
-    assert stored["local-old"] == {"is_read": True, "is_flagged": True}
+    assert stored["local-old"] == {"is_read": True, "is_flagged": True, "imap_uidvalidity": "7"}
 
 
 @pytest.mark.anyio

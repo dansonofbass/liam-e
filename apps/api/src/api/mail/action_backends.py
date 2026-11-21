@@ -8,6 +8,7 @@ from typing import Protocol
 from urllib.parse import quote
 
 import httpx
+from db.accessors import mail_message as message_access
 from db.models.mail_account import MailAccount
 from db.models.mail_message import MailMessage
 
@@ -207,10 +208,17 @@ def _message_uid(connection, message: MailMessage) -> str:
         return message.provider_uid
     if message.folder == "TRASH" and ":" in message.provider_uid:
         validity, uid = message.provider_uid.split(":", 1)
-        _, actual = connection.response("UIDVALIDITY")
-        if uid.isdigit() and actual and actual[0] == validity.encode():
-            return _search(connection, message, uid)
+        if not uid.isdigit() or _uidvalidity(connection) != validity:
+            raise RuntimeError("Indexed IMAP trash UIDVALIDITY changed")
+        return _search(connection, message, uid)
     return _search(connection, message)
+
+
+def _uidvalidity(connection) -> str:
+    _, values = connection.response("UIDVALIDITY")
+    if not values or not isinstance(values[0], bytes) or not values[0].isdigit():
+        raise RuntimeError("Missing IMAP UIDVALIDITY")
+    return values[0].decode()
 
 
 class ImapBackend:
@@ -220,19 +228,22 @@ class ImapBackend:
     async def apply(self, message: MailMessage, kind: ActionKind) -> dict:
         folder = {"archive": "ARCHIVE", "trash": "TRASH", "spam": "SPAM", "restore": "INBOX"}.get(kind, message.folder)
         is_read = kind == "mark_read" if kind in ("mark_read", "mark_unread") else None
-        return await self._run(message, folder, is_read, undo=False)
+        return await self._run(message, folder, is_read)
 
     async def revert(self, message: MailMessage, previous: dict) -> dict:
-        return await self._run(message, previous["folder"], previous["is_read"], undo=True)
+        return await self._run(message, previous["folder"], previous["is_read"])
 
-    async def _run(self, message: MailMessage, folder: str, is_read: bool | None, *, undo: bool) -> dict:
+    async def _run(self, message: MailMessage, folder: str, is_read: bool | None) -> dict:
+        expected = message.imap_uidvalidity
+        if message.folder == "INBOX" and folder == "TRASH" and expected is None:
+            expected = await message_access.legacy_imap_uidvalidity(message)
         credentials = await service.load_credentials(self.account)
         host = credentials["imap_host"]
         await transport.check_mail_host(host)
         password = await service.imap_password(credentials)
-        return await asyncio.to_thread(self._change, host, int(credentials.get("imap_port", 993)), password, message, folder, is_read, undo)
+        return await asyncio.to_thread(self._change, host, int(credentials.get("imap_port", 993)), password, message, folder, is_read, expected)
 
-    def _change(self, host: str, port: int, password: str, message: MailMessage, folder: str, is_read: bool | None, undo: bool) -> dict:
+    def _change(self, host: str, port: int, password: str, message: MailMessage, folder: str, is_read: bool | None, expected: str | None) -> dict:
         connection = transport.open_imap(host, port)
         try:
             _ok(connection.login(self.account.email_address, password))
@@ -254,11 +265,11 @@ class ImapBackend:
             updates = {}
             if moving and folder == "TRASH" and message.folder == "INBOX":
                 # An IMAP UID command can return OK even if it matched no message.
+                if _uidvalidity(connection) != expected:
+                    raise RuntimeError("Indexed IMAP UIDVALIDITY changed")
                 _search(connection, message, uid)
-                _, values = connection.response("UIDVALIDITY")
-                if not values or not values[0] or not values[0].isdigit():
-                    raise RuntimeError("Missing source UIDVALIDITY")
-                updates["imap_source_uidvalidity"] = values[0].decode()
+                updates["imap_source_uidvalidity"] = expected
+                updates["imap_uidvalidity"] = None
             if is_read is not None:
                 _ok(connection.uid("STORE", uid, "+FLAGS" if is_read else "-FLAGS", "(\\Seen)"))
             stored_uid = message.provider_uid
@@ -274,12 +285,11 @@ class ImapBackend:
                     if copied_uid is None:
                         _ok(connection.select(_quoted(target)))
                         copied_uid = _search(connection, message)
-                        _, values = connection.response("UIDVALIDITY")
-                        if not values or not values[0] or not values[0].isdigit():
-                            raise RuntimeError("Missing destination UIDVALIDITY")
-                        validity = values[0].decode()
+                        validity = _uidvalidity(connection)
                         if "MOVE" not in capabilities:
                             _ok(connection.select(_quoted(source)))
+                            if message.folder == "INBOX" and _uidvalidity(connection) != expected:
+                                raise RuntimeError("Indexed IMAP UIDVALIDITY changed")
                             _search(connection, message, uid)
                     stored_uid = f"{validity}:{copied_uid}"
                 if "MOVE" not in capabilities:
@@ -291,6 +301,8 @@ class ImapBackend:
                     else:
                         _ok(connection.select(_quoted(target)))
                         stored_uid = _search(connection, message)
+                        validity = _uidvalidity(connection)
+                    updates["imap_uidvalidity"] = validity
             return {"provider_uid": stored_uid, **updates}
         finally:
             try:
