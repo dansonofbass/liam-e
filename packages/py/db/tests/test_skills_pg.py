@@ -253,5 +253,16 @@ def test_skill_turn_binding_revocation_tombstones_and_proposal_claims(pg_db):
                 skill_revision_id=None,
             )
             assert not await c.permits_skill_in_session(session, corrupt)
+        with pytest.raises(ValueError):
+            await s.create_custom_skill(
+                slug="bad_json",
+                name="Bad",
+                description="Invalid JSON tools",
+                instructions="Test",
+                workflow_steps_json="[]",
+                allowed_tools_json='{"not":"list"}',
+            )
+        with pytest.raises(ValueError):
+            await s.change_skill(recreated.id, 1, workflow_steps_json="{not-json")
 
     asyncio.run(run())

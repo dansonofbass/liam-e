@@ -54,6 +54,8 @@ class ToolRegistry:
     def register(self, tool: RegisteredTool) -> None:
         if not tool.name or not tool.name.strip():
             raise ValueError("Tool name must not be empty")
+        if tool.skill_only and tool.handler is None:
+            raise ValueError(f"Skill-only tool requires an async handler: {tool.name}")
         existing = self._tools.get(tool.name)
         if existing is not None:
             if existing == tool:

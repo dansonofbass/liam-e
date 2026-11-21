@@ -36,6 +36,29 @@ class SkillQuotaExceeded(Exception):
     """Maximum number of stored custom skills has been reached."""
 
 
+def _parse_json_list(raw: str, field_name: str) -> list[object]:
+    """Validate and decode a serialized JSON array field before DB writes."""
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{field_name} must be valid JSON") from error
+    if not isinstance(parsed, list):
+        raise ValueError(f"{field_name} must be a JSON array")
+    return parsed
+
+
+def _validate_skill_json(workflow_steps_json: str | None, allowed_tools_json: str | None) -> None:
+    """Ensure serialized workflow step and tool lists have valid array/element types."""
+    if workflow_steps_json is not None:
+        steps = _parse_json_list(workflow_steps_json, "workflow_steps_json")
+        if not all(isinstance(step, dict) for step in steps):
+            raise ValueError("workflow_steps_json entries must be JSON objects")
+    if allowed_tools_json is not None:
+        tools = _parse_json_list(allowed_tools_json, "allowed_tools_json")
+        if not all(isinstance(name, str) and bool(name.strip()) for name in tools):
+            raise ValueError("allowed_tools_json entries must be non-empty strings")
+
+
 def compute_content_hash(
     *,
     slug: str,
@@ -46,6 +69,7 @@ def compute_content_hash(
     allowed_tools_json: str,
 ) -> str:
     """Compute a stable SHA-256 digest over the canonical skill definition."""
+    _validate_skill_json(workflow_steps_json, allowed_tools_json)
     payload = json.dumps(
         {
             "slug": slug,
@@ -148,6 +172,7 @@ async def create_custom_skill(
     status: str = "active",
 ) -> SkillDefinition:
     """Create a new custom skill and its initial immutable revision."""
+    _validate_skill_json(workflow_steps_json, allowed_tools_json)
     async with get_session_maker()() as session:
         await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": BUILTIN_SYNC_LOCK_KEY})
         existing_count = int((await session.execute(
@@ -201,6 +226,8 @@ async def change_skill(
     delete: bool = False,
 ) -> SkillDefinition | None:
     """Update, toggle status, or delete a skill with optimistic concurrency and revocation."""
+    if not delete:
+        _validate_skill_json(workflow_steps_json, allowed_tools_json)
     async with get_session_maker()() as session:
         row = (await session.execute(
             select(SkillDefinition).where(

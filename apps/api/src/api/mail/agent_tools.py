@@ -134,7 +134,8 @@ async def execute_tool(name: str, arguments: dict, ctx: TurnContext) -> ToolOutc
         return result({'error': denied})
     registered = TOOL_REGISTRY.get(name)
     if registered is not None and registered.skill_only:
-        assert registered.handler is not None
+        if registered.handler is None:
+            return result({'error': 'skill_tool_unavailable'})
         return await registered.handler(arguments, ctx)
     if name == 'propose_calendar_change':
         from api.calendar import chat as calendar_chat, writes

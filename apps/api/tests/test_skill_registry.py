@@ -211,6 +211,18 @@ def test_registry_rejects_unregistered_tools_on_definition_and_execution():
         registry.validate_for_definition(["safe_read", "shell_exec"])
     assert missing.value.missing == ["shell_exec"]
 
+    with pytest.raises(ValueError):
+        registry.register(
+            RegisteredTool(
+                name="broken_skill_only",
+                kind="read",
+                description="Missing handler",
+                parameters={"type": "object", "properties": {}},
+                skill_only=True,
+                handler=None,
+            )
+        )
+
     with pytest.raises(SkillToolUnavailableError) as unavailable:
         registry.resolve_for_execution(["safe_read", "removed_tool"])
     assert unavailable.value.missing == ["removed_tool"]
@@ -290,9 +302,22 @@ async def test_unknown_disabled_missing_tool_and_deleted_skills_fail_cleanly(ski
     with pytest.raises(SkillToolUnavailableError):
         await resolve_skill(skill_revision_id=first_rev.id)
 
-    # Restore tools, narrow via update, then delete -> tombstones and revokes
+    # Restore tools, test partial PATCH consistency checks, narrow via update, then delete
     first_rev.allowed_tools_json = json.dumps(["get_message", "search_messages"])
-    updated, second_rev = await update_skill(custom.id, 1, allowed_tools=["search_messages"])
+    with pytest.raises(SkillValidationError):
+        await update_skill(
+            custom.id,
+            1,
+            workflow_steps=[SkillWorkflowStep(id="bad", title="Bad", description="Uses create_draft", tool_names=["create_draft"])],
+        )
+    with pytest.raises(SkillValidationError):
+        await update_skill(custom.id, 1, allowed_tools=["get_message"])
+    updated, second_rev = await update_skill(
+        custom.id,
+        1,
+        workflow_steps=[],
+        allowed_tools=["search_messages"],
+    )
     assert updated.version == 2 and first_rev.id in revoked
     assert second_rev.id != first_rev.id
 
