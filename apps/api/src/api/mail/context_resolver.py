@@ -5,6 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from db.accessors.prompt_template import StaleVersion
 from api.errors import refuse
 from api.mail.agent_prompt import APP_PROMPT_VERSION
+from api.mail.models_catalog import resolve_default_chat_model
 from api.skills import TOOL_REGISTRY, ensure_builtin_skills
 
 
@@ -17,6 +18,8 @@ async def resolve_context(*, conversation_id=None, text, model=None, prompt_revi
     except (ZoneInfoNotFoundError, ValueError):
         raise refuse(422, 'context_invalid', 'Die Zeitzone ist ungültig.') from None
     try:
+        if conversation_id is None and model is None:
+            model = await resolve_default_chat_model()
         registered_tool_names = None
         if skill_id is not None or skill_revision_id is not None:
             await ensure_builtin_skills()

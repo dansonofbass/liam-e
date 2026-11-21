@@ -1158,6 +1158,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_app_default": {
+            "default": false,
+            "title": "Is App Default",
+            "type": "boolean"
+          },
           "is_default": {
             "title": "Is Default",
             "type": "boolean"
@@ -1235,6 +1240,79 @@
           "checked_on"
         ],
         "title": "ChatModelPrice",
+        "type": "object"
+      },
+      "ChatModelSettingsOut": {
+        "properties": {
+          "app_default_model": {
+            "title": "App Default Model",
+            "type": "string"
+          },
+          "default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model"
+          },
+          "effective_default_model": {
+            "title": "Effective Default Model",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "app_default",
+              "available",
+              "unlisted",
+              "unverified"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "default_model",
+          "effective_default_model",
+          "app_default_model",
+          "status"
+        ],
+        "title": "ChatModelSettingsOut",
+        "type": "object"
+      },
+      "ChatModelSettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version",
+          "default_model"
+        ],
+        "title": "ChatModelSettingsUpdate",
         "type": "object"
       },
       "ChatSettingsOut": {
@@ -10803,6 +10881,60 @@
           }
         },
         "summary": "Update Chat Settings"
+      }
+    },
+    "/api/v1/settings/chat/model": {
+      "get": {
+        "operationId": "chat_model_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatModelSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Chat Model Settings"
+      },
+      "patch": {
+        "operationId": "chat_model_settings_update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatModelSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatModelSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Chat Model Settings"
       }
     },
     "/api/v1/settings/ui": {

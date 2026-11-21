@@ -76,6 +76,19 @@ def ui_locale_in_browser_mode(monkeypatch):
     return preference
 
 
+@pytest.fixture(autouse=True)
+def default_chat_model_app_default(monkeypatch):
+    """API unit tests default to the built-in app model without creating a configuration row."""
+    from unittest.mock import AsyncMock
+
+    from db.accessors import chat_model_settings
+    from db.models.chat_model_settings import ChatModelSettings
+
+    setting = AsyncMock(return_value=ChatModelSettings())
+    monkeypatch.setattr(chat_model_settings, "get", setting)
+    return setting
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     """Run `@pytest.mark.anyio` tests on asyncio only (the app's event loop)."""

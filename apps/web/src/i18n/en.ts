@@ -247,6 +247,19 @@ export const en = {
     empty: 'No mail accounts are enabled for chat.',
     conflict: 'The permissions or connected accounts have changed. Reload your selection.',
   },
+  chatModel: {
+    title: 'Default model for new chats',
+    description: 'New conversations start with this model unless you choose another. Existing conversations keep their model.',
+    choiceLabel: 'Choose default model',
+    appDefault: (label: string) => `App default (${label})`,
+    reset: 'Use app default',
+    resetTip: 'Resets the default model for new chats to the app default.',
+    conflict: 'The default model changed on another device. Reload the current selection.',
+    unlistedNotice: (stored: string, effective: string) =>
+      `The saved model “${stored}” is no longer available in this workspace. New chats use the app default “${effective}” until you choose another or reset.`,
+    unverifiedNotice: 'The model list cannot be reached right now. Your saved choice remains in place.',
+    outsideMailNotice: 'This saved model is not listed as a general-purpose mail model. It remains active until you choose another.',
+  },
   calendarSettings: {
     title: 'Default calendar', description: 'New event proposals use this calendar. You can also name another calendar in chat.',
     clear: 'No default calendar', missing: 'The saved calendar has been removed.', noWritable: 'No connected calendar allows new events.',

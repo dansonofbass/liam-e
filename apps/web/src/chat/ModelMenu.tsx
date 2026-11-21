@@ -25,9 +25,12 @@ export function ModelMenu({ conversationId, model, onChange, disabled = false }:
   const [error, setError] = useState<string>()
   const answering = state.phase === 'working' || state.phase === 'streaming'
   const busy = saving || disabled || (answering && (!conversationId || state.conversationId === conversationId))
-  // An empty choice uses the configured default. A conversation still loading has no known choice.
+  // An empty choice at start uses the configured default; an empty saved conversation keeps the built-in app default. A conversation still loading has no known choice.
   const selected = conversationId ? saved?.model : model ?? ''
-  const id = selected === '' ? models.find(item => item.is_default)?.id : selected
+  const defaultModel = conversationId
+    ? models.find(item => item.is_app_default) ?? models.find(item => item.is_default)
+    : models.find(item => item.is_default)
+  const id = selected === '' ? defaultModel?.id : selected
   const label = models.find(item => item.id === id)?.label ?? id
   const select = async (next: string) => {
     if (busy) return

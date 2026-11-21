@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions, type QueryClient } from '@tanstack/react-query'
-import { promptsList, promptGet, skillsList, skillGet, mailSummary, calendarSettingsGet, chatSettingsGet, chatMailReferenceGet, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
+import { promptsList, promptGet, skillsList, skillGet, mailSummary, calendarSettingsGet, chatModelSettingsGet, chatSettingsGet, chatMailReferenceGet, chatConversationsList, mailAccountsList, mailAccountOptions, mailConnectorsList, mailMessagesList, mailMessageGet, mailMessageInsight, chatHistory, chatModelsList, settingsUiGet, tasksGet, tasksList, tasksOccurrencesList, calendarSourcesList, calendarOccurrencesList, calendarOccurrenceGet } from './generated/sdk.gen'
 import { REFERENCE_LOCALE, type Locale } from '../i18n/locales'
 import type { SourceOut, MailMessagesListData, TasksGetData, TasksListData, TasksOccurrencesListData, UiSettingsOut } from './generated/types.gen'
 import { calendarIndexCache, readCalendarIndex, refreshChangedIndexes, sourceScope } from '../calendar/cache'
@@ -19,6 +19,7 @@ export const SUMMARY_SYNCING_POLL_MS = 3_000
 export const SUMMARY_IDLE_POLL_MS = 60_000
 export const summaryQuery = (chatScope = false) => queryOptions({ queryKey: chatScope ? ['summary', 'chat'] : ['summary'], queryFn: ({ signal }) => unwrap(mailSummary({ query: chatScope ? { chat_scope: true } : undefined, signal, throwOnError: true })), refetchInterval: query => !query.state.data ? false : query.state.data.accounts.some(a => a.state === 'syncing') ? SUMMARY_SYNCING_POLL_MS : SUMMARY_IDLE_POLL_MS })
 export const chatSettingsQuery = () => queryOptions({ queryKey: ['chat-settings'], refetchOnWindowFocus: 'always', queryFn: ({ signal }) => unwrap(chatSettingsGet({ signal, throwOnError: true })) })
+export const chatModelSettingsQuery = () => queryOptions({ queryKey: ['chat-model-settings'], refetchOnWindowFocus: 'always', queryFn: ({ signal }) => unwrap(chatModelSettingsGet({ signal, throwOnError: true })) })
 export const conversationsQuery = () => queryOptions({ queryKey: ['conversations'], refetchOnWindowFocus: 'always', queryFn: () => unwrap(chatConversationsList({ throwOnError: true })) })
 export const accountsQuery = () => queryOptions({ queryKey: ['accounts'], queryFn: () => unwrap(mailAccountsList({ throwOnError: true })) })
 export const accountOptionsQuery = () => queryOptions({ queryKey: ['account-options'], queryFn: () => unwrap(mailAccountOptions({ throwOnError: true })) })
@@ -35,7 +36,7 @@ export const chatMailReferenceQuery = (id: string, version?: number | null, cont
 })
 export const insightQuery = (id: string, locale: Locale = REFERENCE_LOCALE) => queryOptions({ queryKey: ['insight', id], queryFn: () => unwrap(mailMessageInsight({ path: { message_id: id }, query: { locale }, throwOnError: true })) })
 export const historyQuery = (conversationId: string) => queryOptions({ queryKey: ['history', conversationId], queryFn: () => unwrap(chatHistory({ query: { conversation_id: conversationId }, throwOnError: true })) })
-export const modelsQuery = () => queryOptions({ queryKey: ['models'], queryFn: () => unwrap(chatModelsList({ throwOnError: true })), staleTime: 60_000 })
+export const modelsQuery = () => queryOptions({ queryKey: ['models'], refetchOnWindowFocus: 'always', queryFn: () => unwrap(chatModelsList({ throwOnError: true })), staleTime: 60_000 })
 
 // The confirmed device-independent UI settings; a second device reads the same row.
 export const uiSettingsQuery = () => queryOptions({ queryKey: ['ui-settings'], refetchOnWindowFocus: 'always', queryFn: ({ signal }) => unwrap(settingsUiGet({ signal, throwOnError: true })) })

@@ -635,6 +635,10 @@ export type ChatModelOut = {
      */
     id: string;
     /**
+     * Is App Default
+     */
+    is_app_default?: boolean;
+    /**
      * Is Default
      */
     is_default: boolean;
@@ -677,6 +681,46 @@ export type ChatModelPrice = {
      * Source
      */
     source: string;
+};
+
+/**
+ * ChatModelSettingsOut
+ */
+export type ChatModelSettingsOut = {
+    /**
+     * App Default Model
+     */
+    app_default_model: string;
+    /**
+     * Default Model
+     */
+    default_model: string | null;
+    /**
+     * Effective Default Model
+     */
+    effective_default_model: string;
+    /**
+     * Status
+     */
+    status: 'app_default' | 'available' | 'unlisted' | 'unverified';
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * ChatModelSettingsUpdate
+ */
+export type ChatModelSettingsUpdate = {
+    /**
+     * Default Model
+     */
+    default_model: string | null;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
 };
 
 /**
@@ -6325,6 +6369,47 @@ export type ChatSettingsUpdateResponses = {
 };
 
 export type ChatSettingsUpdateResponse = ChatSettingsUpdateResponses[keyof ChatSettingsUpdateResponses];
+
+export type ChatModelSettingsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/chat/model';
+};
+
+export type ChatModelSettingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatModelSettingsOut;
+};
+
+export type ChatModelSettingsGetResponse = ChatModelSettingsGetResponses[keyof ChatModelSettingsGetResponses];
+
+export type ChatModelSettingsUpdateData = {
+    body: ChatModelSettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/chat/model';
+};
+
+export type ChatModelSettingsUpdateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatModelSettingsUpdateError = ChatModelSettingsUpdateErrors[keyof ChatModelSettingsUpdateErrors];
+
+export type ChatModelSettingsUpdateResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatModelSettingsOut;
+};
+
+export type ChatModelSettingsUpdateResponse = ChatModelSettingsUpdateResponses[keyof ChatModelSettingsUpdateResponses];
 
 export type SettingsUiGetData = {
     body?: never;

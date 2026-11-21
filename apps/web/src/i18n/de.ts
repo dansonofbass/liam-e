@@ -237,6 +237,19 @@ export const de = {
     empty: 'Für den Chat ist kein Mailkonto freigegeben.',
     conflict: 'Die Freigaben oder verbundenen Konten haben sich geändert. Lade die Auswahl neu.',
   },
+  chatModel: {
+    title: 'Standardmodell für neue Chats',
+    description: 'Neue Unterhaltungen ohne eigene Wahl starten mit diesem Modell. Bestehende Unterhaltungen behalten ihr bisheriges Modell.',
+    choiceLabel: 'Standardmodell wählen',
+    appDefault: (label: string) => `App-Vorgabe (${label})`,
+    reset: 'App-Vorgabe verwenden',
+    resetTip: 'Setzt das Standardmodell für neue Chats auf die App-Vorgabe zurück.',
+    conflict: 'Das Standardmodell wurde auf einem anderen Gerät geändert. Lade die aktuelle Auswahl.',
+    unlistedNotice: (stored: string, effective: string) =>
+      `Das gespeicherte Modell „${stored}“ ist im Workspace nicht mehr verfügbar. Bis zu einer neuen Wahl oder dem Zurücksetzen gilt die App-Vorgabe „${effective}“.`,
+    unverifiedNotice: 'Die Modellliste ist gerade nicht erreichbar. Das gespeicherte Modell bleibt erhalten.',
+    outsideMailNotice: 'Dieses gespeicherte Modell ist nicht als allgemeines Mail-Modell gelistet. Es bleibt aktiv, bis du ein anderes wählst.',
+  },
   calendarSettings: {
     title: 'Standardkalender', description: 'Neue Terminvorschläge verwenden diesen Kalender. Du kannst im Chat auch einen anderen Kalender ausdrücklich nennen.',
     clear: 'Kein Standardkalender', missing: 'Der gespeicherte Kalender wurde entfernt.', noWritable: 'Kein verbundener Kalender erlaubt neue Termine.',
