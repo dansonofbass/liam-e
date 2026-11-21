@@ -489,9 +489,12 @@ async def apply_imap_hidden(session: AsyncSession, account_id: str, validity: st
             MailMessage.folder.in_(("INBOX", "ARCHIVE", IMAP_RETIRED)), MailMessage.provider_uid.in_((uid, imap_archive_uid(validity, uid)))
         ).values(folder="IMAP_DELETED", provider_uid=f"{validity}:{uid}", imap_uidvalidity=validity))
     for qualified, local_id in retired.items():
+        generation, _, uid = qualified.partition(":")
+        # An expunge observed in this generation still identifies the delivery of a pending move.
+        key = imap_archive_uid(validity, uid) if generation == validity and uid else f"retired:{local_id}"
         await session.execute(update(MailMessage).where(MailMessage.id == local_id, MailMessage.account_id == account_id,
             MailMessage.folder == "IMAP_DELETED", MailMessage.provider_uid == qualified
-        ).values(folder=IMAP_RETIRED, provider_uid=f"retired:{local_id}"))
+        ).values(folder=IMAP_RETIRED, provider_uid=key))
 
 
 async def restore_imap_flagged(session: AsyncSession, account_id: str, uid: str, local_id: str, validity: str) -> bool:
@@ -544,6 +547,7 @@ async def _imap_restore_state(session: AsyncSession, source: MailMessage, keep: 
     rows = (await session.scalars(select(MailMessage).where(MailMessage.account_id == source.account_id, or_(
         and_(MailMessage.folder == "INBOX", MailMessage.provider_uid == uid),
         and_(MailMessage.folder == "IMAP_DELETED", MailMessage.provider_uid == qualified),
+        and_(MailMessage.folder == IMAP_RETIRED, MailMessage.provider_uid == imap_archive_uid(generation, uid)),
     )).order_by(MailMessage.id).with_for_update())).all()
     # RFC 9051 §2.3.1.1: a reset that invalidates previous UIDs increases UIDVALIDITY.
     generations = [(cursor or "").partition(":")[0], *(row.imap_uidvalidity for row in rows)]
@@ -557,8 +561,9 @@ async def _imap_restore_state(session: AsyncSession, source: MailMessage, keep: 
             if row.id != keep.id:
                 row.folder, row.provider_uid = IMAP_RETIRED, f"retired:{row.id}"
             continue
-        # A poll can see the new UID and its flags before this move takes the lock.
-        if row.folder == "IMAP_DELETED" or updates["folder"] == "INBOX":
+        # The poll can already have seen flags or an expunge for this exact destination.
+        # An expunged UID cannot reappear in the same generation.
+        if updates["folder"] == "INBOX" or row.folder == IMAP_RETIRED:
             updates.update(folder=row.folder, provider_uid=row.provider_uid, is_read=row.is_read, is_flagged=row.is_flagged)
         if row.id != keep.id:
             await _merge_copy(session, keep, row, verified=True)

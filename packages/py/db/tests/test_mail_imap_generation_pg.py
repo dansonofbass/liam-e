@@ -218,6 +218,18 @@ def test_direct_imap_expunge_cannot_dispatch_to_an_unselected_archive_copy(pg_db
     asyncio.run(run())
 
 
+def override_inbox_flags(monkeypatch, uid, flags):
+    fetch = YahooConnection.uid
+    def command(connection, cmd, *args):
+        status, data = fetch(connection, cmd, *args)
+        if connection.folder == "INBOX" and cmd.upper() == "FETCH":
+            def flagged(header):
+                return header.replace(b"FLAGS ()", b"FLAGS (" + flags() + b")") if f"UID {uid} ".encode() in header else header
+            data = [(flagged(entry[0]), entry[1]) if isinstance(entry, tuple) else flagged(entry) for entry in data]
+        return status, data
+    monkeypatch.setattr(YahooConnection, "uid", command)
+
+
 def test_flagged_destination_poll_before_undo_keeps_the_restored_public_id(pg_db, monkeypatch):
     async def run():
         provider = Mailboxes(["Yahoo"], False, "move")
@@ -228,18 +240,8 @@ def test_flagged_destination_poll_before_undo_keeps_the_restored_public_id(pg_db
         await mail_insight.store_if_missing(selected, points=["Selected"], deadline=None, needs_reply=False, followups=[], model="test")
         async with client() as browser:
             token = (await browser.post(f"{MAIL}/messages/{selected}/actions", json={"kind": "trash"})).json()["action_id"]
-            execute = YahooConnection.uid
-            deleted = True
-            def command(connection, cmd, *args):
-                status, data = execute(connection, cmd, *args)
-                if connection.folder == "INBOX" and cmd.upper() == "FETCH":
-                    def flags(header):
-                        if b"UID 212 " not in header:
-                            return header
-                        return header.replace(b"FLAGS ()", b"FLAGS (\\Deleted \\Seen \\Flagged)" if deleted else b"FLAGS (\\Seen \\Flagged)")
-                    data = [(flags(i[0]), i[1]) if isinstance(i, tuple) else flags(i) for i in data]
-                return status, data
-            monkeypatch.setattr(YahooConnection, "uid", command)
+            flags = b"\\Deleted \\Seen \\Flagged"
+            override_inbox_flags(monkeypatch, "212", lambda: flags)
             commit = mail_message.commit_trash_move
             async def poll_first(message, updates, **kwargs):
                 assert (await sync.sync_account(account.id)).status == "ok"
@@ -253,7 +255,7 @@ def test_flagged_destination_poll_before_undo_keeps_the_restored_public_id(pg_db
                 assert await listed(browser, "INBOX") == set(ids.values()) - {selected}
                 assert await mail_message.known_uids(account.id, "IMAP_DELETED") == {"7:212": selected}
                 assert (await sync.sync_account(account.id)).status == "ok"
-            deleted = False
+            flags = b"\\Seen \\Flagged"
             assert (await sync.sync_account(account.id)).status == "ok"
             assert await listed(browser, "INBOX") == set(ids.values())
             assert await mail_message.known_uids(account.id, "IMAP_DELETED") == {}
@@ -261,6 +263,49 @@ def test_flagged_destination_poll_before_undo_keeps_the_restored_public_id(pg_db
             assert (restored.provider_uid, restored.is_read, restored.is_flagged) == ("212", True, True)
             assert (await mail_action.get_many([token]))[0].message_id == selected
             assert json.loads((await mail_insight.get(selected)).points_json) == ["Selected"]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("flag_before_expunge", [False, True], ids=["direct-expunge", "flag-then-expunge"])
+def test_expunge_polled_before_restore_ack_survives_the_next_delivery(pg_db, monkeypatch, flag_before_expunge):
+    async def run():
+        provider = Mailboxes(["Yahoo"], False, "move")
+        await provider.connect(monkeypatch)
+        account = provider.accounts["Yahoo"]
+        ids = await mail_message.known_uids(account.id, "INBOX")
+        selected = ids["12"]
+        controls = set(ids.values()) - {selected}
+        await mail_insight.store_if_missing(selected, points=["Selected"], deadline=None, needs_reply=False, followups=[], model="test")
+        async with client() as browser:
+            token = (await browser.post(f"{MAIL}/messages/{selected}/actions", json={"kind": "trash"})).json()["action_id"]
+            commit = mail_message.commit_trash_move
+            async def expunge_before_commit(message, updates, **kwargs):
+                assert (updates["imap_uidvalidity"], updates["provider_uid"]) == ("7", "212")
+                if flag_before_expunge:
+                    override_inbox_flags(monkeypatch, "212", lambda: b"\\Deleted")
+                assert (await sync.sync_account(account.id)).status == "ok"
+                folder, uid = ("IMAP_DELETED", "7:212") if flag_before_expunge else ("INBOX", "212")
+                polled_id = (await mail_message.known_uids(account.id, folder))[uid]
+                assert polled_id != selected
+                del provider.yahoo_folders["INBOX"]["212"]
+                assert (await sync.sync_account(account.id)).status == "ok"
+                assert await listed(browser, "ARCHIVE") == {polled_id}
+                await commit(message, updates, **kwargs)
+            monkeypatch.setattr(mail_message, "commit_trash_move", expunge_before_commit)
+            undo = await browser.post(MAIL + "/actions/undo", json={"action_ids": [token]})
+            assert undo.status_code == 200 and undo.json()["restored"] == [token]
+            first_inbox = await listed(browser, "INBOX")
+            provider.yahoo_folders["INBOX"]["213"] = "later"
+            provider.labels["Yahoo"]["later"] = {"INBOX"}
+            poll = await sync.sync_account(account.id)
+            current = await mail_message.known_uids(account.id, "INBOX")
+            assert (selected in first_inbox, poll.status, "213" in current) == (False, "ok", True)
+            assert first_inbox == controls and await listed(browser, "INBOX") == controls | {current["213"]}
+            assert await listed(browser, "ARCHIVE") == {selected} and await listed(browser, "TRASH") == set()
+            assert (await mail_sync_state.get_state(account.id)).cursor == "7:213"
+            assert (await mail_action.get_many([token]))[0].message_id == selected
+            assert json.loads((await mail_insight.get(selected)).points_json) == ["Selected"]
+            assert (await browser.post(MAIL + "/actions/undo", json={"action_ids": [token]})).json()["skipped"] == [token]
     asyncio.run(run())
 
 
