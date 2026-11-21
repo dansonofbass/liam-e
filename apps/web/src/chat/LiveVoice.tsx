@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiBaseUrl } from '../api/client-config'
+import { audioLiveStatus } from '../api/generated/sdk.gen'
+import { unwrap } from '../api/unwrap'
 import { IconButton } from '../ds'
 import { useI18n } from '../i18n/I18n'
 import { createLiveVoice } from './live-voice'
@@ -60,7 +62,7 @@ export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat
   useEffect(() => {
     if (!globalThis.isSecureContext || typeof AudioContext === 'undefined' || !navigator.mediaDevices?.getUserMedia) return
     const controller = new AbortController()
-    void Promise.resolve().then(() => fetch(`${apiBaseUrl()}/api/v1/audio/live/status`, { method: 'POST', signal: controller.signal })).then(r => r.ok ? r.json() : null).then(r => setAvailable(r?.available === true)).catch(() => {})
+    void unwrap(audioLiveStatus({ signal: controller.signal, throwOnError: true })).then(result => { if (!controller.signal.aborted) setAvailable(result.available === true) }).catch(() => {})
     return () => controller.abort()
   }, [])
   useEffect(() => () => stop(), [contextKey, stop])

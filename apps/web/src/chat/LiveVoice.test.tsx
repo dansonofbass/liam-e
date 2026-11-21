@@ -1,9 +1,26 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import * as sdk from '../api/generated/sdk.gen'
 import { LiveVoice } from './LiveVoice'
 
 const original = { fetch: globalThis.fetch, AudioContext: globalThis.AudioContext, WebSocket: globalThis.WebSocket, secure: globalThis.isSecureContext, media: navigator.mediaDevices }
-afterEach(() => { cleanup(); Object.assign(globalThis, { fetch: original.fetch, AudioContext: original.AudioContext, WebSocket: original.WebSocket, isSecureContext: original.secure }); Object.defineProperty(navigator, 'mediaDevices', { value: original.media, configurable: true }) })
+beforeEach(() => { spyOn(sdk, 'audioLiveStatus').mockResolvedValue({ data: { available: true } } as never) })
+afterEach(() => { cleanup(); mock.restore(); Object.assign(globalThis, { fetch: original.fetch, AudioContext: original.AudioContext, WebSocket: original.WebSocket, isSecureContext: original.secure }); Object.defineProperty(navigator, 'mediaDevices', { value: original.media, configurable: true }) })
+
+test('status uses the generated client and cancels its request on unmount', async () => {
+  let signal: AbortSignal | undefined
+  spyOn(sdk, 'audioLiveStatus').mockImplementation(((options: { signal: AbortSignal }) => {
+    signal = options.signal
+    return new Promise(() => {})
+  }) as never)
+  Object.assign(globalThis, { AudioContext: class {}, isSecureContext: true })
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: () => {} } })
+  const view = render(<LiveVoice conversationId="c" contextKey="c" disabled={false} registerStop={() => {}} stopChat={() => {}} send={async () => undefined} />)
+  await waitFor(() => expect(signal).toBeDefined())
+  expect(signal?.aborted).toBe(false)
+  view.unmount()
+  expect(signal?.aborted).toBe(true)
+})
 
 test('two synthetic turns play audio, interruption and ending release resources', async () => {
   let ws: FakeSocket, stopped = 0, played = 0, closed = 0

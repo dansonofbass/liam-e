@@ -67,6 +67,9 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
 
   const voiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, model, promptRevisionId, activeSkillEntry?.skill.revision_id,
     tasks.scope.source, tasks.scope.account_id, format])
+  // A turn-scoped skill is consumed when the stream starts; that must not stop the answer.
+  const liveVoiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, model, promptRevisionId,
+    tasks.scope.source, tasks.scope.account_id, format])
   const busy = state.phase === 'working' || state.phase === 'streaming'
 
   const safeCursor = Math.min(cursorPos, value.length)
@@ -127,6 +130,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
       requestAnimationFrame(() => textareaRef.current?.focus())
     }
     if (option.kind === 'skill') {
+      stopLiveVoice.current?.()
       setSelectedSkill(
         draftKey,
         toActiveSkillSelection(option.skill),
@@ -135,6 +139,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
     } else if (option.kind === 'template') {
       void templateSelection.choose(option.revisionId)
     } else if (option.kind === 'clear-skill') {
+      stopLiveVoice.current?.()
       setSelectedSkill(draftKey, null)
     } else if (option.kind === 'clear-template') {
       void templateSelection.choose(null)
@@ -183,8 +188,8 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
           liveSkill={skills.data?.find(item => item.id === activeSkillEntry.skill.id)}
           skillsLoaded={skills.isSuccess}
           disabled={busy || audioDraftLocked}
-          onChangePersistence={persistence => setSkillPersistence(draftKey, persistence)}
-          onRemove={() => setSelectedSkill(draftKey, null)}
+          onChangePersistence={persistence => { stopLiveVoice.current?.(); setSkillPersistence(draftKey, persistence) }}
+          onRemove={() => { stopLiveVoice.current?.(); setSelectedSkill(draftKey, null) }}
         />
       )}
       <ActiveTemplateBanner
@@ -241,6 +246,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
           favoriteIds={favoriteIds}
           selectedSkillId={activeSkillEntry?.skill.id ?? null}
           onSelectSkill={skill => {
+            stopLiveVoice.current?.()
             setSelectedSkill(
               draftKey,
               toActiveSkillSelection(skill),
@@ -258,7 +264,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
         />
         <TaskScopeSelector conversationId={conversationId} contextMail={contextMail} disabled={busy || audioDraftLocked} />
       </>}
-      audioControls={<>{conversationId && <LiveVoice conversationId={conversationId} contextKey={voiceContext} disabled={busy || !ready || !tasks.ready || audioDraftLocked} registerStop={registerVoiceStop} onStart={onRecordingStart}
+      audioControls={<>{conversationId && <LiveVoice conversationId={conversationId} contextKey={liveVoiceContext} disabled={busy || !ready || !tasks.ready || audioDraftLocked} registerStop={registerVoiceStop} onStart={onRecordingStart}
         stopChat={stop} send={text => send({ text, account_id: scope, conversation_id: conversationId,
           context_message_id: contextMessageId, context_occurrence_id: contextOccurrenceId,
           task_source: tasks.scope.source, task_source_account_id: tasks.scope.account_id,
