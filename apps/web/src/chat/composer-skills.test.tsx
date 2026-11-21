@@ -317,6 +317,61 @@ test('slash picker dismisses via Close button and outside pointer tap on touch/m
   await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
 })
 
+test('arrow navigation reveals the active option in a long picker and keeps focus in the composer', async () => {
+  const skills = Array.from({ length: 24 }, (_, i) => ({
+    ...dailySkill, id: `skill-${i}`, slug: `long_${i}`, name: `Long ${String(i).padStart(2, '0')}`,
+  }))
+  setup({ skills })
+  const field = await screen.findByPlaceholderText(de.chat.placeholder)
+  field.focus()
+  fireEvent.change(field, { target: { value: '/long', selectionStart: 5 } })
+  const options = await screen.findAllByRole('option')
+  expect(options).toHaveLength(skills.length)
+  const first = options[0]!, last = options.at(-1)!
+  first.scrollIntoView = mock()
+  last.scrollIntoView = mock()
+  fireEvent.keyDown(field, { key: 'ArrowUp' })
+  expect(field.getAttribute('aria-activedescendant')).toBe(last.id)
+  expect(last.scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'nearest' }))
+  fireEvent.keyDown(field, { key: 'ArrowDown' })
+  expect(field.getAttribute('aria-activedescendant')).toBe(first.id)
+  expect(first.scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'nearest' }))
+  expect(document.activeElement).toBe(field)
+  fireEvent.keyDown(field, { key: 'Enter' })
+  expect(await screen.findByText(de.skills.activeSkill(skills[0]!.name))).toBeTruthy()
+  expect(sentBodies).toHaveLength(0)
+})
+
+test.each(['skills', 'templates', 'revision'])('the slash picker keeps loaded options usable and retries a failed %s request', async failed => {
+  setup()
+  const skillError = failed === 'skills'
+  const request = failed === 'skills' ? spyOn(sdk, 'skillsList') : failed === 'templates' ? spyOn(sdk, 'promptsList') : spyOn(sdk, 'promptGet')
+  request.mockRejectedValue(new Error('synthetic catalogue failure'))
+  const errorText = skillError ? de.skills.loadError : de.prompts.error
+  const openPicker = () => fireEvent.change(screen.getByRole('combobox'), { target: { value: '/', selectionStart: 1 } })
+  await screen.findByPlaceholderText(de.chat.placeholder)
+  openPicker()
+  const currentTemplate = (name: string) => name.startsWith(promptTemplate.name) && !name.includes(de.prompts.version(1))
+  const available = await screen.findByRole('option', { name: skillError ? currentTemplate : new RegExp(dailySkill.name) })
+  expect(await screen.findByText(errorText)).toBeTruthy()
+  if (failed === 'revision') expect(screen.getByRole('option', { name: currentTemplate })).toBeTruthy()
+  expect(screen.queryByRole('option', { name: skillError ? new RegExp(dailySkill.name) : /Version 1/ })).toBeNull()
+  fireEvent.click(available)
+  expect(await screen.findByText(skillError ? de.prompts.chip(promptTemplate.name) : de.skills.activeSkill(dailySkill.name))).toBeTruthy()
+
+  openPicker()
+  const retry = await screen.findByRole('button', { name: de.chat.retry })
+  const calls = request.mock.calls.length
+  request.mockResolvedValue({ data: skillError ? [dailySkill] : failed === 'templates' ? [promptTemplate] : promptDetail } as never)
+  fireEvent.click(retry)
+  await waitFor(() => expect(screen.queryByText(errorText)).toBeNull())
+  expect(request.mock.calls.length).toBeGreaterThan(calls)
+  const restored = await screen.findByRole('option', { name: skillError ? new RegExp(dailySkill.name) : /Version 1/ })
+  fireEvent.click(restored)
+  expect(await screen.findByText(skillError ? de.skills.activeSkill(dailySkill.name) : /Vorlage: Fristen · Version 1/)).toBeTruthy()
+  expect(sentBodies).toHaveLength(0)
+})
+
 test('slash picker supports keyboard navigation, empty/unknown handling, dismiss and explicit send', async () => {
   setup()
   const field = await screen.findByPlaceholderText(de.chat.placeholder)
@@ -414,6 +469,46 @@ test('sticky persistence keeps active skill across follow-up clarifying turns un
   fireEvent.click(screen.getByRole('button', { name: de.controls.send }))
   expect(sentBodies).toHaveLength(3)
   expect(sentBodies[2]!.skill_id).toBeUndefined()
+})
+
+test.each(['suggestion', 'mail reference'])('a %s sends the conversation’s exact skill until the owner ends it', async action => {
+  const { router } = setup({ path: '/?about=mail1' })
+  const mailField = await screen.findByPlaceholderText(de.inbox.mailQuestionPlaceholder)
+  fireEvent.change(mailField, { target: { value: '/postfach', selectionStart: 9 } })
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(digestSkill.name) }))
+  await act(() => router.navigate({ to: '/' }))
+  const field = await screen.findByPlaceholderText(de.chat.placeholder)
+  fireEvent.change(field, { target: { value: '/daily', selectionStart: 6 } })
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(dailySkill.name) }))
+  fireEvent.click(screen.getByRole('button', { name: de.skills.keepForFollowUps }))
+  fireEvent.change(field, { target: { value: 'Briefing' } })
+  fireEvent.click(screen.getByRole('button', { name: de.controls.send }))
+
+  const suggestion = 'Was ist morgen fällig?'
+  const mail = { id: 'mail1', account_id: 'a', color_index: 0, sender_name: 'Anna', subject: 'Anfrage', snippet: '', is_flagged: false, internal_date: null, deadline: null }
+  const finish = (turn: number) => act(async () => {
+    emitFrame({ event: 'start', conversation_id: 'c1', user_message_id: `u${turn}`, model: 'm1' })
+    emitFrame({ event: 'suggestions', items: [suggestion] })
+    emitFrame({ event: 'mails', mails: [mail] })
+    emitFrame({ event: 'done', conversation_id: 'c1', message_id: `a${turn}` })
+  })
+  const label = action === 'suggestion' ? suggestion : de.mail.draftReply
+  await finish(1)
+  expect(await screen.findByText(de.skills.durationUntilStopped)).toBeTruthy()
+  fireEvent.click(await screen.findByRole('button', { name: label }))
+  expect(sentBodies).toHaveLength(2)
+  expect(sentBodies[1]).toMatchObject({ conversation_id: 'c1', expected_mail_scope_version: 7, text: action === 'suggestion' ? suggestion : de.mail.draftPrompt })
+  expect(sentBodies[1]!.context_message_id).toBe(action === 'suggestion' ? undefined : mail.id)
+  expect(sentBodies[1]).toMatchObject({ skill_id: dailySkill.id, skill_revision_id: dailySkill.revision_id })
+
+  await finish(2)
+  fireEvent.click(screen.getByRole('button', { name: de.skills.endSkill }))
+  fireEvent.click(await screen.findByRole('button', { name: label }))
+  expect(sentBodies).toHaveLength(3)
+  expect(sentBodies[2]!.skill_id).toBeUndefined()
+  expect(sentBodies[2]!.skill_revision_id).toBeUndefined()
+  await act(() => router.navigate({ to: '/', search: { about: 'mail1' } }))
+  expect(await screen.findByText(de.skills.activeSkill(digestSkill.name))).toBeTruthy()
 })
 
 test.each(['home', 'conversation'])('context_revoked clears only the sticky skill used in the turn from %s', async origin => {

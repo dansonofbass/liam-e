@@ -267,7 +267,8 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
       activeIndex={clampedActiveIndex}
       onActiveIndexChange={setActiveIndex}
       loading={skills.isPending || templateSelection.isPending}
-      error={skills.isError || templateSelection.isError}
+      skillError={skills.isError}
+      templateError={templateSelection.isError}
       onRetry={() => {
         if (skills.isError) void skills.refetch()
         if (templateSelection.isError) templateSelection.refetchPrompts()
@@ -318,7 +319,7 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const summary = mailSummary.isSuccess ? mailSummary.data : undefined
   const { data: models = [] } = useQuery(modelsQuery())
   const skills = useQuery(skillsQuery())
-  const { state, send, retry, retryWithoutPreferences, audioDraftLocked } = useChatSession()
+  const { state, send, retry, retryWithoutPreferences, audioDraftLocked, selectedSkills } = useChatSession()
   const tts = useAudioCapabilities()?.tts
   const { scope, ready } = useConversationScope(conversationId)
   const sources = useQuery(chatCalendarSourcesQuery())
@@ -371,10 +372,15 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   const userIndex = state.userMessageId ? messages.findIndex(message => message.id === state.userMessageId) : -1
   const savedPartial = (state.phase === 'stopped' || state.phase === 'error') && userIndex >= 0 && messages.slice(userIndex + 1).some(message => message.role === 'assistant')
   const busy = state.phase === 'working' || state.phase === 'streaming'
-  // Follow-ups use the same mail scope and server-resolved calendars as a typed question.
-  const submitSuggestion = (text: string) => { if (audioDraftLocked || !ready) return; void send({ text, account_id: scope, conversation_id: conversationId }) }
-  // The pencil on a mail card asks for a reply draft to that mail in this conversation, like the button on the open mail.
-  const draft: Draft = { onDraft: id => { if (audioDraftLocked || !ready) return; void send({ text: texts.mail.draftPrompt, account_id: scope, conversation_id: conversationId, context_message_id: id }) }, disabled: oldGrant || !ready || busy || audioDraftLocked }
+  const sendFollowUp = (text: string, contextMessageId?: string) => {
+    if (audioDraftLocked || !ready) return
+    const skill = selectedSkills[conversationId]?.skill
+    void send({
+      text, account_id: scope, conversation_id: conversationId, context_message_id: contextMessageId,
+      ...(skill ? { skill_id: skill.id, skill_revision_id: skill.revision_id } : {}),
+    })
+  }
+  const draft: Draft = { onDraft: id => sendFollowUp(texts.mail.draftPrompt, id), disabled: oldGrant || !ready || busy || audioDraftLocked }
   const modelLabel = (id?: string) => id ? models.find(model => model.id === id)?.label ?? id : undefined
   const skillLabel = (skill?: { id: string; slug: string; version: number } | null) => {
     if (!skill) return undefined
@@ -405,11 +411,11 @@ export function Conversation({ conversationId }: { conversationId: string }) {
   return <div className="le-chat-view"><ChatHeader conversationId={conversationId} modelMenu={<ModelMenu disabled={audioDraftLocked} key={`${conversationId}:model`} conversationId={conversationId} />} /><div className="le-chat-messages le-chat-thread" ref={scrollRef}>
     {history.isPending && <p className="le-hint">{texts.chat.loadingHistory}</p>}
     {history.isError && <Notice tone="danger" action={historyGone ? newConversation : { label: texts.chat.retry, onClick: () => { void history.refetch() } }}>{historyGone ? texts.errors.conversation_not_found : texts.chat.historyError}</Notice>}
-    {ordered.map((message, index) => <div className="le-chat-entry" id={`message-${message.id}`} key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && !oldGrant && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={submitSuggestion} />}</div>)}
+    {ordered.map((message, index) => <div className="le-chat-entry" id={`message-${message.id}`} key={message.id}>{renderMessage(message)}{index === suggestionsAfter && !live && !oldGrant && <Suggestions items={lastAssistant?.extras.suggestions ?? []} onSend={sendFollowUp} />}</div>)}
     {live && <div className="le-chat-entry">{!savedPartial && <>{!messages.some(message => message.id === state.userMessageId) && <ChatMessage role="user">{state.request?.text}</ChatMessage>}{status && <div className="le-working" role="status">{status}</div>}{liveSkillMeta && <div><Tag tone="on-surface" icon="sparkle">{texts.skills.usedTag(liveSkillMeta.name, liveSkillMeta.version)}</Tag></div>}<div aria-hidden={busy || undefined}><ChatMessage role="assistant" model={modelLabel(state.model)} streaming={busy} stopped={state.phase === 'stopped'} live={false}><SafeMarkdown text={state.text} /></ChatMessage></div></>}
       {state.phase === 'stopped' && <div className="le-chat-retry"><Button variant="ghost" onClick={() => { void retry() }}>{texts.chat.askAgain}</Button></div>}
       {state.phase === 'error' && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : skillFailure ? undefined : state.errorCode && NEEDS_NEW_CONVERSATION.has(state.errorCode) ? newConversation : { label: texts.chat.retry, onClick: () => { void retry() } }}>{state.errorCode === 'conversation_scope_change_requires_new' ? texts.taskChat.scopeConflict : texts.errors[state.errorCode ?? 'internal']}</Notice>}
-      {state.phase === 'done' && <>{!oldGrant && state.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && renderProposal(state.proposal)}{!oldGrant && <Suggestions items={state.suggestions} onSend={submitSuggestion} />}</>}
+      {state.phase === 'done' && <>{!oldGrant && state.calendars?.map(ref => <CalendarReference key={ref.occurrence_id} occurrenceId={ref.occurrence_id} sourceId={ref.source_id} />)}{state.mails.map(mail => <Reference key={mail.id} mail={mail} accounts={accounts} draft={draft} />)}{state.proposal && renderProposal(state.proposal)}{!oldGrant && <Suggestions items={state.suggestions} onSend={sendFollowUp} />}</>}
     </div>}
     <div className="le-sr" aria-live="polite">{state.conversationId === conversationId && state.phase === 'done' ? state.text : ''}</div>
   </div>{showEnd && <div className="le-chat-end"><Button variant="secondary" onClick={scrollToEnd}>{texts.chat.toEnd}</Button></div>}<div className="le-chat-composer">{oldGrant ? <Notice tone="info" action={{ label: texts.prompts.restart, onClick: restart }}>{oldCalendar ? texts.calendarSettings.restart : texts.chatAccounts.restart}</Notice> : <ChatComposer conversationId={conversationId} onRecordingStart={speech.stop} autoFocus={busy && state.conversationId === conversationId} />}</div></div>

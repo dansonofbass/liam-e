@@ -1,5 +1,5 @@
 // i18n-exempt: ARIA combobox/listbox attributes and CSS classes.
-import { useEffect, useId, useMemo, useRef, type CSSProperties, type RefObject } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, type CSSProperties, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { Button, Icon, IconButton } from '../ds'
 import { useFloating } from '../ds/floating'
@@ -16,7 +16,8 @@ export function SlashPicker({
   activeIndex,
   onActiveIndexChange,
   loading,
-  error,
+  skillError,
+  templateError,
   onRetry,
   onSelect,
   onClose,
@@ -30,7 +31,8 @@ export function SlashPicker({
   activeIndex: number
   onActiveIndexChange: (index: number) => void
   loading: boolean
-  error: boolean
+  skillError: boolean
+  templateError: boolean
   onRetry: () => void
   onSelect: (option: SlashOption) => void
   onClose: () => void
@@ -39,6 +41,7 @@ export function SlashPicker({
   const { texts } = useI18n()
   const menuRef = useRef<HTMLDivElement>(null)
   const headingBaseId = useId()
+  const error = skillError || templateError
 
   const spot = useFloating(
     open,
@@ -51,6 +54,14 @@ export function SlashPicker({
   )
 
   const placed = spot !== null
+  const activeOption = options[activeIndex]
+  const activeId = activeOption && optionId(activeOption)
+  useLayoutEffect(() => {
+    if (open && placed && activeId) {
+      document.getElementById(activeId)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+    }
+  }, [open, placed, activeId])
+
   const position = {
     left: spot?.left ?? 0,
     top: spot?.top ?? 0,
@@ -124,9 +135,10 @@ export function SlashPicker({
           <div role="status" className="le-menu-empty">{texts.skills.loading}</div>
         )}
 
-        {error && !hasCatalogEntries && (
+        {error && (
           <div role="alert" className="le-menu-empty">
-            <span>{texts.skills.loadError}</span>
+            {skillError && <span>{texts.skills.loadError}</span>}
+            {templateError && <span>{texts.prompts.error}</span>}
             <Button variant="ghost" onClick={onRetry}>{texts.chat.retry}</Button>
           </div>
         )}
