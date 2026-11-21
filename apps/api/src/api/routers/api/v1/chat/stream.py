@@ -32,6 +32,8 @@ class ChatStreamRequest(BaseModel):
     expected_mail_scope_version: int | None = Field(default=None, ge=1)
     account_id: str | None = None
     prompt_revision_id: str | None = None
+    skill_id: str | None = Field(default=None, max_length=100)
+    skill_revision_id: str | None = Field(default=None, max_length=100)
     without_preferences: bool = False
     locale: Locale = Field(default=DEFAULT_LOCALE, description="Browser language when the saved setting follows the browser")
     context_message_id: str | None = None

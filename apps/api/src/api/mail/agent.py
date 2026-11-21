@@ -16,11 +16,19 @@ from api.mail.context_resolver import resolve_context
 from env.mail import env as mail_env
 from api.mail.chat_client import mistral_client
 from api.mail.agent_prompt import system_prompt
-from api.mail.agent_tools import TOOLS, TurnContext, execute_tool, tool_status
+from api.mail.agent_tools import TurnContext, execute_tool, tool_status, tools_for_context
 from api.mail.chat_events import ChatEvent, StartEvent, StatusEvent, DeltaEvent, MailsEvent, MailRefOut, CalendarsEvent, ProposalEvent, SuggestionsEvent, DoneEvent, ErrorEvent
 from api.mail.chat_schemas import ChatExtrasOut, ContextOut, to_message_out
 from api.mail.insights import BERLIN
 from api.mail import headers, state
+from api.skills import (
+    SkillDisabledError,
+    SkillNotFoundError,
+    SkillRevisionUnavailableError,
+    SkillToolUnavailableError,
+    load_active_skill,
+    skill_prompt_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +71,7 @@ def visible_messages(rows):
     return [r for r in rows if r.role != 'tool' and not (r.role == 'assistant' and r.tool_payload_json)]
 
 
-async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, expected_mail_scope_version: int | None = None, context_message_id: str | None = None, model: str | None = None, prompt_revision_id: str | None = None, calendar_source_ids: list[str] | None = None, context_occurrence_id: str | None = None, calendar_timezone: str = 'Europe/Berlin', task_source: str = 'none', task_source_account_id: str | None = None, without_preferences: bool = False, locale: Locale = DEFAULT_LOCALE, resolved_context=None) -> AsyncIterator[ChatEvent]:
+async def run_turn_events(*, conversation_id: str | None, text: str, account_id: str | None = None, expected_mail_scope_version: int | None = None, context_message_id: str | None = None, model: str | None = None, prompt_revision_id: str | None = None, skill_id: str | None = None, skill_revision_id: str | None = None, calendar_source_ids: list[str] | None = None, context_occurrence_id: str | None = None, calendar_timezone: str = 'Europe/Berlin', task_source: str = 'none', task_source_account_id: str | None = None, without_preferences: bool = False, locale: Locale = DEFAULT_LOCALE, resolved_context=None) -> AsyncIterator[ChatEvent]:
     """All rounds share one persisted snapshot; revocation is checked at each boundary."""
     try:
         effective_locale = await resolve_locale(locale)
@@ -73,7 +81,7 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         return
     conversation, snapshot, template_text = resolved_context or await resolve_context(
         conversation_id=conversation_id, text=text, account_id=account_id, context_message_id=context_message_id, context_occurrence_id=context_occurrence_id, expected_mail_scope_version=expected_mail_scope_version,
-        model=model, prompt_revision_id=prompt_revision_id, calendar_source_ids=calendar_source_ids, calendar_timezone=calendar_timezone,
+        model=model, prompt_revision_id=prompt_revision_id, skill_id=skill_id, skill_revision_id=skill_revision_id, calendar_source_ids=calendar_source_ids, calendar_timezone=calendar_timezone,
         task_source=task_source, task_source_account_id=task_source_account_id, without_preferences=without_preferences)
     account_scope = json.loads(snapshot.account_scope_json)
     scope_ids = account_scope['account_ids']
@@ -93,6 +101,15 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         if occurrence is None or occurrence.source_id not in json.loads(snapshot.calendar_scope_json):
             yield ErrorEvent(code='calendar_reference_unavailable')
             return
+    active_skill = None
+    snapshot_skill_id = getattr(snapshot, 'skill_id', None)
+    snapshot_skill_revision_id = getattr(snapshot, 'skill_revision_id', None)
+    if snapshot_skill_revision_id is not None or snapshot_skill_id is not None:
+        try:
+            active_skill = await load_active_skill(snapshot_skill_revision_id)
+        except (SkillNotFoundError, SkillRevisionUnavailableError, SkillDisabledError, SkillToolUnavailableError):
+            yield ErrorEvent(code='context_revoked')
+            return
     user = await message_access.add_message(conversation_id=conversation.id, role='user', content=text, context_id=snapshot.id)
     model = conversation.model or mail_env.mail_chat_model
     all_text = ''
@@ -104,7 +121,13 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
     async def save(stopped):
         nonlocal saved
         if saved: return None
-        extras = ChatExtrasOut(mails=mails, suggestions=suggestions, model=model, calendars=calendars).model_dump()
+        extras = ChatExtrasOut(
+            mails=mails,
+            suggestions=suggestions,
+            model=model,
+            calendars=calendars,
+            skill=active_skill.execution_ref() if active_skill else None,
+        ).model_dump()
         if ctx and not stopped:
             choice = await choice_for_clarification(ctx, all_text)
             if choice:
@@ -120,7 +143,10 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
         account = await mail_account.get_account(account_id) if account_id else None
         ctx = TurnContext(conversation.id, account.id if account else None, datetime.now(ZoneInfo(calendar_timezone)).date(), account_ids=scope_ids, context_id=snapshot.id, source_message_id=user.id,
                           calendar_source_ids=json.loads(getattr(snapshot, 'calendar_scope_json', '[]')), calendar_timezone=calendar_timezone, user_text=text,
-                          task_scope=json.loads(getattr(snapshot, 'task_scope_json', '{"source":"none"}')), locale=effective_locale, browser_locale=locale)
+                          task_scope=json.loads(getattr(snapshot, 'task_scope_json', '{"source":"none"}')), locale=effective_locale, browser_locale=locale,
+                          allowed_tools=active_skill.allowed_tools if active_skill else None,
+                          active_skill_id=active_skill.id if active_skill else None,
+                          active_skill_revision_id=active_skill.revision_id if active_skill else None)
         history = await message_access.list_messages(conversation.id)
         context_ids = {row.context_id for row in history if row.context_id}
         contexts = await chat_context.get_contexts(context_ids)
@@ -147,6 +173,9 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
                 json.dumps([{'key': rev.key, 'scope': rev.scope, 'value': rev.value} for rev in revisions], ensure_ascii=False)})
         if template_text is not None:
             messages.insert(2 if preference_ids else 1, {'role': 'user', 'content': 'Nutzervorlage für diesen Turn:\n' + template_text})
+        if active_skill is not None:
+            insert_at = 1 + int(bool(preference_ids)) + int(template_text is not None)
+            messages.insert(insert_at, skill_prompt_message(active_skill))
         context_mail = await mail_message.get_message(context_message_id) if context_message_id else None
         if context_mail and context_mail.account_id in scope_ids and not context_mail.unverified_connector:
             messages.insert(1, {'role':'system', 'content':f'Die Bitte bezieht sich auf die Mail mit der ID {context_message_id}. Lies sie mit get_message, bevor du antwortest.'})
@@ -168,9 +197,12 @@ async def run_turn_events(*, conversation_id: str | None, text: str, account_id:
             calls_by_index = {}
             round_text = ''
             try:
-                kwargs = {'model':model, 'messages':messages, 'tools':TOOLS}
+                turn_tools = tools_for_context(ctx)
+                kwargs = {'model':model, 'messages':messages}
+                if turn_tools:
+                    kwargs['tools'] = turn_tools
                 last = round_index == max(1, mail_env.mail_chat_max_tool_rounds) - 1
-                if last: kwargs['tool_choice'] = 'none'
+                if last and turn_tools: kwargs['tool_choice'] = 'none'
                 if client is None:
                     client = mistral_client()
                 if not await chat_context.is_live(snapshot.id):

@@ -17,6 +17,8 @@ from db.models.chat_message import ChatMessage
 from db.models.mail_message import MailMessage
 from db.models.prompt_revision import PromptRevision
 from db.models.prompt_template import OWNER_SCOPE, PromptTemplate
+from db.models.skill_definition import SkillDefinition
+from db.models.skill_revision import SkillRevision
 from db.accessors.prompt_template import StaleVersion
 
 
@@ -34,6 +36,77 @@ class CalendarReferenceUnavailable(Exception):
 
 class ScopeChange(Exception):
     pass
+
+
+class SkillNotFound(Exception):
+    pass
+
+
+class SkillRevisionUnavailable(Exception):
+    pass
+
+
+class SkillDisabled(Exception):
+    pass
+
+
+class SkillToolUnavailable(Exception):
+    pass
+
+
+async def lock_skill_revision(session, *, skill_id=None, skill_revision_id=None, registered_tool_names=None):
+    """Lock the active skill and verify its allowed tools against the API server registry.
+
+    ``db`` cannot import ``api.skills.TOOL_REGISTRY`` directly, so the API layer supplies
+    ``registered_tool_names`` to confirm every tool named in ``revision.allowed_tools_json``
+    is implemented in server code. Execution turns remain restricted strictly to the skill
+    revision's own ``allowed_tools_json``, never to all registered tools.
+    """
+    if skill_id is None and skill_revision_id is None:
+        return None, None
+    if skill_revision_id is not None:
+        if not isinstance(skill_revision_id, str) or not skill_revision_id.strip():
+            raise SkillRevisionUnavailable
+        revision = await session.get(SkillRevision, skill_revision_id.strip())
+        if revision is None or revision.removed or revision.owner_scope != OWNER_SCOPE:
+            raise SkillRevisionUnavailable
+        skill = (await session.execute(select(SkillDefinition).where(
+            SkillDefinition.id == revision.skill_id, SkillDefinition.owner_scope == OWNER_SCOPE
+        ).with_for_update())).scalar_one_or_none()
+        if skill is None:
+            raise SkillNotFound
+        await session.refresh(revision)
+        if revision.removed:
+            raise SkillRevisionUnavailable
+        if skill_id is not None and skill_id.strip() not in (skill.id, skill.slug):
+            raise SkillRevisionUnavailable
+        if skill.status != 'active':
+            raise SkillDisabled
+    else:
+        if not isinstance(skill_id, str) or not skill_id.strip():
+            raise SkillNotFound
+        normalized_skill_id = skill_id.strip()
+        skill = (await session.execute(select(SkillDefinition).where(
+            SkillDefinition.owner_scope == OWNER_SCOPE,
+            (SkillDefinition.id == normalized_skill_id) | (SkillDefinition.slug == normalized_skill_id),
+        ).with_for_update())).scalar_one_or_none()
+        if skill is None:
+            raise SkillNotFound
+        if skill.status != 'active':
+            raise SkillDisabled
+        revision = await session.get(SkillRevision, skill.revision_id)
+        if revision is None or revision.removed or revision.skill_id != skill.id:
+            raise SkillRevisionUnavailable
+    if registered_tool_names is not None:
+        try:
+            parsed_tools = json.loads(revision.allowed_tools_json or '[]')
+        except (TypeError, ValueError) as error:
+            raise SkillToolUnavailable from error
+        if not isinstance(parsed_tools, list) or not all(isinstance(name, str) and name for name in parsed_tools):
+            raise SkillToolUnavailable
+        if not set(parsed_tools).issubset(registered_tool_names):
+            raise SkillToolUnavailable
+    return skill, revision
 
 
 async def lock_revision(session, revision_id):
@@ -78,7 +151,8 @@ async def configure(conversation_id, expected_version, *, revision_id=None, chan
 
 async def resolve(*, conversation_id, title, model, revision_id, account_id, app_prompt_version, calendar_source_ids=None,
                   task_source='none', task_source_account_id=None, without_preferences=False, context_message_id=None,
-                  context_occurrence_id=None, expected_mail_scope_version=None):
+                  context_occurrence_id=None, expected_mail_scope_version=None, skill_id=None, skill_revision_id=None,
+                  registered_tool_names=None):
     async with get_session_maker()() as session:
         await user_preference.lock(session)
         grants = await chat_settings.in_session(session)
@@ -109,6 +183,9 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
             raise ValueError("selection_requires_patch")
         selected = existing.prompt_revision_id if existing else revision_id
         revision = await lock_revision(session, selected)
+        skill, skill_revision = await lock_skill_revision(
+            session, skill_id=skill_id, skill_revision_id=skill_revision_id, registered_tool_names=registered_tool_names
+        )
         if existing:
             await session.refresh(existing, with_for_update=True)
             if existing.prompt_revision_id != selected:
@@ -162,7 +239,10 @@ async def resolve(*, conversation_id, title, model, revision_id, account_id, app
                                app_prompt_version=app_prompt_version, account_scope_json=provenance, mail_scope_version=grants.version,
                                calendar_scope_json=json.dumps(calendar_ids), calendar_feed_bindings_json=json.dumps(bindings, sort_keys=True),
                                task_scope_json=json.dumps(task_scope),
-                               preferences_enabled=enabled, preference_revision_ids_json=json.dumps(preference_ids))
+                               preferences_enabled=enabled, preference_revision_ids_json=json.dumps(preference_ids),
+                               skill_id=skill.id if skill else None,
+                               skill_revision_id=skill_revision.id if skill_revision else None,
+                               skill_hash=skill_revision.content_hash if skill_revision else None)
         session.add(snapshot)
         await session.commit()
         return conversation, snapshot, revision.content if revision else None
@@ -193,9 +273,26 @@ async def replaced_feed_contexts(contexts) -> set[str]:
             {source: bindings[source] for source in ids if source in bindings} != calendar_source.stored_feed_bindings(contexts[key])}
 
 
+async def permits_skill_in_session(session, row: ChatContext | None) -> bool:
+    """Verify an active, unremoved skill binding when a turn context names one."""
+    if row is None:
+        return False
+    if row.skill_revision_id is None:
+        return row.skill_id is None
+    if not row.skill_revision_id.strip():
+        return False
+    revision = await session.get(SkillRevision, row.skill_revision_id)
+    if revision is None or revision.removed or revision.owner_scope != OWNER_SCOPE:
+        return False
+    skill = await session.get(SkillDefinition, revision.skill_id)
+    return bool(skill is not None and skill.owner_scope == OWNER_SCOPE and skill.status == "active")
+
+
 async def is_live(context_id: str) -> bool:
     async with get_session_maker()() as session:
         row = await session.get(ChatContext, context_id)
         if row is None or row.revoked or not await chat_settings.permits_context(session, row):
+            return False
+        if not await permits_skill_in_session(session, row):
             return False
         return await calendar_source.permits_context(session, row)
