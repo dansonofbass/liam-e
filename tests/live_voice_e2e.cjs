@@ -14,11 +14,13 @@ async function wait(check, label) { const end = Date.now() + 30000; while (Date.
 async function stop(child) { if (!child || child.exitCode !== null) return; child.kill('SIGTERM'); await Promise.race([new Promise(resolve => child.once('exit', resolve)), sleep(3000)]); if (child.exitCode === null) child.kill('SIGKILL') }
 
 async function main() {
-  const session = process.env.AO_SESSION_ID
-  if (!session) throw new Error('AO_SESSION_ID required for the disposable database label')
+  // The database container removes itself; the label lets an outside cleanup find it if this
+  // script is killed first. LIVE_E2E_CONTAINER_LABEL (key=value) overrides the default.
+  const label = process.env.LIVE_E2E_CONTAINER_LABEL || `liam-e.voice-e2e=${randomUUID()}`
+  if (!/^[^=\s]+=\S*$/.test(label)) throw new Error('LIVE_E2E_CONTAINER_LABEL must be key=value')
   let db, api, web, browser
   try {
-    db = run('docker', ['run', '--pull=never', '--rm', '-d', '--label', `ao.session=${session}`, '--name', `liam-e-voice-${randomUUID().slice(0, 8)}`, '-p', '127.0.0.1::5432', '-e', 'POSTGRES_PASSWORD=test-only', '-e', 'POSTGRES_DB=liam_e_voice_e2e', image]).trim()
+    db = run('docker', ['run', '--pull=never', '--rm', '-d', '--label', label, '--name', `liam-e-voice-${randomUUID().slice(0, 8)}`, '-p', '127.0.0.1::5432', '-e', 'POSTGRES_PASSWORD=test-only', '-e', 'POSTGRES_DB=liam_e_voice_e2e', image]).trim()
     const dbPort = run('docker', ['port', db, '5432/tcp']).trim().match(/^127\.0\.0\.1:(\d+)$/)?.[1]
     if (!dbPort) throw new Error('Database is not confined to loopback')
     await wait(() => spawnSync('docker', ['exec', db, 'pg_isready', '-U', 'postgres', '-d', 'liam_e_voice_e2e'], { stdio: 'ignore' }).status === 0, 'Postgres')
