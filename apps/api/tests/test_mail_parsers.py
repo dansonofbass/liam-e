@@ -71,8 +71,8 @@ def fixture(name):
 
 
 def test_sender_address_unknown_charset_does_not_raise():
-    value = "=?x-unknown?q?abc?= <a@b.org>"
-    assert headers.sender_address(value) == "a@b.org"
+    value = "=?x-unknown?q?abc?= <a@example.org>"
+    assert headers.sender_address(value) == "a@example.org"
     assert headers.sender_name(value)
 
 
@@ -86,8 +86,8 @@ def test_sender_address_unquoted_comma_falls_back_to_angle_address():
 
 
 def test_parse_rfc822_survives_unknown_charset():
-    raw = b"From: =?x-unknown?q?abc?= <a@b.org>\r\nSubject: =?x-unknown?q?xyz?=\r\n\r\nBody"
-    assert sync_imap.parse_rfc822(raw, max_body_chars=100)["sender_address"] == "a@b.org"
+    raw = b"From: =?x-unknown?q?abc?= <a@example.org>\r\nSubject: =?x-unknown?q?xyz?=\r\n\r\nBody"
+    assert sync_imap.parse_rfc822(raw, max_body_chars=100)["sender_address"] == "a@example.org"
 
 
 def test_parse_rfc822_display_name_with_encoded_comma():
@@ -172,7 +172,7 @@ def test_sender_address_domain_bearing_invalid_mailbox_is_ambiguous():
 
 @pytest.mark.parametrize(("value", "expected"), [
     ("=?utf-8?q?M=C3=BCller?= <Max.Mueller@Example.org>", "max.mueller@example.org"),
-    ("=?x-unknown?q?abc?= <a@b.org>", "a@b.org"),
+    ("=?x-unknown?q?abc?= <a@example.org>", "a@example.org"),
     ("=?utf-8?q?boss@corp.example?= <evil@attacker.example>", "evil@attacker.example"),
     ("=?utf-8?q?boss@corp.example?=", ""),
     ("Doe, John <john@example.org>", "john@example.org"),
@@ -188,9 +188,9 @@ def test_sender_address_domain_bearing_invalid_mailbox_is_ambiguous():
     ("a@evil.example, Bank <service@bank.example>", ""),
     ("\"evil x\"@attacker.example, Bank <service@bank.example>", ""),
     ("plain@Example.ORG", "plain@example.org"),
-    ("<A@B.org>", "a@b.org"),
+    ("<A@Example.ORG>", "a@example.org"),
     ("", ""),
-    ("Group: a@b.org, c@d.org;", ""),
+    ("Group: a@example.org, c@example.net;", ""),
 ])
 def test_sender_paths_agree(value, expected):
     raw = b"From: " + value.encode() + b"\r\nSubject: s\r\n\r\nx\r\n"
@@ -435,5 +435,5 @@ def test_html_to_text_keeps_preformatted_lines():
 
 
 def test_parse_rfc822_reads_text_with_unknown_charset():
-    raw = b'From: a@b.org\r\nContent-Type: text/plain; charset="x-unknown"\r\n\r\nHallo Welt'
+    raw = b'From: a@example.org\r\nContent-Type: text/plain; charset="x-unknown"\r\n\r\nHallo Welt'
     assert sync_imap.parse_rfc822(raw, max_body_chars=100)['body_text'] == 'Hallo Welt'

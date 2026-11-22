@@ -20,7 +20,7 @@ Success means the owner can do three things:
 
 ## Delivery
 
-- **One task:** branch `feat/welle-6` in `~/Projekte/worktrees/liam-e-welle-6`, one PR.
+- **One task:** branch `feat/welle-6` in its own Git worktree, one PR.
 - **Issues covered:** #67, #66, #23, and a new issue for the calendar grid. The new issue is
   written in English from the change template.
 - **Commits:** each issue has its own commits and its own closing keyword in the PR.
@@ -569,7 +569,7 @@ ganzt.          ▭ Urlaub ─────────────────�
 2. **Part 3 backend in parallel:** no doc edits; it regenerates the OpenAPI spec and the client.
 3. **Part 4 in parallel:** the grid on the existing API first, then the dialogs and the detail
    once the Part 3 API is fixed.
-4. **Integration:** the controller integrates serially and resolves overlaps
+4. **Integration:** the lead agent integrates serially and resolves overlaps
    (`test_mcp_exposure.py`, the generated client), then writes the English calendar
    documentation.
 

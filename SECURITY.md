@@ -6,8 +6,14 @@ Fixes are provided only for the current state of `main`.
 
 ## Report a vulnerability
 
-Please report privately through GitHub's private reporting: the **Security** tab, then **Report a
-vulnerability**. A suspected vulnerability does not belong in a public issue.
+Please report privately through GitHub's private vulnerability reporting: open the **Security**
+tab and choose **Report a vulnerability**, or go straight to the
+[reporting form](https://github.com/plagor44-ux/liam-e/security/advisories/new). A suspected
+vulnerability does not belong in a public issue, pull request or discussion.
+
+The report opens a draft security advisory that only you and the maintainer can see. Questions,
+a fix and the disclosure are handled there before anything becomes public. If the button is
+missing, open an issue that asks for a private channel and contains no details.
 
 Useful information includes the tested version (commit or date), the affected route or function,
 and reproduction steps using synthetic data. Never include credentials, tokens, app passwords,

@@ -15,6 +15,11 @@ build
 .env
 .env*.local
 
+# Mistral Studio IDs for tools/deploy.sh, only in a checkout that deploys; never commit them
+# (AGENTS.md, "Publication and private data"). The file holds, with the real values:
+#   {"organizationId": "<organization-id>", "workspaceId": "<workspace-id>", "appId": "<app-id>"}
+/mistral.deployment.json
+
 # Local package-manager configuration (may contain tokens)
 .npmrc
 

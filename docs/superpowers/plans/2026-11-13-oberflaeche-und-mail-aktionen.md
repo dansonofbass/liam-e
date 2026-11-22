@@ -1687,7 +1687,7 @@ für das Layout in den Screens.
   - `SafeMarkdown`:
     - `<script>` erscheint nicht als Element;
     - `[x](javascript:alert(1))` hat kein `href`;
-    - `[x](https://beispiel.de)` hat `target="_blank"` und `rel="noopener noreferrer"`;
+    - `[x](https://example.org)` hat `target="_blank"` und `rel="noopener noreferrer"`;
     - `mailto:` bleibt erhalten.
 - [ ] **Step 2: Laufen lassen** → FAIL.
 - [ ] **Step 3: Implementieren.**
