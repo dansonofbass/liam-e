@@ -519,7 +519,7 @@ async def test_app_locale_takes_priority_over_current_message_language(store, mo
     monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
     events = [event async for event in agent.run_turn_events(conversation_id=None, text=message, locale=locale)]
     sent = fake.requests[0]['messages']
-    assert sent[-1]['content'] == message
+    assert sent[-1]['content'].startswith(message + '\n\n[App language instruction]\n')
     assert f'Antworte standardmäßig auf {fallback} (aktive App-Sprache)' in sent[0]['content']
     assert f'Schreibe neue Mails für create_draft standardmäßig auf {fallback}' in sent[0]['content']
     assert events[-1].event == 'done'
@@ -987,7 +987,7 @@ async def test_voice_response_prompt_preserves_scope_rules_and_current_user_text
     messages = fake.requests[0]['messages']
     assert 'ein bis drei kurzen' in messages[0]['content']
     assert 'Bestätigung' in messages[0]['content']
-    assert any(message['role'] == 'user' and message['content'] == 'Hallo' for message in messages)
+    assert any(message['role'] == 'user' and message['content'].startswith('Hallo\n\n[App language instruction]\n') for message in messages)
     answer = next(row for row in store.rows if row.role == 'assistant')
     assert answer.content == 'Neue Antwort.' and not answer.stopped
     assert events[-1].message_id == answer.id
@@ -1022,4 +1022,62 @@ async def test_app_language_prompt_pins_explicit_and_original_mail_exceptions(st
     assert 'Eine ausdrückliche Sprachbitte im aktuellen eigenen Beitrag hat Vorrang' in prompt
     assert 'Die automatisch erkannte Sprache des Beitrags allein ändert die Antwortsprache nicht' in prompt
     assert 'Antworten und Weiterleitungen schreibe in der Sprache der ursprünglichen Mail' in prompt
-    assert fake.requests[0]['messages'][-1]['content'] == message, case
+    assert fake.requests[0]['messages'][-1]['content'].startswith(message + '\n\n[App language instruction]\n'), case
+
+@pytest.mark.parametrize(('locale', 'history_text', 'user_text', 'opening'), [
+    ('en', 'Das ist eine frühere deutsche Antwort.', 'Most important mail from today.', 'Reply in English by default.'),
+    ('de', 'This is an earlier English answer.', 'Was ist heute wichtig?', 'Antworte standardmäßig auf Deutsch.'),
+])
+@pytest.mark.parametrize('voice_response', [False, True])
+async def test_language_instruction_stays_in_current_user_message_and_is_never_saved(store, monkeypatch, caplog, locale, history_text, user_text, opening, voice_response):
+    from api.mail.agent_prompt import reply_language_instruction, VOICE_INSTRUCTIONS, VOICE_INSTRUCTIONS_EN
+    conversation = await store.create()
+    snapshot = store.snapshot('language-context')
+    store.rows.extend([
+        ChatMessage(conversation_id=conversation.id, role='user', content=user_text, context_id=snapshot.id),
+        ChatMessage(conversation_id=conversation.id, role='assistant', content=history_text, context_id=snapshot.id),
+    ])
+    fake = FakeMistral(streams=[[chunk('list_accounts', {})], ['Synthetic answer.']], strict_order=True)
+    monkeypatch.setattr(agent, 'mistral_client', lambda: fake)
+    events = [event async for event in agent.run_turn_events(conversation_id=conversation.id, text=user_text,
+        locale=locale, voice_response=voice_response, resolved_context=(conversation, snapshot, None))]
+    assert events[-1].event == 'done'
+    assert len(fake.requests) == 2
+    for request in fake.requests:
+        messages = request['messages']
+        current = [message for message in messages if message['role'] == 'user'][-1]
+        assert current['content'] == user_text + '\n\n[App language instruction]\n' + reply_language_instruction(locale)
+        assert reply_language_instruction(locale).startswith(opening)
+        assert any(message.get('content') == history_text for message in messages)
+        assert any(message.get('content') == user_text for message in messages)
+        assert sum(reply_language_instruction(locale) in (message.get('content') or '') for message in messages) == 1
+        system = messages[0]['content']
+        assert (VOICE_INSTRUCTIONS_EN in system) is (voice_response and locale == 'en')
+        assert (VOICE_INSTRUCTIONS in system) is (voice_response and locale == 'de')
+    assert fake.requests[0]['messages'][-1]['role'] == 'user'
+    assert fake.requests[1]['messages'][-1]['role'] == 'tool'
+    assert any(row.role == 'user' and row.content == user_text for row in store.rows)
+    instruction = reply_language_instruction(locale)
+    assert all(instruction not in row.content and instruction not in row.extras_json and instruction not in (row.tool_payload_json or "") for row in store.rows)
+    assert instruction not in caplog.text
+
+
+def test_last_language_instruction_preserves_explicit_request_and_mail_reply_priority():
+    from api.mail.agent_prompt import reply_language_instruction
+    english = reply_language_instruction('en')
+    assert 'explicit language request in the current user message takes precedence' in english
+    assert "Replies and forwards use the original email's language" in english
+    german = reply_language_instruction('de')
+    assert 'ausdrückliche Sprachbitte im aktuellen Nutzerbeitrag hat Vorrang' in german
+    assert 'Antworten und Weiterleitungen verwenden die Sprache der ursprünglichen Mail' in german
+
+
+@pytest.mark.parametrize('messages', [
+    [{'role': 'system'}, {'role': 'user'}, {'role': 'system'}],
+    [{'role': 'user'}, {'role': 'assistant', 'tool_calls': [{}]}, {'role': 'tool'}, {'role': 'system'}, {'role': 'user'}],
+    [{'role': 'user'}, {'role': 'assistant'}, {'role': 'system'}, {'role': 'user'}],
+])
+async def test_strict_model_double_rejects_invalid_role_order(messages):
+    fake = FakeMistral(streams=[['unused']], strict_order=True)
+    with pytest.raises(AssertionError):
+        await fake.stream_async(model='synthetic', messages=messages)

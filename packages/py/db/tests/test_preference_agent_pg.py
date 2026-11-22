@@ -55,7 +55,8 @@ def test_real_model_payload_scope_and_history(pg_db, monkeypatch, caplog):
             assert 'test-only ausführlich' in sent
             messages = requests[-1]['messages']
             assert all(m['role'] == 'user' for m in messages if 'test-only' in (m.get('content') or ''))
-            assert messages[-1]['content'] == 'Bitte lang antworten'
+            from api.mail.agent_prompt import reply_language_instruction
+            assert messages[-1] == {'role': 'user', 'content': 'Bitte lang antworten\n\n[App language instruction]\n' + reply_language_instruction('en')}
             contents = [m.get('content') or '' for m in messages]
             assert 'Rangfolge' in contents[0]
             preference = next(i for i, text in enumerate(contents) if 'Stilpräferenzen' in text)
