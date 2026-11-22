@@ -61,6 +61,40 @@ def test_speech_rejects_unverified_owner(client: TestClient):
     assert response.headers["cache-control"] == "no-store"
 
 
+def test_live_speech_requires_test_opt_in_and_still_uses_saved_reply(speech_client, monkeypatch):
+    from contextlib import asynccontextmanager
+    from env.audio import env
+    from api.routers.api.v1.audio.live import speech
+
+    calls = []
+    class FakeSpeech:
+        async def append(self, text): calls.append(text)
+        async def finish(self): pass
+        async def receive(self):
+            return next(self.frames)
+        frames = iter([b"\x00\x01", None])
+
+    @asynccontextmanager
+    async def fake_live(kind):
+        assert kind == "speech"
+        yield FakeSpeech()
+
+    monkeypatch.setattr(speech, "mistral_live", fake_live)
+    monkeypatch.setattr(env, 'audio_studio_owner', json.dumps({'user_id': '00000000-0000-0000-0000-000000000001', 'organization_id': '00000000-0000-0000-0000-000000000002', 'workspace_id': '00000000-0000-0000-0000-000000000003', 'origin': 'https://test.example'}))
+    monkeypatch.setattr(env, 'audio_live_test_origin', 'https://test.example')
+    from datetime import datetime, timedelta, timezone
+    monkeypatch.setattr(env, 'audio_live_test_until', (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat())
+    headers = {'origin': 'https://test.example'}
+    assert speech_client.post('/api/v1/audio/live/speech', json=REFERENCE, headers=headers).status_code == 503
+    monkeypatch.setattr(env, "audio_live_test_enabled", True)
+    assert speech_client.post('/api/v1/audio/live/speech', json=REFERENCE, headers={'origin': 'https://other.example'}).status_code == 503
+    response = speech_client.post('/api/v1/audio/live/speech', json=REFERENCE, headers=headers)
+    assert response.status_code == 200
+    assert response.content == b"\x00\x01"
+    assert calls == ["Nachricht Das ist synthetisch. Ansehen"]
+    assert response.headers["cache-control"] == "no-store"
+
+
 def test_speech_release_gate_is_independent_and_fails_closed(speech_client, monkeypatch):
     from env.audio import env
 

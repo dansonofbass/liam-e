@@ -22,6 +22,7 @@ dependencies = [
     # Mirrors the toolkit's `[fastapi]` extra: the CLI installs toolkits without extras.
     "pydantic>=2.14.1",
     "uvicorn[standard]>=0.54",
+    "websockets>=17.4,<18",
     "python-dateutil==4.0.0",
     # RFC 5545 typed parsing and VTIMEZONE; recurrence uses the pinned dateutil above.
     "icalendar==7.3.0",

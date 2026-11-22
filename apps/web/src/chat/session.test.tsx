@@ -33,6 +33,18 @@ test('buffers cards until done and text', async () => {
   await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('done'))
   expect(screen.getByTestId('mails').textContent).toBe('1')
 })
+test('voice turn leaves an identical unsent composer draft intact', async () => {
+  window.matchMedia = (() => ({ matches: true })) as unknown as typeof window.matchMedia
+  globalThis.fetch = ((_url: unknown, init: RequestInit) => { signal = init.signal!; return Promise.resolve(new Response(new ReadableStream({ start(c) { controller = c } }))) }) as typeof fetch
+  function Consumer() {
+    const session = useChatSession()
+    return <><button onClick={() => session.setComposerText('c', 'Hallo')}>draft</button><button onClick={() => void session.send({ conversation_id: 'c', text: 'Hallo' }, { preserveDraft: true })}>voice</button><div data-testid="draft">{session.composerTexts.c}</div></>
+  }
+  render(<QueryClientProvider client={clientWithGrants()}><ChatSessionProvider><Consumer /></ChatSessionProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('draft')); fireEvent.click(screen.getByText('voice'))
+  await act(async () => { frame({ event: 'start', conversation_id: 'c' }) })
+  expect(screen.getByTestId('draft').textContent).toBe('Hallo')
+})
 test('stop aborts and displays notice', async () => { setup(); await act(async () => { frame({ event: 'delta', text: 'Hallo' }) }); fireEvent.click(screen.getByText('stop')); expect(signal.aborted).toBe(true); expect(screen.getByText(de.chat.stopped)).toBeTruthy(); expect(screen.getByTestId('phase').textContent).toBe('stopped') })
 test('network break reports aborted', async () => { setup(); await act(async () => { frame({ event: 'delta', text: 'Hallo' }) }); await act(async () => { controller.error(new TypeError('network')) }); await waitFor(() => expect(screen.getByText(de.errors.aborted)).toBeTruthy()); expect(screen.getByTestId('phase').textContent).toBe('error') })
 

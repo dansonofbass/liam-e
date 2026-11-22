@@ -313,6 +313,8 @@ export const de = {
     themes: { light: 'Hell', dark: 'Dunkel', system: 'Wie im System' },
   },
   audio: {
+    liveStart: 'Sprachmodus starten', liveStop: 'Sprachmodus beenden', liveStarting: 'Mikrofon wird gestartet',
+    liveListening: 'Zuhören', liveAnswering: 'Antworten', liveError: 'Sprachmodus nicht verfügbar',
     speech: 'Antwort vorlesen', speechStop: 'Vorlesen beenden', speechPlay: 'Wiedergabe starten',
     speechLoading: 'Audio wird erzeugt …', speechPlaying: 'Die Antwort wird vorgelesen.',
     speechReady: 'Audio ist bereit. Starte die Wiedergabe.', speechFinished: 'Vorlesen beendet.',

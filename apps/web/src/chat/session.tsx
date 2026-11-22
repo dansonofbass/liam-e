@@ -13,7 +13,7 @@ type State = { phase: 'idle' | 'working' | 'streaming' | 'done' | 'stopped' | 'e
 export type TaskScope = { source: 'none' | 'all' | 'unlinked' | 'account' | 'account_and_unlinked'; account_id?: string }
 export type SkillPersistence = 'turn' | 'until_stopped'
 export type SelectedSkillEntry = { skill: ActiveSkillSelection; persistence: SkillPersistence }
-type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string | ((previous: string) => string)) => void; selectedSkills: Record<string, SelectedSkillEntry | null>; setSelectedSkill: (id: string, skill: ActiveSkillSelection | null, persistence?: SkillPersistence) => void; setSkillPersistence: (id: string, persistence: SkillPersistence) => void; audioDraftLocked: boolean; setAudioDraftLocked: (locked: boolean) => void; state: State; send: (request: ChatStreamRequest) => Promise<void>; stop: () => void; retry: () => Promise<void>; retryWithoutPreferences: () => Promise<void> }
+type Session = { taskScopes: Record<string, TaskScope>; setTaskScope: (id: string, scope: TaskScope) => void; composerTexts: Record<string, string>; setComposerText: (id: string, text: string | ((previous: string) => string)) => void; selectedSkills: Record<string, SelectedSkillEntry | null>; setSelectedSkill: (id: string, skill: ActiveSkillSelection | null, persistence?: SkillPersistence) => void; setSkillPersistence: (id: string, persistence: SkillPersistence) => void; audioDraftLocked: boolean; setAudioDraftLocked: (locked: boolean) => void; state: State; send: (request: ChatStreamRequest, options?: { preserveDraft?: boolean }) => Promise<{ conversationId: string; messageId: string } | undefined>; stop: () => void; retry: () => Promise<void>; retryWithoutPreferences: () => Promise<void> }
 const initial = (): State => ({ phase: 'idle', text: '', mails: [], proposal: null, suggestions: [] })
 const Context = createContext<Session | null>(null)
 
@@ -70,7 +70,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     invalidate(turn.conversationId)
   }, [invalidate])
   useEffect(() => () => { const turn = active.current; active.current = null; turn?.controller.abort(); turn?.writer.cancel() }, [])
-  const send = useCallback(async (request: ChatStreamRequest) => {
+  const send = useCallback(async (request: ChatStreamRequest, options?: { preserveDraft?: boolean }) => {
     if (active.current) return
     const composerKey = composerDraftKey(request.conversation_id, request.context_message_id)
     const liveTasks = request.conversation_id && conversation.current === request.conversation_id ? last.current : undefined
@@ -106,7 +106,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
         if (active.current !== turn) return
         switch (event.event) {
           case 'start':
-            setComposerTexts(previous => {
+            if (!options?.preserveDraft) setComposerTexts(previous => {
               return previous[composerKey] === request.text ? { ...previous, [composerKey]: '' } : previous
             })
             if (request.skill_id) {
@@ -132,7 +132,8 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
             if (active.current !== turn) return
             active.current = null
             setState(s => ({ ...s, phase: event.stopped ? 'stopped' : 'done', status: undefined, mails: event.stopped ? [] : mails, calendars: event.stopped ? [] : calendars, proposal: event.stopped ? null : proposal, suggestions: event.stopped ? [] : suggestions, conversationId: event.conversation_id, messageId: event.message_id }))
-            invalidate(event.conversation_id); return
+            invalidate(event.conversation_id)
+            return event.stopped ? undefined : { conversationId: event.conversation_id, messageId: event.message_id }
           case 'error':
             writer.flushNow(); writer.cancel(); active.current = null
             if (event.code === 'context_revoked' && request.skill_id) {

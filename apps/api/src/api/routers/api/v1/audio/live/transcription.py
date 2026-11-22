@@ -1,0 +1,49 @@
+"""Relay bounded PCM frames to Mistral after the inherited owner check."""
+import asyncio
+from contextlib import suppress
+
+from fastapi import APIRouter, WebSocket
+
+from api.audio.live_access import live_remaining
+from api.audio.live_provider import mistral_live
+
+router = APIRouter()
+_slot = asyncio.Semaphore(1)
+
+
+@router.websocket('')
+async def transcribe(websocket: WebSocket) -> None:
+    remaining = live_remaining(websocket)
+    if not remaining:
+        await websocket.close(code=1008)
+        return
+    if _slot.locked():
+        await websocket.close(code=1013)
+        return
+    await _slot.acquire()
+    async def upload(session):
+        while True:
+            frame = await websocket.receive_bytes()
+            await session.append(frame)
+
+    async def download(session):
+        while True:
+            await websocket.send_json(await session.receive())
+
+    try:
+        await websocket.accept()
+        async with asyncio.timeout(min(600, remaining)), mistral_live('transcription') as session:
+            tasks = [asyncio.create_task(upload(session)), asyncio.create_task(download(session))]
+            try:
+                done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    task.result()
+            finally:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+    except Exception:
+        with suppress(Exception):
+            await websocket.close(code=1011)
+    finally:
+        _slot.release()

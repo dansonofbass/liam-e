@@ -129,6 +129,8 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Audio | GET | `/api/v1/audio/capabilities` | `audio_capabilities_get` |
 | Audio | POST | `/api/v1/audio/transcriptions` | `audio_transcribe` |
 | Audio | POST | `/api/v1/audio/speech` | `audio_speech` |
+| Audio live test | POST | `/api/v1/audio/live/status` | `audio_live_status` |
+| Audio live test | POST | `/api/v1/audio/live/speech` | `audio_live_speech` |
 | Audio device check | GET | `/api/v1/audio/device-test` | `audio_device_test_get` |
 | Audio device check | POST | `/api/v1/audio/device-test/recording` | `audio_device_test_record` |
 | Audio device check | GET | `/api/v1/audio/device-test/sample` | `audio_device_test_sample` |
@@ -976,6 +978,12 @@ label, `send_email` takes `replyToMessageId`; the Outlook connector returned HTT
   20 seconds. All audio responses use `Cache-Control: no-store`.
   The owner-only `audio_device_test_get`, `audio_device_test_record` and
   `audio_device_test_sample` operations expire independently and remain browser-only.
+  Live voice is a separate test-only, owner-and-origin-bound path. Its status and speech POSTs
+  remain browser-only, and the transcription WebSocket is not part of OpenAPI or the agent
+  facade. `AUDIO_LIVE_TEST_ENABLED`, `AUDIO_LIVE_TEST_ORIGIN`, and `AUDIO_LIVE_TEST_UNTIL`
+  must be set explicitly; the last is an offset-aware future time at most 72 hours away.
+  Speech accepts only a saved, authorized assistant-message reference. The live transport and
+  provider availability still require verification in the separately bound Studio test app.
   They validate WebM and return a fixed test draft or bundled sample without calling an inference service.
   See the [audio probe](docs/superpowers/probes/2026-11-19-audio-capabilities.md).
   Every OpenAPI import turns every operation into an MCP tool; otherwise a Studio agent could confirm proposals, perform actions or connect accounts without the owner seeing it — individual tools can be disabled in Studio after import.

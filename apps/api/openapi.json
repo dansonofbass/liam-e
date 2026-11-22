@@ -3048,6 +3048,19 @@
         "title": "LiveEvent",
         "type": "object"
       },
+      "LiveStatus": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "LiveStatus",
+        "type": "object"
+      },
       "MailRefOut": {
         "properties": {
           "account_id": {
@@ -8069,6 +8082,73 @@
           }
         },
         "summary": "Sample"
+      }
+    },
+    "/api/v1/audio/live/speech": {
+      "post": {
+        "operationId": "audio_live_speech",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "conversation_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Conversation Id",
+                    "type": "string"
+                  },
+                  "message_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Message Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "conversation_id",
+                  "message_id"
+                ],
+                "title": "SpeechReference",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stream PCM speech for a saved assistant reply during the test window"
+      }
+    },
+    "/api/v1/audio/live/status": {
+      "post": {
+        "operationId": "audio_live_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status"
       }
     },
     "/api/v1/audio/speech": {

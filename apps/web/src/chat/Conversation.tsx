@@ -18,6 +18,7 @@ import { composerDraftKey, useChatSession, useConversationScope, useRestartConve
 import { TaskScopeSelector } from './TaskContext'
 import { PreferenceContext } from './PreferenceContext'
 import { AudioRecorder, supportedAudioFormat } from './AudioRecorder'
+import { LiveVoice } from './LiveVoice'
 import { useAudioCapabilities } from './audio-capabilities'
 import { SpeechControls, useSpeechPlayback } from './SpeechPlayback'
 import { ActiveSkillBanner } from './ActiveSkillBanner'
@@ -36,12 +37,14 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
   const navigate = useNavigate()
   const { state, send, stop, composerTexts, setComposerText, selectedSkills, setSelectedSkill, setSkillPersistence, audioDraftLocked, setAudioDraftLocked } = useChatSession()
   const contextMessageId = contextMail?.id
-  const { scope, ready } = useConversationScope(conversationId, contextMail)
+  const { scope, ready, saved } = useConversationScope(conversationId, contextMail)
   const tasks = useTaskScope(conversationId, contextMessageId)
   const stt = useAudioCapabilities()?.stt
   const format = supportedAudioFormat(stt)
+  const stopLiveVoice = useRef<(() => void) | null>(null)
+  const registerVoiceStop = useCallback((stop: (() => void) | null) => { stopLiveVoice.current = stop }, [])
   const lockDraft = useCallback((locked: boolean) => {
-    if (locked) onRecordingStart?.()
+    if (locked) { stopLiveVoice.current?.(); onRecordingStart?.() }
     setAudioDraftLocked(locked)
   }, [onRecordingStart, setAudioDraftLocked])
   const draftKey = composerDraftKey(conversationId, contextMessageId)
@@ -63,6 +66,9 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
   const [activeIndex, setActiveIndex] = useState(0)
 
   const voiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, model, promptRevisionId, activeSkillEntry?.skill.revision_id,
+    tasks.scope.source, tasks.scope.account_id, format])
+  // A turn-scoped skill is consumed when the stream starts; that must not stop the answer.
+  const liveVoiceContext = JSON.stringify([draftKey, contextOccurrenceId, scope, conversationId ? saved?.model : model, templateSelection.selected,
     tasks.scope.source, tasks.scope.account_id, format])
   const busy = state.phase === 'working' || state.phase === 'streaming'
 
@@ -124,6 +130,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
       requestAnimationFrame(() => textareaRef.current?.focus())
     }
     if (option.kind === 'skill') {
+      stopLiveVoice.current?.()
       setSelectedSkill(
         draftKey,
         toActiveSkillSelection(option.skill),
@@ -132,6 +139,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
     } else if (option.kind === 'template') {
       void templateSelection.choose(option.revisionId)
     } else if (option.kind === 'clear-skill') {
+      stopLiveVoice.current?.()
       setSelectedSkill(draftKey, null)
     } else if (option.kind === 'clear-template') {
       void templateSelection.choose(null)
@@ -180,8 +188,8 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
           liveSkill={skills.data?.find(item => item.id === activeSkillEntry.skill.id)}
           skillsLoaded={skills.isSuccess}
           disabled={busy || audioDraftLocked}
-          onChangePersistence={persistence => setSkillPersistence(draftKey, persistence)}
-          onRemove={() => setSelectedSkill(draftKey, null)}
+          onChangePersistence={persistence => { stopLiveVoice.current?.(); setSkillPersistence(draftKey, persistence) }}
+          onRemove={() => { stopLiveVoice.current?.(); setSelectedSkill(draftKey, null) }}
         />
       )}
       <ActiveTemplateBanner
@@ -201,6 +209,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
       }}
       onSubmit={() => {
         if (busy || audioDraftLocked || !ready || !tasks.ready || !value.trim()) return
+        stopLiveVoice.current?.()
         onSend?.()
         void send({
           text: value,
@@ -237,6 +246,7 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
           favoriteIds={favoriteIds}
           selectedSkillId={activeSkillEntry?.skill.id ?? null}
           onSelectSkill={skill => {
+            stopLiveVoice.current?.()
             setSelectedSkill(
               draftKey,
               toActiveSkillSelection(skill),
@@ -254,9 +264,14 @@ export function ChatComposer({ conversationId, contextMail, contextOccurrenceId,
         />
         <TaskScopeSelector conversationId={conversationId} contextMail={contextMail} disabled={busy || audioDraftLocked} />
       </>}
-      audioControls={stt && format && <AudioRecorder key={voiceContext} format={format}
+      audioControls={<>{conversationId && <LiveVoice conversationId={conversationId} contextKey={liveVoiceContext} disabled={busy || !ready || !tasks.ready || audioDraftLocked} registerStop={registerVoiceStop} onStart={onRecordingStart}
+        stopChat={stop} send={text => send({ text, account_id: scope, conversation_id: conversationId,
+          context_message_id: contextMessageId, context_occurrence_id: contextOccurrenceId,
+          task_source: tasks.scope.source, task_source_account_id: tasks.scope.account_id,
+          ...(activeSkillEntry ? { skill_id: activeSkillEntry.skill.id, skill_revision_id: activeSkillEntry.skill.revision_id } : {}) }, { preserveDraft: true })} />}
+        {stt && format && <AudioRecorder key={voiceContext} format={format}
         limits={stt.app_limits} disabled={busy || !ready || !tasks.ready}
-        onLock={lockDraft} onTranscript={appendTranscript} />}
+        onLock={lockDraft} onTranscript={appendTranscript} />}</>}
     />
     <SlashPicker
       open={slashOpen}

@@ -9,6 +9,10 @@ class Env(BaseEnv):
     # Per deployment. The bound user, tenant and browser origin are supplied by the operator.
     audio_studio_owner: str | None = None
     audio_device_test_until: str | None = None
+    # Opt-in for a separately bound test deployment; never a production attestation.
+    audio_live_test_enabled: bool = False
+    audio_live_test_origin: str | None = None
+    audio_live_test_until: str | None = None
     # Parse each independently. Invalid evidence must not prevent the app from starting.
     audio_stt_verification: str | None = None
     audio_tts_verification: str | None = None

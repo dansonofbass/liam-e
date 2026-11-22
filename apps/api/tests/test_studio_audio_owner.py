@@ -9,6 +9,7 @@ import httpx
 from mistralai_capabilities.apps import credentials as gateway_credentials
 import pytest
 import respx
+from starlette.websockets import WebSocketDisconnect
 from utils.mistral import install_caller_credentials
 
 CAPABILITIES = "/api/v1/audio/capabilities"
@@ -118,3 +119,31 @@ def test_same_origin_owner_reaches_the_transcription_release_check(studio_client
         response = studio_client.post(TRANSCRIPTIONS, headers={**HEADERS, "origin": ORIGIN})
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "audio_unavailable"
+
+
+def test_live_websocket_enforces_gateway_identity_and_origin(studio_client: TestClient, monkeypatch) -> None:
+    from contextlib import asynccontextmanager
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+    from api.routers.api.v1.audio.live import transcription
+
+    class Provider:
+        async def receive(self):
+            await asyncio.sleep(0.01)
+            return {'type': 'turn.start', 'time_s': 1}
+        async def append(self, data): pass
+    @asynccontextmanager
+    async def fake_live(_): yield Provider()
+    monkeypatch.setattr(transcription, 'mistral_live', fake_live)
+    monkeypatch.setattr(env, 'audio_live_test_enabled', True)
+    monkeypatch.setattr(env, 'audio_live_test_origin', ORIGIN)
+    monkeypatch.setattr(env, 'audio_live_test_until', (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat())
+    with respx.mock(assert_all_called=False) as outbound:
+        who = outbound.get(PROXY + '/v1/users/me').mock(return_value=httpx.Response(200, json=IDENTITY))
+        with pytest.raises(WebSocketDisconnect):
+            with studio_client.websocket_connect('/api/v1/audio/live/transcription', headers={**HEADERS, 'origin': 'https://other.example.test'}): pass
+        assert who.call_count == 0
+        with studio_client.websocket_connect('/api/v1/audio/live/transcription', headers={**HEADERS, 'origin': ORIGIN}) as ws:
+            assert ws.receive_json()['type'] == 'turn.start'
+            ws.close()
+        assert who.call_count == 1
