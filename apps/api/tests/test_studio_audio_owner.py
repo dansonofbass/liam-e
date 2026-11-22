@@ -16,10 +16,10 @@ CAPABILITIES = "/api/v1/audio/capabilities"
 TRANSCRIPTIONS = "/api/v1/audio/transcriptions"
 ORIGIN = "https://audio.example.test"
 PROXY = "https://gateway.example.test/mistral"
-OWNER = "3562d901-b614-42e7-9669-14fb24986d78"
+OWNER = "11111111-1111-4111-8111-111111111111"
 ORGANIZATION = "3a2e1035-7019-4729-9cfc-18d762d2a4cc"
 WORKSPACE = "4a2e1035-7019-4729-9cfc-18d762d2a4cc"
-OTHER = "039083ef-44a2-404e-9557-91e5c5a86ad0"
+OTHER = "22222222-2222-4222-8222-222222222222"
 HEADERS = {"x-apps-token": "forwarded-user-session-test-only"}
 IDENTITY = {
     "id": OWNER,
