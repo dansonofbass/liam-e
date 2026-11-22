@@ -7,9 +7,10 @@ import { IconButton } from '../ds'
 import { useFocusTrap } from '../ds/useFocusTrap'
 import { useI18n } from '../i18n/I18n'
 import { createLiveVoice } from './live-voice'
+import type { VoiceAudio } from './transport'
 
 type Reply = { conversationId: string; messageId: string }
-type Props = { conversationId: string; disabled: boolean; contextKey: string; send: (text: string) => Promise<Reply | undefined>; stopChat: () => void; registerStop: (stop: (() => void) | null) => void; onStart?: () => void }
+type Props = { conversationId: string; disabled: boolean; contextKey: string; send: (text: string, audio?: VoiceAudio) => Promise<Reply | undefined>; stopChat: () => void; registerStop: (stop: (() => void) | null) => void; onStart?: () => void }
 
 // Transcription input is signed 16-bit little-endian mono at 24 kHz.
 function pcm(input: Float32Array, inputRate: number): ArrayBuffer {
@@ -22,12 +23,17 @@ function pcm(input: Float32Array, inputRate: number): ArrayBuffer {
   return output
 }
 
-async function playReply(context: AudioContext, reply: Reply, signal: AbortSignal) {
+export async function playReply(context: AudioContext, reply: Reply, signal: AbortSignal) {
   // The generated schema describes binary output as Blob, but parseAs: stream returns response.body.
   const stream = await unwrap(audioLiveSpeech({ body: { conversation_id: reply.conversationId, message_id: reply.messageId }, parseAs: 'stream', signal, throwOnError: true })) as unknown as ReadableStream<Uint8Array> | null
   if (!stream) throw new Error('audio_unavailable')
+  return playPcm(context, stream, signal)
+}
+
+async function playPcm(context: AudioContext, stream: ReadableStream<Uint8Array>, signal: AbortSignal) {
   if (signal.aborted) { await stream.cancel(); return }
   const reader = stream.getReader(), sources = new Set<AudioBufferSourceNode>()
+  const endings: Promise<void>[] = []
   let next = context.currentTime, remaining = new Uint8Array(0), gotAudio = false
   const abort = () => { void reader.cancel(); sources.forEach(source => { try { source.stop() } catch { /* already stopped */ } }) }
   signal.addEventListener('abort', abort, { once: true })
@@ -45,23 +51,50 @@ async function playReply(context: AudioContext, reply: Reply, signal: AbortSigna
       // Mistral PCM speech is float32 little-endian, unlike transcription input.
       for (let i = 0; i < length; i++) { const sample = view.getFloat32(i * 4, true); if (!Number.isFinite(sample)) throw new Error('audio_unavailable'); samples[i] = Math.max(-1, Math.min(1, sample)) }
       const source = context.createBufferSource(); source.buffer = buffer; source.connect(context.destination); sources.add(source)
-      source.onended = () => sources.delete(source)
+      endings.push(new Promise<void>(resolve => { source.onended = () => { sources.delete(source); resolve() } }))
       next = Math.max(next, context.currentTime); source.start(next); next += buffer.duration
     }
     if (!signal.aborted && (!gotAudio || remaining.length)) throw new Error('audio_unavailable')
-    if (!signal.aborted && next > context.currentTime) await new Promise<void>(resolve => {
-      const timer = setTimeout(resolve, (next - context.currentTime) * 1000)
-      signal.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
-    })
-  } finally { signal.removeEventListener('abort', abort); reader.releaseLock() }
+    if (!signal.aborted) {
+      await new Promise<void>(resolve => {
+        const finish = () => { signal.removeEventListener('abort', finish); resolve() }
+        signal.addEventListener('abort', finish, { once: true })
+        if (signal.aborted) finish()
+        else void Promise.all(endings).then(finish)
+      })
+    }
+  } catch (error) { abort(); throw error }
+  finally { signal.removeEventListener('abort', abort); reader.releaseLock() }
+}
+
+
+function liveAudio(context: AudioContext, signal: AbortSignal, onPlaying: () => void): VoiceAudio {
+  let writer!: ReadableStreamDefaultController<Uint8Array>, closed = false, terminal = false
+  const aborter = new AbortController()
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { writer = controller } })
+  const stop = () => { closed = true; aborter.abort() }
+  signal.addEventListener('abort', stop, { once: true })
+  const playing = playPcm(context, stream, aborter.signal).catch(() => {}).finally(() => signal.removeEventListener('abort', stop))
+  return {
+    push(encoded) {
+      if (closed) return
+      const raw = atob(encoded), bytes = new Uint8Array(raw.length)
+      for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+      onPlaying(); writer.enqueue(bytes)
+    },
+    async end() { if (!closed) { closed = true; writer.close() } await playing },
+    fail: isTerminal => { terminal = isTerminal === true; stop() },
+    isTerminal: () => terminal,
+  }
 }
 
 export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat, registerStop, onStart }: Props) {
   const { texts } = useI18n()
   const [available, setAvailable] = useState(false)
-  const [state, setState] = useState<'idle' | 'starting' | 'listening' | 'answering' | 'speaking' | 'error'>('idle')
+  const [state, setState] = useState<'idle' | 'starting' | 'listening' | 'answering' | 'speaking' | 'resuming' | 'error'>('idle')
   const active = useRef<{ stop: () => void; interrupt: () => void } | null>(null)
   const control = useRef<HTMLDivElement>(null)
+  const endButton = useRef<HTMLButtonElement>(null)
   const restoreFocus = useRef(false)
   const current = useRef({ send, stopChat }); current.current = { send, stopChat }
   const stop = useCallback(() => { const session = active.current; active.current = null; session?.stop(); setState('idle') }, [])
@@ -84,7 +117,7 @@ export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat
     onStart?.()
     setState('starting')
     let stream: MediaStream | undefined, socket: WebSocket | undefined, context: AudioContext | undefined, processor: ScriptProcessorNode | undefined
-    let socketClosed: Promise<void> = Promise.resolve()
+    let socketClosed: Promise<void> = Promise.resolve(), started = false, silentFailures = 0
     const session = { stop: () => { voice.stop(); processor?.disconnect(); socket?.close(); stream?.getTracks().forEach(track => track.stop()); void context?.close() }, interrupt: () => voice.interrupt() }
     const openSocket = async () => {
       await socketClosed
@@ -97,15 +130,23 @@ export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat
       await new Promise<void>((resolve, reject) => {
         candidate.onopen = () => { opened = true; resolve() }
         candidate.onerror = () => reject(new Error('audio_unavailable'))
-        candidate.onclose = () => { closed(); if (!opened) reject(new Error('audio_unavailable')); if (socket === candidate && active.current === session) { stop(); setState('error') } }
+        candidate.onclose = event => { closed(); if (!opened) reject(new Error('audio_unavailable')); else if (socket === candidate && active.current === session) { socket = undefined; if (!started || event?.code === 1008 || ++silentFailures >= 3) { stop(); setState('error') } else voice.reconnect() } }
       })
       if (active.current !== session || socket !== candidate) { candidate.close(); return }
-      candidate.onmessage = message => { if (socket !== candidate) return; try { voice.event(JSON.parse(message.data)) } catch { stop(); setState('error') } }
+      candidate.onmessage = message => { if (socket !== candidate) return; try { const event = JSON.parse(message.data); if (!['turn.start', 'turn.end', 'turn.eager_end', 'turn.resume', 'transcription.text.delta', 'transcription.done'].includes(event?.type)) throw new Error('audio_unavailable'); voice.event(event); silentFailures = 0 } catch { stop(); setState('error') } }
     }
     const voice = createLiveVoice({ conversationId, schedule: fn => { const timer = setTimeout(fn, 480); return () => clearTimeout(timer) },
-      scheduleTail: fn => { const timer = setTimeout(fn, 400); return () => clearTimeout(timer) },
-      suspendInput: () => { const previous = socket; socket = undefined; previous?.close() }, resumeInput: openSocket,
-      send: async text => { const result = await current.current.send(text); if (!result) throw new Error('chat_failed'); return result },
+      scheduleTail: fn => { const timer = setTimeout(fn, 400 + silentFailures * 350); return () => clearTimeout(timer) },
+      suspendInput: () => { const previous = socket; socket = undefined; previous?.close() },
+      resumeInput: async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (active.current !== session) return
+          try { await openSocket(); return } catch { if (attempt === 2) throw new Error('audio_unavailable') }
+          await new Promise(resolve => setTimeout(resolve, 350 * (attempt + 1)))
+        }
+      },
+      send: async (text, _conversation, audio) => { const result = await current.current.send(text, audio); if (!result) throw new Error('chat_failed'); return result },
+      startLiveAudio: signal => liveAudio(context!, signal, () => { if (!signal.aborted) setState('speaking') }),
       speak: (reply, signal) => playReply(context!, reply, signal), stopChat: () => current.current.stopChat(),
       onState: next => { if (next === 'error') { stop(); setState('error') } else setState(next) } })
     active.current = session
@@ -123,17 +164,17 @@ export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat
         socket.send(pcm(event.inputBuffer.getChannelData(0), context!.sampleRate))
       }
       source.connect(processor); processor.connect(context.destination)
-      voice.start()
+      started = true; voice.start()
     } catch { if (active.current === session) { stop(); setState('error') } }
   }
   if (!available) return null
-  const status = state === 'starting' ? texts.audio.liveStarting : state === 'listening' ? texts.audio.liveListening : state === 'answering' ? texts.audio.liveAnswering : state === 'speaking' ? texts.audio.liveSpeaking : state === 'error' ? texts.audio.liveError : ''
+  const status = state === 'starting' ? texts.audio.liveStarting : state === 'resuming' ? texts.audio.liveResuming : state === 'listening' ? texts.audio.liveListening : state === 'answering' ? texts.audio.liveAnswering : state === 'speaking' ? texts.audio.liveSpeaking : state === 'error' ? texts.audio.liveError : ''
   const finish = () => { stop() }
-  return <div className="le-audio-controls" ref={control}>{!shown && <><span className="le-audio-status" role="status">{status}</span><IconButton size="lg" icon="mic" label={texts.audio.liveStart} disabled={disabled} onClick={() => void start()} /></>}
+  return <div className="le-audio-controls" ref={control}>{!shown && <><span className="le-audio-status le-voice-status" role="status">{status}</span><IconButton size="lg" icon="audio-lines" label={texts.audio.liveStart} disabled={disabled} onClick={() => void start()} /></>}
     {shown && createPortal(<div className="le-voice-overlay"><div ref={trap} tabIndex={-1} className="le-voice-panel" role="dialog" aria-modal="true" aria-label={texts.audio.liveTitle}>
       <h2 className="heading">{texts.audio.liveTitle}</h2><div className={`le-voice-indicator le-voice-indicator--${state}`} aria-hidden="true"><span /><span /><span /><span /><span /></div>
       <p className="le-voice-state" role="status" aria-live="polite">{status}</p><p className="le-voice-hint">{texts.audio.liveHint}</p>
-      {(state === 'answering' || state === 'speaking') && <button type="button" className="le-btn le-btn--secondary" onClick={() => active.current?.interrupt()}>{texts.audio.liveInterrupt}</button>}
-      <button type="button" className="le-btn le-btn--primary" aria-label={texts.audio.liveStop} onClick={finish}>{texts.audio.liveStop}</button>
+      {(state === 'answering' || state === 'speaking') && <button type="button" className="le-btn le-btn--secondary" onClick={() => { active.current?.interrupt(); endButton.current?.focus() }}>{texts.audio.liveInterrupt}</button>}
+      <button ref={endButton} type="button" className="le-btn le-btn--primary" aria-label={texts.audio.liveStop} onClick={finish}>{texts.audio.liveStop}</button>
     </div></div>, document.body)}</div>
 }

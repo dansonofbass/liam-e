@@ -314,7 +314,7 @@ export const de = {
   },
   audio: {
     liveStart: 'Sprachmodus starten', liveStop: 'Sprachmodus beenden', liveStarting: 'Mikrofon wird gestartet',
-    liveTitle: 'Sprachmodus', liveListening: 'Zuhören', liveAnswering: 'Denkt nach', liveSpeaking: 'Antwortet',
+    liveTitle: 'Sprachmodus', liveListening: 'Zuhören', liveAnswering: 'Denkt nach', liveSpeaking: 'Antwortet', liveResuming: 'Zuhören wird fortgesetzt',
     liveHint: 'Warte, bis liam-e zuhört, bevor du sprichst.', liveInterrupt: 'Antwort unterbrechen', liveError: 'Sprachmodus nicht verfügbar',
     speech: 'Antwort vorlesen', speechStop: 'Vorlesen beenden', speechPlay: 'Wiedergabe starten',
     speechLoading: 'Audio wird erzeugt …', speechPlaying: 'Die Antwort wird vorgelesen.',
@@ -491,6 +491,8 @@ export const de = {
     accountUnavailable: (name: string) => `${name} ist gerade nicht erreichbar. Die übrigen Konten arbeiten weiter.`,
   },
   controls: {
+    composerPlaceholder: 'Deine Frage',
+    composerOptions: 'Weitere Optionen',
     cancel: 'Abbrechen', send: 'Senden', sendTip: 'Senden (Enter)', stop: 'Anhalten', allAccounts: 'Alle Konten',
     archive: 'Archivieren', markRead: 'Als gelesen markieren', markUnread: 'Als ungelesen markieren',
     trash: 'In den Papierkorb', moreMail: (subject: string) => `Weitere Aktionen zu ${subjectText(subject)}`,

@@ -324,7 +324,7 @@ export const en = {
   },
   audio: {
     liveStart: 'Start voice mode', liveStop: 'End voice mode', liveStarting: 'Starting microphone',
-    liveTitle: 'Voice mode', liveListening: 'Listening', liveAnswering: 'Thinking', liveSpeaking: 'Speaking',
+    liveTitle: 'Voice mode', liveListening: 'Listening', liveAnswering: 'Thinking', liveSpeaking: 'Speaking', liveResuming: 'Resuming listening',
     liveHint: 'Wait until liam-e is listening before speaking.', liveInterrupt: 'Interrupt reply', liveError: 'Voice mode unavailable',
     speech: 'Read reply aloud', speechStop: 'Stop reading', speechPlay: 'Start playback',
     speechLoading: 'Generating audio …', speechPlaying: 'Reading the reply aloud.',
@@ -501,6 +501,8 @@ export const en = {
     accountUnavailable: name => name + ' can’t be reached right now. Your other accounts are still available.',
   },
   controls: {
+    composerPlaceholder: 'Your question',
+    composerOptions: 'More options',
     cancel: 'Cancel', send: 'Send', sendTip: 'Send (Enter)', stop: 'Stop', allAccounts: 'All accounts',
     archive: 'Archive', markRead: 'Mark as read', markUnread: 'Mark as unread',
     trash: 'Move to trash', moreMail: subject => 'More actions for ' + subjectText(subject),
