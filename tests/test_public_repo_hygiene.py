@@ -3,9 +3,9 @@
 liam-e is meant to become public (AGENTS.md, section "Publication and private data"). These
 checks cover what a secret scanner does not look for: the Mistral tenant IDs, which no tracked
 file holds (`tools/deploy.sh` reads them from an ignored local file), a `deployment` block in
-`mistral.json`, links to private claude.ai resources, home paths (absolute or under `~/`), and
-mail addresses that could belong to a real person. Credentials are the job of gitleaks
-(`.gitleaks.toml`, CI job `secrets`).
+`mistral.json`, links to private claude.ai resources, home paths (absolute, under `~/` or under
+`~<user>/`), and mail addresses that could belong to a real person. Credentials are the job of
+gitleaks (`.gitleaks.toml`, CI job `secrets`).
 
 The checks read `git ls-files`, so they see exactly what a clone would publish. Tenant IDs and
 private links are looked for in every tracked text file. The address and home-path heuristics
@@ -39,10 +39,12 @@ RESERVED_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
 SYNTHETIC_LOCAL_PART = re.compile(r"^(?:[a-z]|me|test|user|noreply|no-reply)$")
 
 ADDRESS = re.compile(r"(?<![\w.%+-])([A-Za-z0-9._%+-]+)@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?![\w.-]*\w)")
-# Absolute home directories, and paths under "~/", which name a home directory just as well.
+# Absolute home directories, and paths under "~/" or "~<user>/", which name a home directory just
+# as well.
 HOME_PATH = re.compile(
     r"(?<![\w.~-])/(?:home|Users)/[A-Za-z_][\w.-]*(?![\w-])"
     r"|(?<![\w.~/-])~/[\w.][\w.-]*"
+    r"|(?<![\w.~/-])~[A-Za-z_][\w.-]*/"
 )
 # One or two backslashes: a plain path or one escaped in JSON or a string literal.
 WINDOWS_HOME = re.compile(r"(?i)(?<![\w])[a-z]:\\{1,2}Users\\{1,2}[^\\\s\"'<>]+")
@@ -275,9 +277,16 @@ def test_address_rule(address: str, personal: bool) -> None:
         ("~" + "/project", True),
         ("~" + "/.config/tool/state", True),
         ("cd " + "~" + "/work", True),
+        ("~" + "someone/project", True),
+        ("cd " + "~" + "_build/x", True),
+        ("(" + "~" + "someone/.ssh)", True),
         ("~/", False),
         ("https://example.org/~/x", False),
         ("a~/b", False),
+        ("a~b/c", False),
+        ("~5/x", False),
+        ("~someone", False),
+        ("~~struck~~/", False),
         ("/home/", False),
         ("apps/home/view.tsx", False),
     ],
