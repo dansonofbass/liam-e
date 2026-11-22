@@ -79,6 +79,10 @@ steps and the format of the ignored `mistral.deployment.json` are in
   switch and delete the old revisions under “Edited”.
 - **Old test UUID:** a test UUID that was replaced by a synthetic value is still in the
   history. Confirm once that it is not the owner's Mistral user ID.
+- **Conduct reports:** [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) points to GitHub's “Report
+  content” form. According to GitHub's documentation, reports to repository admins can be
+  enabled only for repositories owned by an organization, so for this repository the form
+  reaches GitHub Support. Accept this, or name a private channel to the maintainer.
 
 ## Checklist
 
@@ -91,6 +95,9 @@ steps and the format of the ignored `mistral.deployment.json` are in
   `NOTICE`.
 - [x] Mistral IDs out of `mistral.json`; deploys through `tools/deploy.sh`; the hygiene test
   flags the IDs in any tracked file.
+- [x] README for public readers, CONTRIBUTING.md for external contributors,
+  CODE_OF_CONDUCT.md (Contributor Covenant 2.1), SECURITY.md with the reporting form, and
+  `.github/dependabot.yml` for weekly `github-actions` updates.
 - [ ] CI green on `main`, including the job `secrets`.
 - [ ] First deploy through `tools/deploy.sh` after the merge.
 
@@ -120,8 +127,8 @@ steps and the format of the ignored `mistral.deployment.json` are in
   already point to it.
 - [ ] *Security → Secret scanning* and *Push protection:* turn on, then review the first alerts.
   Secret scanning also scans the history.
-- [ ] *Security → Dependabot alerts* and *Dependabot security updates:* turn on. Optionally add a
-  `.github/dependabot.yml` for `github-actions` so the pinned SHAs receive updates.
+- [ ] *Security → Dependabot alerts* and *Dependabot security updates:* turn on.
+  `.github/dependabot.yml` already asks for weekly updates of the pinned actions.
 - [ ] Optional: *Code scanning → CodeQL default setup*.
 - [ ] *Rules → Rulesets* for `main`:
   - changes only through pull requests, with 0 required approvals (single owner);
@@ -130,8 +137,8 @@ steps and the format of the ignored `mistral.deployment.json` are in
     `web-test`, `pytest`, `pg-contract` and `secrets` do not appear there);
   - block force pushes and deletion;
   - whether administrators may bypass the ruleset is the owner's choice.
-- [ ] *Insights → Community standards:* check LICENSE, SECURITY.md, CONTRIBUTING.md and the
-  templates.
+- [ ] *Insights → Community standards:* check README, LICENSE, CODE_OF_CONDUCT.md,
+  CONTRIBUTING.md, SECURITY.md and the templates.
 
 ## What will never be public
 
