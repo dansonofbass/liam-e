@@ -1,9 +1,10 @@
 """Tracked files stay publishable: no private identifiers of the owner or of the environment.
 
 liam-e is meant to become public (AGENTS.md, section "Publication and private data"). These
-checks cover what a secret scanner does not look for: the Mistral tenant IDs outside the
-`mistral.json` that deploys need, links to private claude.ai resources, home paths (absolute or
-under `~/`), and mail addresses that could belong to a real person. Credentials are the job of gitleaks
+checks cover what a secret scanner does not look for: the Mistral tenant IDs, which no tracked
+file holds (`tools/deploy.sh` reads them from an ignored local file), a `deployment` block in
+`mistral.json`, links to private claude.ai resources, home paths (absolute or under `~/`), and
+mail addresses that could belong to a real person. Credentials are the job of gitleaks
 (`.gitleaks.toml`, CI job `secrets`).
 
 The checks read `git ls-files`, so they see exactly what a clone would publish. Tenant IDs and
@@ -14,7 +15,9 @@ and which hold upstream examples.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 import subprocess
 from functools import cache
@@ -62,6 +65,18 @@ NOT_HOME_PATHS: frozenset[tuple[str, str]] = frozenset(
 )
 WHOLE_PATH = re.compile(r"[^\s\"'`<>()\[\]{},;]+")
 DEPLOYMENT_KEYS = ("organizationId", "workspaceId", "appId")
+# SHA-256 of the lowercase organization, workspace and app IDs of the owner's Studio app, so that
+# the scan recognises them without this file holding them. They left mistral.json on 2026-11-22
+# and remain in older commits (docs/publishing.md). The ignored deployment file of a checkout that
+# deploys (tools/deploy.sh) adds its own values.
+TENANT_ID_SHA256 = frozenset(
+    {
+        "0616dbc12055327684ace052b5d9b11d57619a6d3e6b442ab8facf4e9d76b5f3",
+        "b9bf8d4a58798dee78c1744db9318f726fefa8dc656ba6f48a2ff424ca00c2f2",
+        "209600b74a49d1313b390abea5c730d8e10dfdb1d97851c5947a91129ec257d6",
+    }
+)
+UUID = re.compile(r"(?i)(?<![0-9a-f-])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f-])")
 
 
 @cache
@@ -101,19 +116,82 @@ def hits(pattern: re.Pattern[str], *, keep=lambda _match: True, everything: bool
     return found
 
 
-def test_tenant_ids_appear_only_in_mistral_json() -> None:
-    deployment = json.loads((ROOT / "mistral.json").read_text(encoding="utf-8")).get("deployment", {})
-    ids = {key: deployment.get(key) for key in DEPLOYMENT_KEYS}
-    # Without the IDs there is nothing to look for, and the test would pass vacuously.
-    assert all(isinstance(value, str) and value for value in ids.values()), "mistral.json lacks deployment IDs"
-    leaks = [
-        f"{path}: {key}"
-        for path, text in tracked_texts(everything=True).items()
-        if path != "mistral.json"
-        for key, value in ids.items()
-        if value.lower() in text.lower()
+def fingerprint(value: str) -> str:
+    return hashlib.sha256(value.lower().encode()).hexdigest()
+
+
+def local_tenant_fingerprints() -> frozenset[str]:
+    """Fingerprints of the IDs in this checkout's deployment file, if it has one."""
+    path = Path(os.environ.get("LIAM_E_DEPLOYMENT_FILE") or ROOT / "mistral.deployment.json")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return frozenset()
+    if not isinstance(data, dict):
+        return frozenset()
+    return frozenset(fingerprint(value) for key in DEPLOYMENT_KEYS if isinstance(value := data.get(key), str))
+
+
+def tenant_id_hits(texts: dict[str, str], fingerprints: frozenset[str]) -> list[str]:
+    """Lines that hold one of the fingerprinted IDs. Reports the place, never the value."""
+    return [
+        f"{path}:{number}"
+        for path, text in texts.items()
+        for number, line in enumerate(text.splitlines(), start=1)
+        if any(fingerprint(match.group(0)) in fingerprints for match in UUID.finditer(line))
     ]
-    assert leaks == [], "Mistral tenant IDs belong in mistral.json only; write <organization-id> etc."
+
+
+def test_no_tracked_file_holds_mistral_tenant_ids() -> None:
+    found = tenant_id_hits(tracked_texts(everything=True), TENANT_ID_SHA256 | local_tenant_fingerprints())
+    assert found == [], (
+        "Mistral tenant IDs never belong in the repository; write <organization-id> etc. and deploy with tools/deploy.sh"
+    )
+
+
+def test_tenant_id_scan_reports_a_fingerprinted_id_in_any_case() -> None:
+    synthetic = "12345678-1234-4123-8123-123456789abc"
+    texts = {
+        "mistral.json": f'  "appId": "{synthetic.upper()}"',
+        "docs/deploy.md": "<app-id>, 00000000-0000-4000-8000-000000000000 and x" + synthetic + "0",
+    }
+    assert tenant_id_hits(texts, frozenset({fingerprint(synthetic)})) == ["mistral.json:1"]
+
+
+def has_deployment_block(manifest: object) -> bool:
+    """A `deployment` block would publish the IDs, or with placeholders break every deploy.
+    Without it `mistral deploy` creates the deployer's own app; tools/deploy.sh adds the block to a
+    temporary copy only."""
+    return isinstance(manifest, dict) and "deployment" in manifest
+
+
+def test_mistral_json_binds_no_deployment() -> None:
+    # A plain bool, so that a failure does not print the manifest and any IDs in it.
+    bound = has_deployment_block(json.loads((ROOT / "mistral.json").read_text(encoding="utf-8")))
+    assert not bound, "remove the deployment block; deploy with tools/deploy.sh"
+
+
+@pytest.mark.parametrize(
+    ("manifest", "flagged"),
+    [
+        ({"schemaVersion": 2, "kind": "app", "name": "liam-e", "modules": []}, False),
+        (
+            {
+                "name": "liam-e",
+                "deployment": {
+                    "organizationId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "workspaceId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                    "appId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                },
+            },
+            True,
+        ),
+        ({"name": "liam-e", "deployment": {"appId": "<app-id>"}}, True),
+        ({"name": "liam-e", "deployment": {}}, True),
+    ],
+)
+def test_deployment_block_rule(manifest: dict[str, object], flagged: bool) -> None:
+    assert has_deployment_block(manifest) is flagged
 
 
 def test_no_links_to_private_claude_resources() -> None:
