@@ -271,3 +271,65 @@ def test_pace_tag_counts_towards_limit_at_exact_boundary(pace, tag):
     assert len(paced_text('x' * (500 - len(tag)), pace, 500)) == 500
     with pytest.raises(ValueError, match='audio_text_too_long'):
         paced_text('x' * (501 - len(tag)), pace, 500)
+
+
+def test_voice_preview_rejects_unverified_owner(client):
+    response = client.post('/api/v1/audio/voices/preview', json={'locale': 'de', 'voice': 'voice_481'})
+    assert response.status_code == 401
+    assert response.headers['cache-control'] == 'no-store'
+
+
+def test_voice_preview_only_speaks_fixed_text_for_known_preset(speech_client, monkeypatch):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from api.audio.provider import get_audio_provider
+    from api.audio.recording import get_transcription_slot
+    from api.audio.voices import Voice, VoiceCatalogue
+    from api.routers.api.v1.audio import voices
+
+    catalogue = VoiceCatalogue(verified=True, voices=[Voice(id='voice_123', name='Example', languages=['en'])])
+    monkeypatch.setattr(voices, 'list_voices', AsyncMock(return_value=catalogue))
+    monkeypatch.setattr(voices.ui_settings, 'get_or_create', AsyncMock(return_value=SimpleNamespace(speech_pace='normal')))
+    provider = SimpleNamespace(synthesize=AsyncMock(return_value=MP3))
+    @asynccontextmanager
+    async def slot(): yield True
+    speech_client.app.dependency_overrides[get_audio_provider] = lambda: provider
+    speech_client.app.dependency_overrides[get_transcription_slot] = lambda: slot
+    assert speech_client.post('/api/v1/audio/voices/preview', json={'locale': 'de', 'voice': 'unknown'}).status_code == 422
+    result = speech_client.post('/api/v1/audio/voices/preview', json={'locale': 'de', 'voice': 'voice_123'})
+    assert result.status_code == 200 and result.content == MP3
+    assert result.headers['cache-control'] == 'no-store'
+    args, kwargs = provider.synthesize.await_args
+    assert args == ('Hallo, ich bin Liam. Wie kann ich dir helfen?',)
+    assert kwargs['voice'] == 'voice_123' and kwargs['locale'] == 'de'
+
+
+def test_voice_preview_requires_tts_attestation(speech_client, monkeypatch):
+    from env.audio import env
+    monkeypatch.setattr(env, 'audio_tts_verification', None)
+    response = speech_client.post('/api/v1/audio/voices/preview', json={'locale': 'en', 'voice': 'voice_478'})
+    assert response.status_code == 503
+    assert response.headers['cache-control'] == 'no-store'
+
+
+@pytest.mark.parametrize(('locale', 'selected', 'listed', 'expected'), [
+    ('de', 'voice_123', True, 'voice_123'),
+    ('en', 'voice_456', True, 'voice_456'),
+    ('de', 'voice_removed', False, 'voice_481'),
+    ('en', 'voice_removed', False, 'voice_478'),
+])
+def test_saved_speech_uses_selected_preset_or_language_default(speech_client, monkeypatch, locale, selected, listed, expected):
+    from types import SimpleNamespace
+    from api.audio import voices
+    from api.routers.api.v1.audio import speech
+    monkeypatch.setattr(speech, 'resolve_locale', AsyncMock(return_value=locale))
+    monkeypatch.setattr(speech.ui_settings, 'get_or_create', AsyncMock(return_value=SimpleNamespace(
+        speech_pace='normal', voice_de=selected, voice_en=selected)))
+    inventory = voices.VoiceCatalogue(verified=True, voices=[voices.Voice(id=selected, name='Synthetic', languages=[locale])] if listed else [])
+    monkeypatch.setattr(voices, 'list_voices', AsyncMock(return_value=inventory))
+    with respx.mock(assert_all_mocked=True) as outbound:
+        provider = outbound.post('https://api.mistral.ai/v1/audio/speech').mock(return_value=Response(
+            200, json={'audio_data': base64.b64encode(MP3).decode()}))
+        response = speech_client.post(PATH, json=REFERENCE)
+    assert response.status_code == 200
+    assert json.loads(provider.calls[0].request.content)['voice_id'] == expected
