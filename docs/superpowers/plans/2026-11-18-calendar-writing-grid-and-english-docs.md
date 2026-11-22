@@ -2,8 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking. In this repository, Pi writers implement the packages
-> and the controller integrates them (see "Packages").
+> checkbox (`- [ ]`) syntax for tracking. In this repository, separate implementation agents
+> implement the packages and a lead agent integrates them (see "Packages").
 
 **Goal:** Owners can see their appointments in a month, week or day grid and can create, change
 and delete their own Google appointments, directly or through confirmed assistant cards.
@@ -93,18 +93,19 @@ task:
 
 ## Packages
 
-Packages D, B and G run in parallel on separate writers. Package U starts after B and G are
-integrated, on a writer reset to the integration branch. The controller owns the C tasks.
+Packages D, B and G run in parallel, each with its own implementation agent in its own clone.
+Package U starts after B and G are integrated, in a clone reset to the integration branch. The
+lead agent owns the C tasks.
 
 | Package | Tasks | Owner | Touches |
 | --- | --- | --- | --- |
-| D | D1, D2 | writer (`code-terra`) | `.github/`, all maintained `*.md`, `tests/test_github_templates.py`, `tests/test_doc_links.py`, the marker in `apps/api/tests/test_mcp_exposure.py`, doc paths in code comments |
-| B | B1–B7 | writer (`code-astra`) | `apps/api/src/api/calendar/`, `apps/api/src/api/mail/{connectors,proposals,agent_tools,agent_prompt,dev_seed}.py`, `apps/api/src/api/routers/api/v1/calendar/`, `apps/api/src/api/routers/api/v1/chat/{proposals,schemas}.py`, `packages/py/db/`, API tests, the inventory sets in `test_mcp_exposure.py`, generated client |
-| G | G1–G3 | writer (`code-terra`) | `apps/web/src/calendar/`, `apps/web/src/routes/_app/calendar*`, `apps/web/src/i18n/de.ts` (calendar section), `apps/web/src/api/queries.ts` (calendar queries) |
-| U | U1–U3 | writer (`code-terra`) after B+G | `apps/web/src/calendar/`, `apps/web/src/chat/` (calendar card), `apps/web/src/i18n/de.ts` |
-| C | C1–C6 | controller | issue, integration, English calendar docs, probe report, end-to-end run, gate, PR |
+| D | D1, D2 | implementation agent | `.github/`, all maintained `*.md`, `tests/test_github_templates.py`, `tests/test_doc_links.py`, the marker in `apps/api/tests/test_mcp_exposure.py`, doc paths in code comments |
+| B | B1–B7 | implementation agent | `apps/api/src/api/calendar/`, `apps/api/src/api/mail/{connectors,proposals,agent_tools,agent_prompt,dev_seed}.py`, `apps/api/src/api/routers/api/v1/calendar/`, `apps/api/src/api/routers/api/v1/chat/{proposals,schemas}.py`, `packages/py/db/`, API tests, the inventory sets in `test_mcp_exposure.py`, generated client |
+| G | G1–G3 | implementation agent | `apps/web/src/calendar/`, `apps/web/src/routes/_app/calendar*`, `apps/web/src/i18n/de.ts` (calendar section), `apps/web/src/api/queries.ts` (calendar queries) |
+| U | U1–U3 | implementation agent, after B+G | `apps/web/src/calendar/`, `apps/web/src/chat/` (calendar card), `apps/web/src/i18n/de.ts` |
+| C | C1–C6 | lead agent | issue, integration, English calendar docs, probe report, end-to-end run, gate, PR |
 
-Packages B and G must not edit AGENTS.md, DESIGN.md or other Markdown. The controller writes
+Packages B and G must not edit AGENTS.md, DESIGN.md or other Markdown. The lead agent writes
 the calendar documentation in C3.
 
 ---
@@ -869,7 +870,7 @@ Create `CalendarDetail.test.tsx`.
 
 ---
 
-## Package C: controller
+## Package C: lead agent
 
 ### Task C1: Calendar grid issue
 
@@ -882,12 +883,12 @@ Create `CalendarDetail.test.tsx`.
 
 ### Task C2: Integrate packages
 
-- [ ] Integrate serially. Per writer:
-  - collect;
-  - review the collected refs;
-  - get a cross-family review (D and G by `review-glm`; B by `review-glm` plus `review-grok`);
+- [ ] Integrate serially. Per package:
+  - collect the agent's commits;
+  - review them;
+  - get a review from another model family (for B, two reviews from different families);
   - cherry-pick onto `feat/welle-6`;
-  - `git cherry`, then `--finish`.
+  - confirm with `git cherry` that every commit arrived, then release the clone.
 - [ ] Resolve overlaps:
   - `test_mcp_exposure.py`: D's marker, B's sets;
   - the `de.ts` calendar section: G, then U;
@@ -931,6 +932,6 @@ Create `CalendarDetail.test.tsx`.
   - `bash tools/gen-types.sh --check`;
   - `bun run check`;
   - `git diff --check`.
-- [ ] A whole-branch review from another family before the PR.
+- [ ] A whole-branch review from another model family before the PR.
 - [ ] One PR. It names #67, #66, #23 and the grid issue with their closing keywords, the section
   mapping, the probe summary, and the "not checked" list.
