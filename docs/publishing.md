@@ -12,10 +12,12 @@ The owner chose option (a): this repository becomes public as it is, with its fu
   remove the old commits from GitHub: the read-only `refs/pull/*` refs and force-pushed states
   keep them reachable, and only GitHub support can delete them. All commit hashes would change,
   so references in issues, pull requests and docs would point nowhere.
-- **The Mistral IDs stay in `mistral.json`.** `mistral deploy` reads the `deployment` block
-  from the pushed state; without it a deployment creates a new app. Organization, workspace and
+- **The Mistral IDs leave the current state, not the history.** Organization, workspace and
   app IDs are identifiers, not credentials: the Studio gateway still needs a browser session or
-  a workspace key. Older commits contain the same IDs.
+  a workspace key. They were in `mistral.json` until 2026-11-22 and remain in older commits,
+  which the owner accepts. Without the `deployment` block a deploy from another checkout
+  creates its own app. liam-e's app is deployed with `tools/deploy.sh`, which takes the IDs
+  from an ignored local file ([below](#deploying-without-ids-in-the-repository)).
 - **License: Apache-2.0**, copyright holder `plagor44-ux`. See [LICENSE](../LICENSE) and
   [NOTICE](../NOTICE). The scaffold and two of the agent skills already come from Mistral AI
   under Apache-2.0.
@@ -30,14 +32,16 @@ and pull requests on GitHub, the workflows and the GitHub settings were checked.
 - **Secrets:** none found. The CI job `secrets` runs gitleaks over the history of all branches.
   Thirteen commits that are reachable on GitHub only because of force-pushes were checked
   separately; they are clean as well.
-- **Files on `main`:** `tests/test_public_repo_hygiene.py` passes. The pull request that added
+- **Files on `main`:** `tests/test_public_repo_hygiene.py` passes. The pull request that updated
   this page also added the license files, removed the scheduled OpenWiki workflow (it failed on
   every run and held write permissions), replaced a local path and agent tool names in two
-  docs with neutral wording, and made the remaining test identifiers visibly synthetic. The
-  hygiene test now also flags paths under `~/`.
-- **History:** older commits still contain the Mistral IDs (implementation plan of 13.11.), two
-  links to private Claude artifacts and the name of another of the owner's projects. All were
-  removed from `main` on 2026-11-17. Commits carry the author's first name, GitHub noreply
+  docs with neutral wording, made the remaining test identifiers visibly synthetic and took the
+  Mistral IDs out of `mistral.json`. The hygiene test now also flags paths under `~/` and
+  `~<user>/`, and the Mistral IDs in any tracked file.
+- **History:** older commits still contain the Mistral IDs (`mistral.json` up to 2026-11-22,
+  implementation plan of 13.11.), two links to private Claude artifacts and the name of another
+  of the owner's projects. The links, the project name and the IDs in the plan were removed from
+  `main` on 2026-11-17, the IDs in `mistral.json` on 2026-11-22. Commits carry the author's first name, GitHub noreply
   addresses and `Claude-Session` links. Decision (a) accepts this.
 - **Issues and pull requests:** no uploaded images or attachments. Some pull request
   descriptions and their edit histories name the review profiles of the tools used, the models
@@ -45,6 +49,27 @@ and pull requests on GitHub, the workflows and the GitHub settings were checked.
 - **Actions:** `.github/workflows/ci.yml` is safe for a public repository: no
   `pull_request_target`, read-only token, no secrets, actions pinned to full commit SHAs. Logs
   of past runs become public with the repository.
+
+## Deploying without IDs in the repository
+
+`bash tools/deploy.sh <commit>` deploys a commit from `origin/main` to the existing app. The
+steps and the format of the ignored `mistral.deployment.json` are in
+[Providers and operations](providers-and-operations.md#deployment-in-mistral-studio).
+
+- **Why `--from-disk`:** a plain `mistral deploy` builds the pushed commit and reads the
+  `deployment` block from it. With the block written only locally, CLI 0.18.1 stops with exit
+  code 7 because the tree is dirty. `mistral deploy --from-disk` uploads the working directory
+  instead. A test with CLI 0.18.1 against a separate test app on 2026-11-22 showed that without
+  `--yes` it updates the existing app and creates no new one, changes no files, commits or
+  remote refs, and does not upload a git-ignored file.
+- **Experimental:** the CLI marks `--from-disk` as experimental. The first deploy through the
+  script also shows whether it works from a fresh clone and whether `mistral apps list --json`
+  lists the app ID where the script finds it.
+- **Way back:** if `--from-disk` changes or goes away, revert the commit “fix: take the Mistral
+  deployment IDs out of mistral.json”. That restores the block and the hygiene test's exception
+  for `mistral.json`. Then deploy with `mistral login` and `mistral deploy` from a clean
+  checkout of `main`; the Mistral GitHub App needs access to the repository. The IDs are then
+  in the current state again, which needs a new decision of the owner.
 
 ## Smaller open decisions
 
@@ -64,7 +89,10 @@ and pull requests on GitHub, the workflows and the GitHub settings were checked.
 - [x] Local path and agent tool names removed from the docs; the hygiene test flags `~/` paths.
 - [x] Visibly synthetic test IDs and reserved example domains; origin of the audio sample in
   `NOTICE`.
+- [x] Mistral IDs out of `mistral.json`; deploys through `tools/deploy.sh`; the hygiene test
+  flags the IDs in any tracked file.
 - [ ] CI green on `main`, including the job `secrets`.
+- [ ] First deploy through `tools/deploy.sh` after the merge.
 
 **Before the switch, in the GitHub settings:**
 

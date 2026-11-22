@@ -88,22 +88,33 @@ In the Studio probe on 13.11.2026 the same process was still running at the end 
 
 ## Deployment in Mistral Studio
 
-1. Check the approved commit and push it to the GitHub repository configured as `origin`.
-   The Mistral GitHub App needs access to the repository. The checkout must be clean. The
+1. Merge the approved commit into `main` on the GitHub repository configured as `origin`. The
    GitHub Actions in this repository check code, tests and secrets. [CI](../.github/workflows/ci.yml).
-2. Configure runtime values and secrets in Studio. For Git deployment, runtime configuration
-   comes from Studio. In particular, check access to the API module and the intended Studio
+2. Configure runtime values and secrets in Studio. Runtime configuration comes from Studio; the
+   deploy copy holds no `.env`. In particular, check access to the API module and the intended Studio
    workspace. liam-e is designed for a single user. The versioned API relies on gateway login
    and access restrictions. [API access rule](../apps/api/src/api/routers/api/v1/__init__.py),
    [Security policy](../SECURITY.md).
-3. Run `mistral login` and `mistral deploy` at the repository root. The CLI builds the pushed
-   commit. The `deployment` block in `mistral.json` binds the checkout to
-   `<organization-id>`, `<workspace-id>` and `<app-id>`. Check the displayed target before
-   starting. On first setup without a binding, the CLI creates an app and writes the binding
-   to the manifest. The existing block belongs to the already bound app. Use a separate
-   binding for a separate installation.
-   [Manifest](../mistral.json), [Studio deployment](https://docs.mistral.ai/studio/apps/deploy),
-   [Publication rules](publishing.md).
+3. Run `mistral login`, then `bash tools/deploy.sh <commit>` from a checkout of this
+   repository. The commit must be on `origin/main`. `mistral.json` carries no `deployment`
+   block, so the script reads `<organization-id>`, `<workspace-id>` and `<app-id>` from the
+   git-ignored file `mistral.deployment.json` at the checkout root, or from the file that
+   `LIAM_E_DEPLOYMENT_FILE` names:
+
+   ```json
+   {"organizationId": "<organization-id>", "workspaceId": "<workspace-id>", "appId": "<app-id>"}
+   ```
+
+   Without that file the script stops, because a deploy without the block creates a new app.
+   It clones the commit into a temporary directory outside the working tree (tracked files
+   only, so no `.env`), writes the block into that copy's `mistral.json`, checks with
+   `mistral apps list` that the app exists and runs `mistral deploy --from-disk` there without
+   `--yes`. Check the target the CLI displays. The copy cannot push and is removed afterwards.
+   A plain `mistral deploy` in another checkout creates an app of its own, which is how a
+   separate installation starts. `--from-disk` is experimental in the CLI;
+   [Publication](publishing.md#deploying-without-ids-in-the-repository) describes the way back.
+   [Script](../tools/deploy.sh), [Manifest](../mistral.json),
+   [Studio deployment](https://docs.mistral.ai/studio/apps/deploy).
 4. Through the manifest, Studio provides the API under `/api`, web under `/` and managed
    Postgres. The API module uses injected `POSTGRES_*` values unless `DATABASE_URL` is set.
    Its pre-start step waits for Postgres and runs Alembic to `heads`. Check module status in

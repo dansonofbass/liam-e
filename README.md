@@ -42,6 +42,13 @@ VITE_API_URL=http://127.0.0.1:3000 bun run dev:web
 The UI runs at [localhost:3001](http://localhost:3001). The
 [health check](http://127.0.0.1:3000/api/health) is available directly on the API.
 
+## Deploy
+
+liam-e runs as an app in Mistral Studio. `mistral.json` carries no Studio IDs, so a plain
+`mistral deploy` creates an app of your own. The existing app is deployed with
+`bash tools/deploy.sh <commit>`, which takes its IDs from a git-ignored local file. See
+[Studio deployment](docs/providers-and-operations.md#deployment-in-mistral-studio).
+
 ## Further documentation
 
 - [Architecture and domains](docs/architecture.md)

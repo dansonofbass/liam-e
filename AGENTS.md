@@ -942,6 +942,7 @@ label, `send_email` takes `replyToMessageId`; the Outlook connector returned HTT
   - `bunx nx run api:gen-openapi` + `bash tools/gen-types.sh` — regenerate OpenAPI spec + TS client (after every API change; `gen-types.sh --check` is the drift gate)
   - `bunx nx run db:revision --message "..."` — autogenerate Alembic revision; `bunx nx run db:migrate` — apply (`heads`, not `head`)
   - `bash tools/uv.sh run --no-sync python -m api.mail.dev_seed` — fill the local database with the design-board sample data. The seed rejects database hosts other than `localhost`, `127.0.0.1` and `::1`; repeated runs replace only seed rows and associated insight/sync/chat rows. For visual checks start the API with `MAIL_WORKER_ENABLED=false` so seed accounts are not synced.
+  - `bash tools/deploy.sh <commit>` — deploy a commit from `origin/main` to the existing Studio app; the IDs come from the git-ignored `mistral.deployment.json` ([docs/providers-and-operations.md](docs/providers-and-operations.md)).
 
 ## Conventions
 
@@ -1018,9 +1019,13 @@ anything on GitHub (issues, PRs, reviews, comments), therefore already counts as
   calendar contents, contacts, hostnames, internal domains, IP addresses, absolute local paths,
   user or device names, or names of their own infrastructure or tools. Give paths relative to
   the repository.
-- **Mistral tenant:** organization, workspace and app IDs appear only in `mistral.json`, because
-  `mistral deploy` needs them there. Everywhere else use `<organization-id>`, `<workspace-id>`
-  and `<app-id>`; do not write down the deployment's app or gateway URLs.
+- **Mistral tenant:** organization, workspace and app IDs never appear in the repository, not even
+  in `mistral.json`. Write `<organization-id>`, `<workspace-id>` and `<app-id>`, and do not write
+  down the deployment's app or gateway URLs. Deploy with `bash tools/deploy.sh <commit>`: it reads
+  the IDs from the git-ignored `mistral.deployment.json` and writes the `deployment` block only
+  into a temporary copy ([docs/providers-and-operations.md](docs/providers-and-operations.md)).
+  Never commit that file or print its values. Older commits still hold the IDs
+  ([docs/publishing.md](docs/publishing.md)).
 - **No links to private resources:** name Claude artifacts, sessions and private documents instead
   of linking them (e.g. the “liam-e” design system). The only exception is the `Claude-Session`
   attribution line in commits and PR descriptions.
@@ -1044,8 +1049,8 @@ anything on GitHub (issues, PRs, reviews, comments), therefore already counts as
   `.claude/settings.local.json`, `.claude/worktrees/`, Playwright output) remains untracked;
   `.gitignore` covers it.
 - **Enforcement:** CI job `secrets` (gitleaks over the entire history with `.gitleaks.toml`) and
-  `tests/test_public_repo_hygiene.py` (tenant IDs outside `mistral.json`, private links, home
-  paths, realistic-looking email addresses). The allowlist is empty; an exception requires a
+  `tests/test_public_repo_hygiene.py` (tenant IDs in any tracked file, a `deployment` block in
+  `mistral.json`, private links, home paths, realistic-looking email addresses). The allowlist is empty; an exception requires a
   reviewed false positive, applies only to the rule, file and specific value, and gives the
   justification in the entry. CI actions are pinned to commit SHAs.
 - What remains before publication is in [docs/publishing.md](docs/publishing.md).
