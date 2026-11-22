@@ -47,6 +47,12 @@ pytestmark = pytest.mark.anyio
 @pytest.fixture
 async def skill_runtime(monkeypatch):
     """Self-contained synthetic store covering skills, chat, mail, calendar, and tasks."""
+    class FixedCalendarClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 21, 12, 0, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(briefing.calendar_tools, "datetime", FixedCalendarClock)
     skills: dict[str, SkillDefinition] = {}
     revisions: dict[str, SkillRevision] = {}
     conversations: dict[str, ChatConversation] = {}
@@ -630,6 +636,7 @@ async def test_daily_briefing_vertical_slice_and_follow_up_turn_isolation(skill_
     # Check tool output from collect_daily_briefing actually processed authorized domain data
     tool_msgs = [m for m in skill_runtime.messages if m.role == "tool"]
     briefing_out = json.loads(tool_msgs[0].content)
+    assert briefing_out["untrusted_daily_briefing"]["calendar"]["complete"] is True
     assert briefing_out["untrusted_daily_briefing"]["calendar"]["occurrences"][0]["title"].startswith("Architektur-Review")
     assert briefing_out["untrusted_daily_briefing"]["tasks"]["due_on_date"][0]["title"] == "Abnahme vorbereiten"
     assert briefing_out["untrusted_daily_briefing"]["mails"]["due_or_overdue_deadlines"][0]["subject"] == "Frist heute"

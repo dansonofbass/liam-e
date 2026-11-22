@@ -32,6 +32,12 @@ def _ctx(**overrides):
 
 
 async def test_collect_daily_briefing_merges_authorized_calendar_tasks_and_mail_deadlines(monkeypatch):
+    class FixedCalendarClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 21, 12, 0, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(briefing.calendar_tools, "datetime", FixedCalendarClock)
     source = CalendarSource(
         id="cal-1",
         provider="ics",
