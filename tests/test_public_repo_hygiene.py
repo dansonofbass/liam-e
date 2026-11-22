@@ -2,8 +2,8 @@
 
 liam-e is meant to become public (AGENTS.md, section "Publication and private data"). These
 checks cover what a secret scanner does not look for: the Mistral tenant IDs outside the
-`mistral.json` that deploys need, links to private claude.ai resources, absolute home paths, and
-mail addresses that could belong to a real person. Credentials are the job of gitleaks
+`mistral.json` that deploys need, links to private claude.ai resources, home paths (absolute or
+under `~/`), and mail addresses that could belong to a real person. Credentials are the job of gitleaks
 (`.gitleaks.toml`, CI job `secrets`).
 
 The checks read `git ls-files`, so they see exactly what a clone would publish. Tenant IDs and
@@ -36,7 +36,11 @@ RESERVED_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
 SYNTHETIC_LOCAL_PART = re.compile(r"^(?:[a-z]|me|test|user|noreply|no-reply)$")
 
 ADDRESS = re.compile(r"(?<![\w.%+-])([A-Za-z0-9._%+-]+)@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?![\w.-]*\w)")
-HOME_PATH = re.compile(r"(?<![\w.~-])/(?:home|Users)/[A-Za-z_][\w.-]*(?![\w-])")
+# Absolute home directories, and paths under "~/", which name a home directory just as well.
+HOME_PATH = re.compile(
+    r"(?<![\w.~-])/(?:home|Users)/[A-Za-z_][\w.-]*(?![\w-])"
+    r"|(?<![\w.~/-])~/[\w.][\w.-]*"
+)
 # One or two backslashes: a plain path or one escaped in JSON or a string literal.
 WINDOWS_HOME = re.compile(r"(?i)(?<![\w])[a-z]:\\{1,2}Users\\{1,2}[^\\\s\"'<>]+")
 # The host must be claude.ai itself: after "//" (with a scheme or protocol-relative, but not a
@@ -45,10 +49,17 @@ WINDOWS_HOME = re.compile(r"(?i)(?<![\w])[a-z]:\\{1,2}Users\\{1,2}[^\\\s\"'<>]+"
 PRIVATE_LINK = re.compile(
     r"(?i)(?:(?<=//)(?<![\w.-]//)|(?<![\w./-]))(?:www\.)?claude\.ai/(?:artifact|chat|code|project|public|share)/[a-z0-9_-]+"
 )
-# Paths that look like a home directory but are not one, such as a web route under "/home". Each
-# entry is (file, the whole path as written there) with a comment saying why it is harmless. The
-# same path in another file, or a longer path that starts with it, is still reported.
-NOT_HOME_PATHS: frozenset[tuple[str, str]] = frozenset()
+# Paths that match the home-path rule but name nobody's environment, such as a web route under
+# "/home" or a tool's documented per-user config file. Each entry is (file, the whole path as
+# written there) with a comment saying why it is harmless. The same path in another file, or a
+# longer path that starts with it, is still reported.
+NOT_HOME_PATHS: frozenset[tuple[str, str]] = frozenset(
+    {
+        # Bun's per-user config file, named to explain the registry pin and the release-age
+        # quarantine. Split so that this file holds no home path itself.
+        ("bunfig.toml", "~" + "/.bunfig.toml"),
+    }
+)
 WHOLE_PATH = re.compile(r"[^\s\"'`<>()\[\]{},;]+")
 DEPLOYMENT_KEYS = ("organizationId", "workspaceId", "appId")
 
@@ -122,7 +133,7 @@ def home_path_hits(texts: dict[str, str], allowed: frozenset[tuple[str, str]]) -
 
 def test_no_absolute_home_paths() -> None:
     found = home_path_hits(tracked_texts(), NOT_HOME_PATHS) + hits(WINDOWS_HOME)
-    assert found == [], "use repository-relative paths or a placeholder; a route is listed in NOT_HOME_PATHS"
+    assert found == [], "use repository-relative paths or a placeholder; a reviewed harmless path goes in NOT_HOME_PATHS"
 
 
 def test_home_path_exception_is_bound_to_file_and_whole_path() -> None:
@@ -131,6 +142,13 @@ def test_home_path_exception_is_bound_to_file_and_whole_path() -> None:
     assert home_path_hits({"apps/web/src/routes.ts": f'route = "{route}"'}, allowed) == []
     assert home_path_hits({"apps/web/src/routes.ts": f'path = "{route}/.ssh/config"'}, allowed) != []
     assert home_path_hits({"docs/notes.md": f'route = "{route}"'}, allowed) != []
+
+
+def test_bunfig_exception_covers_only_that_file_and_path() -> None:
+    config = "~" + "/.bunfig.toml"
+    assert home_path_hits({"bunfig.toml": f"a proxy in {config} cannot leak"}, NOT_HOME_PATHS) == []
+    assert home_path_hits({"bunfig.toml": f"see {config}.d/private"}, NOT_HOME_PATHS) != []
+    assert home_path_hits({"docs/notes.md": f"a proxy in {config}"}, NOT_HOME_PATHS) != []
 
 
 def is_personal_address(match: re.Match[str]) -> bool:
@@ -176,7 +194,12 @@ def test_address_rule(address: str, personal: bool) -> None:
         ("/Users" + "/someone/x", True),
         ("C:" + "\\Users\\Someone\\project", True),
         ('{"path": "C:' + '\\\\Users\\\\Someone\\\\project"}', True),
-        ("~/project", False),
+        ("~" + "/project", True),
+        ("~" + "/.config/tool/state", True),
+        ("cd " + "~" + "/work", True),
+        ("~/", False),
+        ("https://example.org/~/x", False),
+        ("a~/b", False),
         ("/home/", False),
         ("apps/home/view.tsx", False),
     ],

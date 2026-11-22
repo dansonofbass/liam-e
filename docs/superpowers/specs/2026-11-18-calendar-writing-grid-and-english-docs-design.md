@@ -20,7 +20,7 @@ Success means the owner can do three things:
 
 ## Delivery
 
-- **One task:** branch `feat/welle-6` in `~/Projekte/worktrees/liam-e-welle-6`, one PR.
+- **One task:** branch `feat/welle-6` in its own Git worktree, one PR.
 - **Issues covered:** #67, #66, #23, and a new issue for the calendar grid. The new issue is
   written in English from the change template.
 - **Commits:** each issue has its own commits and its own closing keyword in the PR.
