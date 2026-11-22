@@ -55,6 +55,8 @@ The mail app uses [`apps/web`](apps/web/) and [`apps/api`](apps/api/).
 
 ## License
 
-There is no project-wide license file for liam-e. The license decision belongs to the owner.
-Adopted components may have their own license terms. The
+liam-e is licensed under the [Apache License, Version 2.0](LICENSE).
+[NOTICE](NOTICE) lists the third-party material it contains or builds on: the Mistral Apps
+scaffold and agent skills, the FastAPI skill (MIT), the font (OFL-1.1), the icons (ISC) and
+the origin of the bundled audio sample. Dependencies keep their own licenses. The
 [publication checklist](docs/publishing.md) records the state of the planned publication.

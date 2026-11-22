@@ -1,0 +1,52 @@
+liam-e
+Copyright 2026 plagor44-ux
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This repository contains or builds on the following third-party material.
+
+1. Mistral Apps scaffold
+
+   The project was generated from the @mistralai-capabilities packages,
+   version 0.1.71 (commit "chore: scaffold mistral apps app"). These packages
+   are Copyright 2025 Mistral AI and licensed under the Apache License,
+   Version 2.0. Some scaffold files have since been modified for this
+   project; the Git history records each change.
+
+2. Agent skills from the same packages
+
+   - .agents/skills/observe, from @mistralai-capabilities/feature-observability
+   - .agents/skills/tanstack-start, from
+     @mistralai-capabilities/frontend-tanstack-start
+
+   Copyright 2025 Mistral AI, Apache License, Version 2.0. Both are included
+   unmodified.
+
+3. .agents/skills/fastapi
+
+   Included unmodified from @mistralai-capabilities/backend-fastapi 0.1.71
+   (Apache License, Version 2.0). Its text is adapted from the official
+   FastAPI agent skill, Copyright (c) 2018 Sebastián Ramírez, MIT License.
+   The attribution and the MIT license text are in
+   .agents/skills/fastapi/LICENSE.
+
+4. Dependencies installed through npm
+
+   These packages are not stored in this repository. A web build contains
+   parts of them.
+
+   - Font "Plus Jakarta Sans" (@fontsource/plus-jakarta-sans),
+     Copyright 2020 The Plus Jakarta Sans Project Authors,
+     SIL Open Font License, Version 1.1.
+   - Icons (lucide-react), Copyright (c) Lucide Icons and Contributors,
+     ISC License. Some Lucide icons derive from Feather,
+     Copyright (c) 2013-present Cole Bemis, MIT License.
+
+   Every other dependency keeps its own license; see the package metadata.
+
+5. apps/api/src/api/audio/device-sample.mp3
+
+   A short synthetic German sentence created for this project. It was
+   generated offline with the eSpeak NG speech synthesizer and encoded with
+   FFmpeg. It contains no recorded human voice. Neither tool is part of this
+   repository.
