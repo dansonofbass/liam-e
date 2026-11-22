@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { mailSyncAll } from '../api/generated/sdk.gen'
 import { summaryQuery } from '../api/queries'
-import { AppShell, Drawer, Icon, IconButton } from '../ds'
+import { AppShell, BrandMark, Drawer, IconButton } from '../ds'
 import { useI18n } from '../i18n/I18n'
 import { Sidebar, Conversations } from '../shell/Sidebar'
 import { MobileHeader, MobileModelSlot } from '../shell/MobileHeader'
@@ -42,6 +42,6 @@ export function Shell() {
   }, [client])
   const mobile = breakpoint === 'mobile', tablet = breakpoint === 'tablet'
   const title = path.startsWith('/calendar') ? texts.calendar.title : path.startsWith('/settings') ? texts.prompts.settings : path.startsWith('/mail') ? texts.shell.inbox : path.startsWith('/accounts') ? texts.shell.accounts : path.startsWith('/tasks') ? texts.tasks.title : texts.shell.chat
-  return <ChatSessionProvider><MobileModelSlot value={mobile ? modelSlot : null}><AppShell sidebar={mobile ? null : <Sidebar collapsed={tablet} onConversations={() => setOpen(true)} />} header={mobile && !(path.startsWith('/mail/') && path !== '/mail/') ? <MobileHeader title={title} conversationId={conversationId} onMenu={() => setOpen(true)} modelSlotRef={path === '/' || conversationId ? setModelSlot : undefined} /> : undefined}><div key={path === '/' || path.startsWith('/chat/') ? 'chat' : path.startsWith('/mail') ? 'mail' : path.startsWith('/calendar') ? 'calendar' : path} className="le-page-fade"><Outlet /></div></AppShell></MobileModelSlot><Drawer open={open} onClose={() => setOpen(false)} label={mobile ? texts.shell.menu : texts.shell.conversations}><div className="le-brand le-drawer-brand"><span className="le-mark"><Icon name="sparkle" /></span><span className="le-grow">{texts.assistant.name}</span><IconButton icon="x" label={texts.shell.closeMenu} onClick={() => setOpen(false)} /></div>{mobile ? <Sidebar hideBrand onNavigate={() => setOpen(false)} /> : <Conversations onNavigate={() => setOpen(false)} />}</Drawer></ChatSessionProvider>
+  return <ChatSessionProvider><MobileModelSlot value={mobile ? modelSlot : null}><AppShell sidebar={mobile ? null : <Sidebar collapsed={tablet} onConversations={() => setOpen(true)} />} header={mobile && !(path.startsWith('/mail/') && path !== '/mail/') ? <MobileHeader title={title} conversationId={conversationId} onMenu={() => setOpen(true)} modelSlotRef={path === '/' || conversationId ? setModelSlot : undefined} /> : undefined}><div key={path === '/' || path.startsWith('/chat/') ? 'chat' : path.startsWith('/mail') ? 'mail' : path.startsWith('/calendar') ? 'calendar' : path} className="le-page-fade"><Outlet /></div></AppShell></MobileModelSlot><Drawer open={open} onClose={() => setOpen(false)} label={mobile ? texts.shell.menu : texts.shell.conversations}><div className="le-brand le-drawer-brand"><BrandMark /><span className="le-grow">{texts.assistant.name}</span><IconButton icon="x" label={texts.shell.closeMenu} onClick={() => setOpen(false)} /></div>{mobile ? <Sidebar hideBrand onNavigate={() => setOpen(false)} /> : <Conversations onNavigate={() => setOpen(false)} />}</Drawer></ChatSessionProvider>
 }
 export const Route = createFileRoute('/_app')({ component: Shell })

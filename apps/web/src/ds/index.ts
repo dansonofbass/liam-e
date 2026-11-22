@@ -1,4 +1,5 @@
 export * from './Icon'
+export * from './BrandMark'
 export * from './Button'
 export * from './IconButton'
 export * from './Tooltip'
