@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { apiBaseUrl } from '../api/client-config'
 import { audioLiveSpeech, audioLiveStatus } from '../api/generated/sdk.gen'
 import { unwrap } from '../api/unwrap'
 import { IconButton } from '../ds'
+import { useFocusTrap } from '../ds/useFocusTrap'
 import { useI18n } from '../i18n/I18n'
 import { createLiveVoice } from './live-voice'
 
 type Reply = { conversationId: string; messageId: string }
 type Props = { conversationId: string; disabled: boolean; contextKey: string; send: (text: string) => Promise<Reply | undefined>; stopChat: () => void; registerStop: (stop: (() => void) | null) => void; onStart?: () => void }
 
-// PCM is signed little-endian mono at 24 kHz on both Mistral endpoints.
+// Transcription input is signed 16-bit little-endian mono at 24 kHz.
 function pcm(input: Float32Array, inputRate: number): ArrayBuffer {
   const count = Math.floor(input.length * 24000 / inputRate)
   const output = new ArrayBuffer(count * 2), view = new DataView(output)
@@ -26,7 +28,7 @@ async function playReply(context: AudioContext, reply: Reply, signal: AbortSigna
   if (!stream) throw new Error('audio_unavailable')
   if (signal.aborted) { await stream.cancel(); return }
   const reader = stream.getReader(), sources = new Set<AudioBufferSourceNode>()
-  let next = context.currentTime, remaining: number | undefined, gotAudio = false
+  let next = context.currentTime, remaining = new Uint8Array(0), gotAudio = false
   const abort = () => { void reader.cancel(); sources.forEach(source => { try { source.stop() } catch { /* already stopped */ } }) }
   signal.addEventListener('abort', abort, { once: true })
   try {
@@ -34,18 +36,19 @@ async function playReply(context: AudioContext, reply: Reply, signal: AbortSigna
       const { value, done } = await reader.read()
       if (done || signal.aborted) break
       let bytes = value
-      if (remaining !== undefined) { bytes = new Uint8Array(value.length + 1); bytes[0] = remaining; bytes.set(value, 1) }
-      remaining = bytes.length % 2 ? bytes[bytes.length - 1] : undefined
-      const length = Math.floor(bytes.length / 2)
+      if (remaining.length) { bytes = new Uint8Array(value.length + remaining.length); bytes.set(remaining); bytes.set(value, remaining.length) }
+      const length = Math.floor(bytes.length / 4)
+      remaining = bytes.slice(length * 4)
       if (!length) continue
       gotAudio = true
       const buffer = context.createBuffer(1, length, 24000), samples = buffer.getChannelData(0), view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-      for (let i = 0; i < length; i++) samples[i] = view.getInt16(i * 2, true) / 32768
+      // Mistral PCM speech is float32 little-endian, unlike transcription input.
+      for (let i = 0; i < length; i++) { const sample = view.getFloat32(i * 4, true); if (!Number.isFinite(sample)) throw new Error('audio_unavailable'); samples[i] = Math.max(-1, Math.min(1, sample)) }
       const source = context.createBufferSource(); source.buffer = buffer; source.connect(context.destination); sources.add(source)
       source.onended = () => sources.delete(source)
       next = Math.max(next, context.currentTime); source.start(next); next += buffer.duration
     }
-    if (!signal.aborted && (!gotAudio || remaining !== undefined)) throw new Error('audio_unavailable')
+    if (!signal.aborted && (!gotAudio || remaining.length)) throw new Error('audio_unavailable')
     if (!signal.aborted && next > context.currentTime) await new Promise<void>(resolve => {
       const timer = setTimeout(resolve, (next - context.currentTime) * 1000)
       signal.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
@@ -56,8 +59,10 @@ async function playReply(context: AudioContext, reply: Reply, signal: AbortSigna
 export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat, registerStop, onStart }: Props) {
   const { texts } = useI18n()
   const [available, setAvailable] = useState(false)
-  const [state, setState] = useState<'idle' | 'starting' | 'listening' | 'answering' | 'error'>('idle')
+  const [state, setState] = useState<'idle' | 'starting' | 'listening' | 'answering' | 'speaking' | 'error'>('idle')
   const active = useRef<{ stop: () => void } | null>(null)
+  const control = useRef<HTMLDivElement>(null)
+  const restoreFocus = useRef(false)
   const current = useRef({ send, stopChat }); current.current = { send, stopChat }
   const stop = useCallback(() => { const session = active.current; active.current = null; session?.stop(); setState('idle') }, [])
   useEffect(() => { registerStop(stop); return () => registerStop(null) }, [registerStop, stop])
@@ -69,9 +74,13 @@ export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat
   }, [])
   useEffect(() => () => stop(), [contextKey, stop])
   useEffect(() => { const hidden = () => { if (document.hidden) stop() }; document.addEventListener('visibilitychange', hidden); return () => document.removeEventListener('visibilitychange', hidden) }, [stop])
+  const shown = state !== 'idle' && state !== 'error'
+  const trap = useFocusTrap(shown, stop)
+  useEffect(() => { if (!shown && restoreFocus.current) { control.current?.querySelector('button')?.focus(); restoreFocus.current = false } }, [shown])
 
   const start = async () => {
     if (disabled || active.current || document.hidden) return
+    restoreFocus.current = true
     onStart?.()
     setState('starting')
     let stream: MediaStream | undefined, socket: WebSocket | undefined, context: AudioContext | undefined, processor: ScriptProcessorNode | undefined
@@ -103,7 +112,12 @@ export function LiveVoice({ conversationId, disabled, contextKey, send, stopChat
     } catch { if (active.current === session) { stop(); setState('error') } }
   }
   if (!available) return null
-  const label = state === 'idle' || state === 'error' ? texts.audio.liveStart : texts.audio.liveStop
-  const status = state === 'starting' ? texts.audio.liveStarting : state === 'listening' ? texts.audio.liveListening : state === 'answering' ? texts.audio.liveAnswering : state === 'error' ? texts.audio.liveError : ''
-  return <div className="le-audio-controls"><span className="le-audio-status" role="status">{status}</span><IconButton size="lg" icon={state === 'idle' || state === 'error' ? 'mic' : 'square'} label={label} disabled={disabled && state === 'idle'} onClick={() => { if (active.current) stop(); else void start() }} /></div>
+  const status = state === 'starting' ? texts.audio.liveStarting : state === 'listening' ? texts.audio.liveListening : state === 'answering' ? texts.audio.liveAnswering : state === 'speaking' ? texts.audio.liveSpeaking : state === 'error' ? texts.audio.liveError : ''
+  const finish = () => { stop() }
+  return <div className="le-audio-controls" ref={control}>{!shown && <><span className="le-audio-status" role="status">{status}</span><IconButton size="lg" icon="mic" label={texts.audio.liveStart} disabled={disabled} onClick={() => void start()} /></>}
+    {shown && createPortal(<div className="le-voice-overlay"><div ref={trap} tabIndex={-1} className="le-voice-panel" role="dialog" aria-modal="true" aria-label={texts.audio.liveTitle}>
+      <h2 className="heading">{texts.audio.liveTitle}</h2><div className={`le-voice-indicator le-voice-indicator--${state}`} aria-hidden="true"><span /><span /><span /><span /><span /></div>
+      <p className="le-voice-state" role="status" aria-live="polite">{status}</p><p className="le-voice-hint">{texts.audio.liveHint}</p>
+      <button type="button" className="le-btn le-btn--primary" aria-label={texts.audio.liveStop} onClick={finish}>{texts.audio.liveStop}</button>
+    </div></div>, document.body)}</div>
 }
