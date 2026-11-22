@@ -1,0 +1,15 @@
+# Weekly version updates for the actions in .github/workflows. The workflows pin each action to a
+# full commit SHA with its tag in a comment on the same line; Dependabot updates both. All updates
+# of one week arrive as a single grouped pull request.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"
