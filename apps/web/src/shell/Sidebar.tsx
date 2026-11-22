@@ -1,7 +1,7 @@
 import { Link, useLocation } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { conversationsQuery, summaryQuery } from '../api/queries'
-import { Icon, NavButton, NavItem } from '../ds'
+import { BrandMark, NavButton, NavItem } from '../ds'
 import { useI18n } from '../i18n/I18n'
 import { formatListDate, formatStand } from '../i18n/format'
 import { ThemeMenu } from './ThemeMenu'
@@ -18,7 +18,7 @@ export function Sidebar({ collapsed = false, hideBrand = false, onConversations,
   const path = useLocation({ select: location => location.pathname })
   const count = data?.accounts.length ?? 0
   return <div className="le-shell-sidebar" onClick={event => { if ((event.target as HTMLElement).closest('a')) onNavigate?.() }}>
-    {!hideBrand && <div className="le-brand"><span className="le-mark"><Icon name="sparkle" /></span>{!collapsed && texts.assistant.name}</div>}
+    {!hideBrand && <div className="le-brand"><BrandMark />{!collapsed && texts.assistant.name}</div>}
     <NavItem to="/" icon="message-circle" label={texts.shell.chat} tip={texts.shell.chatTip} collapsed={collapsed} current={path === '/' || path.startsWith('/chat/')} />
     <NavItem to="/mail" icon="inbox" label={texts.shell.inbox} tip={texts.shell.inboxTip} badge={data?.unread_total || undefined} badgeLabel={data?.unread_total ? texts.shell.unread(data.unread_total) : undefined} collapsed={collapsed} />
     <NavItem to="/calendar" icon="clock" label={texts.calendar.title} tip={texts.calendar.tip} collapsed={collapsed} current={path.startsWith('/calendar')} />

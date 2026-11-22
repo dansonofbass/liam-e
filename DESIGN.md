@@ -4,7 +4,7 @@
 > Exact values (colors, dimensions, shadows) are in the **tokens**; this document governs
 > how they are used, how text sounds and how the app behaves on small screens.
 
-**Status:** valid, as of 2026-11-14. The sources of values are `apps/web/src/styles/tokens.css`
+**Status:** valid, as of 2026-11-22. The sources of values are `apps/web/src/styles/tokens.css`
 (tokens) and `apps/web/src/ds/` (components). The „liam-e“ design system in Claude Design
 (owner artifact, not public, style direction C „Weich“), from which they originated, is kept
 aligned with them (§10).
@@ -316,7 +316,13 @@ Quoted German labels and the German icon names in this section are UI text.
   öffnen · `x` Schließen · `arrow-left` Zurück · `plus` Neue Unterhaltung · `search` Suchen
   · `chevron-down` Auswahl · `list-checks` Auswählen · `link` Connector · `key-round` Anmeldung beim Anbieter ·
   `sun-moon` Darstellung; `check` also marks the selected row in a menu.
-- **Components** (classes `le-*`, description and preview in the design system): Button,
+- **Brand mark:** the name „liam-e“ reads „e-mail“ backwards, and the mark is its „-e“: one
+  stroke whose hyphen runs into the crossbar of a lowercase e. `BrandMark` (class `le-mark`)
+  draws it in `on-accent` on the `accent` circle beside the name in the sidebar and the drawer.
+  App icon and favicon (`apps/web/public/`) carry the same glyph on a petrol tile; the README
+  header and social preview images are in `docs/assets/`. `sparkle` is no brand mark: it marks
+  only the assistant (`le-ai-mark`).
+- **Components** (classes `le-*`, description and preview in the design system): BrandMark, Button,
   IconButton, Chip (with tag, badge, dot), Tooltip, Notice, AppShell, NavItem, Menu, QuickAction,
   Composer, ChatMessage, MailReference, ConfirmCard, MailRow, Avatar, TextField, AccountCard,
   Drawer and NavButton (navigation item opening a drawer, „Unterhaltungen“ on tablet). In the app
@@ -750,3 +756,9 @@ Quoted German labels in this section are UI text.
 
 1. **Select multiple inbox mails and process immediately:** one shared undo without a confirmation
    dialog; assistant proposals still require confirmation (§7.4, §9.2).
+
+## Decided (2026-11-22, owner)
+
+1. **Brand mark „-e“** (direction B „Bindestrich-e“ on the design canvas „liam-e Branding“, owner
+   artifact, not public) for app icon, favicon, README header, social preview and the brand row
+   in the app; `sparkle` remains the assistant mark (§6).

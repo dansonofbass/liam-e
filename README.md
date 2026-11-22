@@ -1,4 +1,9 @@
-# liam-e
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-header-dark.png">
+    <img alt="liam-e" src="docs/assets/readme-header-light.png" width="100%">
+  </picture>
+</h1>
 
 liam-e brings multiple mail accounts together in one inbox. An AI assistant searches the mail
 index, summarizes messages and drafts replies. You review its proposals in chat and decide
