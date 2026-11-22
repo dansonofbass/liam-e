@@ -33,7 +33,7 @@ body:
         - label: Tables (generated migration)
         - label: MCP inventory (new mutating operation)
         - label: Agent may propose new actions (confirmation through proposal card)
-        - label: UI text (DESIGN.md, text catalogue)
+        - label: UI text (DESIGN.md, German and English catalogues)
   - type: textarea
     id: acceptance
     attributes:
