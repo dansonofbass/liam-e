@@ -107,7 +107,7 @@ async def test_reconnect_timeout_and_expired_window_fail_closed(monkeypatch):
     assert expired.closed == 1008 and not expired.accepted and not slot.locked()
 
 
-def test_voice_turn_requires_owner_origin_and_speaks_server_deltas(monkeypatch):
+def test_voice_turn_requires_owner_origin_and_speaks_server_deltas(monkeypatch, capsys):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
     from api.audio.access import get_audio_owner_verifier
@@ -117,6 +117,7 @@ def test_voice_turn_requires_owner_origin_and_speaks_server_deltas(monkeypatch):
     from env.audio import env
 
     spoken = []
+    agent_options = []
     class Provider:
         async def append(self, text): spoken.append(text)
         async def finish(self): self.first = True
@@ -128,12 +129,14 @@ def test_voice_turn_requires_owner_origin_and_speaks_server_deltas(monkeypatch):
     @asynccontextmanager
     async def fake_live(kind, **kwargs): yield Provider()
     async def fake_events(**kwargs):
+        agent_options.append(kwargs)
         yield StartEvent(conversation_id='c', user_message_id='u', model='test')
         yield DeltaEvent(text='Hallo.')
         yield DoneEvent(conversation_id='c', message_id='new', stopped=False)
     monkeypatch.setattr(turn.chat_conversation, 'get_conversation', AsyncMock(return_value=object()))
     monkeypatch.setattr(turn, 'resolve_context', AsyncMock(return_value=(object(), SimpleNamespace(id='ctx'), None)))
     monkeypatch.setattr(turn, 'run_turn_events', fake_events)
+    monkeypatch.setattr(turn.ui_settings, 'get_or_create', AsyncMock(return_value=SimpleNamespace(locale='browser', browser_locale=None, speech_pace='normal', voice_model='mistral-small-latest')))
     monkeypatch.setattr(voice_bridge, 'mistral_live', fake_live)
     monkeypatch.setattr(voice_bridge.chat_context, 'is_live', AsyncMock(return_value=True))
     monkeypatch.setattr(env, 'audio_studio_owner', json.dumps({'user_id': '00000000-0000-0000-0000-000000000001', 'organization_id': '00000000-0000-0000-0000-000000000002', 'workspace_id': '00000000-0000-0000-0000-000000000003', 'origin': 'https://test.example'}))
@@ -160,9 +163,12 @@ def test_voice_turn_requires_owner_origin_and_speaks_server_deltas(monkeypatch):
             assert spoken == ['Hallo.']
             ws.send_json({'event': 'playback_finished'})
             assert ws.receive_json()['message_id'] == 'new'
+    assert agent_options[0]['voice_model'] == 'mistral-small-latest'
+    assert agent_options[0]['live_voice_turn'] is True
+    assert capsys.readouterr().err.count('voice_metrics ') == 1
 
 
-def test_voice_turn_preserves_context_refusals_and_missing_conversation(monkeypatch):
+def test_voice_turn_preserves_context_refusals_and_missing_conversation(monkeypatch, capsys):
     from unittest.mock import AsyncMock
     from api.audio.access import get_audio_owner_verifier
     from api.errors import refuse
@@ -182,6 +188,7 @@ def test_voice_turn_preserves_context_refusals_and_missing_conversation(monkeypa
         with client.websocket_connect('/api/v1/audio/live/turn') as ws:
             ws.send_json({'conversation_id': 'missing', 'text': 'synthetic', 'voice_response': True})
             assert ws.receive_json() == {'event': 'refusal', 'code': 'conversation_not_found'}
+    assert capsys.readouterr().err.count('voice_metrics outcome=pre_turn') == 2
 
 
 def test_voice_turn_creates_conversation_when_started_from_empty_chat(monkeypatch):
@@ -240,3 +247,26 @@ def test_voice_turn_creates_conversation_when_started_from_empty_chat(monkeypatc
         with client.websocket_connect('/api/v1/audio/live/turn') as ws:
             ws.send_json({'text': 'Mit unbekanntem Modell', 'voice_response': True, 'model': 'gone'})
             assert ws.receive_json() == {'event': 'refusal', 'code': 'model_unknown'}
+
+
+def test_voice_client_disconnect_is_not_logged_as_provider_failure(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+    from api.audio.access import get_audio_owner_verifier
+    from api.routers.api.v1.audio.live import turn
+
+    monkeypatch.setattr(turn, 'live_remaining', lambda _: 60)
+    monkeypatch.setattr(turn.chat_conversation, 'get_conversation', AsyncMock(return_value=object()))
+    monkeypatch.setattr(turn, 'resolve_context', AsyncMock(return_value=(object(), SimpleNamespace(id='ctx'), None)))
+    monkeypatch.setattr(turn, 'run_voice_turn', AsyncMock(side_effect=WebSocketDisconnect(code=1000)))
+    logger = Mock()
+    monkeypatch.setattr(turn, '_LOG', logger)
+    app = build_app()
+    async def allow(_): return True
+    app.dependency_overrides[get_audio_owner_verifier] = lambda: allow
+    with TestClient(app) as client:
+        with client.websocket_connect('/api/v1/audio/live/turn') as ws:
+            ws.send_json({'conversation_id': 'c', 'text': 'synthetic', 'voice_response': True})
+            with pytest.raises(WebSocketDisconnect): ws.receive_json()
+    logger.warning.assert_not_called()
+    assert any(call.args[0] == 'live voice turn ended code=client_disconnect' for call in logger.info.call_args_list)

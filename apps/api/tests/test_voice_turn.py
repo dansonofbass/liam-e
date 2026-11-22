@@ -233,7 +233,7 @@ async def test_proposal_cards_are_forwarded_but_never_sent_to_speech(monkeypatch
     (['Um 10.', '30 Uhr.'], ['Um 10.30 Uhr.']),
     (['Der Wert ist 3.', '14 Euro.'], ['Der Wert ist 3.14 Euro.']),
     (['Datum 22.', '11.2026.'], ['Datum 22.11.2026.']),
-    (['Zum Beispiel z.', 'B. heute.'], ['Zum Beispiel z.B.', ' heute.']),
+    (['Zum Beispiel z.', 'B. heute.'], ['Zum Beispiel z.B. heute.']),
 ])
 async def test_sentence_boundaries_do_not_depend_on_delta_chunks(monkeypatch, chunks, expected):
     spoken = []
@@ -333,3 +333,310 @@ async def test_streamed_sentence_rejects_tag_over_provider_limit(monkeypatch):
     assert any(event['event'] == 'voice_audio_error' for event in output)
     await socket.input.put({'event': 'playback_finished'})
     await asyncio.wait_for(task, 1)
+
+async def test_provider_is_prewarmed_before_any_chat_text_and_closes_for_empty_reply(monkeypatch):
+    connected, closed, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    @asynccontextmanager
+    async def provider(kind, **kwargs):
+        connected.set()
+        try: yield object()
+        finally: closed.set()
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', AsyncMock(return_value=True))
+    async def events():
+        await release.wait()
+        yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
+    socket = Socket()
+    task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'context'))
+    await asyncio.wait_for(connected.wait(), 1)
+    release.set()
+    while (await asyncio.wait_for(socket.output.get(), 1))['event'] != 'voice_audio_end': pass
+    assert closed.is_set()
+    await socket.input.put({'event': 'playback_finished'})
+    await asyncio.wait_for(task, 1)
+
+@pytest.mark.parametrize(('chunks', 'expected'), [
+    (['Die Zahl 3,', '5 ist hier ein ausführliches Beispiel, und danach geht es weiter.'], ['Die Zahl 3,5 ist hier ein ausführliches Beispiel,', ' und danach geht es weiter.']),
+    (['Ein Beispiel ist z. ', 'B. eine Zeit um 10.', '30 Uhr, danach geht es weiter.'], ['Ein Beispiel ist z. B. eine Zeit um 10.30 Uhr,', ' danach geht es weiter.']),
+])
+async def test_first_segment_preserves_numbers_and_abbreviations(monkeypatch, chunks, expected):
+    spoken = []
+    class Provider:
+        async def append(self, text): spoken.append(text)
+        async def finish(self): pass
+        async def receive(self): return None
+    @asynccontextmanager
+    async def provider(kind, **kwargs): yield Provider()
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', AsyncMock(return_value=True))
+    async def events():
+        for chunk in chunks: yield DeltaEvent(text=chunk)
+        yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
+    socket = Socket()
+    task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'context'))
+    while (await asyncio.wait_for(socket.output.get(), 1))['event'] != 'voice_audio_end': pass
+    assert spoken == expected
+    await socket.input.put({'event': 'playback_finished'})
+    await asyncio.wait_for(task, 1)
+
+@pytest.mark.parametrize('ending', ['error', 'cancel', 'revoke'])
+async def test_prewarmed_provider_is_closed_before_any_text(monkeypatch, ending):
+    connected, closed, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    live = True
+    @asynccontextmanager
+    async def provider(kind, **kwargs):
+        connected.set()
+        try: yield object()
+        finally: closed.set()
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    async def is_live(_): return live
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', is_live)
+    async def events():
+        await release.wait()
+        if ending == 'error': raise ValueError('synthetic')
+        yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
+    socket = Socket()
+    task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'context'))
+    await asyncio.wait_for(connected.wait(), 1)
+    if ending == 'error':
+        release.set()
+        with pytest.raises(ValueError): await asyncio.wait_for(task, 1)
+    elif ending == 'cancel':
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError): await task
+    else:
+        live = False
+        await asyncio.wait_for(task, 1)
+    assert closed.is_set()
+
+async def test_first_segment_can_start_after_long_unpunctuated_text(monkeypatch):
+    emitted = asyncio.Event()
+    release = asyncio.Event()
+    spoken = []
+    class Provider:
+        async def append(self, text): spoken.append(text); emitted.set()
+        async def finish(self): pass
+        async def receive(self): return None
+    @asynccontextmanager
+    async def provider(kind, **kwargs): yield Provider()
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', AsyncMock(return_value=True))
+    text = 'Worte ' * 25
+    async def events():
+        yield DeltaEvent(text=text)
+        await release.wait()
+        yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
+    socket = Socket()
+    task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'context'))
+    await asyncio.wait_for(emitted.wait(), 1)
+    assert 120 <= len(spoken[0]) < len(text)
+    release.set()
+    while (await asyncio.wait_for(socket.output.get(), 1))['event'] != 'voice_audio_end': pass
+    assert ''.join(spoken) == text
+    await socket.input.put({'event': 'playback_finished'})
+    await asyncio.wait_for(task, 1)
+
+async def test_metrics_survive_cancellation_during_provider_cleanup(monkeypatch, caplog):
+    entered, cleanup_started, release_cleanup, closed = asyncio.Event(), asyncio.Event(), asyncio.Event(), asyncio.Event()
+    @asynccontextmanager
+    async def provider(kind, **kwargs):
+        entered.set()
+        try: yield object()
+        finally:
+            cleanup_started.set()
+            await release_cleanup.wait()
+            closed.set()
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', AsyncMock(return_value=True))
+    async def events():
+        await asyncio.Future()
+        yield
+    socket = Socket()
+    caplog.set_level('INFO', logger=voice_turn.__name__)
+    task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'context'))
+    await asyncio.wait_for(entered.wait(), 1)
+    await socket.input.put({'event': 'unexpected'})
+    await asyncio.wait_for(cleanup_started.wait(), 1)
+    task.cancel()
+    await asyncio.sleep(0)
+    assert not task.done()
+    release_cleanup.set()
+    with pytest.raises(asyncio.CancelledError): await task
+    assert closed.is_set()
+    assert caplog.text.count('voice_metrics ') == 1
+
+@pytest.mark.parametrize('ending', ['normal', 'interrupt', 'disconnect', 'error', 'revoke'])
+async def test_metrics_written_once_on_each_turn_end(monkeypatch, caplog, ending):
+    live = True
+    connected = asyncio.Event()
+    @asynccontextmanager
+    async def provider(kind, **kwargs):
+        connected.set()
+        yield object()
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    async def is_live(_): return live
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', is_live)
+    async def events():
+        await connected.wait()
+        if ending == 'normal':
+            yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
+        elif ending == 'error':
+            raise ValueError('private detail')
+        else:
+            await asyncio.Future()
+    class DisconnectedSocket(Socket):
+        async def receive_json(self):
+            await self.input.get()
+            raise ConnectionError('private detail')
+    socket = DisconnectedSocket() if ending == 'disconnect' else Socket()
+    caplog.set_level('INFO', logger=voice_turn.__name__)
+    task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'private-context'))
+    await asyncio.wait_for(connected.wait(), 1)
+    if ending == 'normal':
+        while (await asyncio.wait_for(socket.output.get(), 1))['event'] != 'voice_audio_end': pass
+        await socket.input.put({'event': 'playback_finished'})
+        await asyncio.wait_for(task, 1)
+    elif ending == 'interrupt':
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError): await task
+    elif ending == 'disconnect':
+        await socket.input.put(None)
+        with pytest.raises(ConnectionError): await asyncio.wait_for(task, 1)
+    elif ending == 'error':
+        with pytest.raises(ValueError): await asyncio.wait_for(task, 1)
+    else:
+        live = False
+        await asyncio.wait_for(task, 1)
+    assert caplog.text.count('voice_metrics ') == 1
+    assert 'private' not in caplog.text
+
+@pytest.mark.parametrize('failure', ['append', 'finish', 'receive'])
+async def test_prewarmed_provider_reopens_once_before_audio(monkeypatch, failure, caplog):
+    from api.audio.metrics import VoiceMetrics
+    opens, closed, spoken = [], [], []
+    class Provider:
+        def __init__(self, attempt): self.attempt = attempt; self.delivered = False
+        async def append(self, text):
+            spoken.append((self.attempt, text))
+            if self.attempt == 0 and failure == 'append': raise ConnectionError('private')
+        async def finish(self):
+            if self.attempt == 0 and failure == 'finish': raise ConnectionError('private')
+        async def receive(self):
+            if self.attempt == 0 and failure == 'receive': raise ConnectionError('private')
+            if not self.delivered: self.delivered = True; return bytes(4)
+            return None
+    @asynccontextmanager
+    async def provider(kind, **kwargs):
+        attempt = len(opens); opens.append(attempt)
+        try: yield Provider(attempt)
+        finally: closed.append(attempt)
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', AsyncMock(return_value=True))
+    async def events():
+        yield DeltaEvent(text='Hallo.')
+        yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
+    metrics = VoiceMetrics()
+    caplog.set_level('INFO', logger=voice_turn.__name__)
+    socket = Socket(); task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'context', metrics=metrics))
+    output = []
+    while True:
+        item = await asyncio.wait_for(socket.output.get(), 1); output.append(item)
+        if item['event'] == 'voice_audio_end': break
+    assert opens == [0, 1] and closed == [0, 1]
+    assert spoken == [(0, 'Hallo.'), (1, 'Hallo.')]
+    assert sum(item['event'] == 'voice_audio' for item in output) == 1
+    assert not any(item['event'] == 'voice_audio_error' for item in output)
+    await socket.input.put({'event': 'playback_finished'}); await asyncio.wait_for(task, 1)
+    assert 'tts_reopen=1' in caplog.text
+
+@pytest.mark.parametrize('after_audio', [False, True])
+async def test_provider_retry_is_bounded_and_never_repeats_played_audio(monkeypatch, after_audio):
+    opens, closed = [], []
+    class Provider:
+        def __init__(self): self.sent = False
+        async def append(self, text): pass
+        async def finish(self): pass
+        async def receive(self):
+            if after_audio and not self.sent: self.sent = True; return bytes(4)
+            raise ConnectionError('private')
+    @asynccontextmanager
+    async def provider(kind, **kwargs):
+        opens.append(1)
+        try: yield Provider()
+        finally: closed.append(1)
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', AsyncMock(return_value=True))
+    async def events():
+        yield DeltaEvent(text='Hallo.')
+        yield DoneEvent(conversation_id='c', message_id='m', stopped=False)
+    socket = Socket(); task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'context'))
+    output = []
+    while True:
+        item = await asyncio.wait_for(socket.output.get(), 1); output.append(item)
+        if item['event'] == 'voice_audio_end': break
+    assert len(opens) == len(closed) == (1 if after_audio else 2)
+    assert sum(item['event'] == 'voice_audio' for item in output) == int(after_audio)
+    assert any(item['event'] == 'voice_audio_error' for item in output)
+    await socket.input.put({'event': 'playback_finished'}); await asyncio.wait_for(task, 1)
+
+async def test_retry_checks_revocation_before_reopening(monkeypatch):
+    live = True
+    opens, closed = [], []
+    class Provider:
+        async def append(self, text):
+            nonlocal live
+            live = False
+            raise ConnectionError('private')
+    @asynccontextmanager
+    async def provider(kind, **kwargs):
+        opens.append(1)
+        try: yield Provider()
+        finally: closed.append(1)
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    async def is_live(_): return live
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', is_live)
+    async def events():
+        yield DeltaEvent(text='Hallo. ')
+        await asyncio.Future()
+    socket = Socket(); task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'context'))
+    await asyncio.wait_for(task, 1)
+    output = []
+    while not socket.output.empty(): output.append(await socket.output.get())
+    assert opens == closed == [1]
+    assert any(item.get('code') == 'context_revoked' for item in output)
+    assert not any(item['event'] == 'voice_audio' for item in output)
+
+async def test_interrupt_cancels_reopening_and_cleans_sessions(monkeypatch):
+    opens, closed = [], []
+    reopening = asyncio.Event()
+    class Provider:
+        async def append(self, text): raise ConnectionError('private')
+    @asynccontextmanager
+    async def provider(kind, **kwargs):
+        attempt = len(opens); opens.append(attempt)
+        try:
+            if attempt == 1:
+                reopening.set()
+                await asyncio.Future()
+            yield Provider()
+        finally: closed.append(attempt)
+    monkeypatch.setattr(voice_turn, 'mistral_live', provider)
+    monkeypatch.setattr(voice_turn, 'live_remaining', lambda _: 60)
+    monkeypatch.setattr(voice_turn.chat_context, 'is_live', AsyncMock(return_value=True))
+    async def events():
+        yield DeltaEvent(text='Hallo. ')
+        await asyncio.Future()
+    socket = Socket(); task = asyncio.create_task(voice_turn.run_voice_turn(socket, events(), 'context'))
+    await asyncio.wait_for(reopening.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError): await task
+    assert opens == closed == [0, 1]
