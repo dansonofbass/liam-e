@@ -10,6 +10,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from api.audio.errors import NO_STORE, audio_error
 from api.audio.live_access import live_remaining
 from api.audio.live_provider import LiveAudioError, mistral_live
+from api.audio.pace import paced_text
+from api.locales import resolve_locale
+from db.accessors import ui_settings
 from api.routers.api.v1.audio.speech import SpeechReference, _speech_reference, _visible_reply
 
 logger = logging.getLogger(__name__)
@@ -37,10 +40,17 @@ async def synthesize(request: Request) -> StreamingResponse:
     if len(text) > 8000:
         raise audio_error('audio_text_too_long')
 
+    locale = await resolve_locale(reference.locale)
+    pace = (await ui_settings.get_or_create()).speech_pace
+    try:
+        text = paced_text(text, pace, 8000)
+    except ValueError:
+        raise audio_error("audio_text_too_long") from None
+
     async def frames() -> AsyncIterator[bytes]:
         total = 0
         try:
-            async with asyncio.timeout(min(60, remaining)), mistral_live('speech') as session:
+            async with asyncio.timeout(min(60, remaining)), mistral_live('speech', locale=locale) as session:
                 await session.append(text)
                 await session.finish()
                 # StreamingResponse owns disconnect detection and cancels this iterator.
