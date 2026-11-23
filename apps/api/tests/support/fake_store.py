@@ -3,7 +3,7 @@
 import json
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
-from db.accessors import mail_account, mail_action, mail_credential, mail_filing, mail_insight, mail_sync_state, mail_job, mail_message, mail_reference_snapshot
+from db.accessors import mail_account, mail_action, mail_credential, mail_filing, mail_insight, mail_sync_state, mail_job, mail_message, mail_reference_snapshot, mail_rule_run
 from db.models.mail_action import MailAction
 from db.models.mail_job import MailJob
 from db.models.mail_account import MailAccount
@@ -28,6 +28,10 @@ class FakeStore:
         monkeypatch.setattr(mail_message, "get_message", self.get_message)
         monkeypatch.setattr(mail_message, "known_uids", self.known_uids)
         monkeypatch.setattr(mail_message, "legacy_imap_uidvalidity", self.legacy_imap_uidvalidity)
+        async def imap_generation_reset(session, account_id, generation):
+            state = self.states.get(account_id)
+            return bool(state and state.cursor) and state.cursor.partition(':')[0] != generation
+        monkeypatch.setattr(mail_message, "imap_generation_reset", imap_generation_reset)
         monkeypatch.setattr(mail_message, "commit_trash_move", self.commit_trash_move)
         monkeypatch.setattr(mail_sync_state, "sync_transaction", self.sync_transaction)
         monkeypatch.setattr(mail_message, "resolve_aliases", self.resolve_aliases)
@@ -45,6 +49,12 @@ class FakeStore:
         async def no_rules(session, account_id, message_ids):
             return None
         monkeypatch.setattr(mail_job, "queue_mail_rules", no_rules)
+        async def no_rebuild_notice(session, account_id, generation):
+            return None
+        monkeypatch.setattr(mail_rule_run, "record_imap_rebuild", no_rebuild_notice)
+        async def no_import_notice(session, account_id, notice_id, status):
+            return None
+        monkeypatch.setattr(mail_rule_run, "record_import_notice", no_import_notice)
         monkeypatch.setattr(mail_message, "count_unread", self.count_unread)
         monkeypatch.setattr(mail_message, "count_for_account", self.count_for_account)
         async def newsletter_senders(*, account_ids=None, chat_only=False):
@@ -275,7 +285,7 @@ class FakeStore:
     async def save_state(self, *, account_id, **kwargs):
         claim_poll = kwargs.pop("claim_poll", False)
         previous = self.states.get(account_id)
-        for key in ("connector_verified", "connector_cursor", "connector_generation", "connector_proof_revision", "connector_deferred_threads", "cursor"):
+        for key in ("connector_verified", "connector_cursor", "connector_generation", "connector_proof_revision", "connector_deferred_threads", "rules_initial_import", "cursor"):
             if kwargs.get(key) is None:
                 kwargs.pop(key, None)
                 if previous:

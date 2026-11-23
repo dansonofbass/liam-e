@@ -426,8 +426,8 @@ Quoted German labels in this section are UI text.
   „Diese Woche“ (from Monday) and „Älter“.
 - Selection mode replaces the top bar on `desktop` and `tablet`, the status-and-buttons row on
   `mobile`. It shows „Auswahl beenden“, the count, „Alle auswählen“ and archive, read/unread,
-  trash and spam. On phones the four actions occupy a second row so they are all visible. The bar
-  may scroll independently on larger displays. On `mobile` and
+  trash and spam. The filing and provider actions occupy a second row so they remain visible
+  within the mail list; they wrap further if needed. On `mobile` and
   with a coarse pointer targets are at least 44 px. Tapping a row selects it; the avatar directly
   selects even outside the mode. With a mouse it shows a checkbox on hover, shift-click selects the
   range. „Alle auswählen“ selects at most 100 loaded mails. Escape ends selection. Swiping and row
@@ -637,10 +637,14 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
 - `/settings/rules` manages ordered, versioned rules with account, sender, domain, subject and
   recipient conditions. Preview shows a count; applying to existing mail needs a separate dialog and
   confirms the number queued for background processing. Rule rows summarize their conditions, targets
-  and active state. Open run outcomes refresh while visible and identify skipped provider actions.
+  and active state. Open run outcomes refresh while visible and identify skipped provider actions
+  and folder assignments overridden by a higher-priority rule.
   Filing menus show shared assignments and identify partially assigned labels.
   Show unsupported provider actions as skipped and uncertain provider outcomes as unknown. Explain
-  that a sleeping Studio instance delays rule execution until the next fetch.
+  that a sleeping Studio instance delays rule execution until the next fetch. After an IMAP mailbox
+  rebuild, the run notice explains that rules were not applied automatically, can be applied manually,
+  and unread mail remains eligible for normal summaries. The same notice is shown for an account's
+  initial import and its deferred historical messages, with the account identified.
 - The inbox filters global folders and labels across accounts. A selected mail or bulk selection
   can be filed without requiring provider write capabilities. Chat filing and rule cards show the
   target and conditions and require explicit confirmation before local changes.
