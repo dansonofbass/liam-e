@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import String, and_, any_, bindparam, case, cast, delete, exists, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, undefer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from db.accessors import mail_reference_snapshot, mail_sync_state
@@ -45,6 +45,9 @@ def _connector_labels(stored: str, *, folder: str | None = None, is_read: bool |
     return json.dumps(labels)
 
 
+_HTML_UNSET = object()
+
+
 async def upsert_message(
     *,
     account_id: str,
@@ -57,6 +60,9 @@ async def upsert_message(
     recipients_json: str = "[]",
     snippet: str = "",
     body_text: str = "",
+    body_html: str | None = None,
+    html_version: int | None | object = _HTML_UNSET,
+    html_status: str = "pending",
     internal_date: datetime | None = None,
     has_attachments: bool = False,
     is_read: bool | None = False,
@@ -116,6 +122,10 @@ async def upsert_message(
         message.snippet = snippet
         message.body_text = body_text
         message.body_version = body_version
+        if html_version is None:
+            message.body_html, message.html_status, message.html_version = None, "pending", 0
+        elif html_version is not _HTML_UNSET:
+            message.body_html, message.html_status, message.html_version = body_html, html_status, html_version
         message.internal_date = internal_date
         message.has_attachments = has_attachments
         if is_read is not None or new or reverified:
@@ -160,9 +170,12 @@ def matches_ids(message_ids: Collection[str]):
         func.cardinality(MailMessage.connector_alias_ids) > 0, MailMessage.connector_alias_ids.overlap(ids)))
 
 
-async def get_message(message_id: str, session: AsyncSession | None = None) -> MailMessage | None:
+async def get_message(message_id: str, session: AsyncSession | None = None, *, include_html: bool = False) -> MailMessage | None:
     async with (nullcontext(session) if session is not None else get_session_maker()()) as reader:
-        return (await reader.execute(select(MailMessage).where(matches_ids([message_id])))).scalar_one_or_none()
+        stmt = select(MailMessage).where(matches_ids([message_id]))
+        if include_html:
+            stmt = stmt.options(undefer(MailMessage.body_html))
+        return (await reader.execute(stmt)).scalar_one_or_none()
 
 
 async def legacy_imap_uidvalidity(message: MailMessage) -> str | None:
@@ -591,6 +604,8 @@ async def commit_trash_move(message: MailMessage, updates: dict, *, action: Mail
             # A native full rebuild can remove this row between dispatch and success.
             # Carry its public ID and undo history into the confirmed destination.
             keep = MailMessage(**message.model_dump(exclude={"search_tsv"}))
+            # HTML is deferred on the dispatched row; reread it after an inbox restore.
+            keep.body_html, keep.html_status, keep.html_version = None, "pending", 0
         if account.provider == "imap" and updates["folder"] == "INBOX" and updates.get("imap_uidvalidity"):
             updates = await _imap_restore_state(session, message, keep, updates)
         else:
@@ -657,6 +672,27 @@ async def stale_bodies(account_id: str, folder: str, version: int, *, limit: int
     stmt = (stmt.order_by(MailMessage.internal_date.desc().nulls_last(), MailMessage.id).limit(limit))
     async with get_session_maker()() as session:
         return list((await session.execute(stmt)).scalars().all())
+
+
+async def stale_html_bodies(account_id: str, version: int, *, limit: int, exclude: Collection[str] = ()) -> list[MailMessage]:
+    """Only INBOX rows are safe to re-read with the current provider adapters."""
+    stmt = select(MailMessage).where(MailMessage.account_id == account_id, MailMessage.folder == "INBOX", MailMessage.html_version < version)
+    if exclude:
+        stmt = stmt.where(MailMessage.id.not_in(list(exclude)))
+    stmt = stmt.order_by(MailMessage.internal_date.desc().nulls_last(), MailMessage.id).limit(limit)
+    async with get_session_maker()() as session:
+        return list((await session.execute(stmt)).scalars().all())
+
+
+async def set_html(message_id: str, *, expected_uid: str, expected_message_id: str, expected_uidvalidity: str | None, version: int, status: str, html: str | None, session: AsyncSession | None = None) -> None:
+    """Do not attach a late response to a moved, reidentified or already refreshed mail."""
+    if status not in {"available", "absent", "too_large", "unavailable"}:
+        raise ValueError("invalid HTML state")
+    async with _writer(session) as session:
+        row = (await session.execute(select(MailMessage).where(MailMessage.id == message_id).with_for_update())).scalar_one_or_none()
+        if row is None or row.folder != "INBOX" or row.provider_uid != expected_uid or row.rfc_message_id != expected_message_id or row.imap_uidvalidity != expected_uidvalidity or row.html_version >= version:
+            return
+        row.body_html, row.html_status, row.html_version = html, status, version
 
 
 async def _drop_insight(session, message_id: str) -> bool:
