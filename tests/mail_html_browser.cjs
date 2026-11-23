@@ -28,7 +28,7 @@ async function main() {
     const origin = `http://127.0.0.1:${server.address().port}`
     await page.goto(origin)
     await page.addScriptTag({ path: bundle })
-    const html = `<p class="sample">Sample</p><img src="${origin}/pixel"><img src="cid:part"><a href="${origin}/link">Open</a><style>@import url(${origin}/css); @media (prefers-color-scheme: dark) { .sample { color:#fff; background:url(${origin}/css) } }</style><script>parent.compromised=true</script>`
+    const html = `<p class="sample">Sample</p><img src="${origin}/pixel"><img src="cid:part"><a href="${origin}/link">Open</a><style><!-- @import url(${origin}/css); @media (prefers-color-scheme: dark) { .sample { color:#fff; background:url(${origin}/css) } } --></style><script>parent.compromised=true</script>`
     for (const dark of [false, true]) for (const images of [false, true]) {
       imageRequests = 0; cssRequests = 0
       await page.evaluate(({ html, images, dark }) => {
@@ -50,6 +50,27 @@ async function main() {
         await popup.close()
       }
     }
+    await page.evaluate(() => {
+      const frame = document.createElement('iframe')
+      frame.sandbox = 'allow-popups allow-popups-to-escape-sandbox'
+      frame.srcdoc = window.prepareMailDocument('<style>@media(prefers-color-scheme:dark){.panel{background:#fff}.panel p{color:#000}}</style><div class="panel"><p>Visible</p></div>', false, 'Unavailable', true).document
+      document.querySelector('main').replaceChildren(frame)
+    })
+    const panel = page.frameLocator('iframe').locator('.panel')
+    const paragraph = panel.locator('p')
+    await paragraph.waitFor()
+    const colors = await paragraph.evaluate(node => [getComputedStyle(node.parentElement).backgroundColor, getComputedStyle(node).color])
+    if (colors[0] !== 'rgb(255, 255, 255)' || colors[1] !== 'rgb(0, 0, 0)') throw Error(`unexpected separated-rule colours: ${colors}`)
+    await page.evaluate(() => {
+      const frame = document.createElement('iframe')
+      frame.sandbox = 'allow-popups allow-popups-to-escape-sandbox'
+      frame.srcdoc = window.prepareMailDocument('<style>@media(prefers-color-scheme:dark){html > body{background:#fff;color:#000}}</style><p>Visible</p>', false, 'Unavailable', true).document
+      document.querySelector('main').replaceChildren(frame)
+    })
+    const frame = page.frameLocator('iframe')
+    await frame.locator('p').waitFor()
+    const canvas = await frame.locator('html').evaluate(node => getComputedStyle(node).backgroundColor)
+    if (canvas !== 'rgb(255, 255, 255)') throw Error(`sender background does not cover canvas: ${canvas}`)
     console.log('Synthetic Chromium: image consent, script isolation and safe link opening passed')
   } finally {
     await browser?.close()
