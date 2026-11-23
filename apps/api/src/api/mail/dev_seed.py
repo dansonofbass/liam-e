@@ -117,6 +117,32 @@ async def seed_tasks(now: datetime) -> None:
         await session.commit()
 
 
+async def seed_filing() -> None:
+    """Install synthetic app-side folders, labels and rules in a local database."""
+    from db.models.mail_folder import MailFolder
+    from db.models.mail_filing import MailFiling
+    from db.models.mail_label_assignment import MailLabelAssignment
+    from db.models.mail_rule import MailRule
+    from db.models.mail_rule_run import MailRuleRun
+
+    require_local_database()
+    folder = MailFolder(id=seed_id("folder", "projects"), name="Projekte (Beispiel)", kind="folder")
+    label = MailFolder(id=seed_id("label", "important"), name="Wichtig (Beispiel)", kind="label")
+    messages = [seed_id("mail", "meyer-angebot-4471"), seed_id("mail", "kita-elternabend")]
+    filings = [MailFiling(message_id=message_id, folder_id=folder.id) for message_id in messages]
+    labels = [MailLabelAssignment(message_id=message_id, label_id=label.id)
+              for message_id in (messages[0], seed_id("mail", "hausverwaltung-nebenkosten"))]
+    rules = [MailRule(id=seed_id("rule", "projects"), name="Angebote zuordnen (Beispiel)",
+                      sender_domain="meyer-gmbh.example", folder_id=folder.id, label_id=label.id),
+             MailRule(id=seed_id("rule", "studio-skip"), name="Studio-Aktion (Beispiel)",
+                      account_id=seed_id("account", "privat"), sender_domain="hv-kurz.example",
+                      label_id=label.id, mark_read=True)]
+    runs = [MailRuleRun(id=seed_id("rule-run", "studio-skip"), rule_id=rules[1].id, rule_version=1,
+                        message_id=seed_id("mail", "hausverwaltung-nebenkosten"), account_id=seed_id("account", "privat"),
+                        status="done", provider_results_json=json.dumps({"mark_read": "skipped_unsupported"}))]
+    await seed_access.replace_filing([folder, label], filings, labels, rules, runs)
+
+
 async def seed(now: datetime | None = None) -> SeedResult:
     """Replace local board sample mail data, never accessing a remote database."""
     require_local_database()
@@ -200,6 +226,7 @@ async def seed(now: datetime | None = None) -> SeedResult:
                     created_at=started, updated_at=started)]
     await seed_access.replace_mail_data(accounts, states, messages, [insight], jobs)
     await seed_tasks(local_now.astimezone(UTC))
+    await seed_filing()
 
     conversation_specs = [
         ("was-ist-heute-wichtig", "Was ist heute wichtig?", at(0, "08:57")),
