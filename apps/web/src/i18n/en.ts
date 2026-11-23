@@ -487,6 +487,8 @@ export const en = {
     unreachable: 'The account can’t be reached. Try again in a moment.',
     host_not_allowed: 'liam-e can’t connect to this server. Check its address or add it to MAIL_IMAP_ALLOWED_HOSTS in Mistral Studio.',
     provider_error: 'The provider isn’t responding. Try again in a moment.',
+    provider_action_unsupported: 'Gmail in Mistral Studio does not support this email action.',
+    provider_partial: 'The provider only applied part of the change. Check the email’s folder.',
     provider_failed: 'The provider didn’t confirm the change. Check the email after the next sync.',
     action_uncertain: 'The result is uncertain. Reload the inbox to see where the email is now.',
     account_exists: 'This address is already connected another way. Remove the account before changing how it connects.',
@@ -597,6 +599,14 @@ export const en = {
       const result = action[0] + ' ' + numberFormat.format(done) + ' of ' + emails(total) + action[1] + '.'
       return kind === 'trash' ? result + ' The move is unconfirmed for ' + emails(total - done) + '.' : result
     },
+    unsupportedSelection: 'Select only emails from supported accounts for this action. Gmail in Mistral Studio does not support this change.',
+    bulkProviderPartial: (n: number) => plural(n, { one: 'The provider partly changed # email. The list shows its reported folder.', other: 'The provider partly changed # emails. The list shows their reported folders.' }),
+    providerPartial: {
+      INBOX: 'The provider only applied part of the change. The email is in the inbox.',
+      TRASH: 'The provider only applied part of the change. The email is in the trash.',
+      ARCHIVE: 'The provider only applied part of the change. The email is in the archive.',
+      SPAM: 'The provider only applied part of the change. The email is in spam.',
+    },
     bulkUndoFailed: n => plural(n, { one: 'Couldn’t undo # action.', other: 'Couldn’t undo # actions.' }),
     title: 'Inbox', groups: { today: 'Today', yesterday: 'Yesterday', week: 'This week', older: 'Older' },
     done: {
@@ -634,6 +644,7 @@ export const en = {
     askTip: 'Opens a chat about this email', draftTip: 'Drafts a reply in chat. liam-e sends it once you confirm.',
     draftPrompt: 'Draft a reply to this email.', forward: 'Forward', forwardPrompt: 'Forward this email.', unsubscribe: 'Unsubscribe', unsubscribePrompt: 'Unsubscribe from this newsletter.', unsubscribeUnavailable: 'This email offers no way to unsubscribe.', spam: 'Mark as spam',
     original: 'View original', originalUnavailable: 'This account can’t fetch the original email.',
+    studioGmailActionsUnavailable: 'With Gmail in Mistral Studio, you can’t archive emails, move them to trash, mark them as spam, or mark them as read or unread.',
     localReference: 'Saved local copy. Its connection to the current mailbox could not be verified.',
     originalTitle: 'Original email', originalLoading: 'Fetching original …', originalHeaders: 'Headers', originalSource: 'Source',
     originalTruncated: 'This email is large, so you’re seeing the beginning of its source.', originalEmpty: 'The provider returned no source for this email.',
@@ -656,6 +667,9 @@ export const en = {
     removed: title => 'Removed ' + title + '.',
     providersLabel: 'Providers', providersLoading: 'Loading providers …', providersError: 'Providers couldn’t be loaded. Try again.',
     gmail: 'Gmail', outlook: 'Outlook', other: 'Other provider',
+    gmailConnectorLogin: 'Sign in to Gmail in Mistral Studio. This app does not ask for your credentials.',
+    gmailCapabilitiesAvailable: 'Read, search, summarize, and send after confirmation.',
+    gmailCapabilitiesUnavailable: 'Trash, archive, spam, read and unread flags, and folder actions are unavailable for Gmail in Mistral Studio.',
     gmailConnectorSub: 'Through the Gmail connector in Mistral Studio', outlookConnectorSub: 'Through the Outlook connector in Mistral Studio',
     googleSub: 'Sign in to your Google account', microsoftSub: 'Sign in to your Microsoft account', otherSub: 'iCloud, Yahoo, and others via IMAP with an app password',
     connectorDescription: (provider, company) => 'liam-e reads and organizes email from ' + provider + ' through the connector in Mistral Studio. Sign in to ' + company + ' there. liam-e only changes or sends email when you take action or confirm a proposal.',

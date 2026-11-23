@@ -1,20 +1,21 @@
+import { mailCapabilities } from '../test/mailCapabilities'
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
 import { Route } from '../routes/_app/mail'
 import { inboxSearchSchema } from './filters'
 
 const originalMatchMedia = window.matchMedia
 const row = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', subject: 'Termin', snippet: '', internal_date: null, deadline: null, has_attachments: false, is_flagged: false, is_read: false, needs_reply: false }
-function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' | 'many' = 'empty', path = '/mail', coarse = false, mobile = false) {
+function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' | 'many' = 'empty', path = '/mail', coarse = false, mobile = false, limited = false) {
   window.matchMedia = ((query: string) => ({ matches: (!mobile && query.includes('1024px')) || (coarse && query.includes('pointer: coarse')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
-  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' }], unread_total: 1, last_sync_at: null } })) as never)
+  spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' }, ...(limited ? [{ id: 'limited', display_name: 'Studio', email_address: 'studio@example.test', provider: 'gmail', connection: 'connector', color_index: 1, state: 'ok', action_capabilities: mailCapabilities(false) }] : [])], unread_total: 1, last_sync_at: null } })) as never)
   const list = spyOn(sdk, 'mailMessagesList').mockImplementation((async () => {
     if (mode === 'loading') return await new Promise(() => {})
     if (mode === 'error') throw new Error('unavailable')
-    return { data: { items: mode === 'row' ? [row] : mode === 'rows' ? [row, { ...row, id: 'm2', subject: 'Zweite' }, { ...row, id: 'm3', subject: 'Dritte' }] : mode === 'many' ? Array.from({ length: 101 }, (_, i) => ({ ...row, id: `m${i}`, subject: `Mail ${i}` })) : [], next_cursor: null } }
+    return { data: { items: mode === 'row' ? [row] : mode === 'rows' ? [row, { ...row, id: 'm2', account_id: limited ? 'limited' : row.account_id, subject: 'Zweite' }, { ...row, id: 'm3', subject: 'Dritte' }] : mode === 'many' ? Array.from({ length: 101 }, (_, i) => ({ ...row, id: `m${i}`, subject: `Mail ${i}` })) : [], next_cursor: null } }
   }) as never)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const root = createRootRoute({ component: () => <QueryClientProvider client={client}><Outlet /></QueryClientProvider> })
@@ -370,4 +371,62 @@ test('selection mode disables swipe and hides row actions', async () => {
   fireEvent(element, event)
   expect(capture).not.toHaveBeenCalled()
   expect(action).not.toHaveBeenCalled()
+})
+
+test('a mixed selection keeps every message and explains why actions are blocked', async () => {
+  const bulk = spyOn(sdk, 'mailMessagesBulkAction')
+  setup('rows', '/mail', false, false, true)
+  await screen.findByText('Zweite')
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen: Termin' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen: Zweite' }))
+  expect(await screen.findByText(/Wähle für diese Aktion nur Mails aus unterstützten Konten/)).toBeTruthy()
+  const trash = screen.getByRole('button', { name: 'In den Papierkorb' })
+  expect(trash.hasAttribute('disabled')).toBe(true)
+  fireEvent.click(trash)
+  fireEvent.keyDown(document.body, { key: 'Delete' })
+  expect(bulk).not.toHaveBeenCalled()
+  expect(screen.getByText('2 ausgewählt')).toBeTruthy()
+})
+
+test('a Gmail Studio row explains unavailable actions on hover and focus', async () => {
+  const action = spyOn(sdk, 'mailMessageAction')
+  setup('rows', '/mail', false, false, true)
+  const row = (await screen.findByText('Zweite')).closest<HTMLElement>('.le-mailrow')!
+  const hint = 'Gmail in Mistral Studio unterstützt diese Mail-Aktion nicht.'
+  expect(within(row).queryByText(hint)).toBeNull()
+  const archive = within(row).getByRole('button', { name: 'Archivieren' })
+  expect(archive.getAttribute('aria-disabled')).toBe('true')
+  fireEvent.mouseEnter(archive)
+  expect((await screen.findByRole('tooltip')).textContent).toBe(hint)
+  fireEvent.mouseLeave(archive)
+  expect(screen.queryByRole('tooltip')).toBeNull()
+  fireEvent.keyDown(document.body, { key: 'Tab' })
+  act(() => { archive.focus() })
+  expect(document.activeElement).toBe(archive)
+  const tooltip = screen.getByRole('tooltip')
+  expect(tooltip.textContent).toBe(hint)
+  expect(archive.getAttribute('aria-describedby')).toBe(tooltip.id)
+  fireEvent.click(archive)
+  expect(action).not.toHaveBeenCalled()
+  expect(screen.getByText('Zweite')).toBeTruthy()
+})
+
+test('a swipe on Gmail Studio explains the restriction without an action', async () => {
+  spyOn(sdk, 'settingsUiGet').mockImplementation((async () => ({ data: { swipe_left: 'trash', swipe_right: 'archive', revision: 1 }, response: { ok: true } })) as never)
+  const action = spyOn(sdk, 'mailMessageAction')
+  const { client } = setup('rows', '/mail', true, true, true)
+  const element = (await screen.findByText('Zweite')).closest<HTMLElement>('.le-mailrow')!
+  await waitFor(() => expect(client.getQueryState(['ui-settings'])?.status).toBe('success'))
+  element.getBoundingClientRect = () => ({ width: 300, height: 100, left: 0, right: 300, top: 0, bottom: 100, x: 0, y: 0, toJSON() {} })
+  const pointer = (type: string, x: number) => {
+    const event = new MouseEvent(type, { bubbles: true, clientX: x, clientY: 100 })
+    Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: 'touch' }, isPrimary: { value: true } })
+    fireEvent(element, event)
+  }
+  pointer('pointerdown', 200); pointer('pointermove', 300); pointer('pointerup', 300)
+  const hint = 'Gmail in Mistral Studio unterstützt diese Mail-Aktion nicht.'
+  expect((await screen.findByRole('alert')).textContent).toBe(hint)
+  expect(screen.getAllByText(hint)).toHaveLength(1)
+  expect(action).not.toHaveBeenCalled()
+  expect(screen.getByText('Zweite')).toBeTruthy()
 })

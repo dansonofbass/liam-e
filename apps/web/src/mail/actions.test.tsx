@@ -26,7 +26,7 @@ function setup(mobile = false) {
     const { data } = useQuery<InfiniteData<MessagePageOut>>({ queryKey: key, queryFn: async () => client.getQueryData<InfiniteData<MessagePageOut>>(key)!, enabled: false })
     const { run, runBulk, undo, notify, toast, entries, capacityAvailable } = useMailActions({ clock: time.clock })
     return <><div>{data?.pages.flatMap(page => page.items).map(row => <div key={row.id}>{row.subject}:{String(row.is_read)}</div>)}</div>
-      <button onClick={() => { void runBulk(['1', '2'], 'archive') }}>bulk archive</button><button onClick={() => { void runBulk(['1', '2'], 'mark_read') }}>bulk read</button>
+      <button onClick={() => { void runBulk(['1', '2'], 'archive') }}>bulk archive</button><button onClick={() => { void runBulk(['1', '2'], 'trash') }}>bulk trash</button><button onClick={() => { void runBulk(['1', '2'], 'mark_read') }}>bulk read</button>
       <button onClick={() => { void run('1', 'archive') }}>archive 1</button><button onClick={() => { void run('2', 'archive') }}>archive 2</button><button onClick={() => { void run('2', 'trash') }}>trash 2</button><button onClick={() => { void run('1', 'spam') }}>spam 1</button><button onClick={() => { void run('1', 'mark_read') }}>read 1</button><button onClick={() => { void run('1', 'mark_unread') }}>unread 1</button>
       <button onClick={() => { void run('2', 'mark_read', { silent: true }) }}>silent read 2</button><button onClick={() => { void run('1', 'mark_read', { silent: true }) }}>silent read 1</button><button onClick={() => notify('refresh failed')}>notify</button><button onClick={() => { void undo() }}>force undo</button>
       <div data-testid="capacity">{String(capacityAvailable)}</div><div data-testid="entries">{entries.map(entry => <button key={entry.actionId} onClick={() => { void undo(entry.actionId) }}>{entry.actionId}</button>)}</div>
@@ -39,6 +39,38 @@ function success() {
   return spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => ({ data: { action_id: `action-${options?.path?.message_id}`, message: rows.find(row => row.id === options?.path?.message_id) }, response: { status: 200 } })) as never)
 }
 afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMedia })
+
+test('a partial trash reconciles the inbox without a success toast or undo', async () => {
+  spyOn(sdk, 'mailMessageAction').mockImplementation((async () => ({
+    error: { detail: { code: 'provider_partial', folder: 'TRASH' } }, response: { status: 409 },
+  })) as never)
+  setup()
+  fireEvent.click(screen.getByText('trash 2'))
+  const status = await screen.findByRole('status')
+  expect(status.textContent).toBe('Der Anbieter hat nur einen Teil der Änderung ausgeführt. Die Mail ist im Papierkorb.')
+  expect(screen.queryByText('Zweite:false')).toBeNull()
+  expect(screen.getByText('Erste:false')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Rückgängig' })).toBeNull()
+})
+
+test('bulk trash identifies partial moves and offers undo only for completed messages', async () => {
+  spyOn(sdk, 'mailMessagesBulkAction').mockImplementation((async () => ({
+    data: { results: [
+      { message_id: '1', status: 'partial', folder: 'TRASH' },
+      { message_id: '2', status: 'done', action_id: 'trash-2' },
+    ] }, response: { ok: true },
+  })) as never)
+  const undo = spyOn(sdk, 'mailActionsUndo').mockResolvedValue({ data: { restored: ['trash-2'] } } as never)
+  setup()
+  fireEvent.click(screen.getByText('bulk trash'))
+  const status = await screen.findByRole('status')
+  expect(status.textContent).toContain('Der Anbieter hat 1 Mail teilweise geändert. Die Liste zeigt den gemeldeten Ordner.')
+  expect(screen.queryByText('Erste:false')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Rückgängig' }))
+  await screen.findByText('Zweite:false')
+  expect(screen.queryByText('Erste:false')).toBeNull()
+  expect(undo.mock.calls[0]?.[0]?.body?.action_ids).toEqual(['trash-2'])
+})
 
 test('bulk notices use the proper plural and action wording', () => {
   expect(de.inbox.selectionCount(0)).toBe('Keine ausgewählt')
@@ -53,6 +85,9 @@ test('bulk notices use the proper plural and action wording', () => {
   expect(de.inbox.bulkResult('trash', 0, 2)).toBe('0 von 2 Mails in den Papierkorb gelegt. Für 2 Mails fehlt die Bestätigung.')
   expect(en.inbox.bulkResult('trash', 2, 3)).toBe('Moved 2 of 3 emails to trash. The move is unconfirmed for 1 email.')
   expect(de.inbox.bulkResult('spam', 2, 2)).toBe('2 Mails als Spam markiert.')
+  expect(en.inbox.bulkProviderPartial(2)).toBe('The provider partly changed 2 emails. The list shows their reported folders.')
+  expect(en.inbox.providerPartial.ARCHIVE).toBe('The provider only applied part of the change. The email is in the archive.')
+  expect(en.errors.provider_partial).toBe('The provider only applied part of the change. Check the email’s folder.')
 })
 
 test('bulk partial failure rolls back only failed rows and keeps one group undo', async () => {

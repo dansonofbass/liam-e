@@ -14,6 +14,7 @@ from db.models.mail_message import IMAP_RETIRED, MailMessage
 from sqlalchemy.exc import IntegrityError
 
 from api.errors import refuse
+from api.mail import action_capabilities, connectors
 
 ActionKind = Literal["archive", "trash", "spam", "mark_read", "mark_unread", "restore"]
 logger = logging.getLogger(__name__)
@@ -21,6 +22,14 @@ logger = logging.getLogger(__name__)
 
 class ActionFailedError(RuntimeError):
     """The provider could not complete an action."""
+
+
+class ActionPartialError(ActionFailedError):
+    """The provider changed the folder labels but did not complete the action."""
+
+    def __init__(self, folder: str):
+        super().__init__("The provider only partly applied the action")
+        self.folder = folder
 
 
 class ActionUnsupportedError(RuntimeError):
@@ -37,7 +46,6 @@ class UndoResult:
 
 async def write_connector_labels(account, message: MailMessage, *, added: list[str], removed: list[str]) -> None:
     """Keep connector writes inside the guarded action boundary."""
-    from api.mail import connectors
     from api.mail.connector_mailbox import inbox_only
 
     if "TRASH" in added or "TRASH" in removed:
@@ -66,19 +74,43 @@ async def _write_provider_state(message: MailMessage, updates: dict, *, folder: 
         raise
 
 
+async def _reconcile_connector_labels(message: MailMessage, labels: list[str] | None) -> str | None:
+    if labels is None:
+        return None
+    folder_labels = ("TRASH", "SPAM", "INBOX")
+    observed = set(labels)
+    current = set(json.loads(message.labels_json)) | {message.folder}
+    folder = next((label for label in folder_labels if label in observed), "ARCHIVE")
+    if message.folder == folder and current.intersection(folder_labels) == observed.intersection(folder_labels):
+        return None
+    await message_access.commit_trash_move(message, {
+        "folder": folder, "labels_json": json.dumps(sorted(observed)),
+        "is_read": "UNREAD" not in observed, "is_flagged": "STARRED" in observed,
+    })
+    return folder
+
+
+async def require_bulk_support(message_ids: list[str], kind: ActionKind) -> None:
+    blocked = [account.id for account in await account_access.list_accounts()
+               if not getattr(action_capabilities.for_account(account), kind)]
+    if blocked and await message_access.has_messages_from_accounts(message_ids, blocked):
+        raise action_capabilities.unsupported()
+
+
 async def apply_action(message_id: str, kind: ActionKind) -> MailAction:
     from api.mail import action_backends
 
     message = await message_access.get_message(message_id)
     if message is None:
         raise refuse(404, "message_not_found", "Die Mail ist nicht mehr da.")
+    account = await account_access.get_account(message.account_id)
+    if account is None:
+        raise ActionUnsupportedError()
+    action_capabilities.require_action(account, kind)
     if message.folder in {"IMAP_DELETED", IMAP_RETIRED}:
         raise ActionUnsupportedError()
     sources = {"archive": ("INBOX",), "trash": ("INBOX", "ARCHIVE"), "spam": ("INBOX", "ARCHIVE"), "restore": ("ARCHIVE", "TRASH")}
     if kind in sources and message.folder not in sources[kind]:
-        raise ActionUnsupportedError()
-    account = await account_access.get_account(message.account_id)
-    if account is None:
         raise ActionUnsupportedError()
     backend = action_backends.backend_for(account)
     previous = {key: getattr(message, key) for key in ("folder", "is_read", "provider_uid", "labels_json")}
@@ -88,6 +120,12 @@ async def apply_action(message_id: str, kind: ActionKind) -> MailAction:
             updates = await backend.apply(message, kind)
         except ActionUnsupportedError:
             raise
+        except connectors.LabelChangeUnconfirmed as error:
+            folder = await _reconcile_connector_labels(message, error.labels)
+            if folder is not None:
+                raise ActionPartialError(folder) from None
+            logger.warning("%s", type(error).__name__)
+            raise ActionFailedError() from None
         except Exception as error:
             logger.warning("%s", type(error).__name__)
             raise ActionFailedError() from None
@@ -123,6 +161,11 @@ async def undo_actions(action_ids: list[str], *, now: datetime) -> UndoResult:
 
     result = UndoResult()
     rows = await action_access.get_many(action_ids)
+    if rows:
+        accounts = {account.id: account for account in await account_access.list_accounts()}
+        for row in rows:
+            if account := accounts.get(row.account_id):
+                action_capabilities.require_action(account, row.kind)
     known = {row.id for row in rows}
     result.skipped.extend(key for key in dict.fromkeys(action_ids) if key not in known)
     for action in sorted(rows, key=lambda row: (_aware(row.created_at), row.id), reverse=True):
@@ -149,6 +192,12 @@ async def undo_actions(action_ids: list[str], *, now: datetime) -> UndoResult:
             previous.pop("trash_inbox_uid", None)
             previous.pop("imap_source_uidvalidity", None)
             updates = await action_backends.backend_for(account).revert(message, previous)
+        except connectors.LabelChangeUnconfirmed as error:
+            try:
+                await _reconcile_connector_labels(message, error.labels)
+            finally:
+                await action_access.release(action.id)
+            result.failed.append(action.id)
         except Exception as error:
             logger.warning("%s", type(error).__name__)
             await action_access.release(action.id)

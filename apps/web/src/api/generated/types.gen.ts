@@ -70,6 +70,7 @@ export type AccountOptionsOut = {
  * AccountOut
  */
 export type AccountOut = {
+    action_capabilities: MailActionCapabilities;
     /**
      * Auth Type
      */
@@ -140,6 +141,7 @@ export type AccountOut = {
  * AccountSummaryOut
  */
 export type AccountSummaryOut = {
+    action_capabilities: MailActionCapabilities;
     /**
      * Color Index
      */
@@ -302,6 +304,10 @@ export type BulkMessageActionResult = {
      * Action Id
      */
     action_id?: string | null;
+    /**
+     * Folder
+     */
+    folder?: 'INBOX' | 'TRASH' | 'ARCHIVE' | 'SPAM' | null;
     message?: MessageListItemOut | null;
     /**
      * Message Id
@@ -310,7 +316,7 @@ export type BulkMessageActionResult = {
     /**
      * Status
      */
-    status: 'done' | 'not_found' | 'unsupported' | 'failed';
+    status: 'done' | 'not_found' | 'unsupported' | 'failed' | 'partial';
 };
 
 /**
@@ -1698,6 +1704,44 @@ export type LiveStatus = {
      * Available
      */
     available: boolean;
+};
+
+/**
+ * MailActionCapabilities
+ */
+export type MailActionCapabilities = {
+    /**
+     * Archive
+     */
+    archive: boolean;
+    /**
+     * Label
+     */
+    label: boolean;
+    /**
+     * Mark Read
+     */
+    mark_read: boolean;
+    /**
+     * Mark Unread
+     */
+    mark_unread: boolean;
+    /**
+     * Move
+     */
+    move: boolean;
+    /**
+     * Restore
+     */
+    restore: boolean;
+    /**
+     * Spam
+     */
+    spam: boolean;
+    /**
+     * Trash
+     */
+    trash: boolean;
 };
 
 /**

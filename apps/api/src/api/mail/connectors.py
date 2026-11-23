@@ -23,6 +23,8 @@ from urllib.parse import quote
 import httpx
 from utils.mistral import mistral_api_url, mistral_app_token
 
+from api.mail import action_capabilities
+
 
 logger = logging.getLogger(__name__)
 _TOOL_TIMEOUT_SECONDS = 120
@@ -94,6 +96,14 @@ class ToolNotAllowedError(ValueError):
     """Raised before dispatch when a tool is outside the requested capability."""
 
 
+class LabelChangeUnconfirmed(ValueError):
+    """A failed mutation can still leave a message-specific provider state."""
+
+    def __init__(self, labels: list[str] | None):
+        super().__init__("Connector label change not confirmed")
+        self.labels = labels
+
+
 async def _call_tool(connector: str, tool: str, arguments: dict[str, Any], timeout: float = _TOOL_TIMEOUT_SECONDS) -> str:
     """Call one connector tool; returns the joined text content of the MCP-style result."""
     ref = quote(connector, safe="")
@@ -130,6 +140,8 @@ async def call_write_tool(account, tool: str, arguments: dict[str, Any], *, targ
     if tool not in WRITE_TOOLS:
         raise ToolNotAllowedError("Tool is not a permitted write tool")
     from api.mail.connector_mailbox import bound_inbox_message, bound_mailbox, inbox_only
+    if tool in {"label_message", "unlabel_message"}:
+        action_capabilities.require_action(account, "label")
     if target is not None and tool in {"label_message", "unlabel_message"} and inbox_only(account):
         if arguments.get("messageId") != target.provider_uid:
             raise ToolNotAllowedError("Label target does not match the verified message")
@@ -144,6 +156,7 @@ async def move_trash_labels(account, message, added: list[str], removed: list[st
     """Both label mutations and their readbacks must use one proven mailbox."""
     from api.mail.connector_mailbox import bound_inbox_message, bound_mailbox, inbox_only
 
+    action_capabilities.require_action(account, "trash")
     if message.account_id != account.id:
         raise ToolNotAllowedError("Mail does not belong to this account")
     if not message.thread_id or not message.provider_uid:
@@ -162,7 +175,18 @@ async def move_trash_labels(account, message, added: list[str], removed: list[st
             if binding is not None and selected != binding:
                 raise ValueError("Connector mailbox changed during move")
             binding = selected
-            await _call_tool(account.provider, tool, {"messageId": message.provider_uid, "labelIds": change})
+            try:
+                await _call_tool(account.provider, tool, {"messageId": message.provider_uid, "labelIds": change})
+            except (ValueError, httpx.HTTPError) as error:
+                if not (present or absent):
+                    raise
+                if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (401, 403):
+                    raise
+                try:
+                    labels = await thread_labels(account.provider, message.thread_id, {message.provider_uid}, minimal_only=True)
+                except (ValueError, httpx.HTTPError):
+                    raise error from None
+                raise LabelChangeUnconfirmed(labels.get(message.provider_uid)) from None
             # HTTP 200 can contain a text diagnostic. Confirm TRASH before removing INBOX.
             expected.update(change)
             await _confirm_label_change(account.provider, message.thread_id, message.provider_uid, present, absent)
@@ -170,6 +194,7 @@ async def move_trash_labels(account, message, added: list[str], removed: list[st
 
 async def _confirm_label_change(provider: str, thread_id: str, uid: str, present: set[str], absent: set[str]) -> None:
     observations: list[tuple[str, tuple[bool, bool, bool]]] = []
+    latest_point: list[str] | None = None
 
     def evidence(labels: list[str] | None) -> tuple[bool, bool, bool]:
         if labels is None:
@@ -177,6 +202,9 @@ async def _confirm_label_change(provider: str, thread_id: str, uid: str, present
         return True, present.issubset(labels), absent.isdisjoint(labels)
 
     def record(fmt: str, labels: dict[str, list[str]]) -> None:
+        nonlocal latest_point
+        if fmt == "MINIMAL":
+            latest_point = labels.get(uid)
         observations.append((fmt, evidence(labels.get(uid))))
 
     # A full read can replay old labels. After the initial observation, only
@@ -194,7 +222,7 @@ async def _confirm_label_change(provider: str, thread_id: str, uid: str, present
             "Connector label change not confirmed format=%s attempt=%d labels_present=%s required_met=%s forbidden_absent=%s",
             fmt, attempt, *checks,
         )
-    raise ValueError("Connector label change not confirmed")
+    raise LabelChangeUnconfirmed(latest_point)
 
 
 async def thread_labels(

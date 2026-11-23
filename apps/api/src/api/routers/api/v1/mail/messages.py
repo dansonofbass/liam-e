@@ -101,6 +101,8 @@ async def bulk_message_action(body: BulkMessageActionIn) -> BulkMessageActionOut
         async with semaphore:
             try:
                 action = await actions.apply_action(message_id, body.kind)
+            except actions.ActionPartialError as error:
+                return BulkMessageActionResult(message_id=message_id, status="partial", folder=error.folder)
             except actions.ActionUnsupportedError:
                 return BulkMessageActionResult(message_id=message_id, status="unsupported")
             except HTTPException as error:
@@ -120,6 +122,7 @@ async def bulk_message_action(body: BulkMessageActionIn) -> BulkMessageActionOut
                 logger.warning("Bulk action display failed: %s", type(error).__name__)
             return result
 
+    await actions.require_bulk_support(body.message_ids, body.kind)
     aliases = await message_access.resolve_aliases(body.message_ids)
     targets = {}
     for message_id in body.message_ids:
@@ -135,6 +138,12 @@ async def message_action(message_id: str, body: MessageActionIn) -> MessageActio
         action = await actions.apply_action(message_id, body.kind)
     except actions.ActionUnsupportedError:
         raise refuse(409, "action_unsupported", "Das geht bei dieser Mail nicht.") from None
+    except actions.ActionPartialError as error:
+        raise HTTPException(status_code=409, detail={
+            "code": "provider_partial",
+            "message": "Der Anbieter hat nur einen Teil der Änderung ausgeführt.",
+            "folder": error.folder,
+        }) from None
     except actions.ActionFailedError:
         raise refuse(502, "provider_failed", "Der Anbieter hat die Änderung nicht bestätigt. Prüfe die Mail nach dem nächsten Abruf.") from None
     message = await message_access.get_message(message_id)
