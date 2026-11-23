@@ -115,6 +115,74 @@ def test_trash_survives_replayed_inbox_and_restores_same_message(pg_db, monkeypa
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("verified", [True, False], ids=["bound", "inbox-only"])
+@pytest.mark.parametrize("omit_labels", [False, True], ids=["stale-labels", "missing-labels"])
+def test_move_and_undo_recovers_from_stale_or_missing_minimal_labels(pg_db, monkeypatch, verified, omit_labels):
+    async def run():
+        provider = StudioMailbox()
+        ids = await provider.connect(monkeypatch, verified=verified)
+        stale = None
+        delays = []
+
+        async def wait_for_replication(seconds):
+            delays.append(seconds)
+
+        monkeypatch.setattr(connectors, "sleep", wait_for_replication, raising=False)
+
+        async def lagged_readback(path, payload):
+            nonlocal stale
+            tool = urlsplit(path).path.split("/")[-2]
+            args = payload["arguments"]
+            if tool in {"label_message", "unlabel_message"}:
+                uid = args["messageId"]
+                stale = (uid, sorted(provider.labels[uid]), len(delays))
+            result = await provider.dispatch(path, payload)
+            if tool == "get_thread" and args == {"threadId": "mixed", "messageFormat": "MINIMAL"} and stale:
+                uid, labels, prior_delays = stale
+                thread = json.loads(result["content"][0]["text"])
+                member = next(row for row in thread["messages"] if row["id"] == uid)
+                if omit_labels:
+                    member.pop("labelIds")
+                    stale = None
+                elif delays[prior_delays:] != [0.5, 1.0]:
+                    member["labelIds"] = labels
+                else:
+                    stale = None
+                result["content"][0]["text"] = json.dumps(thread)
+            return result
+
+        monkeypatch.setattr(connectors, "_post", lagged_readback)
+        target, sibling = ids["target"], ids["sibling"]
+        async with client() as browser:
+            moved = await browser.post(f"{MAIL}/messages/{target}/actions", json={"kind": "trash"})
+            assert moved.status_code == 200
+            assert await listed(browser, "INBOX") == {sibling}
+            assert await listed(browser, "TRASH") == {target}
+            provider.replay = True
+            assert (await sync.sync_account(provider.account.id)).status == "ok"
+            assert await listed(browser, "INBOX") == {sibling}
+            assert await listed(browser, "TRASH") == {target}
+
+            provider.replay = False
+            action = moved.json()["action_id"]
+            undone = await browser.post(MAIL + "/actions/undo", json={"action_ids": [action]})
+            assert undone.json()["restored"] == [action]
+            provider.replay = True
+            provider.replayed_target_labels = ["TRASH"]
+            assert (await sync.sync_account(provider.account.id)).status == "ok"
+            assert await listed(browser, "INBOX") == {target, sibling}
+            assert await listed(browser, "TRASH") == set()
+            assert provider.writes == [
+                ("label_message", "target", ("TRASH",)),
+                ("unlabel_message", "target", ("INBOX",)),
+                ("label_message", "target", ("INBOX",)),
+                ("unlabel_message", "target", ("TRASH",)),
+            ]
+            assert delays == ([] if omit_labels else [0.5, 1.0] * 4)
+
+    asyncio.run(run())
+
+
 def test_trash_during_inflight_inbox_snapshot_then_undo(pg_db, monkeypatch):
     async def run():
         provider = StudioMailbox()
@@ -171,6 +239,80 @@ def test_refused_trash_never_hides_mail_or_records_success(pg_db, monkeypatch, r
             assert await mail_action.latest_open(ids["target"]) is None
             assert await listed(browser, "TRASH") == set()
             assert await listed(browser, "INBOX") == set(ids.values())
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("verified", [True, False], ids=["bound", "inbox-only"])
+@pytest.mark.parametrize("undo", [False, True], ids=["trash", "undo"])
+@pytest.mark.parametrize("omit_on_retry", [False, True], ids=["contradiction", "missing-labels-on-retry"])
+def test_stale_full_read_cannot_confirm_a_noop_studio_move(pg_db, monkeypatch, caplog, verified, undo, omit_on_retry):
+    async def run():
+        provider = StudioMailbox()
+        ids = await provider.connect(monkeypatch, verified=verified)
+        target, sibling = ids["target"], ids["sibling"]
+        endpoint = f"{MAIL}/messages/{target}/actions"
+        async with client() as browser:
+            action = None
+            if undo:
+                moved = await browser.post(endpoint, json={"kind": "trash"})
+                assert moved.status_code == 200
+                action = moved.json()["action_id"]
+
+            writes_before = len(provider.writes)
+            readbacks = []
+            delays = []
+
+            async def wait_for_replication(seconds):
+                delays.append(seconds)
+
+            monkeypatch.setattr(connectors, "sleep", wait_for_replication, raising=False)
+            provider.reject = {"content": [{"text": "{}"}]}
+            provider.replay = True
+            provider.replayed_target_labels = ["INBOX"] if undo else ["TRASH"]
+
+            async def observe_readback(path, payload):
+                result = await provider.dispatch(path, payload)
+                args = payload["arguments"]
+                if args.get("threadId") == "mixed" and len(provider.writes) > writes_before:
+                    readbacks.append(args["messageFormat"])
+                    if omit_on_retry and readbacks == ["MINIMAL", "MINIMAL"]:
+                        thread = json.loads(result["content"][0]["text"])
+                        member = next(row for row in thread["messages"] if row["id"] == "target")
+                        member.pop("labelIds")
+                        result["content"][0]["text"] = json.dumps(thread)
+                return result
+
+            monkeypatch.setattr(connectors, "_post", observe_readback)
+            if undo:
+                response = await browser.post(MAIL + "/actions/undo", json={"action_ids": [action]})
+                assert response.status_code == 200
+                assert response.json()["restored"] == []
+                assert response.json()["failed"] == [action]
+                assert (await mail_action.latest_open(target)).id == action
+            else:
+                response = await browser.post(endpoint, json={"kind": "trash"})
+                assert response.status_code == 502
+                assert response.json()["detail"]["code"] == "provider_failed"
+                assert await mail_action.latest_open(target) is None
+
+            diagnostics = [record.getMessage() for record in caplog.records if record.name == connectors.__name__]
+            assert diagnostics == [
+                "Connector label change not confirmed format=MINIMAL attempt=1 "
+                "labels_present=True required_met=False forbidden_absent=True",
+                f"Connector label change not confirmed format=MINIMAL attempt=2 "
+                f"labels_present={not omit_on_retry} required_met=False forbidden_absent={not omit_on_retry}",
+                "Connector label change not confirmed format=MINIMAL attempt=3 "
+                "labels_present=True required_met=False forbidden_absent=True",
+            ]
+            assert readbacks == ["MINIMAL"] * 3
+            assert delays == [0.5, 1.0]
+            assert provider.writes[writes_before:] == [
+                ("label_message", "target", ("INBOX" if undo else "TRASH",)),
+            ]
+            assert provider.labels == {"target": {"TRASH" if undo else "INBOX"}, "sibling": {"INBOX"}}
+            assert await listed(browser, "INBOX") == ({sibling} if undo else {target, sibling})
+            assert await listed(browser, "TRASH") == ({target} if undo else set())
+
     asyncio.run(run())
 
 
