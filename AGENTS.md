@@ -102,10 +102,24 @@ sends nothing without a confirmed card. Individual inbox actions initiated by th
 run directly through the mail action endpoints.
 
 Account responses expose `action_capabilities` for individual actions, including `move` and
-`label`. Gmail Studio accounts disable label and folder writes, including read/unread changes.
-The API returns `409 provider_action_unsupported` before dispatch for unsupported actions, undo
-and proposal confirmation. A mixed bulk request containing an unsupported target is rejected
-before any action runs. Read tools and explicitly confirmed sending retain their existing paths.
+`label`. A verified Gmail Studio binding can change read status, archive, move to Trash and restore.
+The first ordinary action confirms the provider change through a current point read; the stored
+write evidence applies to that binding. Folder actions and their inverses check the live source
+before dispatch. Restore uses that source and preserves the observed read flag. Folder Undo plans
+from the saved destination and live labels, and finishes without a write when already there.
+Read-status Undo compares the saved flag with the live labels. If the original action left the
+flag unchanged, Undo only refreshes the local row. A mixed Undo checks each token separately. If all tokens are
+unsupported, the group shows the unsupported hint. When an action only reconciles the local
+folder, its response marks that result so the UI can explain it. A recognized permission denial
+pauses mail actions immediately with `provider_permission_missing`. Without a receipt, the first
+unchanged point readback returns `provider_failed`. The second consecutive unchanged result pauses
+the binding and returns `provider_permission_missing` on that request. A positive receipt or an
+observed change to a requested label resets the streak. Reauthentication in Studio and an explicit
+retry from Accounts allow a new action attempt. Spam, moves to provider folders and provider
+labels return `409 provider_action_unsupported` before dispatch. A bulk request with known
+unavailable targets is declined before dispatch. If a denial is discovered during a bulk request,
+successful actions on other accounts retain their individual results. Read tools and explicitly
+confirmed sending retain their existing paths.
 
 A trash action moves the selected provider message and stores its local folder and undo record
 together after the provider confirms the move. Trash and undo invalidate older sync batches for
@@ -206,6 +220,7 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Mail / accounts | GET | `/api/v1/mail/accounts/options` | `mail_account_options` |
 | Mail / accounts | DELETE | `/api/v1/mail/accounts/{account_id}` | `mail_account_delete` |
 | Mail / accounts | PATCH | `/api/v1/mail/accounts/{account_id}` | `mail_account_update` |
+| Mail / accounts | POST | `/api/v1/mail/accounts/{account_id}/retry-provider-actions` | `mail_account_retry_provider_actions` |
 | Mail / accounts | POST | `/api/v1/mail/accounts/{account_id}/sync` | `mail_account_sync` |
 | Mail / actions | POST | `/api/v1/mail/actions/undo` | `mail_actions_undo` |
 | Mail / connectors | GET | `/api/v1/mail/connectors` | `mail_connectors_list` |
@@ -1032,9 +1047,18 @@ as it also contains order confirmations and account notices). On 23.11.2026, ten
 requests failed confirmation after a label write returned HTTP 200. A first probe made four
 label writes with HTTP 200 and no observed change. A second probe made seven writes. All seven
 returned HTTP 200 with a missing-scope diagnostic in text and no tool error flag. Both read formats
-confirmed zero changes. The tested Gmail binding lacks permission to modify mail. liam-e allows
-reads and confirmed sending through that binding and blocks label and folder actions. Connector
-writes require a positive receipt or a current matching label read before success is recorded.
+confirmed zero changes. On 24.11.2026, after reauthentication of the same pinned credential,
+read/unread, archive/restore and trash/restore worked on one synthetic delivery. Both read formats
+confirmed each change and the original unread Inbox state returned with other labels unchanged.
+The folder probe returned HTTP 200 without a positive receipt. Gmail Studio permits these
+actions through a verified binding and checks the current exact message before recording success.
+Gmail Studio point readbacks retry at approximately one and three seconds. A recognized
+permission denial pauses the binding immediately. Without a receipt or permission diagnostic,
+two consecutive unchanged readbacks from separate writes pause the binding. The second reports
+`provider_permission_missing` on that action. A positive receipt
+or a change to a requested label resets the streak. After reauthentication in Studio, the
+account action allows another attempt.
+Spam, provider folder moves and provider label changes remain unavailable.
 `send_email` takes `replyToMessageId`. The Outlook connector returned HTTP 401 in the earlier probe.
 
 ## Stack & commands

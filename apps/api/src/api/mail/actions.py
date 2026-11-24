@@ -10,6 +10,8 @@ from db.accessors import mail_account as account_access
 from db.accessors import mail_action as action_access
 from db.accessors import mail_message as message_access
 from db.models.mail_action import MailAction
+from db.models.mail_account import gmail_studio
+from fastapi import HTTPException
 from db.models.mail_message import IMAP_RETIRED, MailMessage
 from sqlalchemy.exc import IntegrityError
 
@@ -17,6 +19,12 @@ from api.errors import refuse
 from api.mail import action_capabilities, connector_write_results as write_result, connectors
 
 ActionKind = Literal["archive", "trash", "spam", "mark_read", "mark_unread", "restore"]
+FOLDER_ACTION_SOURCES = {
+    "archive": ("INBOX",),
+    "trash": ("INBOX", "ARCHIVE"),
+    "spam": ("INBOX", "ARCHIVE"),
+    "restore": ("ARCHIVE", "TRASH"),
+}
 logger = logging.getLogger(__name__)
 
 
@@ -25,12 +33,13 @@ class ActionFailedError(RuntimeError):
 
 
 class ActionPartialError(ActionFailedError):
-    """The provider changed the folder labels but did not complete the action."""
+    """The action failed, but the observed folder was reconciled in the index."""
 
-    def __init__(self, folder: str, error_code: str | None = None):
-        super().__init__("The provider only partly applied the action")
+    def __init__(self, folder: str, error_code: str | None = None, *, reconciled: bool = False):
+        super().__init__("The provider folder was reconciled after an incomplete action")
         self.folder = folder
         self.error_code = error_code
+        self.reconciled = reconciled
 
 
 class ActionUnsupportedError(RuntimeError):
@@ -82,7 +91,7 @@ async def _reconcile_connector_labels(message: MailMessage, labels: list[str] | 
     folder_labels = ("TRASH", "SPAM", "INBOX")
     observed = set(labels)
     current = set(json.loads(message.labels_json)) | {message.folder}
-    folder = next((label for label in folder_labels if label in observed), "ARCHIVE")
+    folder = connectors.observed_folder(observed)
     if message.folder == folder and current.intersection(folder_labels) == observed.intersection(folder_labels):
         return None
     await message_access.commit_trash_move(message, {
@@ -93,10 +102,12 @@ async def _reconcile_connector_labels(message: MailMessage, labels: list[str] | 
 
 
 async def require_bulk_support(message_ids: list[str], kind: ActionKind) -> None:
-    blocked = [account.id for account in await account_access.list_accounts()
-               if not getattr(action_capabilities.for_account(account), kind)]
-    if blocked and await message_access.has_messages_from_accounts(message_ids, blocked):
-        raise action_capabilities.unsupported()
+    for account in await account_access.list_accounts():
+        try:
+            await action_capabilities.require_action(account, kind)
+        except HTTPException:
+            if await message_access.has_messages_from_accounts(message_ids, [account.id]):
+                raise
 
 
 async def apply_action(message_id: str, kind: ActionKind) -> MailAction:
@@ -108,34 +119,34 @@ async def apply_action(message_id: str, kind: ActionKind) -> MailAction:
     account = await account_access.get_account(message.account_id)
     if account is None:
         raise ActionUnsupportedError()
-    action_capabilities.require_action(account, kind)
+    await action_capabilities.require_action(account, kind)
     if message.folder in {"IMAP_DELETED", IMAP_RETIRED}:
         raise ActionUnsupportedError()
-    sources = {"archive": ("INBOX",), "trash": ("INBOX", "ARCHIVE"), "spam": ("INBOX", "ARCHIVE"), "restore": ("ARCHIVE", "TRASH")}
-    if kind in sources and message.folder not in sources[kind]:
+    if kind in FOLDER_ACTION_SOURCES and message.folder not in FOLDER_ACTION_SOURCES[kind]:
         raise ActionUnsupportedError()
     backend = action_backends.backend_for(account)
     previous = {key: getattr(message, key) for key in ("folder", "is_read", "provider_uid", "labels_json")}
-    changes = {"folder": {"archive": "ARCHIVE", "trash": "TRASH", "spam": "SPAM", "restore": "INBOX"}[kind]} if kind in sources else {"is_read": kind == "mark_read"}
-    if kind == "trash" or (kind == "restore" and message.folder == "TRASH"):
+    changes = {"folder": {"archive": "ARCHIVE", "trash": "TRASH", "spam": "SPAM", "restore": "INBOX"}[kind]} if kind in FOLDER_ACTION_SOURCES else {"is_read": kind == "mark_read"}
+    if gmail_studio(account) or kind == "trash" or (kind == "restore" and message.folder == "TRASH"):
         try:
             updates = await backend.apply(message, kind)
-        except ActionUnsupportedError:
+        except (ActionUnsupportedError, HTTPException):
             raise
         except write_result.PermissionMissing as error:
             folder = await _reconcile_connector_labels(message, error.labels)
             if folder is not None:
-                raise ActionPartialError(folder, error.code) from None
+                raise ActionPartialError(folder, error.code, reconciled=error.provider_unchanged) from None
             raise
         except connectors.LabelChangeUnconfirmed as error:
             folder = await _reconcile_connector_labels(message, error.labels)
             if folder is not None:
-                raise ActionPartialError(folder) from None
+                raise ActionPartialError(folder, reconciled=error.provider_unchanged) from None
             logger.warning("%s", type(error).__name__)
             raise ActionFailedError() from None
         except Exception as error:
             logger.warning("%s", type(error).__name__)
             raise ActionFailedError() from None
+        previous.update(updates.pop("connector_previous", {}))
         action = MailAction(message_id=message.id, account_id=account.id, kind=kind, previous_json=json.dumps(previous))
         await message_access.commit_trash_move(message, changes | updates, action=action)
         return action
@@ -168,11 +179,16 @@ async def undo_actions(action_ids: list[str], *, now: datetime) -> UndoResult:
 
     result = UndoResult()
     rows = await action_access.get_many(action_ids)
-    if rows:
-        accounts = {account.id: account for account in await account_access.list_accounts()}
-        for row in rows:
-            if account := accounts.get(row.account_id):
-                action_capabilities.require_action(account, row.kind)
+    # Keep the single-token unsupported response. Groups resolve capabilities per token.
+    if len(rows) == 1:
+        row, = rows
+        if account := await account_access.get_account(row.account_id):
+            try:
+                await action_capabilities.require_action(account, row.kind)
+            except HTTPException as error:
+                if error.status_code != 403:
+                    raise
+    unsupported = 0
     known = {row.id for row in rows}
     result.skipped.extend(key for key in dict.fromkeys(action_ids) if key not in known)
     for action in sorted(rows, key=lambda row: (_aware(row.created_at), row.id), reverse=True):
@@ -194,11 +210,16 @@ async def undo_actions(action_ids: list[str], *, now: datetime) -> UndoResult:
             account = await account_access.get_account(action.account_id)
             if account is None:
                 raise ActionUnsupportedError()
+            await action_capabilities.require_action(account, action.kind)
             previous = json.loads(action.previous_json)
             # This provider evidence belongs to the action, not the message being restored.
             previous.pop("trash_inbox_uid", None)
             previous.pop("imap_source_uidvalidity", None)
-            updates = await action_backends.backend_for(account).revert(message, previous)
+            backend = action_backends.backend_for(account)
+            if gmail_studio(account) and isinstance(backend, action_backends.LabelBackend):
+                updates = await backend.revert(message, previous, kind=action.kind)
+            else:
+                updates = await backend.revert(message, previous)
         except (connectors.LabelChangeUnconfirmed, write_result.PermissionMissing) as error:
             if isinstance(error, write_result.PermissionMissing):
                 result.error_code = error.code
@@ -208,13 +229,21 @@ async def undo_actions(action_ids: list[str], *, now: datetime) -> UndoResult:
                 await action_access.release(action.id)
             result.failed.append(action.id)
         except Exception as error:
+            if isinstance(error, HTTPException) and isinstance(error.detail, dict):
+                code = error.detail.get("code")
+                if code == write_result.PERMISSION_MISSING:
+                    result.error_code = code
+                elif error.status_code == 409 and code == action_capabilities.ERROR_CODE:
+                    unsupported += 1
             logger.warning("%s", type(error).__name__)
             await action_access.release(action.id)
             result.failed.append(action.id)
         else:
-            if action.kind == "trash" or (action.kind == "restore" and previous["folder"] == "TRASH"):
+            if gmail_studio(account) or action.kind == "trash" or (action.kind == "restore" and previous["folder"] == "TRASH"):
                 await message_access.commit_trash_move(message, previous | updates, undo_id=action.id)
             else:
                 await _write_provider_state(message, previous | updates, folder=previous["folder"])
             result.restored.append(action.id)
+    if unsupported and unsupported == len(set(action_ids)):
+        result.error_code = action_capabilities.ERROR_CODE
     return result

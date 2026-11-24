@@ -15,12 +15,14 @@ from __future__ import annotations
 import json
 import logging
 from asyncio import sleep, timeout
-from collections.abc import Callable
+from collections.abc import Callable, Collection
+from contextlib import nullcontext
 from contextvars import ContextVar
 from typing import Any
 from urllib.parse import quote
 
 import httpx
+from db.accessors import mail_sync_state
 from utils.mistral import mistral_api_url, mistral_app_token
 
 from api.mail import action_capabilities, connector_write_results as write_result
@@ -99,9 +101,10 @@ class ToolNotAllowedError(ValueError):
 class LabelChangeUnconfirmed(ValueError):
     """A failed mutation can still leave a message-specific provider state."""
 
-    def __init__(self, labels: list[str] | None):
+    def __init__(self, labels: list[str] | None, *, provider_unchanged: bool = False):
         super().__init__("Connector label change not confirmed")
         self.labels = labels
+        self.provider_unchanged = provider_unchanged
 
 
 async def _call_tool(connector: str, tool: str, arguments: dict[str, Any], timeout: float = _TOOL_TIMEOUT_SECONDS) -> str:
@@ -150,7 +153,7 @@ async def call_write_tool(account, tool: str, arguments: dict[str, Any], *, targ
         raise ToolNotAllowedError("Tool is not a permitted write tool")
     from api.mail.connector_mailbox import bound_inbox_message, bound_mailbox, inbox_only
     if tool in {"label_message", "unlabel_message"}:
-        action_capabilities.require_action(account, "label")
+        await action_capabilities.require_action(account, "label")
     if target is not None and tool in {"label_message", "unlabel_message"} and inbox_only(account):
         if arguments.get("messageId") != target.provider_uid:
             raise ToolNotAllowedError("Label target does not match the verified message")
@@ -165,7 +168,7 @@ async def move_trash_labels(account, message, added: list[str], removed: list[st
     """Both label mutations and their readbacks must use one proven mailbox."""
     from api.mail.connector_mailbox import bound_inbox_message, bound_mailbox, inbox_only
 
-    action_capabilities.require_action(account, "trash")
+    await action_capabilities.require_action(account, "trash")
     if message.account_id != account.id:
         raise ToolNotAllowedError("Mail does not belong to this account")
     if not message.thread_id or not message.provider_uid:
@@ -206,7 +209,134 @@ async def move_trash_labels(account, message, added: list[str], removed: list[st
             await _confirm_label_change(account.provider, message.thread_id, message.provider_uid, present, absent)
 
 
-async def _confirm_label_change(provider: str, thread_id: str, uid: str, present: set[str], absent: set[str]) -> None:
+def observed_folder(labels: Collection[str]) -> str:
+    return next((folder for folder in ("TRASH", "SPAM", "INBOX") if folder in labels), "ARCHIVE")
+
+
+async def change_gmail_labels(
+    account, message, added: list[str], removed: list[str], *, action: str, destination: str | None = None,
+    source_folders: Collection[str] | None = None, read_status: bool | None = None, folder_undo: bool = False,
+) -> tuple[list[str], list[str]]:
+    """Confirm only the verified Gmail operations on the same named binding and exact delivery."""
+    from api.mail.connector_mailbox import MailboxUnavailable, bound_mailbox
+
+    allowed = {"archive": {"INBOX"}, "trash": {"INBOX", "TRASH"},
+               "restore": {"INBOX", "TRASH", "UNREAD"}, "mark_read": {"UNREAD"}, "mark_unread": {"UNREAD"}}
+    if (action not in allowed or not set(added + removed) <= allowed[action]
+            or message.account_id != account.id or message.unverified_connector
+            or not message.thread_id or not message.provider_uid):
+        raise action_capabilities.unsupported()
+    state = await action_capabilities.require_action(account, action)
+    evidence = state.write_evidence() if state else None
+    if state is None or evidence is None:
+        raise MailboxUnavailable()
+    proof = evidence[:2]
+    provider, thread, uid = account.provider, message.thread_id, message.provider_uid
+    present: set[str] = set()
+    absent: set[str] = set()
+    folder_labels = {"INBOX", "TRASH"}
+    undo_labels = folder_labels.intersection({destination}) if folder_undo else None
+    async with bound_mailbox(account, cursor=state.connector_cursor, generation=state.connector_generation, observed=state):
+        initial_labels = (await thread_labels(provider, thread, {uid}, minimal_only=True)).get(uid)
+        if initial_labels is None:
+            raise LabelChangeUnconfirmed(None)
+        if source_folders is not None:
+            live_folder = observed_folder(initial_labels)
+            if undo_labels is not None:
+                current = folder_labels.intersection(initial_labels)
+                if live_folder == destination:
+                    if current == undo_labels:
+                        return initial_labels, initial_labels
+                    # An added destination label can mask the source of a partial move.
+                    live_folder = observed_folder(set(initial_labels) - undo_labels)
+                added, removed = sorted(undo_labels - current), sorted(current - undo_labels)
+            elif destination == "INBOX":
+                # Restore changes only folder labels. The pinned read supplies the source.
+                added = ["INBOX"]
+                removed = ["TRASH"] if live_folder == "TRASH" else []
+            if live_folder not in source_folders:
+                raise LabelChangeUnconfirmed(initial_labels, provider_unchanged=True)
+        if read_status is not None:
+            # Undo derives its UNREAD change from Gmail, even if sync already replayed the saved flag.
+            added = ["UNREAD"] if not read_status and "UNREAD" not in initial_labels else []
+            removed = ["UNREAD"] if read_status and "UNREAD" in initial_labels else []
+
+        labels = initial_labels
+        step_has_evidence = False
+        provider_changed = False
+        for tool, changes, expected in (("label_message", added, present), ("unlabel_message", removed, absent)):
+            if not changes:
+                continue
+            has_confirmed_step = bool(present or absent)
+            if step_has_evidence:
+                await mail_sync_state.record_connector_write(account.id, proof, outcome="confirmed")
+            current = await mail_sync_state.get_state(account.id)
+            current_proof = current.write_evidence() if current else None
+            if current is None or current_proof is None or current_proof[:2] != proof:
+                raise MailboxUnavailable()
+            if current_proof[2] == "blocked":
+                raise write_result.PermissionMissing(labels, provider_unchanged=not provider_changed)
+
+            # The first write uses the anchor just checked above. Later writes recheck it
+            # because Studio can reconnect the same credential name to another mailbox.
+            binding = (bound_mailbox(account, cursor=current.connector_cursor,
+                                     generation=current.connector_generation, observed=current)
+                       if has_confirmed_step else nullcontext())
+            labels_before = set(labels)
+            has_receipt = True
+            try:
+                async with binding:
+                    try:
+                        await _call_tool(provider, tool, {"messageId": uid, "labelIds": changes})
+                    except write_result.WriteUnconfirmed:
+                        has_receipt = False
+                    expected.update(changes)
+                    labels = await _confirm_label_change(provider, thread, uid, present, absent, point_only=True)
+            except write_result.PermissionMissing:
+                await mail_sync_state.record_connector_write(account.id, proof, outcome="blocked")
+                raise write_result.PermissionMissing(labels, provider_unchanged=not provider_changed) from None
+            except write_result.WriteRefused:
+                if has_confirmed_step:
+                    raise LabelChangeUnconfirmed(labels) from None
+                raise
+            except LabelChangeUnconfirmed as error:
+                if not has_receipt and error.labels is not None and set(error.labels) == labels_before:
+                    paused = await mail_sync_state.record_connector_write(account.id, proof, outcome="unchanged")
+                    if paused:
+                        raise write_result.PermissionMissing(error.labels, provider_unchanged=not provider_changed) from None
+                    error.provider_unchanged = not provider_changed
+                raise
+            except (httpx.HTTPError, TimeoutError):
+                if not has_confirmed_step:
+                    raise
+                # Read the current state of the same live mailbox. Never repeat an uncertain write.
+                recovery = await mail_sync_state.get_state(account.id)
+                recovery_proof = recovery.write_evidence() if recovery else None
+                if recovery is None or recovery_proof is None or recovery_proof[0] != proof[0]:
+                    raise MailboxUnavailable() from None
+                async with bound_mailbox(account, cursor=recovery.connector_cursor,
+                                         generation=recovery.connector_generation, observed=recovery, check_after=True):
+                    observed = (await thread_labels(provider, thread, {uid}, minimal_only=True)).get(uid)
+                raise LabelChangeUnconfirmed(observed) from None
+            else:
+                changed_labels = labels_before.symmetric_difference(labels)
+                provider_changed = provider_changed or bool(changed_labels)
+                step_has_evidence = has_receipt or not changed_labels.isdisjoint(changes)
+
+    if destination is not None and (
+        observed_folder(labels) != destination
+        or (undo_labels is not None and folder_labels.intersection(labels) != undo_labels)
+    ):
+        raise LabelChangeUnconfirmed(labels)
+    if step_has_evidence:
+        # The write is already confirmed. A replaced pin cannot acquire this evidence.
+        await mail_sync_state.record_connector_write(account.id, proof, outcome="confirmed")
+    return initial_labels, labels
+
+
+async def _confirm_label_change(
+    provider: str, thread_id: str, uid: str, present: set[str], absent: set[str], *, point_only: bool = False,
+) -> list[str]:
     observations: list[tuple[str, tuple[bool, bool, bool]]] = []
     latest_point: list[str] | None = None
 
@@ -223,13 +353,15 @@ async def _confirm_label_change(provider: str, thread_id: str, uid: str, present
 
     # A full read can replay old labels. After the initial observation, only
     # the point read can confirm the change. All delays and reads share one deadline.
+    delays = (0.0, 1.0, 2.0) if point_only else (0.0, 0.5, 1.0)
     async with timeout(_TOOL_TIMEOUT_SECONDS):
-        for delay in (0.0, 0.5, 1.0):
+        for delay in delays:
             if delay:
                 await sleep(delay)
-            observed = await thread_labels(provider, thread_id, {uid}, minimal_only=bool(delay), on_read=record)
-            if all(evidence(observed.get(uid))):
-                return
+            observed = await thread_labels(provider, thread_id, {uid}, minimal_only=point_only or bool(delay), on_read=record)
+            labels = observed.get(uid)
+            if labels is not None and all(evidence(labels)):
+                return labels
 
     for attempt, (fmt, checks) in enumerate(observations, 1):
         logger.warning(

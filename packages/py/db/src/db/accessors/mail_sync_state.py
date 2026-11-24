@@ -2,6 +2,8 @@
 
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Literal
+from uuid import uuid4
 
 from sqlalchemy import case, select, text, update
 from db.accessors import user_preference
@@ -124,3 +126,35 @@ async def fail_poll(account_id: str, previous: MailSyncState, code: str) -> None
             state.last_sync_at = state.updated_at = utcnow()
     except StaleMailSync:
         return
+
+
+
+async def record_connector_write(
+    account_id: str, proof: tuple[str, str], *, outcome: Literal["confirmed", "unchanged", "blocked"],
+) -> bool:
+    """Update the dispatching binding and retry generation, and report whether it is paused."""
+    async with get_session_maker().begin() as session:
+        state = await session.scalar(select(MailSyncState).where(MailSyncState.account_id == account_id).with_for_update())
+        evidence = state.write_evidence() if state else None
+        if evidence is None or evidence[:2] != proof:
+            return False
+        if evidence[2] == "blocked":
+            return True
+        assert state is not None
+        if outcome == evidence[2] == "unchanged":
+            outcome = "blocked"
+        state.connector_write_evidence = f"{proof[0]}:{proof[1]}:{outcome}"
+        return outcome == "blocked"
+
+
+async def retry_connector_writes(account_id: str) -> bool:
+    """Reopen the current binding without dispatching or repeating a provider write."""
+    async with get_session_maker().begin() as session:
+        state = await session.scalar(select(MailSyncState).where(MailSyncState.account_id == account_id).with_for_update())
+        evidence = state.write_evidence() if state else None
+        if evidence is None:
+            return False
+        assert state is not None
+        if evidence[2] == "blocked":
+            state.connector_write_evidence = f"{evidence[0]}:{uuid4().hex}:ready"
+        return True
