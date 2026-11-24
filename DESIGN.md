@@ -366,7 +366,8 @@ Quoted German labels and the German icon names in this section are UI text.
     the keyboard shortcut in parentheses to the tooltip.
   - Chip pressed (`aria-pressed`, active filter) and `quiet` (without border on `surface-soft`,
     for selection chips such as account and model).
-  - Notice `info`, `success`, `danger`, optionally with an action as a link.
+  - Notice `info`, `success`, `danger`, optionally with an action as a link. The icon stays
+    beside the first line. Wrapped lines align with the start of the text.
   - Tag `default`, `warm` (deadline, with `clock`) and `on-surface` (account in lists, with account dot).
   - Avatar `md` and `lg` (account card).
   - Badge shows „999+“ from 1,000.
@@ -576,8 +577,10 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
   The card states that a concurrent change in Google can be overwritten. There is no „Rückgängig“;
   an open result offers „Prüfen“, and a changed appointment asks for a new proposal.
 - **Actions initiated by the user in the inbox** on one mail or multiple selected mails take effect
-  immediately and then show a notice for 10 seconds with a shared „Rückgängig“. Assistant proposals
-  continue through the confirmation card.
+  immediately and then show a notice for 10 seconds with a shared „Rückgängig“. Provider permission
+  guidance wraps and stays visible until dismissed, alongside later action results. Its close
+  button has an accessible name. Each Undo stays beside the action result and keeps its own
+  deadline. Assistant proposals continue through the confirmation card.
 
 ### 9.3 Provenance and content from mail
 

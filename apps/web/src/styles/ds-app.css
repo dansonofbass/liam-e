@@ -7,7 +7,8 @@
 /* Menus for triggers at the bottom of the screen open upwards and size to their items. */
 .le-menu--up-start, .le-menu--up-end { width: max-content; min-width: calc(3 * var(--space-8)); }
 .le-menu-item--danger, .le-menu-item--danger .le-ico { color: var(--danger); }
-.le-menu--grouped { width: 24rem; }
+.le-menu--grouped:not(.le-menu--mailrow) { width: 24rem; }
+.le-menu--mailrow .le-menu-group-label { overflow-wrap: anywhere; }
 .le-menu-group-label { padding: var(--space-2) var(--space-3); font-size: var(--font-size-small); font-weight: 600; color: var(--ink-muted); }
 .le-menu--grouped > * + * { margin-top: var(--space-2); border-top: 1px solid var(--line); }
 .le-menu--grouped a.le-menu-item { color: var(--accent); text-decoration: none; }
@@ -238,9 +239,9 @@
 .le-inbox-mobile-status .le-inbox-controls { flex-basis: 100%; justify-content: space-between; }
 .le-inbox-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: calc(var(--control-height-lg) + 2 * var(--space-4)); }
 .le-inbox-scroll > .le-hint, .le-inbox-scroll > .le-notice { margin: var(--space-4); }
-.le-inbox-toast { position: absolute; z-index: 10; left: var(--space-4); right: var(--space-4); bottom: var(--space-4); border-radius: var(--radius-md); background: var(--surface-overlay); box-shadow: var(--shadow-overlay); }
-.le-inbox-toast .le-notice > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.le-inbox-toast .le-notice > .le-inbox-toast-text--wrap { white-space: normal; overflow: visible; text-overflow: clip; }
+.le-inbox-toast { display: grid; gap: var(--space-1); position: absolute; z-index: 10; left: var(--space-4); right: var(--space-4); bottom: var(--space-4); border-radius: var(--radius-md); background: var(--surface-overlay); box-shadow: var(--shadow-overlay); }
+.le-inbox-toast .le-notice-body > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.le-inbox-toast .le-notice-body > .le-inbox-toast-text--wrap { white-space: normal; overflow: visible; text-overflow: clip; }
 .le-inbox-toast--inline { position: static; flex: 0 0 auto; margin: 0 var(--space-3) var(--space-2); }
 @media (pointer: coarse) { .le-inbox-filters .le-chip, .le-inbox-control, .le-inbox-toast .le-link { min-width: var(--control-height-lg); min-height: var(--control-height-lg); } .le-inbox-toast .le-link { display: inline-flex; align-items: center; justify-content: center; } }
 .le-mailrow--placeholder { min-height: var(--space-7); align-items: center; }

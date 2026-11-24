@@ -718,3 +718,63 @@ test('rule card shows scope and actions before confirmation', async () => {
   await waitFor(() => expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: [] }, throwOnError: true }))
   expect(await screen.findByText('Regel erstellt.')).toBeTruthy()
 })
+
+test('mail proposal results distinguish an index correction from a partial write', async () => {
+  const card = message('partial', {
+    done: 1,
+    undo_action_ids: ['action-c'],
+    failed: [
+      { id: 'a', code: 'action_failed', outcome: 'reconciled' },
+      { id: 'b', code: 'provider_permission_missing', outcome: 'partial' },
+    ],
+  })
+  card.proposal = { ...card.proposal!, kind: 'archive',
+    items: ['a', 'b', 'c'].map(id => ({ id, kind: 'mail', title: id, subtitle: '' })) }
+  setup(card)
+  expect(await screen.findByText(/1 Mail wurde nicht verschoben/)).toBeTruthy()
+  expect(screen.getByText(/Der Anbieter hat 1 Mail teilweise geändert/)).toBeTruthy()
+  expect(screen.getByText(/Für diese Aktion fehlt dem Connector die Berechtigung/)).toBeTruthy()
+})
+
+test.each([
+  ['reconciled', 'action_failed', /1 Mail wurde nicht verschoben/],
+  ['partial', 'provider_permission_missing', /Der Anbieter hat 1 Mail teilweise geändert/],
+] as const)('a single-mail failed confirmation shows the %s outcome', async (outcome, code, text) => {
+  const card = message()
+  card.proposal = { kind: 'archive', reason: 'Synthetic',
+    items: [{ id: 'a', kind: 'mail', title: 'Example', subtitle: '' }] }
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: {
+    ...card,
+    proposal_status: 'failed',
+    proposal: { ...card.proposal, result: {
+      done: 0, failed: [{ id: 'a', code, outcome }], undo_action_ids: [], manual: [],
+    } },
+  } } as never)
+  setup(card)
+  fireEvent.click(await screen.findByRole('button', { name: '1 archivieren' }))
+  expect(await screen.findByText(text)).toBeTruthy()
+  expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a'], body: undefined }, throwOnError: true })
+  expect(Boolean(screen.queryByText(/Für diese Aktion fehlt dem Connector die Berechtigung/))).toBe(code === 'provider_permission_missing')
+  expect(screen.queryByRole('button', { name: 'Rückgängig' })).toBeNull()
+})
+
+test('a failed archive confirmation shows reconnection guidance when the second failure pauses Gmail', async () => {
+  const card = message()
+  card.proposal = { kind: 'archive', reason: 'Synthetic',
+    items: ['a', 'b'].map(id => ({ id, kind: 'mail', title: id, subtitle: '' })) }
+  const confirm = spyOn(sdk, 'chatProposalConfirm').mockResolvedValue({ data: {
+    ...card,
+    proposal_status: 'failed',
+    proposal: { ...card.proposal, result: {
+      done: 0,
+      failed: [{ id: 'a', code: 'action_failed' }, { id: 'b', code: 'provider_permission_missing' }],
+      undo_action_ids: [],
+      manual: [],
+    } },
+  } } as never)
+  setup(card)
+  fireEvent.click(await screen.findByRole('button', { name: '2 archivieren' }))
+  expect(await screen.findByText(/Melde das Konto in Mistral Studio erneut an.*unter Konten wieder erlauben/)).toBeTruthy()
+  expect(confirm).toHaveBeenCalledWith({ path: { proposal_id: 'p' }, body: { selected_ids: ['a', 'b'], body: undefined }, throwOnError: true })
+  expect(screen.queryByRole('button', { name: 'Rückgängig' })).toBeNull()
+})
