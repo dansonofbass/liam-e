@@ -112,7 +112,9 @@ async def prepare(run_id: str, matcher, snapshot: dict[str, int] | None = None) 
         if run.status != "queued":
             return run
         message = (await session.scalars(select(MailMessage).where(MailMessage.id == run.message_id).with_for_update())).one_or_none()
-        rules = list((await session.scalars(select(MailRule).order_by(MailRule.position, MailRule.created_at, MailRule.id).with_for_update())).all())
+        # Deletion also locks multiple rules by ID; sort by priority only after all locks are held.
+        rules = list((await session.scalars(select(MailRule).order_by(MailRule.id).with_for_update())).all())
+        rules.sort(key=lambda item: (item.position, item.created_at, item.id))
         if snapshot is not None:
             rules = [item for item in rules if snapshot.get(item.id) == item.version]
         rule = next((item for item in rules if item.id == run.rule_id), None)
@@ -126,8 +128,8 @@ async def prepare(run_id: str, matcher, snapshot: dict[str, int] | None = None) 
                 stmt = insert(MailFiling).values(message_id=message.id, folder_id=rule.folder_id)
                 await session.execute(stmt.on_conflict_do_update(index_elements=[MailFiling.message_id],
                     set_={"folder_id": rule.folder_id}, where=MailFiling.folder_id.is_(None)))
-            if rule.label_id:
-                stmt = insert(MailLabelAssignment).values(message_id=message.id, label_id=rule.label_id)
+            for label_id in rule.label_ids:
+                stmt = insert(MailLabelAssignment).values(message_id=message.id, label_id=label_id)
                 await session.execute(stmt.on_conflict_do_nothing())
             pending = {kind: "pending" for kind, enabled in (("mark_read", rule.mark_read), ("mark_unread", rule.mark_unread), ("archive", rule.archive)) if enabled}
             has_provider_actions = bool(pending)
