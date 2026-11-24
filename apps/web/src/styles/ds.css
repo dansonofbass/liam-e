@@ -42,6 +42,7 @@ small { font-size: var(--font-size-small); }
 .le-btn--primary:disabled { background: var(--line-strong); color: var(--ink-muted); box-shadow: none; }
 .le-btn--secondary { background: var(--surface); border-color: var(--control-border); color: var(--ink); }
 .le-btn--secondary:hover { border-color: var(--accent); color: var(--accent); }
+.le-btn--secondary:disabled, .le-btn--secondary:disabled:hover { background: var(--line-strong); border-color: var(--line-strong); color: var(--ink); box-shadow: none; }
 .le-btn--ghost { background: var(--surface-soft); color: var(--ink); }
 .le-btn--ghost:hover { background: var(--accent-soft); color: var(--accent); }
 .le-btn--danger { background: var(--danger); color: var(--on-danger); }
@@ -287,4 +288,5 @@ small { font-size: var(--font-size-small); }
 
 .le-rule-labels { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
 .le-rule-labels legend, .le-rule-labels .le-hint { width: 100%; }
-.le-rule-labels label { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 44px; }
+.le-rule-labels label { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%; min-height: 44px; padding: var(--space-1); }
+.le-rule-labels label span { min-width: 0; overflow-wrap: anywhere; }

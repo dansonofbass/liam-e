@@ -929,3 +929,486 @@ def test_rule_update_rechecks_version_after_waiting_for_destination(pg_db, monke
         assert saved.name == 'Fresh' and saved.label_ids == [existing.id]
 
     asyncio.run(run())
+
+
+def test_manual_apply_includes_filed_provider_inbox_without_moving_it(pg_db, monkeypatch):
+    async def run():
+        import json
+        from unittest.mock import AsyncMock
+        from api.mail import action_capabilities, actions, jobs, rules
+        from api.mail.rule_schemas import RuleIn
+        from api.routers.api.v1.mail.rules import ApplyIn, apply_rule, preview
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        account = MailAccount(id='synthetic', provider='gmail', auth_type='mistral_connector', email_address='owner@example.org')
+        async with get_session_maker().begin() as session:
+            session.add(account)
+        higher_folder = await mail_filing.create_destination('Higher', 'folder')
+        owner_folder = await mail_filing.create_destination('Owner', 'folder')
+        lower_folder = await mail_filing.create_destination('Lower', 'folder')
+        label = await mail_filing.create_destination('Work', 'label')
+        existing = await mail_filing.create_destination('Existing', 'label')
+        first = await mail_message.upsert_message(account_id=account.id, folder='INBOX', provider_uid='first', sender_address='person@example.org')
+        owner = await mail_message.upsert_message(account_id=account.id, folder='INBOX', provider_uid='owner', sender_address='person@example.org')
+        unfiled = await mail_message.upsert_message(account_id=account.id, folder='INBOX', provider_uid='unfiled', sender_address='person@example.org')
+        archived = await mail_message.upsert_message(account_id=account.id, folder='ARCHIVE', provider_uid='archive', sender_address='person@example.org')
+        trashed = await mail_message.upsert_message(account_id=account.id, folder='TRASH', provider_uid='trash', sender_address='person@example.org')
+        higher = await mail_rule.create(name='Higher', position=1, sender_domain='example.org', folder_id=higher_folder.id)
+        lower = await mail_rule.create(name='Lower', position=2, sender_domain='example.org', folder_id=lower_folder.id, label_ids=[label.id], mark_read=True)
+        await rules.execute_rule_run(higher.id, higher.version, first.id)
+        await mail_filing.assign([owner.id], folder_id=owner_folder.id, add_labels=[existing.id, label.id])
+        body = RuleIn(name=lower.name, sender_domain=lower.sender_domain, folder_id=lower.folder_id, label_ids=lower.label_ids, mark_read=True, position=2)
+        previewed = await preview(body)
+        assert previewed['matched'] == 3 and previewed['already_filed'] == 2
+        assert set(previewed['message_ids']) == {first.id, owner.id, unfiled.id}
+        gate = AsyncMock(side_effect=action_capabilities.unsupported())
+        writer = AsyncMock()
+        monkeypatch.setattr(action_capabilities, 'require_action', gate)
+        monkeypatch.setattr(actions, 'apply_action', writer)
+        result = await apply_rule(lower.id, ApplyIn(expected_version=lower.version, confirm_apply=True))
+        assert result['matched'] == 3
+        for _ in range(3):
+            assert await jobs.run_once()
+        assert not await jobs.run_once()
+        filings = await mail_filing.for_messages([first.id, owner.id, unfiled.id, archived.id, trashed.id])
+        assert filings[first.id].folder_id == higher_folder.id and filings[first.id].label_ids == [label.id]
+        assert filings[owner.id].folder_id == owner_folder.id and set(filings[owner.id].label_ids) == {existing.id, label.id}
+        assert filings[unfiled.id].folder_id is None and filings[unfiled.id].label_ids == [label.id]
+        assert filings[archived.id].label_ids == [] and filings[trashed.id].label_ids == []
+        assert gate.await_count == 3
+        writer.assert_not_awaited()
+        runs = await mail_rule_run.list_for_rule(lower.id)
+        assert len(runs) == 3 and all(json.loads(run.provider_results_json)['mark_read'] == 'skipped_unsupported' for run in runs)
+    asyncio.run(run())
+
+
+def test_manual_reapply_restores_filed_labels_without_repeating_provider_action(pg_db, monkeypatch):
+    async def run():
+        import json
+        from unittest.mock import AsyncMock
+        from api.mail import action_capabilities, actions, jobs, rules
+        from api.routers.api.v1.mail.rules import ApplyIn, apply_rule
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        account = MailAccount(id='synthetic', provider='gmail', auth_type='mistral_connector', email_address='owner@example.org')
+        async with get_session_maker().begin() as session:
+            session.add(account)
+        folder = await mail_filing.create_destination('Owner', 'folder')
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id=account.id, folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id], mark_read=True)
+        gate, writer = AsyncMock(), AsyncMock()
+        monkeypatch.setattr(action_capabilities, 'require_action', gate)
+        monkeypatch.setattr(actions, 'apply_action', writer)
+        first = await rules.execute_rule_run(rule.id, rule.version, message.id)
+        assert first.status == 'done' and json.loads(first.provider_results_json)['mark_read'] == 'done'
+        writer.assert_awaited_once_with(message.id, 'mark_read')
+        await mail_filing.assign([message.id], folder_id=folder.id, remove_labels=[label.id])
+        await rules.execute_rule_run(rule.id, rule.version, message.id)
+        assert (await mail_filing.for_message(message.id)).label_ids == []  # Automatic replay stays deduplicated.
+        for _ in range(2):
+            outcome = await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True))
+            assert outcome == {'matched': 1, 'app_changed': 1, 'provider_skipped': 1, 'provider_queued': 0, 'conflicts': 0}
+            assert not await jobs.run_once()
+            filing = await mail_filing.for_message(message.id)
+            assert filing.folder_id == folder.id and filing.label_ids == [label.id]
+            await mail_filing.assign([message.id], remove_labels=[label.id])
+        writer.assert_awaited_once_with(message.id, 'mark_read')
+        gate.assert_awaited_once()
+        runs = await mail_rule_run.list_for_rule(rule.id)
+        assert len(runs) == 1 and runs[0].status == 'done'
+        assert json.loads(runs[0].provider_results_json)['mark_read'] == 'done'
+    asyncio.run(run())
+
+
+def test_manual_reapply_does_not_retry_unknown_provider_action(pg_db, monkeypatch):
+    async def run():
+        import json
+        from unittest.mock import AsyncMock
+        from api.mail import action_capabilities, actions, jobs, rules
+        from api.routers.api.v1.mail.rules import ApplyIn, apply_rule
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        account = MailAccount(id='synthetic', provider='gmail', auth_type='mistral_connector', email_address='owner@example.org')
+        async with get_session_maker().begin() as session:
+            session.add(account)
+        folder = await mail_filing.create_destination('Owner', 'folder')
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id=account.id, folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id], mark_read=True)
+        gate, writer = AsyncMock(), AsyncMock(side_effect=RuntimeError('synthetic uncertain result'))
+        monkeypatch.setattr(action_capabilities, 'require_action', gate)
+        monkeypatch.setattr(actions, 'apply_action', writer)
+        first = await rules.execute_rule_run(rule.id, rule.version, message.id)
+        assert first.status == 'unknown' and json.loads(first.provider_results_json)['mark_read'] == 'unknown'
+        await mail_filing.assign([message.id], folder_id=folder.id, remove_labels=[label.id])
+        outcome = await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True))
+        assert outcome == {'matched': 1, 'app_changed': 1, 'provider_skipped': 1, 'provider_queued': 0, 'conflicts': 0}
+        assert not await jobs.run_once()
+        filing = await mail_filing.for_message(message.id)
+        assert filing.folder_id == folder.id and filing.label_ids == [label.id]
+        writer.assert_awaited_once_with(message.id, 'mark_read')
+        gate.assert_awaited_once()
+        runs = await mail_rule_run.list_for_rule(rule.id)
+        assert len(runs) == 1 and runs[0].status == 'unknown'
+        assert json.loads(runs[0].provider_results_json)['mark_read'] == 'unknown'
+    asyncio.run(run())
+
+
+def test_saved_preview_counts_only_changes_and_stale_rule_rejects_apply(pg_db):
+    async def run():
+        from fastapi import HTTPException
+        from api.mail import rules
+        from api.routers.api.v1.mail.rules import ApplyIn, RulePreviewIn, apply_rule, preview
+        from db.accessors import mail_filing, mail_message, mail_rule
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id])
+        body = RulePreviewIn(name=rule.name, sender_domain=rule.sender_domain, label_ids=[label.id], saved_rule_id=rule.id, expected_version=rule.version)
+        await mail_filing.assign([message.id], add_labels=[label.id])
+        assert (await preview(body))['matched'] == 0
+        assert (await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True)))['matched'] == 0
+        from db.accessors import mail_rule_run
+        assert await mail_rule_run.list_for_rule(rule.id) == []
+        await rules.execute_rule_run(rule.id, rule.version, message.id)
+        assert (await preview(body))['matched'] == 0
+        assert (await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True)))['app_changed'] == 0
+        await mail_filing.assign([message.id], remove_labels=[label.id])
+        assert (await preview(body))['matched'] == 1
+        result = await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True))
+        assert result['matched'] == result['app_changed'] == 1
+        await mail_filing.assign([message.id], remove_labels=[label.id])
+        await mail_rule.update(rule.id, rule.version, name='New name')
+        with pytest.raises(HTTPException) as exc:
+            await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True))
+        assert exc.value.status_code == 409
+        assert (await mail_filing.for_message(message.id)).label_ids == []
+    asyncio.run(run())
+
+
+def test_saved_rule_editor_preview_replaces_its_saved_copy(pg_db):
+    async def run():
+        from fastapi import HTTPException
+        from api.routers.api.v1.mail.rules import ApplyIn, RulePreviewIn, apply_rule, preview
+        from db.accessors import mail_filing, mail_message, mail_rule
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        old_folder = await mail_filing.create_destination('Old', 'folder')
+        new_folder = await mail_filing.create_destination('New', 'folder')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org', subject='New subject')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', folder_id=old_folder.id, position=2)
+        body = RulePreviewIn(name=rule.name, sender_domain=rule.sender_domain, subject_contains='New subject', folder_id=new_folder.id,
+                             position=rule.position, saved_rule_id=rule.id, expected_version=rule.version, preview_draft=True)
+        assert (await preview(body))['message_ids'] == [message.id]
+        assert (await preview(body.model_copy(update={'subject_contains': 'No match'})))['matched'] == 0
+        unchanged = body.model_copy(update={'subject_contains': '', 'folder_id': old_folder.id})
+        estimate = await preview(unchanged)
+        result = await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True,
+                                                   preview_message_ids=estimate['message_ids']))
+        assert estimate['matched'] == result['matched'] == result['app_changed'] == 1
+        assert (await mail_filing.for_message(message.id)).folder_id == old_folder.id
+        await mail_rule.update(rule.id, rule.version, name='Changed elsewhere')
+        with pytest.raises(HTTPException) as exc:
+            await preview(body)
+        assert exc.value.status_code == 409 and exc.value.detail['code'] == 'rule_version_conflict'
+    asyncio.run(run())
+
+
+def test_saved_rule_draft_preview_accounts_for_future_rule_version(pg_db):
+    async def run():
+        from api.mail import rules
+        from api.routers.api.v1.mail.rules import RulePreviewIn, preview
+        from db.accessors import mail_filing, mail_message, mail_rule
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id], mark_read=True)
+        await rules.prepare_rule_run(rule.id, rule.version, message.id)
+        body = RulePreviewIn(name=rule.name, sender_domain=rule.sender_domain, label_ids=[label.id], mark_read=True,
+                             saved_rule_id=rule.id, expected_version=rule.version, preview_draft=True)
+        assert (await preview(body))['matched'] == 0
+        assert (await preview(body.model_copy(update={'name': 'Edited'})))['message_ids'] == [message.id]
+    asyncio.run(run())
+
+
+def test_paused_saved_rule_can_preview_an_active_editor_draft(pg_db):
+    async def run():
+        from fastapi import HTTPException
+        from sqlalchemy import select
+        from api.routers.api.v1.mail.rules import RulePreviewIn, preview
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+        from db.models.mail_job import MailJob
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        folder = await mail_filing.create_destination('Projects', 'folder')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Paused', sender_domain='example.org', folder_id=folder.id, is_active=False)
+        body = RulePreviewIn(name=rule.name, sender_domain=rule.sender_domain, folder_id=folder.id,
+                             is_active=True, saved_rule_id=rule.id, expected_version=rule.version, preview_draft=True)
+        assert (await preview(body))['message_ids'] == [message.id]
+        for changed, expected_code in (({'preview_draft': False}, 'rule_inactive'),
+                                       ({'is_active': False}, 'rule_inactive'),
+                                       ({'expected_version': rule.version + 1}, 'rule_version_conflict')):
+            with pytest.raises(HTTPException) as exc:
+                await preview(body.model_copy(update=changed))
+            assert exc.value.status_code == 409 and exc.value.detail['code'] == expected_code
+        assert not (await mail_rule.get(rule.id)).is_active
+        assert (await mail_filing.for_message(message.id)).folder_id is None
+        assert await mail_rule_run.list_for_rule(rule.id) == []
+        async with get_session_maker()() as session:
+            assert not (await session.scalars(select(MailJob).where(MailJob.kind == 'mail_rule_apply'))).all()
+    asyncio.run(run())
+
+
+def test_manual_apply_reports_mail_changed_after_preview(pg_db):
+    async def run():
+        from api.routers.api.v1.mail.rules import ApplyIn, RulePreviewIn, apply_rule, preview
+        from db.accessors import mail_filing, mail_message, mail_rule
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+        from db.models.mail_message import MailMessage
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id])
+        body = RulePreviewIn(name=rule.name, sender_domain=rule.sender_domain, label_ids=[label.id], saved_rule_id=rule.id, expected_version=rule.version)
+        estimate = await preview(body)
+        assert estimate['message_ids'] == [message.id]
+        async with get_session_maker().begin() as session:
+            row = await session.get(MailMessage, message.id)
+            row.folder = 'ARCHIVE'
+        result = await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True, preview_message_ids=estimate['message_ids']))
+        assert result == {'matched': 0, 'app_changed': 0, 'provider_skipped': 0, 'provider_queued': 0, 'conflicts': 1}
+        assert (await mail_filing.for_message(message.id)).label_ids == []
+    asyncio.run(run())
+
+
+def test_manual_apply_ignores_paused_higher_priority_folder_rule(pg_db):
+    async def run():
+        import json
+        from api.routers.api.v1.mail.rules import ApplyIn, RulePreviewIn, apply_rule, preview
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        paused_folder = await mail_filing.create_destination('Paused', 'folder')
+        active_folder = await mail_filing.create_destination('Active', 'folder')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        await mail_rule.create(name='Paused', sender_domain='example.org', folder_id=paused_folder.id, position=1, is_active=False)
+        rule = await mail_rule.create(name='Active', sender_domain='example.org', folder_id=active_folder.id, position=2)
+        body = RulePreviewIn(name=rule.name, sender_domain=rule.sender_domain, folder_id=rule.folder_id,
+                             position=rule.position, saved_rule_id=rule.id, expected_version=rule.version)
+        estimate = await preview(body)
+        assert estimate['matched'] == 1 and estimate['message_ids'] == [message.id]
+        result = await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True,
+                                                   preview_message_ids=estimate['message_ids']))
+        assert result == {'matched': 1, 'app_changed': 1, 'provider_skipped': 0, 'provider_queued': 0, 'conflicts': 0}
+        assert (await mail_filing.for_message(message.id)).folder_id == active_folder.id
+        runs = await mail_rule_run.list_for_rule(rule.id)
+        assert len(runs) == 1 and runs[0].status == 'done'
+        assert '_folder' not in json.loads(runs[0].provider_results_json)
+    asyncio.run(run())
+
+
+def test_paused_rule_preview_and_manual_apply_refuse_without_writes(pg_db):
+    async def run():
+        from fastapi import HTTPException
+        from sqlalchemy import select
+        from api.routers.api.v1.mail.rules import ApplyIn, RulePreviewIn, apply_rule, preview
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+        from db.models.mail_job import MailJob
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        folder = await mail_filing.create_destination('Projects', 'folder')
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Paused', sender_domain='example.org', folder_id=folder.id,
+                                      label_ids=[label.id], mark_read=True, is_active=False)
+        body = RulePreviewIn(name=rule.name, sender_domain=rule.sender_domain, folder_id=rule.folder_id,
+                             label_ids=rule.label_ids, is_active=False, saved_rule_id=rule.id, expected_version=rule.version)
+        draft = body.model_copy(update={'saved_rule_id': None, 'expected_version': None})
+        stale = body.model_copy(update={'expected_version': rule.version + 1})
+        for operation in (preview(body), preview(draft), preview(stale),
+                          apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True)),
+                          apply_rule(rule.id, ApplyIn(expected_version=rule.version + 1, confirm_apply=True))):
+            with pytest.raises(HTTPException) as exc:
+                await operation
+            assert exc.value.status_code == 409 and exc.value.detail['code'] == 'rule_inactive'
+            assert exc.value.detail['message'] == 'Die Regel ist pausiert. Aktiviere sie, um fortzufahren.'
+        filing = await mail_filing.for_message(message.id)
+        assert filing.folder_id is None and filing.label_ids == []
+        assert await mail_rule_run.list_for_rule(rule.id) == []
+        async with get_session_maker()() as session:
+            assert not (await session.scalars(select(MailJob).where(MailJob.kind == 'mail_rule_apply'))).all()
+    asyncio.run(run())
+
+
+def test_rule_paused_during_confirmation_rolls_back_and_reports_inactive(pg_db, monkeypatch):
+    async def run():
+        from fastapi import HTTPException
+        from sqlalchemy import select
+        from api.routers.api.v1.mail import rules as router
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+        from db.models.mail_job import MailJob
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id], mark_read=True)
+        original = router.matching_messages
+        async def pause_after_scan(current):
+            async for item in original(current):
+                yield item
+            await mail_rule.update(rule.id, rule.version, is_active=False)
+        monkeypatch.setattr(router, 'matching_messages', pause_after_scan)
+        with pytest.raises(HTTPException) as exc:
+            await router.apply_rule(rule.id, router.ApplyIn(expected_version=rule.version, confirm_apply=True))
+        assert exc.value.status_code == 409 and exc.value.detail['code'] == 'rule_inactive'
+        assert exc.value.detail['message'] == 'Die Regel ist pausiert. Aktiviere sie, um fortzufahren.'
+        assert (await mail_filing.for_message(message.id)).label_ids == []
+        assert await mail_rule_run.list_for_rule(rule.id) == []
+        async with get_session_maker()() as session:
+            assert not (await session.scalars(select(MailJob).where(MailJob.kind == 'mail_rule_apply'))).all()
+    asyncio.run(run())
+
+
+def test_manual_batch_rechecks_rule_version_inside_transaction(pg_db, monkeypatch):
+    async def run():
+        from fastapi import HTTPException
+        from api.routers.api.v1.mail import rules as router
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id])
+        original = router.matching_messages
+        async def change_after_scan(current):
+            async for item in original(current):
+                yield item
+            await mail_rule.update(rule.id, rule.version, name='Changed during confirmation')
+        monkeypatch.setattr(router, 'matching_messages', change_after_scan)
+        with pytest.raises(HTTPException) as exc:
+            await router.apply_rule(rule.id, router.ApplyIn(expected_version=rule.version, confirm_apply=True))
+        assert exc.value.status_code == 409
+        assert (await mail_filing.for_message(message.id)).label_ids == []
+        assert await mail_rule_run.list_for_rule(rule.id) == []
+    asyncio.run(run())
+
+
+def test_concurrent_manual_apply_deduplicates_provider_work(pg_db, monkeypatch):
+    async def run():
+        from unittest.mock import AsyncMock
+        from api.mail import action_capabilities, actions, jobs
+        from api.routers.api.v1.mail.rules import ApplyIn, apply_rule
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='gmail', auth_type='mistral_connector', email_address='owner@example.org'))
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id], mark_read=True)
+        gate, writer = AsyncMock(), AsyncMock()
+        monkeypatch.setattr(action_capabilities, 'require_action', gate)
+        monkeypatch.setattr(actions, 'apply_action', writer)
+        body = ApplyIn(expected_version=rule.version, confirm_apply=True)
+        results = await asyncio.gather(apply_rule(rule.id, body), apply_rule(rule.id, body))
+        assert sum(item['app_changed'] for item in results) == 1
+        assert sum(item['provider_queued'] for item in results) == 2  # The second request observes the same queued action.
+        assert sum(item['provider_skipped'] for item in results) == 0
+        assert await jobs.run_once()
+        assert not await jobs.run_once()
+        writer.assert_awaited_once_with(message.id, 'mark_read')
+        assert len(await mail_rule_run.list_for_rule(rule.id)) == 1
+    asyncio.run(run())
+
+
+def test_manual_apply_does_not_recover_an_inflight_provider_write(pg_db):
+    async def run():
+        import json
+        from api.mail import jobs, rules
+        from api.routers.api.v1.mail.rules import ApplyIn, apply_rule
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='gmail', auth_type='mistral_connector', email_address='owner@example.org'))
+        label = await mail_filing.create_destination('Work', 'label')
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='test', sender_address='person@example.org')
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id], mark_read=True)
+        run = await rules.prepare_rule_run(rule.id, rule.version, message.id)
+        run, claimed = await mail_rule_run.record_action(run.id, 'mark_read', expected='pending', result='dispatching')
+        assert claimed
+        await mail_filing.assign([message.id], remove_labels=[label.id])
+        result = await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True))
+        assert result == {'matched': 1, 'app_changed': 1, 'provider_skipped': 0, 'provider_queued': 1, 'conflicts': 0}
+        assert not await jobs.run_once()
+        current = (await mail_rule_run.list_for_rule(rule.id))[0]
+        assert current.status == 'local_done' and json.loads(current.provider_results_json)['mark_read'] == 'dispatching'
+    asyncio.run(run())
+
+
+def test_manual_batch_rolls_back_if_local_assignment_fails(pg_db, monkeypatch):
+    async def run():
+        from api.routers.api.v1.mail.rules import ApplyIn, apply_rule
+        from db.accessors import mail_filing, mail_message, mail_rule, mail_rule_run
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+
+        async with get_session_maker().begin() as session:
+            session.add(MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='owner@example.org'))
+        label = await mail_filing.create_destination('Work', 'label')
+        messages = [await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid=uid, sender_address='person@example.org') for uid in ('one', 'two')]
+        rule = await mail_rule.create(name='Example', sender_domain='example.org', label_ids=[label.id], mark_read=True)
+        original = mail_rule_run._apply_assignments
+        calls = 0
+        async def fail_second(*args):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError('synthetic transaction failure')
+            return await original(*args)
+        monkeypatch.setattr(mail_rule_run, '_apply_assignments', fail_second)
+        with pytest.raises(RuntimeError, match='synthetic transaction failure'):
+            await apply_rule(rule.id, ApplyIn(expected_version=rule.version, confirm_apply=True))
+        for message in messages:
+            assert not (await mail_filing.for_message(message.id)).label_ids
+        assert await mail_rule_run.list_for_rule(rule.id) == []
+    asyncio.run(run())

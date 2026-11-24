@@ -246,6 +246,36 @@ export type ApplyIn = {
      * Expected Version
      */
     expected_version: number;
+    /**
+     * Preview Message Ids
+     */
+    preview_message_ids?: Array<string> | null;
+};
+
+/**
+ * ApplyOut
+ */
+export type ApplyOut = {
+    /**
+     * App Changed
+     */
+    app_changed: number;
+    /**
+     * Conflicts
+     */
+    conflicts: number;
+    /**
+     * Matched
+     */
+    matched: number;
+    /**
+     * Provider Queued
+     */
+    provider_queued: number;
+    /**
+     * Provider Skipped
+     */
+    provider_skipped: number;
 };
 
 /**
@@ -3211,6 +3241,94 @@ export type RuleIn = {
      * Subject Contains
      */
     subject_contains?: string;
+};
+
+/**
+ * RulePreviewIn
+ */
+export type RulePreviewIn = {
+    /**
+     * Account Id
+     */
+    account_id?: string | null;
+    /**
+     * Archive
+     */
+    archive?: boolean;
+    /**
+     * Expected Version
+     */
+    expected_version?: number | null;
+    /**
+     * Folder Id
+     */
+    folder_id?: string | null;
+    /**
+     * Is Active
+     */
+    is_active?: boolean;
+    /**
+     * Label Ids
+     */
+    label_ids?: Array<string>;
+    /**
+     * Mark Read
+     */
+    mark_read?: boolean;
+    /**
+     * Mark Unread
+     */
+    mark_unread?: boolean;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Position
+     */
+    position?: number;
+    /**
+     * Preview Draft
+     */
+    preview_draft?: boolean;
+    /**
+     * Recipient
+     */
+    recipient?: string;
+    /**
+     * Saved Rule Id
+     */
+    saved_rule_id?: string | null;
+    /**
+     * Sender Address
+     */
+    sender_address?: string;
+    /**
+     * Sender Domain
+     */
+    sender_domain?: string;
+    /**
+     * Subject Contains
+     */
+    subject_contains?: string;
+};
+
+/**
+ * RulePreviewOut
+ */
+export type RulePreviewOut = {
+    /**
+     * Already Filed
+     */
+    already_filed: number;
+    /**
+     * Matched
+     */
+    matched: number;
+    /**
+     * Message Ids
+     */
+    message_ids: Array<string>;
 };
 
 /**
@@ -6949,7 +7067,7 @@ export type MailRuleCreateFromMessageResponses = {
 export type MailRuleCreateFromMessageResponse = MailRuleCreateFromMessageResponses[keyof MailRuleCreateFromMessageResponses];
 
 export type MailRulesPreviewData = {
-    body: RuleIn;
+    body: RulePreviewIn;
     path?: never;
     query?: never;
     url: '/api/v1/mail/rules/preview';
@@ -6966,13 +7084,9 @@ export type MailRulesPreviewError = MailRulesPreviewErrors[keyof MailRulesPrevie
 
 export type MailRulesPreviewResponses = {
     /**
-     * Response Mail Rules Preview
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: number;
-    };
+    200: RulePreviewOut;
 };
 
 export type MailRulesPreviewResponse = MailRulesPreviewResponses[keyof MailRulesPreviewResponses];
@@ -7069,13 +7183,9 @@ export type MailRuleApplyError = MailRuleApplyErrors[keyof MailRuleApplyErrors];
 
 export type MailRuleApplyResponses = {
     /**
-     * Response Mail Rule Apply
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: number;
-    };
+    200: ApplyOut;
 };
 
 export type MailRuleApplyResponse = MailRuleApplyResponses[keyof MailRuleApplyResponses];
