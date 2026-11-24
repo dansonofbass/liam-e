@@ -2094,6 +2094,54 @@
         "title": "ConversationOut",
         "type": "object"
       },
+      "CreateAndAssignIn": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "default": "none",
+            "enum": [
+              "none",
+              "moss",
+              "olive",
+              "teal",
+              "lake",
+              "denim",
+              "indigo",
+              "plum",
+              "berry"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "folder",
+              "label"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "message_id"
+        ],
+        "title": "CreateAndAssignIn",
+        "type": "object"
+      },
       "DeleteIn": {
         "additionalProperties": false,
         "properties": {
@@ -2165,6 +2213,22 @@
       "DestinationIn": {
         "additionalProperties": false,
         "properties": {
+          "color": {
+            "default": "none",
+            "enum": [
+              "none",
+              "moss",
+              "olive",
+              "teal",
+              "lake",
+              "denim",
+              "indigo",
+              "plum",
+              "berry"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
           "kind": {
             "enum": [
               "folder",
@@ -2185,6 +2249,34 @@
           "kind"
         ],
         "title": "DestinationIn",
+        "type": "object"
+      },
+      "DestinationPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailFolder"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "DestinationPage",
         "type": "object"
       },
       "DeviceRecordingOut": {
@@ -3340,6 +3432,22 @@
       },
       "MailFolder": {
         "properties": {
+          "color": {
+            "default": "none",
+            "enum": [
+              "none",
+              "moss",
+              "olive",
+              "teal",
+              "lake",
+              "denim",
+              "indigo",
+              "plum",
+              "berry"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5190,6 +5298,34 @@
         "title": "ProposalResult",
         "type": "object"
       },
+      "QuickActionOut": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/MailFolder"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "title": "Last Used At",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "use_count": {
+            "title": "Use Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "destination",
+          "use_count",
+          "last_used_at",
+          "score"
+        ],
+        "title": "QuickActionOut",
+        "type": "object"
+      },
       "ReadError": {
         "properties": {
           "detail": {
@@ -5379,6 +5515,28 @@
       "RenameIn": {
         "additionalProperties": false,
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "moss",
+                  "olive",
+                  "teal",
+                  "lake",
+                  "denim",
+                  "indigo",
+                  "plum",
+                  "berry"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
           "name": {
             "maxLength": 120,
             "minLength": 1,
@@ -5390,6 +5548,118 @@
           "name"
         ],
         "title": "RenameIn",
+        "type": "object"
+      },
+      "RuleFromMessageIn": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "archive": {
+            "default": false,
+            "title": "Archive",
+            "type": "boolean"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "label_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Id"
+          },
+          "mark_read": {
+            "default": false,
+            "title": "Mark Read",
+            "type": "boolean"
+          },
+          "mark_unread": {
+            "default": false,
+            "title": "Mark Unread",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "default": 0,
+            "title": "Position",
+            "type": "integer"
+          },
+          "recipient": {
+            "default": "",
+            "maxLength": 320,
+            "title": "Recipient",
+            "type": "string"
+          },
+          "sender_address": {
+            "default": "",
+            "maxLength": 320,
+            "title": "Sender Address",
+            "type": "string"
+          },
+          "sender_domain": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Sender Domain",
+            "type": "string"
+          },
+          "source_account_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Source Account Id",
+            "type": "string"
+          },
+          "source_message_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Source Message Id",
+            "type": "string"
+          },
+          "subject_contains": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Subject Contains",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "source_message_id",
+          "source_account_id"
+        ],
+        "title": "RuleFromMessageIn",
         "type": "object"
       },
       "RuleIn": {
@@ -11025,6 +11295,125 @@
         "summary": "Assign"
       }
     },
+    "/api/v1/mail/folders/create-and-assign": {
+      "post": {
+        "operationId": "mail_folder_create_and_assign",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAndAssignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailFolder"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create And Assign"
+      }
+    },
+    "/api/v1/mail/folders/page": {
+      "get": {
+        "operationId": "mail_folders_page",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Destination Page"
+      }
+    },
+    "/api/v1/mail/folders/quick-actions": {
+      "get": {
+        "operationId": "mail_filing_quick_actions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QuickActionOut"
+                  },
+                  "title": "Response Mail Filing Quick Actions",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Quick Actions"
+      }
+    },
     "/api/v1/mail/folders/{destination_id}": {
       "delete": {
         "operationId": "mail_folder_delete",
@@ -11602,6 +11991,44 @@
           }
         },
         "summary": "Create Rule"
+      }
+    },
+    "/api/v1/mail/rules/from-message": {
+      "post": {
+        "operationId": "mail_rule_create_from_message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleFromMessageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailRule"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Rule From Message"
       }
     },
     "/api/v1/mail/rules/preview": {

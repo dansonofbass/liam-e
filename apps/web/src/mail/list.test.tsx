@@ -10,6 +10,7 @@ import { inboxSearchSchema } from './filters'
 const originalMatchMedia = window.matchMedia
 const row = { id: 'm1', account_id: 'a', color_index: 0, sender_name: 'Anna', sender_address: 'anna@example.com', subject: 'Termin', snippet: '', internal_date: null, deadline: null, has_attachments: false, is_flagged: false, is_read: false, needs_reply: false }
 function setup(mode: 'empty' | 'error' | 'loading' | 'row' | 'rows' | 'many' = 'empty', path = '/mail', coarse = false, mobile = false, limited = false) {
+  spyOn(sdk, 'mailFilingQuickActions').mockResolvedValue({ data: [] } as never)
   spyOn(sdk, 'mailFoldersList').mockImplementation((async () => ({ data: [{ id: 'folder', name: 'Projects', kind: 'folder' }, { id: 'label', name: 'Projects', kind: 'label' }] })) as never)
   window.matchMedia = ((query: string) => ({ matches: (!mobile && query.includes('1024px')) || (coarse && query.includes('pointer: coarse')), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   spyOn(sdk, 'mailSummary').mockImplementation((async () => ({ data: { accounts: [{ id: 'a', display_name: '', email_address: 'ich@example.com', provider: 'gmail', color_index: 0, state: 'ok' }, ...(limited ? [{ id: 'limited', display_name: 'Studio', email_address: 'studio@example.test', provider: 'gmail', connection: 'connector', color_index: 1, state: 'ok', action_capabilities: mailCapabilities(false) }] : [])], unread_total: 1, last_sync_at: null } })) as never)
@@ -32,6 +33,88 @@ afterEach(() => { cleanup(); mock.restore(); window.matchMedia = originalMatchMe
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 // Waits until a removal's follow-up refetches are done, then lets their renders settle.
 const settleFetches = async (client: QueryClient) => { await waitFor(() => expect(client.isFetching()).toBe(0)); await settle() }
+
+test('shortcut overview is visible by button and the question-mark key', async () => {
+  setup('row')
+  await screen.findByText('Termin')
+  const button = screen.getByRole('button', { name: 'Tastenkürzel' })
+  fireEvent.click(button)
+  expect(screen.getByRole('dialog', { name: 'Tastenkürzel' })).toBeTruthy()
+  fireEvent.keyDown(document, { key: 'Escape' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  fireEvent.keyDown(document.body, { key: '?', shiftKey: true })
+  expect(await screen.findByRole('dialog', { name: 'Tastenkürzel' })).toBeTruthy()
+})
+
+test('filing shortcuts open the matching choices for current and selected mail', async () => {
+  const assign = spyOn(sdk, 'mailFilingAssign').mockResolvedValue({ data: { ok: true } } as never)
+  setup('row')
+  await screen.findByText('Termin')
+  fireEvent.keyDown(document.body, { key: 'j' })
+  fireEvent.keyDown(document.body, { key: 'v' })
+  expect(await screen.findByRole('menuitemradio', { name: 'Ordner: Projects' })).toBeTruthy()
+  expect(screen.queryByRole('menuitemcheckbox', { name: 'Label: Projects' })).toBeNull()
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+  fireEvent.click(screen.getByRole('button', { name: 'Auswählen: Termin' }))
+  fireEvent.keyDown(document.body, { key: 'l' })
+  fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Label: Projects' }))
+  await waitFor(() => expect(assign.mock.calls[0]?.[0]?.body).toEqual({ message_ids: ['m1'], add_labels: ['label'] }))
+})
+
+test('filing shortcut uses the opened mail even when it is outside the loaded list', async () => {
+  const assign = spyOn(sdk, 'mailFilingAssign').mockResolvedValue({ data: { ok: true } } as never)
+  spyOn(sdk, 'mailMessageGet').mockResolvedValue({ data: { ...row, id: 'canonical', body_text: '', attachments: [], to: [], cc: [], thread_id: '', can_show_original: false, can_unsubscribe: false } } as never)
+  setup('empty', '/mail/alias')
+  const trigger = await screen.findByRole('button', { name: 'Zuordnen' }) as HTMLButtonElement
+  await waitFor(() => expect(trigger.disabled).toBe(false))
+  fireEvent.keyDown(document.body, { key: 'v' })
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Ordner: Projects' }))
+  await waitFor(() => expect(assign.mock.calls[0]?.[0]?.body).toEqual({ message_ids: ['canonical'], folder_id: 'folder' }))
+})
+
+test('a quick action in a list row files without opening it', async () => {
+  const assign = spyOn(sdk, 'mailFilingAssign').mockResolvedValue({ data: { ok: true } } as never)
+  const { client, router } = setup('row')
+  await screen.findByText('Termin')
+  await waitFor(() => expect(client.getQueryState(['mail-quick-actions'])?.status).toBe('success'))
+  client.setQueryData(['mail-quick-actions'], [{ destination: { id: 'folder', name: 'Projects', kind: 'folder' }, use_count: 2, last_used_at: '2026-11-23T00:00:00Z', score: 2 }])
+  fireEvent.click(await screen.findByRole('button', { name: 'Ordner: Projects' }))
+  await waitFor(() => expect(assign.mock.calls[0]?.[0]?.body).toEqual({ message_ids: ['m1'], folder_id: 'folder' }))
+  expect(await screen.findByText('Zuordnung gespeichert.')).toBeTruthy()
+  expect(router.state.location.pathname).toBe('/mail')
+})
+
+test('the row quick bar shows only the top suggestion with a focus tooltip', async () => {
+  const { client } = setup('row')
+  await screen.findByText('Termin')
+  await waitFor(() => expect(client.getQueryState(['mail-quick-actions'])?.status).toBe('success'))
+  act(() => client.setQueryData(['mail-quick-actions'], [
+    { destination: { id: 'folder', name: 'Long project destination', kind: 'folder' }, score: 5 },
+    { destination: { id: 'label', name: 'Other', kind: 'label' }, score: 3 },
+  ]))
+  const bar = document.querySelector('.le-mailrow-actions') as HTMLElement
+  const quick = await within(bar).findByRole('button', { name: 'Ordner: Long project destination' })
+  expect(within(bar).queryByRole('button', { name: 'Label: Other' })).toBeNull()
+  expect(quick.hasAttribute('title')).toBe(false)
+  fireEvent.mouseEnter(quick)
+  expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', 'Long project destination')
+  fireEvent.mouseLeave(quick)
+  fireEvent.keyDown(document.body, { key: 'Tab' })
+  act(() => quick.focus())
+  expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', 'Long project destination')
+})
+
+test('mobile row menu offers a quick action without opening the mail', async () => {
+  const assign = spyOn(sdk, 'mailFilingAssign').mockResolvedValue({ data: { ok: true } } as never)
+  const { client, router } = setup('row', '/mail', true, true)
+  await screen.findByText('Termin')
+  await waitFor(() => expect(client.getQueryState(['mail-quick-actions'])?.status).toBe('success'))
+  act(() => client.setQueryData(['mail-quick-actions'], [{ destination: { id: 'folder', name: 'Projects', kind: 'folder' }, score: 2 }]))
+  fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen zu Termin' }))
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Ordner: Projects' }))
+  await waitFor(() => expect(assign.mock.calls[0]?.[0]?.body).toEqual({ message_ids: ['m1'], folder_id: 'folder' }))
+  expect(router.state.location.pathname).toBe('/mail')
+})
 
 test('inbox swipe uses the confirmed assignment and the shared action path', async () => {
   spyOn(sdk, 'settingsUiGet').mockImplementation((async () => ({ data: { swipe_left: 'archive', swipe_right: 'toggle_read', revision: 1 }, response: { ok: true } })) as never)

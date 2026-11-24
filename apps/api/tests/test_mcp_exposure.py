@@ -61,10 +61,12 @@ MUTATING_OPERATIONS: frozenset[str] = frozenset(
         "mail_account_update",
         "mail_actions_undo",
         "mail_folder_create",
+        "mail_folder_create_and_assign",
         "mail_folder_update",
         "mail_folder_delete",
         "mail_filing_assign",
         "mail_rule_create",
+        "mail_rule_create_from_message",
         "mail_rule_update",
         "mail_rule_delete",
         "mail_rule_apply",
@@ -98,6 +100,8 @@ BROWSER_ONLY_GET_OPERATIONS: frozenset[str] = frozenset(
         "audio_voices_list",
         "mail_message_html_get",  # Browser-only untrusted markup.
         "mail_folders_list",  # Private owner-managed folder and label names.
+        "mail_folders_page",  # The paginated inventory is also private.
+        "mail_filing_quick_actions",  # Installation usage history is browser-only.
         "mail_rules_list",
         "mail_rule_runs_list",
         "audio_capabilities_get",  # Owner-only application capability.

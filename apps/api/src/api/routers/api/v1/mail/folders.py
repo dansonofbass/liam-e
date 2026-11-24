@@ -1,11 +1,12 @@
 """Owner-managed, app-side folders and labels."""
 
 from typing import Literal
+from datetime import datetime
 
-from db.accessors import mail_filing
-from db.models.mail_folder import MailFolder
-from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+from db.accessors import mail_filing, mail_filing_usage
+from db.models.mail_folder import DestinationColor, MailFolder
+from fastapi import APIRouter, Query
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.exc import IntegrityError
 
 from api.errors import refuse
@@ -17,11 +18,19 @@ class DestinationIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=120)
     kind: Literal["folder", "label"]
+    color: DestinationColor = 'none'
 
 
 class RenameIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=120)
+    color: DestinationColor | None = None
+
+    @model_validator(mode='after')
+    def validate_color(self):
+        if 'color' in self.model_fields_set and self.color is None:
+            raise ValueError('Choose a palette color')
+        return self
 
 
 class FilingIn(BaseModel):
@@ -32,15 +41,43 @@ class FilingIn(BaseModel):
     remove_labels: list[str] = Field(default_factory=list, max_length=100)
 
 
+class CreateAndAssignIn(DestinationIn):
+    message_id: str = Field(min_length=1, max_length=100)
+
+
+class DestinationPage(BaseModel):
+    items: list[MailFolder]
+    next_cursor: str | None
+
+
+class QuickActionOut(BaseModel):
+    destination: MailFolder
+    use_count: int
+    last_used_at: datetime
+    score: float
+
+
 @router.get("", operation_id="mail_folders_list")
 async def list_destinations() -> list[MailFolder]:
     return await mail_filing.list_destinations()
 
 
+@router.get('/page', operation_id='mail_folders_page')
+async def destination_page(cursor: str | None = Query(default=None, max_length=100), limit: int = Query(default=100, ge=1, le=100)) -> DestinationPage:
+    rows, next_cursor = await mail_filing.destination_page(cursor, limit)
+    return DestinationPage(items=rows, next_cursor=next_cursor)
+
+
+@router.get('/quick-actions', operation_id='mail_filing_quick_actions')
+async def quick_actions() -> list[QuickActionOut]:
+    return [QuickActionOut(destination=row.destination, use_count=row.use_count, last_used_at=row.last_used_at, score=row.score)
+            for row in await mail_filing_usage.list_quick_actions()]
+
+
 @router.post("", operation_id="mail_folder_create")
 async def create_destination(body: DestinationIn) -> MailFolder:
     try:
-        return await mail_filing.create_destination(body.name, body.kind)
+        return await mail_filing.create_destination(body.name, body.kind, body.color)
     except ValueError:
         raise refuse(422, "folder_invalid", "Der Name ist ungültig.") from None
     except IntegrityError:
@@ -61,10 +98,22 @@ async def assign(body: FilingIn) -> dict[str, bool]:
     return {"ok": True}
 
 
+@router.post('/create-and-assign', operation_id='mail_folder_create_and_assign')
+async def create_and_assign(body: CreateAndAssignIn) -> MailFolder:
+    try:
+        return await mail_filing.create_and_assign(body.message_id, body.name, body.kind, body.color)
+    except LookupError:
+        raise refuse(404, 'message_not_found', 'Die Mail ist nicht mehr da.') from None
+    except ValueError:
+        raise refuse(422, 'folder_invalid', 'Der Name ist ungültig.') from None
+    except IntegrityError:
+        raise refuse(409, 'folder_exists', 'Diesen Namen gibt es schon.') from None
+
+
 @router.patch("/{destination_id}", operation_id="mail_folder_update")
 async def rename_destination(destination_id: str, body: RenameIn) -> MailFolder:
     try:
-        return await mail_filing.rename_destination(destination_id, body.name)
+        return await mail_filing.rename_destination(destination_id, body.name, body.color)
     except LookupError:
         raise refuse(404, "folder_not_found", "Der Ordner oder das Label ist nicht mehr da.") from None
     except ValueError:

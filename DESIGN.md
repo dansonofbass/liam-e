@@ -236,6 +236,24 @@ Text at least 4,5:1, edges, focus ring and other meaningful indicators at least 
 | `tip-ink` | `tip-bg` | 4,5:1 | 15,88:1 |
 | `control-border` | `surface`, `surface-soft` | 3:1 | 3,19:1 |
 | `focus-ring` | `surface`, `surface-soft`, `surface-ground`, `accent-soft` | 3:1 | 5,36:1 |
+| `ink` | destination backgrounds | 4,5:1 | 6,38:1 |
+| destination border | `surface`, `surface-soft` | 3:1 | 4,56:1 |
+
+Destination colours use a filled tag with a border, distinct from the account's coloured dot and
+the urgency and danger treatments. Folder and label icons and names remain visible in grayscale.
+The fixed palette below gives background / border in each theme; text uses `ink`. `none` uses the
+neutral on-surface tag. Settings show names and filled rectangular swatches in both themes, with no free colour picker.
+
+| Name | Light | Dark |
+|---|---|---|
+| Moss | `#cbf1ce` / `#227729` | `#1b5a20` / `#90e096` |
+| Olive | `#ebf1cb` / `#697722` | `#505a1b` / `#d2e090` |
+| Teal | `#cbf1e7` / `#227762` | `#1b5a4a` / `#90e0cc` |
+| Lake | `#cbe4f1` / `#225b77` | `#1b455a` / `#90c5e0` |
+| Denim | `#cbd4f1` / `#223777` | `#1b2b5a` / `#90a4e0` |
+| Indigo | `#d4cbf1` / `#372277` | `#2b1b5a` / `#a490e0` |
+| Plum | `#eecbf1` / `#702277` | `#551b5a` / `#d990e0` |
+| Berry | `#f1cbdb` / `#772245` | `#5a1b35` / `#e090b1` |
 
 Anyone changing a color value remeasures this table. `apps/web/src/styles/contrast.test.ts`
 checks each pair in both themes against the target, not the values in the last column.
@@ -511,8 +529,12 @@ The quoted key label is UI text.
   returns to the trigger afterwards.
 - **Inbox keyboard shortcuts**, only on `desktop` and `wide`, not in fields and menus and never
   while a dialog is open (even if focus is not currently inside it): j and k next and previous
-  mail, Enter open, e archive, u read/unread, Entf or # trash. Tooltips name the shortcut in
-  parentheses, „Entf“ for trash.
+  mail, Enter open, e archive, u read/unread, Entf or # trash, x select, Esc end selection,
+  v choose a folder, l add a label and ? show the overview. The overview is also available from a
+  visible touch-sized button and names the context of every action. The shared binding definition
+  supplies handlers, overview, filing-menu header hints and tooltips; destination names have no key
+  suffix. An already assigned label is not removed
+  through the add-label shortcut. Composition and conflicting modifiers also block shortcuts.
 - Icon buttons carry `aria-label`. Tooltips are `role="tooltip"` and attached to the element via
   `aria-describedby`.
 - Never status by color alone: urgency has a dot **and** text or tooltip, errors an icon and sentence.
@@ -634,6 +656,9 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
 - `/settings/folders` manages global app folders and labels. Explain that a folder hides mail from
   liam-e's inbox, labels do not, and neither changes the provider. Deletion names the consequence
   and needs a confirmation dialog; a destination used by a rule cannot be deleted yet.
+  Search and the type filter apply to the complete inventory, with 20 rows per page and previous
+  and next controls. Changing a search or filter returns to the first page; deletion cannot leave
+  the user on an invalid page. Empty inventories and searches with no matches have distinct text.
 - `/settings/rules` manages ordered, versioned rules with account, sender, domain, subject and
   recipient conditions. Preview shows a count; applying to existing mail needs a separate dialog and
   confirms the number queued for background processing. Rule rows summarize their conditions, targets
@@ -650,6 +675,29 @@ from the end; if you scroll further up it stays still and a „Zum Ende“ butto
 - The inbox filters global folders and labels across accounts. A selected mail or bulk selection
   can be filed without requiring provider write capabilities. Chat filing and rule cards show the
   target and conditions and require explicit confirmation before local changes.
+  Folder and label names carry their localized kind, with folder and tag icons in filing tags and
+  choices. Individual tags stay on one line, truncating with the full accessible name and a hover
+  tooltip. List tags are not tab stops; reader tags also show their tooltip on focus. Kind is never
+  communicated by colour alone.
+  Recent and frequent destinations are compact one-click actions in the hovered, focused or selected
+  desktop row, the selection bar and the reader. The desktop overlay replaces the fixed-height
+  snippet line without changing row height or covering sender, subject, metadata or filing tags; it
+  matches the row background and shows only the top-ranked quick destination.
+  Mobile rows offer them in the more menu; mobile controls retain 44 px touch targets. Already-assigned destinations are excluded. Names truncate
+  with their full text available to assistive technology and in a tooltip. Show at most five on
+  desktop, three on tablet and two on mobile; actions never trigger row navigation. The reader
+  explains an empty history and the ordinary filing menu remains available.
+  The opened mail's action menu can create a folder or label and assign that mail in one explicit
+  save, or open a new rule with editable account, sender, domain and subject suggestions. The owner
+  chooses which suggested conditions to use; initialization completes before editing and failure opens
+  an empty manual draft. Loading can be cancelled, discarding the pending prefill. The sender
+  suggests a name and the form has one Save
+  action. A folder or label is required, with a visible explanation until chosen. Leaving with edits
+  asks for confirmation. A missing source
+  or duplicate name is explained, and unsaved rule edits use the settings leave guard.
+  Destination choices and tags use locale-aware name order within each kind, ignoring case and
+  accents and comparing digit runs numerically; fixed commands stay first. Rule rows sort by name and display the stored execution
+  priority, which is independent of their visual order.
 - „Einstellungen“ is accessible in sidebar, toolbar and mobile drawer. `/settings` shows the template
   library, as does `/settings/prompts`. Further completed areas can be added to `settingsSections`;
   there are no empty landing pages. The current area is marked in section navigation like the current

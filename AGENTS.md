@@ -212,12 +212,16 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Mail / connectors | POST | `/api/v1/mail/connectors/{name}/connect` | `mail_account_connect_connector` |
 | Mail / connectors | GET | `/api/v1/mail/connectors/{name}/tools` | `mail_connector_tools_list` |
 | Mail / filing | GET | `/api/v1/mail/folders` | `mail_folders_list` |
+| Mail / filing | GET | `/api/v1/mail/folders/page` | `mail_folders_page` |
+| Mail / filing | GET | `/api/v1/mail/folders/quick-actions` | `mail_filing_quick_actions` |
 | Mail / filing | POST | `/api/v1/mail/folders` | `mail_folder_create` |
 | Mail / filing | PATCH | `/api/v1/mail/folders/{destination_id}` | `mail_folder_update` |
 | Mail / filing | DELETE | `/api/v1/mail/folders/{destination_id}` | `mail_folder_delete` |
 | Mail / filing | POST | `/api/v1/mail/folders/assign` | `mail_filing_assign` |
+| Mail / filing | POST | `/api/v1/mail/folders/create-and-assign` | `mail_folder_create_and_assign` |
 | Mail / rules | GET | `/api/v1/mail/rules` | `mail_rules_list` |
 | Mail / rules | POST | `/api/v1/mail/rules` | `mail_rule_create` |
+| Mail / rules | POST | `/api/v1/mail/rules/from-message` | `mail_rule_create_from_message` |
 | Mail / rules | POST | `/api/v1/mail/rules/preview` | `mail_rules_preview` |
 | Mail / rules | PATCH | `/api/v1/mail/rules/{rule_id}` | `mail_rule_update` |
 | Mail / rules | DELETE | `/api/v1/mail/rules/{rule_id}` | `mail_rule_delete` |
@@ -246,6 +250,42 @@ Inventory from `apps/api/openapi.json`; each row names method, path and `operati
 | Tasks | POST | `/api/v1/tasks/occurrences/{occurrence_id}/reopen` | `tasks_occurrence_reopen` |
 
 ## App-side mail filing and rules
+
+The inbox, reading pane, filing choices and settings identify destinations by kind as well as
+name. Filing tags use folder and tag icons with text and wrap on narrow screens so both names
+remain readable without relying on colour.
+User-facing destination lists sort folders and labels by the active UI locale, ignoring case and
+accents, using numeric collation and ID ties. Server inventories use the same case- and accent-insensitive numeric ordering; the UI sorts for its locale. Rule settings use the same name order and show the stored priority; this
+display order never changes rule evaluation order.
+Folder settings fetch the complete inventory through browser-only, ID-cursor pages of at most 100,
+then sort and filter it before displaying 20 rows per page. The existing complete inventory remains
+available to filing and chat; settings changes invalidate both cached reads.
+Desktop inbox shortcuts use `apps/web/src/mail/inboxShortcuts.ts` as the shared definition for
+handling, hints and the visible overview. Filing-menu headers show V and L once rather than on
+every destination. V opens folders, L opens labels and ? opens the overview;
+J/K, Enter, E, U, Delete/#, X and Escape retain their documented inbox actions. Editing fields,
+composition, conflicting modifiers, menus and dialogs prevent shortcuts.
+Filing records destination usage in the same transaction, without mail content or an extra write
+request. The installation-scoped history is capped at 200 destinations and 90 days since last use;
+deleting a destination removes its history. Expired entries are removed on reads and writes and
+hourly while the worker runs. The browser-only quick-action read ranks frequency with a 30-day age
+weight; the UI applies locale order to ties and shows at most five actions, fewer on narrow screens.
+Already-applied destinations are excluded. Desktop rows show quick actions in an out-of-flow overlay
+on hover, focus or selection, within the fixed-height snippet line, with one top-ranked destination;
+mobile rows expose them in the more menu. The selection bar and reader also offer compact actions.
+From an opened mail, create-and-assign creates the destination and files the verified source in one
+transaction; a missing source or duplicate name leaves no partial destination. The rule editor can
+prefill account, sender, domain and subject from that mail, proposing a rule name from the sender.
+The form waits for source initialization before edits, permits cancellation during loading and
+falls back to an empty manual draft on failure.
+The form has one explicit save action; it explains the required folder or label before enabling
+save, and unsaved changes retain the leave confirmation. Only selected conditions are saved, and
+the source and its account are rechecked under lock during creation, including verified aliases.
+List-header conditions are not supported. Unsaved rule edits use the settings leave guard.
+Each destination has a validated named colour or `none`; existing rows default to `none` on upgrade.
+The fixed palette is local to liam-e and appears in filing tags in the inbox and reader, with kind
+icons and text retained. Rules inherit a label's appearance through assignment; they have no colour
+action. Account colours, urgency and error tokens keep their separate roles.
 
 Folders and labels are global app data, never provider folders or labels. Each indexed message has
 at most one app folder and any number of labels. The owner inbox hides foldered messages; label

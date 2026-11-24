@@ -8,6 +8,77 @@ import pytest
 pytestmark = pytest.mark.skipif(not os.getenv("RUN_PG_CONTRACT"), reason="RUN_PG_CONTRACT is not set")
 
 
+def test_destination_inventory_pages_are_bounded_complete_and_preserve_the_existing_list(pg_db):
+    async def run():
+        import httpx
+        from fastapi import FastAPI
+        from api.routers.api.v1.mail import folders
+        from db.accessors import mail_filing
+
+        expected = [await mail_filing.create_destination(f"Folder {n:02}", "folder") for n in range(7)]
+        app = FastAPI()
+        app.include_router(folders.router, prefix="/folders")
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            ids, cursor = [], None
+            while True:
+                response = await client.get('/folders/page', params={'limit': 2, **({'cursor': cursor} if cursor else {})})
+                assert response.status_code == 200
+                page = response.json()
+                assert len(page['items']) <= 2
+                ids.extend(row['id'] for row in page['items'])
+                cursor = page['next_cursor']
+                if cursor is None:
+                    break
+            assert len(ids) == len(set(ids)) == len(expected)
+            assert set(ids) == {row.id for row in expected}
+            assert {row['id'] for row in (await client.get('/folders')).json()} == set(ids)
+            assert (await client.get('/folders/page', params={'limit': 0})).status_code == 422
+            assert (await client.get('/folders/page', params={'limit': 101})).status_code == 422
+
+    asyncio.run(run())
+
+
+def test_create_and_file_is_atomic_and_resolves_verified_aliases(pg_db):
+    async def run():
+        import httpx
+        from fastapi import FastAPI
+        from api.routers.api.v1.mail import folders
+        from db.accessors import mail_filing, mail_message
+        from db.engine import get_session_maker
+        from db.models.mail_account import MailAccount
+        from db.models.mail_message import MailMessage
+
+        async with get_session_maker().begin() as session:
+            session.add_all([MailAccount(id='synthetic', provider='imap', auth_type='imap_password', email_address='one@example.org'),
+                             MailAccount(id='synthetic-other', provider='imap', auth_type='imap_password', email_address='two@example.org')])
+        message = await mail_message.upsert_message(account_id='synthetic', folder='INBOX', provider_uid='one')
+        other = await mail_message.upsert_message(account_id='synthetic-other', folder='INBOX', provider_uid='two')
+        orphan = await mail_message.upsert_message(account_id='removed', folder='INBOX', provider_uid='orphan')
+        async with get_session_maker().begin() as session:
+            stored = await session.get(MailMessage, message.id)
+            stored.connector_alias_ids = ['old-local-id']
+            stored.unverified_connector = False
+        app = FastAPI(); app.include_router(folders.router, prefix='/folders')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            missing = await client.post('/folders/create-and-assign', json={'message_id': 'missing', 'name': 'Unused', 'kind': 'folder'})
+            assert missing.status_code == 404
+            assert (await client.post('/folders/create-and-assign', json={'message_id': orphan.id, 'name': 'Orphan', 'kind': 'folder'})).status_code == 404
+            assert not any(row.name == 'Unused' for row in await mail_filing.list_destinations())
+            created = await client.post('/folders/create-and-assign', json={'message_id': 'old-local-id', 'name': 'Projects', 'kind': 'folder'})
+            assert created.status_code == 200
+            assert (await mail_filing.for_message(message.id)).folder_id == created.json()['id']
+            duplicate = await client.post('/folders/create-and-assign', json={'message_id': other.id, 'name': 'Projects', 'kind': 'folder'})
+            assert duplicate.status_code == 409
+            assert (await mail_filing.for_message(other.id)).folder_id is None
+            label = await client.post('/folders/create-and-assign', json={'message_id': message.id, 'name': 'Important', 'kind': 'label'})
+            assert label.status_code == 200
+            assert (await mail_filing.for_message(message.id)).label_ids == [label.json()['id']]
+            assert (await client.post('/folders/create-and-assign', json={'message_id': message.id, 'name': '  ', 'kind': 'folder'})).status_code == 422
+        assert (await mail_message.get_message(message.id)).folder == 'INBOX'
+
+    asyncio.run(run())
+
+
 def test_cross_account_folders_replace_and_labels_accumulate(pg_db):
     async def run():
         from db.accessors import mail_filing, mail_message
@@ -453,4 +524,14 @@ def test_verified_merge_preserves_rule_dispatch_deduplication(pg_db, monkeypatch
         assert json.loads(outcome.provider_results_json)['mark_read'] == 'unknown'
         assert len(await mail_rule_run.list_for_rule(rule.id)) == 1
         write.assert_not_awaited()
+    asyncio.run(run())
+
+
+def test_destination_inventory_uses_numeric_case_and_accent_order(pg_db):
+    async def run():
+        from db.accessors import mail_filing
+        for name in ('Archiv 10', 'archiv 2', 'Äpfel'):
+            await mail_filing.create_destination(name, 'folder')
+        rows = await mail_filing.list_destinations()
+        assert [row.name for row in rows] == ['Äpfel', 'archiv 2', 'Archiv 10']
     asyncio.run(run())

@@ -18,6 +18,9 @@ import { useMailActionsContext } from './useMailActions'
 import { FilingMenu } from './FilingMenu'
 import { FilingTags } from './FilingTags'
 import { foldersQuery } from '../settings/mailQueries'
+import { shortcutHint } from './inboxShortcuts'
+import { QuickActions } from './QuickActions'
+import { CreateFilingDialog } from './CreateFilingDialog'
 
 export function MailView({ id }: { id: string }) {
   const { texts, locale } = useI18n()
@@ -32,8 +35,10 @@ export function MailView({ id }: { id: string }) {
   const { state, send, retry, retryWithoutPreferences } = useChatSession()
   const [started, setStarted] = useState(false)
   const [original, setOriginal] = useState<string | null>(null)
+  const [createFiling, setCreateFiling] = useState<{ messageId: string; kind: 'folder' | 'label' }>()
   // The dialog belongs to the mail it was opened for: moving to another mail (browser back) closes it.
   if (original !== null && original !== id) setOriginal(null)
+  if (createFiling && createFiling.messageId !== id) setCreateFiling(undefined)
   const opened = useRef(new Set<string>())
   const busy = state.phase === 'working' || state.phase === 'streaming'
   const data = message.data
@@ -82,11 +87,11 @@ export function MailView({ id }: { id: string }) {
   }
   const iconSize = !split || coarse ? 'lg' : 'md'
   const actions = data && !data.local_reference_only && <>
-    <FilingMenu ids={[id]} messages={[data]} compact={!split} />
-    <IconButton label={texts.controls.archive} icon="archive" size={iconSize} shortcut={split ? 'E' : undefined} disabled={capabilities?.archive === false} tip={capabilities?.archive === false ? hint : undefined} onClick={() => remove('archive')} />
-    <IconButton label={data.is_read ? texts.controls.markUnread : texts.controls.markRead} icon="mail-open" size={iconSize} shortcut={split ? 'U' : undefined} disabled={capabilities?.[readKind] === false} tip={capabilities?.[readKind] === false ? hint : undefined} onClick={() => { void run(id, readKind) }} />
-    <IconButton label={texts.controls.trash} icon="trash-2" size={iconSize} tone="danger" shortcut={split ? 'Entf' : undefined} disabled={capabilities?.trash === false} tip={capabilities?.trash === false ? hint : undefined} onClick={() => remove('trash')} />
-    <Menu placement={split ? 'down-start' : 'down-end'} trigger={props => <IconButton {...props} label={texts.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: texts.taskChat.ask, icon: 'check', onSelect: proposeTask }, { label: texts.mail.forward, icon: 'forward', onSelect: () => start(texts.mail.forwardPrompt) }, { label: texts.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : texts.mail.unsubscribeUnavailable, onSelect: () => start(texts.mail.unsubscribePrompt) }, { label: texts.mail.spam, icon: 'ban', disabled: capabilities?.spam === false, hint: capabilities?.spam === false ? hint : undefined, onSelect: () => remove('spam') }, { label: texts.mail.original, icon: 'file-code', disabled: !data.can_show_original, hint: data.can_show_original ? undefined : texts.mail.originalUnavailable, onSelect: () => setOriginal(id) }]} />
+    <FilingMenu ids={[id]} messages={[data]} compact={!split} showShortcuts={split} />
+    <IconButton label={texts.controls.archive} icon="archive" size={iconSize} shortcut={split ? shortcutHint('archive', locale) : undefined} disabled={capabilities?.archive === false} tip={capabilities?.archive === false ? hint : undefined} onClick={() => remove('archive')} />
+    <IconButton label={data.is_read ? texts.controls.markUnread : texts.controls.markRead} icon="mail-open" size={iconSize} shortcut={split ? shortcutHint('read', locale) : undefined} disabled={capabilities?.[readKind] === false} tip={capabilities?.[readKind] === false ? hint : undefined} onClick={() => { void run(id, readKind) }} />
+    <IconButton label={texts.controls.trash} icon="trash-2" size={iconSize} tone="danger" shortcut={split ? shortcutHint('trash', locale) : undefined} disabled={capabilities?.trash === false} tip={capabilities?.trash === false ? hint : undefined} onClick={() => remove('trash')} />
+    <Menu placement={split ? 'down-start' : 'down-end'} trigger={props => <IconButton {...props} label={texts.mail.more} icon="more-horizontal" size={iconSize} disabled={busy} />} items={[{ label: texts.taskChat.ask, icon: 'check', onSelect: proposeTask }, { label: texts.mailFiling.createFolderForMail, icon: 'folder', onSelect: () => setCreateFiling({ messageId: id, kind: 'folder' }) }, { label: texts.mailFiling.createLabelForMail, icon: 'tag', onSelect: () => setCreateFiling({ messageId: id, kind: 'label' }) }, { label: texts.mailFiling.createRuleForMail, icon: 'list-checks', onSelect: () => { void navigate({ to: '/settings/rules', search: { source_mail: id } }) } }, { label: texts.mail.forward, icon: 'forward', onSelect: () => start(texts.mail.forwardPrompt) }, { label: texts.mail.unsubscribe, icon: 'newspaper', disabled: !data.can_unsubscribe, hint: data.can_unsubscribe ? undefined : texts.mail.unsubscribeUnavailable, onSelect: () => start(texts.mail.unsubscribePrompt) }, { label: texts.mail.spam, icon: 'ban', disabled: capabilities?.spam === false, hint: capabilities?.spam === false ? hint : undefined, onSelect: () => remove('spam') }, { label: texts.mail.original, icon: 'file-code', disabled: !data.can_show_original, hint: data.can_show_original ? undefined : texts.mail.originalUnavailable, onSelect: () => setOriginal(id) }]} />
   </>
   const chatButtons = data && !data.local_reference_only && <>
     <Tooltip content={texts.mail.askTip}><Button variant="secondary" icon="message-circle" className={split ? 'le-btn--sm' : ''} disabled={busy} onClick={ask}>{texts.mail.askInChat}</Button></Tooltip>
@@ -94,6 +99,7 @@ export function MailView({ id }: { id: string }) {
   </>
   return <div className="le-mail-view">
     <div className="le-topbar le-mail-topbar">{!split && <IconButton label={texts.mail.back} icon="arrow-left" size="lg" onClick={back} />}{!split && <span className="le-grow" />}{actions}{split && <><span className="le-grow" />{data && chatButtons}</>}</div>
+    {data && !data.local_reference_only && <div className="le-mail-quick"><QuickActions messages={[data]} showEmpty onSuccess={() => notify(texts.mailFiling.done, 'success')} /></div>}
     <div className="le-mail-scroll">
       {data && !data.local_reference_only && capabilities && Object.values(capabilities).every(supported => !supported) && <Notice tone="info">{texts.mail.studioGmailActionsUnavailable}</Notice>}
       {started && state.phase === 'error' && !state.conversationId && <Notice tone="danger" action={state.errorCode === 'preferences_unavailable' ? { label: texts.preferences.continueWithout, onClick: () => { void retryWithoutPreferences() } } : state.errorCode === 'chat_account_not_granted' ? { label: texts.chatAccounts.section, onClick: () => { void navigate({ to: '/settings/chat' }) } } : { label: texts.chat.retry, onClick: () => { void retry() } }}>{texts.errors[state.errorCode ?? 'internal']}</Notice>}
@@ -107,6 +113,7 @@ export function MailView({ id }: { id: string }) {
       </article>}
     </div>
     {original === id && data?.can_show_original && <OriginalDialog id={id} onClose={() => setOriginal(null)} />}
+    {createFiling?.messageId === id && <CreateFilingDialog messageId={id} kind={createFiling.kind} onClose={() => setCreateFiling(undefined)} onSuccess={() => notify(texts.mailFiling.done, 'success')} />}
     {!split && <ActionToast inline />}
     {!split && chatButtons && <div className="le-mail-bottom">{chatButtons}</div>}
   </div>

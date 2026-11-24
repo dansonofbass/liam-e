@@ -120,7 +120,7 @@ small { font-size: var(--font-size-small); }
 .le-menu-item:hover { background: var(--surface-soft); }
 .le-menu-title { font-weight: 600; }
 .le-menu-sub { grid-column: 1; font-size: var(--font-size-small); color: var(--ink-muted); }
-.le-menu-item .le-ico { grid-row: 1 / span 2; grid-column: 2; color: var(--accent); }
+.le-menu-icons { grid-row: 1 / span 2; grid-column: 2; display: inline-flex; align-items: center; gap: var(--space-1); color: var(--accent); }
 
 /* Quick action */
 .le-qa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); }
@@ -174,9 +174,9 @@ small { font-size: var(--font-size-small); }
 
 /* Mail row (inbox list) */
 .le-mailrow-swipe { position: relative; overflow: hidden; border-radius: var(--radius-sm); touch-action: pan-y pinch-zoom; }
-.le-mailrow-swipe .le-mailrow { background-color: var(--surface); }
-.le-mailrow-swipe .le-mailrow:hover { background-color: var(--surface-soft); }
-.le-mailrow-swipe .le-mailrow[aria-current="true"] { background-color: var(--accent-soft); }
+.le-mailrow-swipe .le-mailrow { --le-row-bg: var(--surface); background-color: var(--le-row-bg); }
+.le-mailrow-swipe .le-mailrow:hover, .le-mailrow-swipe .le-mailrow:focus-within, .le-mailrow-swipe .le-mailrow.is-hover { --le-row-bg: var(--surface-soft); background-color: var(--le-row-bg); }
+.le-mailrow-swipe .le-mailrow[aria-current="true"] { --le-row-bg: var(--accent-soft); background-color: var(--le-row-bg); }
 .le-mailrow-preview { position: absolute; inset: 0; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); background: var(--accent-soft); color: var(--accent); }
 .le-mailrow-preview.is-danger { background: var(--danger-soft); color: var(--danger); }
 .le-mailrow-preview.is-left { justify-content: flex-end; }
@@ -199,24 +199,34 @@ small { font-size: var(--font-size-small); }
 .le-mailrow-from { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .le-mailrow-subject { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .le-mailrow.is-unread .le-mailrow-from, .le-mailrow.is-unread .le-mailrow-subject { font-weight: 700; }
-.le-mailrow-snippet { font-size: var(--font-size-small); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.le-mailrow-snippet-slot { position: relative; min-width: 0; height: 24px; display: flex; align-items: center; }
+.le-mailrow-snippet { min-width: 0; font-size: var(--font-size-small); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 639px) {
   .le-mailrow-main { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 8px; align-items: center; }
   .le-mailrow-top { display: contents; }
-  .le-mailrow-from, .le-mailrow-subject, .le-mailrow-snippet { grid-column: 1 / -1; }
+  .le-mailrow-from, .le-mailrow-subject, .le-mailrow-snippet-slot { grid-column: 1 / -1; }
   .le-mailrow-from { grid-row: 1; }
   .le-mailrow-subject { grid-row: 2; }
-  .le-mailrow-snippet { grid-row: 3; }
+  .le-mailrow-snippet-slot { grid-row: 3; height: auto; }
   .le-mailrow-top .le-tag { grid-row: 4; grid-column: 1; }
   .le-mailrow-deadline { grid-row: 4; grid-column: 2; }
   .le-mailrow-main > .le-filing-tags { grid-row: 5; grid-column: 1 / -1; }
+  .le-mailrow-main > .le-quick-actions { grid-row: 6; grid-column: 1 / -1; }
 }
 .le-mailrow-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
 .le-mailrow-time { font-size: var(--font-size-caption); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .le-mailrow.is-unread .le-mailrow-time { color: var(--accent); font-weight: 600; }
-/* The hover bar covers the end of the text column, so time, urgency dot and attachment stay visible and can be hovered. */
-.le-mailrow-actions { position: absolute; z-index: 2; grid-column: 2 / 3; right: 0; top: 50%; transform: translateY(-50%); display: flex; gap: var(--space-1); padding: var(--space-1); border-radius: var(--radius-pill); background: var(--surface-overlay); box-shadow: var(--shadow-overlay); opacity: 0; pointer-events: none; transition: opacity var(--le-dur-fast) ease; }
-.le-mailrow:hover .le-mailrow-actions, .le-mailrow:focus-within .le-mailrow-actions, .le-mailrow.is-hover .le-mailrow-actions { opacity: 1; pointer-events: auto; }
+/* The toolbar overlays only the snippet slot; its height is reserved in every row. */
+.le-mailrow-actions { position: absolute; z-index: 2; inset: 0; display: none; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: var(--space-1); background: linear-gradient(to right, transparent, var(--le-row-bg) 12px); }
+.le-mailrow-actions > .le-tooltip-anchor { flex: none; }
+.le-mailrow-actions .le-icon-btn { width: 24px; height: 24px; }
+.le-mailrow-actions .le-quick-actions { flex: 0 1 auto; min-width: 0; }
+.le-mailrow-actions .le-quick-actions .le-btn { min-height: 24px; height: 24px; min-width: calc(10ch + 24px); max-width: 9rem; padding: 0 var(--space-2); }
+.le-mailrow-actions .le-quick-actions .le-btn:focus-visible { outline-offset: -2px; }
+.le-mailrow:hover .le-mailrow-actions, .le-mailrow:focus-within .le-mailrow-actions, .le-mailrow.is-hover .le-mailrow-actions, .le-mailrow[aria-current="true"] .le-mailrow-actions { display: flex; }
+@media (min-width: 640px) {
+  .le-mailrow:hover .le-mailrow-snippet-slot:has(.le-mailrow-actions) .le-mailrow-snippet, .le-mailrow:focus-within .le-mailrow-snippet-slot:has(.le-mailrow-actions) .le-mailrow-snippet, .le-mailrow.is-hover .le-mailrow-snippet-slot:has(.le-mailrow-actions) .le-mailrow-snippet, .le-mailrow[aria-current="true"] .le-mailrow-snippet-slot:has(.le-mailrow-actions) .le-mailrow-snippet { opacity: 0; }
+}
 
 /* Confirm card */
 .le-confirm { border-radius: var(--radius-lg); background: var(--surface-soft); padding: var(--space-2); }

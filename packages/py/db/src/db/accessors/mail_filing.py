@@ -2,16 +2,20 @@
 
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
+import re
+import unicodedata
+from typing import get_args
 
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from db.engine import get_session_maker
 from db.models.mail_filing import MailFiling
-from db.models.mail_folder import MailFolder
+from db.models.mail_folder import DestinationColor, MailFolder
 from db.models.mail_label_assignment import MailLabelAssignment
 from db.models.mail_message import MailMessage
 from db.models.mail_rule import MailRule
+from db.models.mail_filing_usage import MailFilingUsage
 
 
 @dataclass(frozen=True)
@@ -20,30 +24,69 @@ class Filing:
     label_ids: list[str]
 
 
-async def create_destination(name: str, kind: str) -> MailFolder:
+async def create_destination(name: str, kind: str, color: DestinationColor = 'none') -> MailFolder:
     name = name.strip()
-    if not name or len(name) > 120 or kind not in ("folder", "label"):
+    if not name or len(name) > 120 or kind not in ("folder", "label") or color not in get_args(DestinationColor):
         raise ValueError("Invalid folder or label")
-    row = MailFolder(name=name, kind=kind)
+    row = MailFolder(name=name, kind=kind, color=color)
     async with get_session_maker().begin() as session:
         session.add(row)
     return row
 
 
+async def create_and_assign(message_id: str, name: str, kind: str, color: DestinationColor = 'none') -> MailFolder:
+    name = name.strip()
+    if not name or len(name) > 120 or kind not in ('folder', 'label') or color not in get_args(DestinationColor):
+        raise ValueError('Invalid folder or label')
+    async with get_session_maker().begin() as session:
+        from db.accessors import mail_message, user_preference
+        from db.models.mail_account import MailAccount
+        await user_preference.lock(session)  # Serialize with account removal.
+        candidates = list((await session.scalars(select(MailMessage).where(mail_message.matches_ids([message_id])).order_by(MailMessage.id).with_for_update())).all())
+        source = next((row for row in candidates if row.id == message_id), None) or (candidates[0] if len(candidates) == 1 else None)
+        if source is None or await session.get(MailAccount, source.account_id) is None:
+            raise LookupError('Source mail not found')
+        row = MailFolder(name=name, kind=kind, color=color)
+        session.add(row)
+        await session.flush()
+        await assign([message_id], session=session, **({'folder_id': row.id} if kind == 'folder' else {'add_labels': [row.id]}))
+        return row
+
+
+def _destination_order(row: MailFolder) -> tuple:
+    # DE/EN base-strength ordering with numeric digit runs and stable ID ties.
+    name = ''.join(char for char in unicodedata.normalize('NFD', row.name.casefold()) if not unicodedata.combining(char))
+    parts = tuple((1, int(part)) if part.isdecimal() else (0, part) for part in re.split(r'(\d+)', name))
+    return (row.kind, parts, row.id)
+
+
 async def list_destinations() -> list[MailFolder]:
     async with get_session_maker()() as session:
-        return list((await session.scalars(select(MailFolder).order_by(MailFolder.kind, MailFolder.name, MailFolder.id))).all())
+        rows = list((await session.scalars(select(MailFolder))).all())
+    return sorted(rows, key=_destination_order)
 
 
-async def rename_destination(destination_id: str, name: str) -> MailFolder:
+async def destination_page(cursor: str | None, limit: int) -> tuple[list[MailFolder], str | None]:
+    """Read a bounded ID-ordered page; callers may sort the complete inventory for display."""
+    query = select(MailFolder).order_by(MailFolder.id).limit(limit + 1)
+    if cursor is not None:
+        query = query.where(MailFolder.id > cursor)
+    async with get_session_maker()() as session:
+        rows = list((await session.scalars(query)).all())
+    return rows[:limit], rows[limit - 1].id if len(rows) > limit else None
+
+
+async def rename_destination(destination_id: str, name: str, color: DestinationColor | None = None) -> MailFolder:
     name = name.strip()
-    if not name or len(name) > 120:
+    if not name or len(name) > 120 or (color is not None and color not in get_args(DestinationColor)):
         raise ValueError("Invalid name")
     async with get_session_maker().begin() as session:
         row = (await session.scalars(select(MailFolder).where(MailFolder.id == destination_id).with_for_update())).one_or_none()
         if row is None:
             raise LookupError("Destination not found")
         row.name = name
+        if color is not None:
+            row.color = color
         return row
 
 
@@ -58,6 +101,7 @@ async def delete_destination(destination_id: str) -> None:
             raise ValueError("Destination is used by a rule")
         await session.execute(update(MailFiling).where(MailFiling.folder_id == destination_id).values(folder_id=None))
         await session.execute(delete(MailLabelAssignment).where(MailLabelAssignment.label_id == destination_id))
+        await session.execute(delete(MailFilingUsage).where(MailFilingUsage.destination_id == destination_id))
         await session.delete(row)
 
 
@@ -113,6 +157,9 @@ async def assign(message_ids: list[str], *, folder_id: str | None | object = _UN
             for label_id in labels:
                 stmt = insert(MailLabelAssignment).values(message_id=message_id, label_id=label_id)
                 await session.execute(stmt.on_conflict_do_nothing())
+        if ids:
+            from db.accessors import mail_filing_usage
+            await mail_filing_usage.record(session, ([folder_id] if isinstance(folder_id, str) else []) + labels)
 
 
 async def for_message(message_id: str) -> Filing:

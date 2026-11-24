@@ -6,6 +6,7 @@ import { ConfirmCard } from './ConfirmCard'
 import { MailRow } from './MailRow'
 import { Composer } from './Composer'
 import { AccountCard } from './AccountCard'
+import { shortcutHint } from '../mail/inboxShortcuts'
 
 afterEach(cleanup)
 const items: ProposalItem[] = ['a', 'b', 'c', 'd'].map(id => ({ id, kind: 'mail', title: id, subtitle: '' }))
@@ -72,7 +73,14 @@ test('unread coarse mail exposes its actions and markers', () => {
 test('the trash action of a mail row names the same shortcut as the open mail', async () => {
   render(<MailRow mail={mail} selected={false} coarse={false} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
   fireEvent.mouseEnter(screen.getByRole('button', { name: 'In den Papierkorb' }))
-  expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', 'In den Papierkorb (Entf)')
+  expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', `In den Papierkorb (${shortcutHint('trash', 'de')})`)
+})
+
+test('mail action menu displays the same keys as the shortcut registry', () => {
+  render(<MailRow mail={mail} selected={false} coarse onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen zu Nebenkostenabrechnung 2025' }))
+  expect(screen.getByRole('menuitem', { name: `Archivieren (${shortcutHint('archive', 'de')})` })).toBeTruthy()
+  expect(screen.getByRole('menuitem', { name: `In den Papierkorb (${shortcutHint('trash', 'de')})` })).toBeTruthy()
 })
 
 test('a flagged mail row shows the warm urgency dot with a name and a tooltip', async () => {
@@ -96,11 +104,17 @@ test('the urgency dot stays visible and reachable while the row shows its action
     const row = container.querySelector('.le-mailrow')!
     const actions = container.querySelector('.le-mailrow-actions')!
     row.classList.add('is-hover')
-    expect(getComputedStyle(actions).opacity).toBe('1')
+    expect(getComputedStyle(actions).display).toBe('flex')
     expect(getComputedStyle(screen.getByRole('img', { name: 'Dringend' })).visibility).toBe('visible')
     expect(getComputedStyle(container.querySelector('time')!).visibility).toBe('visible')
-    // The bar covers the end of the text column, not the column with time and marks.
-    expect(style.textContent).toMatch(/^\.le-mailrow-actions \{ position: absolute; z-index: 2; grid-column: 2 \/ 3; right: 0;/mu)
+    // A fixed-height snippet slot contains the absolute toolbar, leaving subject, tags and side outside it.
+    const slot = container.querySelector('.le-mailrow-snippet-slot')!
+    expect(slot.contains(actions)).toBe(true)
+    expect(slot.contains(container.querySelector('.le-mailrow-subject'))).toBe(false)
+    expect(slot.contains(container.querySelector('.le-mailrow-side'))).toBe(false)
+    expect(style.textContent).toMatch(/\.le-mailrow-snippet-slot \{ position: relative;[^}]*height: 24px;/u)
+    expect(style.textContent).toMatch(/^\.le-mailrow-actions \{ position: absolute;[^}]*inset: 0;[^}]*flex-wrap: nowrap;/mu)
+    expect(style.textContent).toMatch(/\.le-mailrow-actions \.le-icon-btn \{ width: 24px; height: 24px; \}/u)
     fireEvent.mouseEnter(screen.getByRole('img', { name: 'Dringend' }))
     expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', 'Dringend')
   } finally {
@@ -219,4 +233,49 @@ test('mobile single-line composer centers its 20 px line box inside the 54 px he
   expect(mobileBlock).toContain('.le-composer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }')
   expect(mobileBlock).toContain('.le-composer textarea { min-width: 0; padding: var(--space-4) var(--space-3) var(--space-4) var(--space-4); line-height: 20px; }')
   expect(mobileBlock).toContain('.le-composer-bar { align-self: end; flex-wrap: nowrap; gap: var(--space-1); padding: var(--space-1); }')
+})
+
+
+test('mobile rows hide the desktop action bar in every active state', async () => {
+  const css = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toMatch(/@media \(max-width: 639px\), \(pointer: coarse\) \{[^\n]*\.le-mailrow:hover \.le-mailrow-actions[^\n]*\.le-mailrow:focus-within \.le-mailrow-actions[^\n]*\.le-mailrow\.is-hover \.le-mailrow-actions[^\n]*\.le-mailrow\[aria-current="true"\] \.le-mailrow-actions \{ display: none; \}/u)
+})
+
+
+test('the empty snippet still has the stable toolbar slot', async () => {
+  const { container } = render(<MailRow mail={{ ...mail, snippet: '' }} selected coarse={false} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  const slot = container.querySelector('.le-mailrow-snippet-slot')!
+  expect(slot.querySelector('.le-mailrow-actions')).toBeTruthy()
+  expect(slot.querySelector('.le-mailrow-snippet')?.textContent).toBe('')
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-mailrow-snippet-slot \{[^}]*height: 24px;/u)
+  expect(css).toMatch(/\.le-mailrow-actions \{ position: absolute;[^}]*inset: 0;/u)
+})
+
+
+test('the snippet toolbar uses each row state background with a soft fade', async () => {
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  const app = await Bun.file(new URL('../styles/ds-app.css', import.meta.url)).text()
+  expect(css).toContain('--le-row-bg: var(--surface)')
+  expect(css).toContain('--le-row-bg: var(--surface-soft)')
+  expect(css).toContain('--le-row-bg: var(--accent-soft)')
+  expect(app).toMatch(/\.le-mailrow-swipe \.le-mailrow\.is-checked \{ --le-row-bg: var\(--accent-soft\);/u)
+  expect(css).toMatch(/\.le-mailrow-actions \{[^}]*linear-gradient\(to right, transparent, var\(--le-row-bg\) 12px\)/u)
+})
+
+
+test('row filing tags expose names without adding tab stops', () => {
+  render(<MailRow mail={{ ...mail, app_label_ids: ['label'] }} filingDestinations={[{ id: 'label', name: 'Example', kind: 'label' }]} selected={false} coarse={false} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  const tag = screen.getByRole('img', { name: 'Label: Example' })
+  expect(tag.tabIndex).toBe(-1)
+  expect(tag.hasAttribute('aria-label')).toBe(true)
+})
+
+test('the row quick-action focus ring is inset and the snippet stays accessible', async () => {
+  const css = await Bun.file(new URL('../styles/ds.css', import.meta.url)).text()
+  expect(css).toMatch(/\.le-mailrow-actions \.le-quick-actions \.le-btn:focus-visible \{[^}]*outline-offset: -2px;/u)
+  expect(css).toMatch(/\.le-mailrow:hover[^\n]*\.le-mailrow-snippet[^\n]*opacity: 0;/u)
+  const { container } = render(<MailRow mail={{ ...mail, snippet: 'Synthetic snippet' }} selected coarse={false} onOpen={() => {}} onArchive={() => {}} onToggleRead={() => {}} onTrash={() => {}} />)
+  expect(container.querySelector('.le-mailrow-snippet')?.textContent).toBe('Synthetic snippet')
+  expect(container.querySelector('.le-mailrow-snippet')?.hasAttribute('aria-hidden')).toBe(false)
 })
