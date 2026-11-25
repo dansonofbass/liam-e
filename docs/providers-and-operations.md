@@ -16,7 +16,24 @@ and other IMAP providers are available through “Anderer Anbieter” (UI text).
 | Outlook through own Microsoft OAuth2 | Microsoft Graph Delta for the inbox, read and folder actions via Graph, sending via Graph including reply or forwarding draft at the provider, read-only original view. | Registered OAuth client with suitable callback URL. Login, consent and mail actions depend on the account and its tenant rules. |
 | Outlook through Studio (`outlook`) | Listing and registration are implemented. Sync, sending and labels use the shared connector path with the tool format evidenced for Gmail. | The tool list responded with HTTP 401 on 13.11.2026. Authentication and compatible tool scope for this path remain open. |
 | iCloud and Yahoo through IMAP/SMTP | Host presets and shared IMAP/SMTP path. Sync via IMAP UIDs, read and folder actions via IMAP, sending via SMTP and read-only original view. | Check the account's app password and permissions. Tests use an IMAP fake and simulate TLS/SMTP transport. |
+| Fastmail through IMAP/SMTP | Presets for Fastmail's published domains, including `fastmail.com`, `fastmail.fm` and regional domains. Uses the shared IMAP/SMTP path. | Settings and domain list verified against official documentation; no live authentication or provider connectivity tested. |
 | Other IMAP/SMTP providers | The same IMAP/SMTP path with own allowed hosts. Different ports and SMTP STARTTLS are configurable through the API. Folder actions depend on identifiable system folders and server capabilities. | Check host approval, public DNS resolution, TLS, login and folder behavior with the respective provider. |
+
+Fastmail's 130 provider-owned domains are listed explicitly in the
+[provider registry](../apps/api/src/api/mail/providers.py), following its official
+[domain list](https://www.fastmail.help/hc/en-us/articles/6239365719055-What-domains-can-I-use-with-Fastmail).
+Custom domains and unlisted subdomains are not inferred; pass the server settings explicitly
+for those addresses. Only the two standard mail servers are added to the default host allowlist:
+
+| Protocol | Server | Port | Encryption |
+| --- | --- | --- | --- |
+| IMAP | `imap.fastmail.com` | 993 | Implicit TLS, not STARTTLS |
+| SMTP | `smtp.fastmail.com` | 465 | Implicit TLS, not STARTTLS |
+
+These are Fastmail's [official server settings](https://www.fastmail.help/hc/en-us/articles/1500000278342-Server-names-and-ports).
+SMTP port 587 with STARTTLS remains available through explicit configuration; the preset uses 465.
+External access requires an app-specific password, not the normal account password, and is
+unavailable on Basic plans. See [IMAP, POP, and SMTP](https://www.fastmail.help/hc/en-us/articles/1500000279921-IMAP-POP-and-SMTP).
 
 The [provider registry](../apps/api/src/api/mail/providers.py) defines OAuth scopes and host
 presets. The shared paths for [mail actions](../apps/api/src/api/mail/action_backends.py),
