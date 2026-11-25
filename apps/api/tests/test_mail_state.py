@@ -9,13 +9,36 @@ from api.mail.state import AccountStatus, account_status, connection
 
 
 @pytest.mark.parametrize("job_status", ["queued", "running"])
-@pytest.mark.parametrize("last_error", ["", "auth_expired", "provider_error"])
-def test_active_sync_job_takes_precedence(job_status, last_error):
+@pytest.mark.parametrize(
+    "last_error,expected_error",
+    [
+        ("", ""),
+        ("auth_expired", "auth_expired"),
+        ("provider_error", "provider_error"),
+        ("Login failed for this account", "provider_error"),
+    ],
+)
+def test_active_sync_job_takes_precedence(job_status, last_error, expected_error):
     last_sync = datetime(2026, 1, 2, tzinfo=timezone.utc)
     sync_state = SimpleNamespace(status="error", last_error=last_error, last_sync_at=last_sync)
     job = SimpleNamespace(kind="sync", status=job_status)
 
-    assert account_status(SimpleNamespace(), sync_state, job) == AccountStatus("syncing", last_error, last_sync)
+    assert account_status(SimpleNamespace(), sync_state, job) == AccountStatus("syncing", expected_error, last_sync)
+
+
+@pytest.mark.parametrize("job_status", ["queued", "running"])
+def test_active_sync_job_without_sync_state(job_status):
+    job = SimpleNamespace(kind="sync", status=job_status)
+
+    assert account_status(SimpleNamespace(), None, job) == AccountStatus("syncing", "", None)
+
+
+@pytest.mark.parametrize("job_status", ["done", "error"])
+def test_finished_sync_job_does_not_force_syncing(job_status):
+    sync_state = SimpleNamespace(status="ok", last_error="", last_sync_at=None)
+    job = SimpleNamespace(kind="sync", status=job_status)
+
+    assert account_status(SimpleNamespace(), sync_state, job) == AccountStatus("ok", "", None)
 
 
 @pytest.mark.parametrize("job_status", ["queued", "running"])
