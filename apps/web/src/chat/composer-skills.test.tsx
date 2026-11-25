@@ -1,8 +1,9 @@
 // i18n-exempt: synthetic fixtures and route tests.
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import * as sdk from '../api/generated/sdk.gen'
 import type { ChatMessageOut, ChatModelOut, ConversationOut, PromptDetailOut, PromptOut, SkillOut } from '../api/generated/types.gen'
 import { Route as StartRoute } from '../routes/_app/index'
@@ -12,7 +13,7 @@ import { I18nProvider } from '../i18n/I18n'
 import { Conversation } from './Conversation'
 import { ChatSessionProvider } from './session'
 import { SKILL_FAVORITES_STORAGE_KEY } from './skill-favorites'
-import { buildSlashOptions, detectSlashQuery, stripSlashToken } from './skill-selection'
+import { buildSlashOptions, detectSlashQuery, skillStep, stripSlashToken } from './skill-selection'
 
 const originalFetch = globalThis.fetch
 const originalMatchMedia = window.matchMedia
@@ -124,6 +125,7 @@ function setup({
   details = [promptDetail],
   conversations,
   history = [],
+  compact = false,
 }: {
   path?: string
   locale?: 'de' | 'en'
@@ -132,6 +134,7 @@ function setup({
   details?: PromptDetailOut[]
   conversations?: ConversationOut[]
   history?: ChatMessageOut[]
+  compact?: boolean
 } = {}) {
   sentBodies = []
   streamController = null
@@ -147,7 +150,7 @@ function setup({
     updated_at: '2026-11-21T08:00:00Z',
   }]
 
-  window.matchMedia = ((query: string) => ({ matches: query !== '(max-width: 639px)', addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+  window.matchMedia = ((query: string) => ({ matches: query === '(max-width: 639px)' ? compact : true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
   globalThis.fetch = ((_url: unknown, init?: RequestInit) => {
     sentBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>)
     return Promise.resolve(new Response(new ReadableStream({ start(c) { streamController = c } })))
@@ -218,6 +221,12 @@ function setup({
   })
   const rendered = render(<RouterProvider router={router} />)
   return { client, router, unmount: rendered.unmount }
+}
+
+/** Keeps the attached skill for follow-ups through its duration menu. */
+function keepSkill() {
+  fireEvent.click(screen.getByRole('button', { name: de.skills.activeDuration }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: new RegExp(de.skills.durationUntilStopped) }))
 }
 
 afterEach(() => {
@@ -508,10 +517,9 @@ test('sticky persistence keeps active skill across follow-up clarifying turns un
   fireEvent.change(field, { target: { value: '/daily', selectionStart: 6 } })
   fireEvent.click(await screen.findByRole('option', { name: new RegExp(dailySkill.name) }))
 
-  const stickyToggle = await screen.findByRole('button', { name: de.skills.keepForFollowUps })
-  fireEvent.click(stickyToggle)
-  expect(stickyToggle.getAttribute('aria-pressed')).toBe('true')
-  expect(screen.getByText(de.skills.durationUntilStopped)).toBeTruthy()
+  await screen.findByRole('button', { name: de.skills.activeDuration })
+  keepSkill()
+  expect(screen.getByRole('button', { name: de.skills.durationUntilStopped })).toBeTruthy()
 
   const activeField = screen.getByPlaceholderText(de.skills.placeholderWithSkill(dailySkill.name))
   fireEvent.change(activeField, { target: { value: 'Gib mir das Briefing', selectionStart: 20 } })
@@ -558,7 +566,7 @@ test.each(['suggestion', 'mail reference'])('a %s sends the conversation’s exa
   const field = await screen.findByPlaceholderText(de.chat.placeholder)
   fireEvent.change(field, { target: { value: '/daily', selectionStart: 6 } })
   fireEvent.click(await screen.findByRole('option', { name: new RegExp(dailySkill.name) }))
-  fireEvent.click(screen.getByRole('button', { name: de.skills.keepForFollowUps }))
+  keepSkill()
   fireEvent.change(field, { target: { value: 'Briefing' } })
   fireEvent.click(screen.getByRole('button', { name: de.controls.send }))
 
@@ -607,7 +615,7 @@ test.each(['home', 'conversation'])('context_revoked clears only the sticky skil
   await choose(de.chat.placeholder, '/daily', dailySkill)
   await act(() => router.navigate(fromHome ? home : conversation))
   await choose(de.chat.placeholder, '/daily', dailySkill)
-  fireEvent.click(screen.getByRole('button', { name: de.skills.keepForFollowUps }))
+  keepSkill()
   fireEvent.change(screen.getByPlaceholderText(de.skills.placeholderWithSkill(dailySkill.name)), { target: { value: 'Briefing' } })
   fireEvent.click(screen.getByRole('button', { name: de.controls.send }))
   expect(sentBodies[0]).toMatchObject({ skill_id: dailySkill.id, skill_revision_id: dailySkill.revision_id })
@@ -727,7 +735,8 @@ test('historical skill provenance badge never breaks model label and revoked ski
   }
 
   setup({ path: '/chat/c1', history: [msgAssistant, msgProposal] })
-  expect(await screen.findByText(de.skills.usedTag(dailySkill.name, dailySkill.version))).toBeTruthy()
+  expect(await screen.findByText(`Skill: ${dailySkill.name} · Version 2`)).toBeTruthy()
+  expect(screen.queryByText(/· v2/)).toBeNull()
   expect(document.querySelector('.le-msg-ai small')?.textContent).toBe('Small')
   expect(screen.getByText(de.skills.revoked)).toBeTruthy()
   expect(screen.getByText(de.skills.cancelOnly)).toBeTruthy()
@@ -794,6 +803,10 @@ test('the skill creator is only a slash action, hidden while active, and built-i
 
   const english = build({ texts: en })
   expect(has(build({ texts: en, query: 'create' }))).toBe(true)
+  // Keywords and the action name match in either language, whatever the app language.
+  for (const query of ['create', 'new', 'add']) expect(has(build({ query }))).toBe(true)
+  for (const query of ['erstellen', 'neu', 'anlegen']) expect(has(build({ texts: en, query }))).toBe(true)
+  expect(has(build({ texts: en, query: 'postfach' }))).toBe(false)
   expect(english.find(option => option.kind === 'create-skill')?.label).toBe(en.skills.builtin.skill_creator.name)
   expect(english.find(option => option.kind === 'skill' && option.skill.id === dailySkill.id)).toMatchObject({ label: en.skills.builtin.daily_briefing.name, hint: en.skills.builtin.daily_briefing.description })
   expect(english.find(option => option.kind === 'skill' && option.skill.id === digestSkill.id)?.label).toBe(digestSkill.name)
@@ -806,15 +819,21 @@ test('creating a skill starts a fresh conversation that keeps the creator until 
   const { router } = setup({ path: '/chat/c1', skills: [creatorSkill, dailySkill, digestSkill] })
   const field = await screen.findByPlaceholderText(de.chat.placeholder)
   fireEvent.change(field, { target: { value: 'Wochenbericht /erstellen', selectionStart: 24 } })
-  fireEvent.click(await screen.findByRole('option', { name: new RegExp(de.skills.createSkillHint) }))
+  const action = await screen.findByRole('option', { name: new RegExp(de.skills.createSkillHint) })
+  // The consequence of the action wraps rather than being cut off.
+  expect(action.querySelector('.le-menu-meta--wrap')?.textContent).toBe(de.skills.createSkillHint)
+  fireEvent.click(action)
 
   await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   const creatorField = await screen.findByPlaceholderText(de.skills.creatorPlaceholder) as HTMLTextAreaElement
   expect(creatorField.value).toBe('Wochenbericht ')
   expect(screen.getByText(de.skills.builtin.skill_creator.name)).toBeTruthy()
+  // The creator row holds only its name, the short note and the end button: no duration or steps controls.
   expect(screen.getByText(de.skills.creatorNote)).toBeTruthy()
-  expect(screen.getByText(de.skills.durationUntilStopped)).toBeTruthy()
-  expect(screen.queryByRole('button', { name: de.skills.keepForFollowUps })).toBeNull()
+  expect(screen.getByRole('button', { name: de.skills.endSkill })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: de.skills.activeDuration })).toBeNull()
+  expect(screen.queryByRole('button', { name: de.skills.durationUntilStopped })).toBeNull()
+  expect(screen.queryByRole('button', { name: de.skills.showSteps(1) })).toBeNull()
   expect(sentBodies).toHaveLength(0)
 
   // A stored favorite id for the creator is ignored.
@@ -835,4 +854,107 @@ test('creating a skill starts a fresh conversation that keeps the creator until 
   fireEvent.click(screen.getByRole('button', { name: de.skills.endSkill }))
   expect(await screen.findByPlaceholderText(de.chat.placeholder)).toBeTruthy()
   expect(screen.queryByText(de.skills.creatorNote)).toBeNull()
+})
+
+test('built-in steps are localized by slug and step ID, while other steps show as stored', async () => {
+  const daily: SkillOut = { ...dailySkill, workflow_steps: [
+    { id: 'collect_agenda', title: 'Domänendaten einsammeln', description: 'Synthetische Serverbeschreibung.', tool_names: ['collect_daily_briefing'] },
+    { id: 'synthetic_step', title: 'Eigener Schritt', description: 'Wie gespeichert.', tool_names: [] },
+  ] }
+  setup({ locale: 'en', skills: [daily, digestSkill] })
+  const field = await screen.findByPlaceholderText(en.chat.placeholder)
+  fireEvent.change(field, { target: { value: '/daily', selectionStart: 6 } })
+  const option = await screen.findByRole('option', { name: new RegExp(en.skills.builtin.daily_briefing.name) })
+  // A skill's hint keeps the single-line style.
+  expect(option.querySelector('.le-menu-meta--wrap')).toBeNull()
+  fireEvent.click(option)
+  fireEvent.click(await screen.findByRole('button', { name: en.skills.showSteps(2) }))
+  const localized = en.skills.builtin.daily_briefing.steps.collect_agenda
+  expect(screen.getByText(localized.title)).toBeTruthy()
+  expect(screen.getByText(`: ${localized.description}`, { exact: false })).toBeTruthy()
+  expect(screen.queryByText('Domänendaten einsammeln')).toBeNull()
+  expect(screen.getByText('Eigener Schritt')).toBeTruthy()
+
+  // A custom skill reusing a built-in slug or step ID never takes the built-in text.
+  const stored = { id: 'collect_agenda', title: 'Eigene Sammlung', description: 'Bleibt wie gespeichert.' }
+  expect(skillStep({ ...digestSkill, slug: 'daily_briefing' }, stored, en)).toEqual({ title: stored.title, description: stored.description })
+  expect(skillStep(daily, stored, de)).toEqual(de.skills.builtin.daily_briefing.steps.collect_agenda)
+  expect(skillStep(creatorSkill, { ...stored, id: 'clarify_purpose' }, en)).toEqual({ title: stored.title, description: stored.description })
+})
+
+test('an attached skill and template each take one row, the duration note is a lasting description and steps keep their label', async () => {
+  setup()
+  const field = await screen.findByPlaceholderText(de.chat.placeholder)
+  fireEvent.change(field, { target: { value: '/Fristen', selectionStart: 8 } })
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(promptTemplate.name) }))
+  const template = (await screen.findByText(de.prompts.chip(promptTemplate.name))).closest('.le-composer-active-row') as HTMLElement
+  expect(within(template).getByText(de.prompts.durationNew)).toBeTruthy()
+  expect(within(template).getByRole('button', { name: de.prompts.clearSelection }).closest('.le-composer-active-close')).toBeTruthy()
+
+  fireEvent.change(field, { target: { value: '/daily', selectionStart: 6 } })
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(dailySkill.name) }))
+  const row = (await screen.findByText(de.skills.activeSkill(dailySkill.name))).closest('.le-composer-active-row') as HTMLElement
+  const duration = within(row).getByRole('button', { name: de.skills.activeDuration })
+  const steps = within(row).getByRole('button', { name: de.skills.showSteps(1) })
+  expect(within(row).getByRole('button', { name: de.skills.removeSelection }).closest('.le-composer-active-close')).toBeTruthy()
+  // The note no longer takes its own row; it describes the duration control instead.
+  const banner = row.closest('.le-composer-active') as HTMLElement
+  expect(within(banner).queryByText(de.skills.activeScopeNote, { selector: ':not(.le-sr)' })).toBeNull()
+  const description = () => document.getElementById(duration.getAttribute('aria-describedby') ?? '')?.textContent
+  expect(description()).toBe(de.skills.activeScopeNote)
+
+  // Hovering shows the same note as a tooltip without announcing it a second time.
+  fireEvent.mouseEnter(duration)
+  expect((await screen.findByRole('tooltip')).textContent).toBe(de.skills.activeScopeNote)
+  expect(duration.getAttribute('aria-describedby')?.split(' ')).toHaveLength(1)
+  fireEvent.mouseLeave(duration)
+
+  fireEvent.click(duration)
+  const choices = screen.getAllByRole('menuitemradio')
+  expect(choices.map(item => item.getAttribute('aria-checked'))).toEqual(['true', 'false'])
+  expect(choices[0]!.textContent).toContain(de.skills.durationTurnHint)
+  expect(choices[1]!.textContent).toContain(de.skills.durationStickyHint)
+  fireEvent.click(choices[1]!)
+  const sticky = within(row).getByRole('button', { name: de.skills.durationUntilStopped })
+  expect(document.getElementById(sticky.getAttribute('aria-describedby') ?? '')?.textContent).toBe(de.skills.activeStickyNote)
+  expect(within(row).getByRole('button', { name: de.skills.endSkill })).toBeTruthy()
+
+  // The steps chip keeps its label; its state and target are announced instead.
+  expect(steps.getAttribute('aria-expanded')).toBe('false')
+  fireEvent.click(steps)
+  expect(steps.textContent).toBe(de.skills.showSteps(1))
+  expect(steps.getAttribute('aria-expanded')).toBe('true')
+  expect(document.getElementById(steps.getAttribute('aria-controls') ?? '')?.textContent).toContain(dailySkill.workflow_steps[0]!.title)
+  fireEvent.click(steps)
+  expect(steps.getAttribute('aria-controls')).toBeNull()
+  expect(screen.queryByText(dailySkill.workflow_steps[0]!.title)).toBeNull()
+})
+
+test('on phones the x stays beside the tag and the banner chips are tightened so both fit the second row', () => {
+  const css = readFileSync(new URL('./composer-skills.css', import.meta.url), 'utf8')
+  const phone = css.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n\}/u)?.[1] ?? ''
+  const rule = (body: string, selector: string) => body.match(new RegExp(`${selector.replaceAll('.', '\\.')} \\{([^}]*)\\}`, 'u'))?.[1] ?? ''
+  expect(rule(phone, '.le-composer-active-row')).toContain(`grid-template-areas: 'tag close' 'actions actions'`)
+  const chips = rule(phone, '.le-composer-active-actions .le-chip')
+  expect(chips).toContain('gap: var(--space-1)')
+  expect(chips).toContain('padding-inline: var(--space-2)')
+  // Wider screens keep the default chip spacing.
+  expect(rule(css.replace(phone, ''), '.le-composer-active-actions .le-chip')).toBe('')
+})
+
+test('the compact phone composer shows a short skill or creator placeholder and keeps the full one as the field name', async () => {
+  setup({ compact: true, skills: [creatorSkill, dailySkill, digestSkill] })
+  const field = await screen.findByPlaceholderText(de.controls.composerPlaceholder)
+  expect(field.getAttribute('aria-label')).toBe(de.chat.placeholder)
+  fireEvent.change(field, { target: { value: '/daily', selectionStart: 6 } })
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(dailySkill.name) }))
+  expect(await screen.findByPlaceholderText(de.skills.compactPlaceholder)).toBe(field)
+  expect(field.getAttribute('aria-label')).toBe(de.skills.placeholderWithSkill(dailySkill.name))
+
+  fireEvent.click(screen.getByRole('button', { name: de.skills.removeSelection }))
+  expect(await screen.findByPlaceholderText(de.controls.composerPlaceholder)).toBe(field)
+  fireEvent.change(field, { target: { value: '/erstellen', selectionStart: 10 } })
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(de.skills.createSkillHint) }))
+  const creatorField = await screen.findByPlaceholderText(de.skills.creatorCompactPlaceholder)
+  expect(creatorField.getAttribute('aria-label')).toBe(de.skills.creatorPlaceholder)
 })
