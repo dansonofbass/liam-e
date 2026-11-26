@@ -3,6 +3,7 @@
 import imaplib
 import json
 import logging
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -11,11 +12,12 @@ from db.accessors import mail_job
 from db.accessors import mail_message as message_access
 from db.accessors import mail_rule_run
 from db.accessors import mail_sync_state as sync_state_access
+from db.models.mail_account import MailAccount, gmail_studio
 from db.models.mail_message import IMAP_RETIRED
 from env.mail import env as mail_env
 from utils.mistral import MistralNotConfiguredError
 
-from api.mail import connector_mailbox, connectors, netguard, providers, secrets, service, sync_connector, sync_gmail, sync_graph, sync_imap, transport
+from api.mail import connector_mailbox, connector_throttle, connectors, netguard, providers, secrets, service, sync_connector, sync_gmail, sync_graph, sync_imap, transport
 from api.mail.seed_ids import is_seed_account
 from api.mail.sync_types import BODY_VERSION, HTML_VERSION, SyncResult
 
@@ -54,6 +56,12 @@ async def sync_account(account_id: str) -> SyncResult:
     account = await account_access.get_account(account_id)
     if account is None:
         raise LookupError(f"no mail account with id {account_id}")
+    with connector_throttle.sync(account_id if account.auth_type == connectors.CONNECTOR else None):
+        return await _sync_account(account)
+
+
+async def _sync_account(account: MailAccount) -> SyncResult:
+    account_id = account.id
     is_connector = account.auth_type == connectors.CONNECTOR
     if is_seed_account(account_id):
         state = await sync_state_access.get_state(account_id)
@@ -76,15 +84,44 @@ async def sync_account(account_id: str) -> SyncResult:
         options = dict(folders=[f.strip().upper() for f in mail_env.mail_sync_folders.split(",") if f.strip()],
                        limit=mail_env.mail_sync_page_size, max_body_chars=mail_env.mail_sync_max_body_chars)
         native_moves = {}
+        checks = []
+        proof = previous.write_evidence() if gmail_studio(account) else None
         verified = is_connector and not connector_mailbox.inbox_only(account)
         if verified:
             verified_cursor = previous.connector_cursor if previous and previous.connector_verified else ""
             generation = previous.connector_generation if previous else 0
-            async with connector_mailbox.bound_mailbox(account, cursor=verified_cursor, generation=generation, observed=previous, bootstrap=True, check_after=True) as (binding, progress):
-                first_import = not progress
-                changes, deferred = await _connector_changes(account, progress,
-                    previous.connector_deferred_threads if previous.connector_verified else [], options,
-                    initial_deferred=set() if first_import else initial_deferred, first_import=first_import)
+            checkpoint = None
+            known_deferred = previous.connector_deferred_threads if previous.connector_verified else []
+            try:
+                async with connector_mailbox.bound_mailbox(account, cursor=verified_cursor, generation=generation, observed=previous, bootstrap=True, check_after=True) as (binding, progress):
+                    first_import = not progress
+                    tracked = set() if first_import else initial_deferred
+                    label_jobs = await mail_job.connector_label_checks(account.id) if proof else []
+                    pending_labels = sync_connector.PendingLabelChecks(label_jobs, proof[0]) if proof and label_jobs else None
+
+                    async def save_checkpoint(current):
+                        nonlocal checkpoint
+                        if not progress.startswith("initial:"):
+                            if not (known_deferred or current.restored_members or label_jobs):
+                                return
+                            current = deepcopy(current)
+                        kept, deferred = await _refine_connector_changes(
+                            account, current, known_deferred, options,
+                            initial_deferred=tracked, defer_probes=True, pending_labels=pending_labels)
+                        await connector_mailbox.verify_bound_mailbox(account, binding, generation=generation, observed=previous)
+                        checkpoint = kept, deferred
+
+                    changes, deferred = await _connector_changes(account, progress, known_deferred, options,
+                        initial_deferred=tracked, first_import=first_import, checkpoint_delta=save_checkpoint,
+                        pending_labels=pending_labels)
+                    if pending_labels is not None:
+                        checks = pending_labels.results()
+            except (connector_throttle.RateLimited, httpx.HTTPStatusError) as error:
+                if checkpoint is None or (isinstance(error, httpx.HTTPStatusError) and error.response.status_code not in (429, 503)):
+                    raise
+                # The independently verified delta does not depend on the throttled probes.
+                changes, deferred = checkpoint
+                checks = []
             stored_progress = connector_mailbox.encode(binding, changes.cursor)
         elif is_connector:
             progress = previous.connector_cursor or cursor
@@ -108,6 +145,8 @@ async def sync_account(account_id: str) -> SyncResult:
             suppress_import_page = bool(import_id) and (not is_connector or scan_active)
             new_ids, invalidated = await _apply_changes(account, changes, session, verified, native_moves,
                 initial_import_id=import_id, suppress_import_page=suppress_import_page)
+            if checks and proof:
+                await sync_connector.apply_label_checks(session, account, proof[0], checks)
             pending_import = (scan_active and (sync_connector.import_scan_pending(changes.cursor) or not changes.cursor)) if is_connector else changes.initial_pending
             tracked_threads = changes.initial_deferred_threads if is_connector else set()
             state.rules_initial_import = json.dumps({'id': import_id, 'threads': sorted(tracked_threads), 'scan_pending': pending_import}) if import_id and (pending_import or tracked_threads or not changes.cursor) else ''
@@ -176,10 +215,24 @@ async def _check_native_returns(account, changes):
     return {uid: (original, uid in confirmed) for uid, original in origins.items() if original is not None}
 
 
-async def _connector_changes(account, progress, deferred, options, *, initial_deferred=frozenset(), first_import=False):
-    changes = await sync_connector.fetch_changes(account, cursor=progress, **options)
+async def _connector_changes(
+    account, progress, deferred, options, *, initial_deferred=frozenset(), first_import=False,
+    checkpoint_delta=None, pending_labels=None,
+):
+    changes = await sync_connector.fetch_changes(account, cursor=progress, **options,
+        **({"before_history": checkpoint_delta} if checkpoint_delta is not None else {}))
+    if checkpoint_delta is not None and progress and not progress.startswith("initial:"):
+        await checkpoint_delta(changes)
+    return await _refine_connector_changes(account, changes, deferred, options,
+        initial_deferred=initial_deferred, first_import=first_import, pending_labels=pending_labels)
+
+
+async def _refine_connector_changes(
+    account, changes, deferred, options, *, initial_deferred, first_import=False, defer_probes=False,
+    pending_labels=None,
+):
     pending = list(dict.fromkeys([*deferred, *changes.restored_members]))
-    retry_count = min(5, len(pending))
+    retry_count = 0 if defer_probes else min(5, len(pending))
     initial_threads = set(initial_deferred) | changes.initial_deferred_threads
     if first_import:
         initial_threads.update(pending)
@@ -196,9 +249,13 @@ async def _connector_changes(account, progress, deferred, options, *, initial_de
     changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in excluded]
     possible = {row["provider_uid"] for row in changes.upserts} | changes.read_updates.keys() | changes.flag_updates.keys()
     # Studio's date searches omit an old message restored today. Rotate point reads through local trash.
-    candidates = await message_access.trash_conflicts(account.id, possible, changes.moved_out, check_unlisted=True)
-    if candidates:
-        await sync_connector.confirm_trash_conflicts(account, changes, candidates)
+    candidates = await message_access.trash_conflicts(account.id, possible, changes.moved_out, check_unlisted=not defer_probes)
+    if pending_labels is not None:
+        sync_connector.protect_pending_label_checks(changes, pending_labels.uids)
+        candidates = {uid: thread for uid, thread in candidates.items() if uid not in pending_labels.uids}
+    if candidates or pending_labels is not None:
+        await sync_connector.confirm_trash_conflicts(
+            account, changes, candidates, pending=pending_labels, defer_probes=defer_probes)
     remaining = list(dict.fromkeys([*pending[retry_count:], *changes.deferred_threads]))
     changes.initial_deferred_threads = initial_threads.intersection(remaining)
     return changes, remaining

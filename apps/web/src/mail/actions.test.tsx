@@ -826,3 +826,155 @@ test('bulk undo explains a mixed unsupported and skipped outcome', async () => {
   await waitFor(() => expect(screen.getByRole('status').textContent).toContain(de.errors.provider_action_unsupported))
   expect(screen.getByRole('status').textContent).toContain(de.inbox.bulkUndoFailed(1))
 })
+
+test.each([true, false])('single connector throttling restores the row and only offers a safe retry (%s)', async retryable => {
+  const query = new QueryClient()
+  const action = success()
+  action.mockResolvedValueOnce({
+    error: { detail: { code: 'provider_rate_limited', retryable } },
+    response: { status: 429 },
+  } as never)
+  function Trigger() {
+    const { run } = useMailActionsContext()
+    return <button onClick={() => { void run('1', 'archive') }}>archive fixture</button>
+  }
+  render(<QueryClientProvider client={query}><MailActionsProvider><Trigger /><ActionToast /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('archive fixture'))
+  await screen.findByText(retryable ? de.errors.provider_rate_limited : de.inbox.providerRateUnconfirmed)
+  const retry = screen.queryByRole('button', { name: /Erneut versuchen: Archivieren/ })
+  if (retryable) {
+    fireEvent.click(retry!)
+    await screen.findByRole('button', { name: de.proposal.undo })
+    expect(action).toHaveBeenCalledTimes(2)
+  } else {
+    expect(retry).toBeNull()
+    expect(action).toHaveBeenCalledTimes(1)
+  }
+})
+
+test('a bulk rate-limit retry sends only the safe failed item and retains successful undo', async () => {
+  const query = new QueryClient()
+  const time = makeClock()
+  const bulk = spyOn(sdk, 'mailMessagesBulkAction')
+    .mockResolvedValueOnce({ response: { ok: true }, data: { results: [
+      { message_id: '1', status: 'done', action_id: 'action-1' },
+      { message_id: '2', status: 'failed', error_code: 'provider_rate_limited', retryable: true },
+      { message_id: '3', status: 'partial', folder: 'TRASH', error_code: 'provider_rate_limited' },
+    ] } } as never)
+    .mockResolvedValueOnce({ response: { ok: true }, data: { results: [
+      { message_id: '2', status: 'done', action_id: 'action-2' },
+    ] } } as never)
+  function Trigger() {
+    const { runBulk } = useMailActionsContext()
+    return <button onClick={() => { void runBulk(['1', '2', '3'], 'trash') }}>bulk fixture</button>
+  }
+  render(<QueryClientProvider client={query}><MailActionsProvider clock={time.clock}><Trigger /><ActionToast /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('bulk fixture'))
+  await screen.findByRole('button', { name: de.proposal.undo })
+  act(() => time.advance(60_001))
+  expect(screen.queryByRole('button', { name: de.proposal.undo })).toBeNull()
+  fireEvent.click(await screen.findByRole('button', { name: 'Erneut versuchen: In den Papierkorb – 1 Mail' }))
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(2))
+  expect(bulk.mock.calls[1]?.[0]?.body).toEqual({ kind: 'trash', message_ids: ['2'] })
+})
+
+
+test('simultaneous single retries identify their action and subject', async () => {
+  const query = new QueryClient()
+  query.setQueryData<InfiniteData<MessagePageOut>>(key, { pages: [{ items: rows, next_cursor: null }], pageParams: [] })
+  const action = spyOn(sdk, 'mailMessageAction').mockResolvedValue({
+    error: { detail: { code: 'provider_rate_limited', retryable: true } }, response: { status: 429 },
+  } as never)
+  function Trigger() {
+    const { run } = useMailActionsContext()
+    return <>
+      <button onClick={() => { void run('1', 'archive') }}>archive fixture</button>
+      <button onClick={() => { void run('2', 'trash') }}>trash fixture</button>
+    </>
+  }
+  render(<QueryClientProvider client={query}><MailActionsProvider><Trigger /><ActionToast /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('archive fixture'))
+  fireEvent.click(screen.getByText('trash fixture'))
+  const retryArchive = await screen.findByRole('button', { name: 'Erneut versuchen: Archivieren – „Erste“' })
+  expect(await screen.findByRole('button', { name: 'Erneut versuchen: In den Papierkorb – „Zweite“' })).toBeTruthy()
+  fireEvent.click(retryArchive)
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(3))
+  expect(action.mock.calls[2]?.[0]).toMatchObject({ path: { message_id: '1' }, body: { kind: 'archive' } })
+})
+
+
+test.each([false, true])('a mixed Undo retains only the safely throttled token through cooldown and optional timeout (%s)', async timesOut => {
+  const query = new QueryClient()
+  const time = makeClock()
+  query.setQueryData<InfiniteData<MessagePageOut>>(key, { pages: [{ items: rows, next_cursor: null }], pageParams: [] })
+  spyOn(sdk, 'mailMessagesBulkAction').mockResolvedValue({ response: { ok: true }, data: { results: [
+    { message_id: '1', action_id: 'safe', status: 'done' },
+    { message_id: '2', action_id: 'uncertain', status: 'done' },
+  ] } } as never)
+  const undo = spyOn(sdk, 'mailActionsUndo')
+    .mockResolvedValueOnce({ data: { restored: [], expired: [], skipped: [], failed: ['safe', 'uncertain'],
+      error_code: 'provider_rate_limited', retryable: ['safe'], unconfirmed: ['uncertain'] } } as never)
+  if (timesOut) undo.mockImplementationOnce((() => new Promise(() => {})) as never)
+  undo.mockResolvedValueOnce({ data: { restored: ['safe'], expired: [], skipped: [], failed: [] } } as never)
+  function Trigger() {
+    const { runBulk } = useMailActionsContext()
+    return <button onClick={() => { void runBulk(['1', '2'], 'trash') }}>bulk fixture</button>
+  }
+  render(<QueryClientProvider client={query}><MailActionsProvider clock={time.clock}><Trigger /><ActionToast /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('bulk fixture'))
+  fireEvent.click(await screen.findByRole('button', { name: de.proposal.undo }))
+  expect(await screen.findByText(de.inbox.providerRateUnconfirmed)).toBeTruthy()
+  act(() => time.advance(60_001))
+  const retry = { name: 'Erneut versuchen: Rückgängig: In den Papierkorb – 1 Mail · „Erste“' }
+  fireEvent.click(await screen.findByRole('button', retry))
+  await waitFor(() => expect(undo).toHaveBeenCalledTimes(2))
+  expect(undo.mock.calls[1]?.[0]?.body).toEqual({ action_ids: ['safe'] })
+  if (timesOut) {
+    await act(async () => { time.advance(15_000) })
+    expect(undo.mock.calls[1]?.[0]?.signal?.aborted).toBe(true)
+    expect(await screen.findByText(de.inbox.undoTimeout)).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', retry))
+    await waitFor(() => expect(undo).toHaveBeenCalledTimes(3))
+    expect(undo.mock.calls[2]?.[0]?.body).toEqual({ action_ids: ['safe'] })
+  }
+  await waitFor(() => expect(query.getQueryData<InfiniteData<MessagePageOut>>(key)?.pages[0]?.items.map(item => item.id)).toEqual(['1']))
+})
+
+
+test('a mixed bulk retry keeps its selection while the Undo queue is full', async () => {
+  const query = new QueryClient()
+  const time = makeClock()
+  query.setQueryData<InfiniteData<MessagePageOut>>(key, { pages: [{ items: rows, next_cursor: null }], pageParams: [] })
+  spyOn(sdk, 'mailMessageAction').mockImplementation((async (options: { path: { message_id: string } }) => ({
+    data: { action_id: options.path.message_id, message: { subject: 'Fixture' } }, response: { status: 200 },
+  })) as never)
+  const bulk = spyOn(sdk, 'mailMessagesBulkAction')
+    .mockResolvedValueOnce({ response: { ok: true }, data: { results: [
+      { message_id: '1', action_id: 'done', status: 'done' },
+      { message_id: '2', status: 'partial', folder: 'TRASH', error_code: 'provider_rate_limited', retryable: true },
+    ] } } as never)
+    .mockResolvedValueOnce({ response: { ok: true }, data: { results: [
+      { message_id: '2', action_id: 'retried', status: 'done' },
+    ] } } as never)
+  function Trigger() {
+    const { run, runBulk } = useMailActionsContext()
+    return <>
+      <button onClick={() => { for (let i = 0; i < 19; i++) void run(`completed-${i}`, 'archive') }}>prepare fixture</button>
+      <button onClick={() => { void runBulk(['1', '2'], 'trash') }}>bulk fixture</button>
+    </>
+  }
+  render(<QueryClientProvider client={query}><MailActionsProvider clock={time.clock}><Trigger /><ActionToast /></MailActionsProvider></QueryClientProvider>)
+  fireEvent.click(screen.getByText('prepare fixture'))
+  await screen.findByRole('button', { name: de.inbox.recentActions(19) })
+  fireEvent.click(screen.getByText('bulk fixture'))
+  await screen.findByRole('button', { name: de.inbox.recentActions(20) })
+  const retry = { name: 'Erneut versuchen: In den Papierkorb – 1 Mail · „Zweite“' }
+  fireEvent.click(await screen.findByRole('button', retry))
+  expect(await screen.findByText(de.inbox.undoCapacity)).toBeTruthy()
+  expect(bulk).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('button', retry)).toBeTruthy()
+  act(() => time.advance(10_001))
+  fireEvent.click(screen.getByRole('button', retry))
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(2))
+  expect(bulk.mock.calls[1]?.[0]?.body).toEqual({ kind: 'trash', message_ids: ['2'] })
+})

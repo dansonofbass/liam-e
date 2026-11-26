@@ -645,6 +645,7 @@ export const en = {
     provider_action_unsupported: 'This action is unavailable for this Gmail account in Mistral Studio.',
     provider_permission_missing: 'The connector doesn’t have permission for this action. Reconnect the account in Mistral Studio. If mail actions are paused, allow them again in Accounts.',
     provider_partial: 'The provider only applied part of the change. Check the email’s folder.',
+    provider_rate_limited: 'The mail provider is limiting requests. Try again shortly.',
     provider_failed: 'The provider didn’t confirm the change. Check the email after the next sync.',
     action_uncertain: 'The result is uncertain. Reload the inbox to see where the email is now.',
     account_exists: 'This address is already connected another way. Remove the account before changing how it connects.',
@@ -760,6 +761,15 @@ export const en = {
     unsupportedSelection: 'Some actions are unavailable for the selected emails. Select only emails from accounts that support the action.',
     bulkProviderPartial: (n: number) => plural(n, { one: 'The provider partly changed # email. The list shows its reported folder.', other: 'The provider partly changed # emails. The list shows their reported folders.' }),
     providerReconciled: 'The email stayed in its folder. The list shows its current folder.',
+    providerRateUnconfirmed: 'The mail provider is limiting requests. Check the affected emails after the next sync.',
+    retryActions: { archive: 'Archive', trash: 'Move to trash', spam: 'Mark as spam', mark_read: 'Mark as read', mark_unread: 'Mark as unread' },
+    retryMail: (action, subject = "") => action + ' – “' + noticeSubject(subject) + '”',
+    retrySelection: (action, count = 0, subjects = []) => {
+      const names = subjects.map(subject => '“' + noticeSubject(subject) + '”').join(', ')
+      const more = count > subjects.length && names ? ' (+' + numberFormat.format(count - subjects.length) + ')' : ''
+      return action + ' – ' + emails(count) + (names ? ' · ' + names + more : '')
+    },
+    retryAction: action => 'Retry: ' + action,
     bulkProviderReconciled: (n: number) => plural(n, { one: '# email stayed in its folder. The list shows its current folder.', other: '# emails stayed in their folders. The list shows their current folders.' }),
     providerPartial: {
       INBOX: 'The provider only applied part of the change. The email is in the inbox.',

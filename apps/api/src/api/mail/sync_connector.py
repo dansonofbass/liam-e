@@ -9,13 +9,17 @@ for an unfinished window. Window boundaries overlap by one second.
 
 import json
 import logging
+from collections.abc import Awaitable, Callable, Sequence
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 
+from db.accessors import mail_job
 from db.accessors import mail_message as message_access
 from db.models.mail_account import MailAccount
+from db.models.mail_job import MailJob
 from db.models.mail_message import MailMessage
 
 from api.mail import connectors
@@ -69,11 +73,24 @@ def import_scan_pending(progress: str) -> bool:
     return progress.startswith('initial:') or (len(parts) == 3 and all(part.isdigit() for part in parts))
 
 
-async def fetch_changes(account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int) -> SyncChanges:
+async def fetch_changes(
+    account: MailAccount, *, cursor: str, folders: list[str], limit: int, max_body_chars: int,
+    before_history: Callable[[SyncChanges], Awaitable[None]] | None = None,
+) -> SyncChanges:
     if not cursor.startswith("initial:"):
         return await _fetch_page(account, cursor=cursor, limit=limit, max_body_chars=max_body_chars)
     delta, previous_token = json.loads(cursor.removeprefix("initial:"))
     current = await _fetch_page(account, cursor=str(delta), limit=limit, max_body_chars=max_body_chars)
+    if before_history is not None and (
+        current.cursor != str(delta)
+        or current.upserts
+        or current.read_updates
+        or current.flag_updates
+        or current.moved_out
+    ):
+        checkpoint = deepcopy(current)
+        checkpoint.cursor = "initial:" + json.dumps([current.cursor, previous_token])
+        await before_history(checkpoint)
     try:
         history = await _history_page(account, cursor, limit, max_body_chars)
     except (ValueError, KeyError, TypeError, httpx.HTTPError) as error:
@@ -144,27 +161,54 @@ async def _thread_messages(provider: str, thread_id: str):
     return messages if isinstance(messages, list) else None
 
 
-async def confirm_trash_conflicts(account, changes: SyncChanges, candidates: dict[str, str]) -> None:
-    """Search and history can replay an old folder after a move in either direction."""
+type LabelCheck = tuple[str, dict[str, str], list[str] | None]
+
+
+class PendingLabelChecks:
+    """Pending delivery checks and point-read results from one verified mailbox poll."""
+
+    def __init__(self, jobs: Sequence[MailJob], binding: str):
+        self.targets = {job.id: json.loads(job.payload_json) for job in jobs}
+        self.binding = binding
+        self.by_thread: dict[str, set[str]] = {}
+        self.uids: set[str] = set()
+        self.observed: dict[str, dict[str, list[str]]] = {}
+        for target in self.targets.values():
+            if target["binding"] == binding:
+                uid = target["provider_uid"]
+                self.by_thread.setdefault(target["thread_id"], set()).add(uid)
+                self.uids.add(uid)
+
+    def results(self) -> list[LabelCheck]:
+        return [
+            (job_id, target, self.observed.get(target["thread_id"], {}).get(target["provider_uid"])
+             if target["binding"] == self.binding else None)
+            for job_id, target in self.targets.items()
+        ]
+
+
+async def confirm_trash_conflicts(
+    account: MailAccount, changes: SyncChanges, candidates: dict[str, str], *,
+    pending: PendingLabelChecks | None = None, defer_probes: bool = False,
+) -> None:
+    """Verify Trash conflicts and pending deliveries with one point read per thread."""
     rows = {row["provider_uid"]: row for row in changes.upserts}
     by_thread: dict[str, set[str]] = {}
     uncertain = set()
     for uid, thread in candidates.items():
         by_thread.setdefault(rows.get(uid, {}).get("thread_id") or thread, set()).add(uid)
-    for thread, uids in by_thread.items():
-        try:
-            latest = await connectors.thread_labels(account.provider, thread, uids) if thread else {}
-        except httpx.HTTPStatusError as error:
-            if error.response.status_code == 404:
-                latest = dict.fromkeys(uids, [])
-            elif error.response.status_code in (400, 410, 422):
-                latest = {}
-            else:
-                raise
-        except json.JSONDecodeError:
-            # A text tool error for this thread does not invalidate the other inbox observations.
-            latest = {}
-        for uid in uids:
+    if pending is not None and not defer_probes:
+        for thread in pending.by_thread:
+            by_thread.setdefault(thread, set())
+    for thread, trash_uids in by_thread.items():
+        pending_uids = pending.by_thread.get(thread, set()) if pending is not None else set()
+        latest: dict[str, list[str]] = {}
+        # Leave shared checks for the normal pass so the checkpoint can be verified first.
+        if thread and not (defer_probes and pending_uids):
+            latest = await _sync_thread_labels(account.provider, thread, trash_uids, pending_uids)
+            if pending is not None and pending_uids:
+                pending.observed[thread] = latest
+        for uid in trash_uids:
             if uid in latest:
                 changes.observe_current_labels(uid, latest[uid], rows.get(uid))
             else:
@@ -176,6 +220,71 @@ async def confirm_trash_conflicts(account, changes: SyncChanges, candidates: dic
         changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in uncertain]
         changes.moved_out = [uid for uid in changes.moved_out if uid not in uncertain]
         changes.trashed.difference_update(uncertain)
+
+
+async def _sync_thread_labels(
+    provider: str, thread: str, trash_uids: set[str], pending_uids: set[str],
+) -> dict[str, list[str]]:
+    uids = trash_uids | pending_uids
+    point_labels: dict[str, list[str]] | None = None
+
+    def remember_point(fmt: str, observed: dict[str, list[str]]) -> None:
+        nonlocal point_labels
+        if fmt == "MINIMAL":
+            point_labels = observed.copy()
+
+    try:
+        return await connectors.thread_labels(provider, thread, uids, point_only_uids=pending_uids,
+            on_read=remember_point if pending_uids else None)
+    except httpx.HTTPStatusError as error:
+        status = error.response.status_code
+        if status == 404:
+            if point_labels is None:  # The MINIMAL read itself confirmed the thread is gone.
+                return dict.fromkeys(uids, [])
+            return dict.fromkeys(trash_uids, []) | point_labels
+        if status in (401, 403) or (trash_uids and status not in (400, 410, 422)):
+            raise
+    except json.JSONDecodeError:
+        # A text tool error leaves unread members inconclusive.
+        pass
+    except (ValueError, httpx.TransportError):
+        if trash_uids:
+            raise
+    return point_labels or {}
+
+
+def protect_pending_label_checks(changes: SyncChanges, uids: set[str]) -> None:
+    if not uids:
+        return
+    # A stale page cannot replace an indexed delivery or trigger rules for it while
+    # a pending point read owns its folder and flags.
+    changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in uids]
+    changes.moved_out = [uid for uid in changes.moved_out if uid not in uids]
+    changes.confirmed_inbox.difference_update(uids)
+    changes.trashed.difference_update(uids)
+    for uid in uids:
+        changes.read_updates.pop(uid, None)
+        changes.flag_updates.pop(uid, None)
+
+
+async def apply_label_checks(session, account: MailAccount, binding: str, checked: Sequence[LabelCheck]) -> None:
+    completed, pending = [], []
+    for job_id, target, labels in checked:
+        if target["binding"] != binding:
+            completed.append(job_id)
+            continue
+        row = await message_access.get_message(target["message_id"], session)
+        if (row is not None and row.account_id == account.id and not row.unverified_connector
+                and row.provider_uid == target["provider_uid"] and row.thread_id == target["thread_id"]):
+            if labels is None:
+                pending.append(job_id)
+                continue
+            await message_access.commit_trash_move(row, {
+                "folder": connectors.observed_folder(labels), "labels_json": json.dumps(sorted(labels)),
+                "is_read": "UNREAD" not in labels, "is_flagged": "STARRED" in labels,
+            }, sync_session=session)
+        completed.append(job_id)
+    await mail_job.finish_connector_label_checks(session, completed, pending)
 
 
 async def _history_page(account, cursor, limit, max_body_chars):

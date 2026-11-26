@@ -886,6 +886,32 @@ messages, including archived rows, stay outside chat reads until a verified sync
 Sent message from the registered mailbox and retains its opaque thread and message IDs as an
 anchor alongside the verified pagination cursor. The ordinary sync cursor stays numeric for older workers. Sync and body rereads check it before and after fetching.
 Writes check the mailbox immediately before dispatch. An incoming-only placeholder can change labels from the inbox only when a named credential verifies the thread, message, sender and subject and is used for the write. Chat cannot use these accounts. A verified batch publishes rows and progress atomically after checking the stored generation. A sync attempt has its own generation. The last successful proof has a separate revision. A definite mismatch still withdraws the grant while a newer poll is waiting for evidence. A later failure cannot overwrite a newer success. Sync workers renew their job lease during provider reads. Database transactions from older workers cannot insert or overwrite verified provider content. Independent new-mail and historical cursors keep new arrivals visible even when a historical page fails and needs retry. Malformed historical messages go on a per-mailbox retry list. Each poll checks up to five deferred threads alongside its normal pages. The normal scan and deferred reads require evidence that each message belongs in the inbox. When the search result supplies its labels, those labels also set its read and starred state. Historical pages and deferred reads both apply archived-message removals to the index. A single-message inbox match without labels preserves independently established read and star flags. Connector restores and archives reuse the local row for that provider UID. If an old worker already created two copies, the sync keeps the current inbox identity or the verified archive when only an unverified inbox copy left. For two verified copies, the surviving message retains the earlier local IDs as links within the same account and folder permissions. A confirmed mailbox mismatch invalidates these links. When duplicate copies lack this proof, the retired ID opens its cached content as a read-only source in the owner's mail view. Removing the account clears these copies. Chat and bulk actions resolve verified aliases before applying an action once per message. The regular 14-day listing also checks locally archived messages and queues their threads for a bounded, identity-checked content read before restoring them. When a narrow thread listing has no per-message labels, a fresh recent listing can confirm a restored message and its flags after the content read. An ambiguous sibling remains pending even when both scans see the same thread. Incomplete thread responses also remain pending. A 401 or 403 on a full-content read marks the sync as requiring reauthorization and preserves its last successful cursor. Verification and its bounded jobs for invalidated unread insights commit together. Their queue states keep older workers from claiming them during an upgrade. Each job checks the affected messages in the same account before regenerating them.
+Gmail Studio message actions and their Undo hold an account-specific gate across provider verification, writes
+and the local result. Sync takes that gate between connector tool requests, so a waiting action
+can run after the current request and a waiting sync can resume between actions. The gate is local
+to the API process. For 429 and read-side 503 responses, an action shares at most two retries and
+three seconds to wait and verify before retrying, with backoff and the provider's Retry-After.
+The budget does not cancel an in-flight write. An exhausted delay or a throttled sync request
+also pauses subsequent requests for that account. Write retries first recheck the pinned mailbox
+and affected labels. Only the write response can establish missing write permission. An ambiguous
+write-side 503 is never sent again. When the first
+write already completed both steps of a move, its confirmed labels suppress the redundant
+second write and readback. Exhausted throttling
+reports `provider_rate_limited` with a retry only when no write took effect or the remaining
+step of a verified partial move was refused before dispatch. A partial move is reflected in the
+index without returning success or an Undo token. An unavailable confirmation leaves the last
+known state and queues an exact delivery check when no usable point read has settled the write.
+The mutation request also queues that check if its own response may have been lost.
+Sync checks a bounded batch on the verified binding, independent of the Inbox search date.
+Incomplete point reads stay queued. A verified thread 404 settles absence from the Inbox.
+Neither case replays a provider write. If initial history is throttled, sync publishes the new-mail
+page it independently verified before backfill and keeps the historical page token. Both
+resumed initial import and steady-state sync verify the delta before optional delivery or
+deferred-thread reads, retaining that work across cooldowns. A queued delivery check on the
+verified binding replaces the ordinary trash probe for that delivery.
+Undo identifies safely retryable tokens separately from uncertain results.
+Action failure warnings carry only a fixed action kind, provider kind and diagnostic code/class.
+
 A confirmed missing or mismatched identity withdraws chat access. Temporary transport or provider failures stop the operation and leave the binding available for a later sync. Incoming-only accounts with a placeholder address can sync the ordinary inbox and keep every row outside chat. Settings show the server’s eligibility for each active account and explain incoming-only and pending-verification states. A checkbox edit preserves grants absent from the cached account list. The owner can reselect the account after a
 successful verified sync. A replacement mailbox registers separately and starts without a grant.
 After an anchor is lost, the next sync must establish a fresh verified binding before selection and verify indexed messages page by page. A provider reauthorization under the same credential name

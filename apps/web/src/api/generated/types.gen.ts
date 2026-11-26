@@ -374,6 +374,10 @@ export type BulkMessageActionResult = {
      */
     reconciled?: boolean;
     /**
+     * Retryable
+     */
+    retryable?: boolean;
+    /**
      * Status
      */
     status: 'done' | 'not_found' | 'unsupported' | 'failed' | 'partial';
@@ -2983,6 +2987,31 @@ export type ProposalResult = {
 };
 
 /**
+ * ProviderRateLimitDetail
+ */
+export type ProviderRateLimitDetail = {
+    /**
+     * Code
+     */
+    code: 'provider_rate_limited';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Retryable
+     */
+    retryable: boolean;
+};
+
+/**
+ * ProviderRateLimitOut
+ */
+export type ProviderRateLimitOut = {
+    detail: ProviderRateLimitDetail;
+};
+
+/**
  * QuickActionOut
  */
 export type QuickActionOut = {
@@ -4865,9 +4894,17 @@ export type UndoOut = {
      */
     restored: Array<string>;
     /**
+     * Retryable
+     */
+    retryable?: Array<string>;
+    /**
      * Skipped
      */
     skipped: Array<string>;
+    /**
+     * Unconfirmed
+     */
+    unconfirmed?: Array<string>;
     /**
      * Unsupported
      */
@@ -7063,6 +7100,10 @@ export type MailMessageActionErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: ProviderRateLimitOut;
 };
 
 export type MailMessageActionError = MailMessageActionErrors[keyof MailMessageActionErrors];
