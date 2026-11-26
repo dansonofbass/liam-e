@@ -14,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from db.accessors import mail_reference_snapshot, mail_rule_run, mail_sync_state
 from db.models.mail_insight import MailInsight
 from db.models.mail_action import MailAction
+from db.models.mail_account import MailAccount
 from db.models.mail_filing import MailFiling
 from db.models.mail_label_assignment import MailLabelAssignment
 
@@ -397,6 +398,21 @@ async def known_uids(account_id: str, folder: str, *, verified_only: bool = Fals
         return dict((await session.execute(query)).all())
 
 
+async def inbox_only_connector_deliveries(
+    session: AsyncSession, account_id: str, uids: set[str],
+) -> list[tuple[str, str, str]]:
+    """Find held-back deliveries that cannot be rediscovered by the Trash rotation."""
+    trash = aliased(MailMessage)
+    stmt = select(MailMessage.id, MailMessage.thread_id, MailMessage.provider_uid).where(
+        MailMessage.account_id == account_id, MailMessage.folder == "INBOX",
+        MailMessage.unverified_connector.is_(False), MailMessage.provider_uid.in_(uids),
+        MailMessage.thread_id != "",
+        ~exists(select(trash.id).where(trash.account_id == account_id, trash.folder == "TRASH",
+                                      trash.provider_uid == MailMessage.provider_uid)),
+    )
+    return [(message_id, thread_id, uid) for message_id, thread_id, uid in (await session.execute(stmt)).all()]
+
+
 async def rebuild_imap_uids(session: AsyncSession, account_id: str, candidates: set[str], generation: str) -> set[str]:
     """Keep a UID only when its mailbox generation is known to match."""
     if not candidates:
@@ -646,10 +662,18 @@ async def _imap_restore_state(session: AsyncSession, source: MailMessage, keep: 
     return updates
 
 
-async def commit_trash_move(message: MailMessage, updates: dict, *, action: MailAction | None = None, undo_id: str | None = None) -> None:
-    """Publish the provider-confirmed move, its undo record and the sync fence together."""
-    async with get_session_maker().begin() as session:
-        account = await mail_sync_state.fence_folder_change(session, message.account_id)
+async def commit_trash_move(
+    message: MailMessage, updates: dict, *, action: MailAction | None = None,
+    undo_id: str | None = None, sync_session: AsyncSession | None = None,
+) -> None:
+    """Publish the confirmed move under the action fence or an already fenced sync."""
+    async with _writer(sync_session) as session:
+        if sync_session is None:
+            account = await mail_sync_state.fence_folder_change(session, message.account_id)
+        else:
+            account = await session.get(MailAccount, message.account_id)
+            if account is None:
+                raise mail_sync_state.StaleMailSync
         stable_uid = account.auth_type == "mistral_connector" or account.provider == "google"
         updates = updates.copy()
         validity = updates.pop("imap_source_uidvalidity", None)

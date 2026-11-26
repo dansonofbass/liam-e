@@ -13,10 +13,13 @@ type Removal = 'archive' | 'trash' | 'spam'
 type Kind = Removal | 'mark_read' | 'mark_unread'
 const removes = (kind: Kind | 'remove'): kind is Removal => kind === 'archive' || kind === 'trash' || kind === 'spam'
 type MailNotice = { tone: 'success' | 'danger'; text: string; wrap: boolean }
+type Retry = { label: string; resume: (onAdmitted: () => void) => void }
+type RetryNotice = { id: number; text: string; label: string; retry: () => void }
 type Change = { key: QueryKey; page: number; index: number; row: MessageListItemOut }
-type GroupItem = { actionId: string; messageId: string; changes: Change[]; previousRead?: boolean }
-export type UndoEntry = { actionId: string; messageId: string; kind: Kind; changes: Change[]; previousRead?: boolean; group?: GroupItem[]; partial?: boolean; wrap?: boolean; text: string; label: string; deadline: number; pending: boolean }
+type GroupItem = { actionId: string; messageId: string; changes: Change[]; previousRead?: boolean; subject?: string }
+export type UndoEntry = GroupItem & { kind: Kind; group?: GroupItem[]; partial?: boolean; wrap?: boolean; text: string; label: string; deadline: number; pending: boolean }
 const LIMIT = 20
+const rateLimit = z.object({ detail: z.object({ retryable: z.literal(true) }) })
 const partialFolder = z.object({ detail: z.object({ folder: z.enum(['INBOX', 'TRASH', 'ARCHIVE', 'SPAM']), reconciled: z.boolean().optional() }) })
 const inFolder = ({ key }: Change, folder: string) => {
   const filters = key[1]
@@ -33,6 +36,9 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
   const [entries, setEntries] = useState<UndoEntry[]>([])
   const entriesRef = useRef<UndoEntry[]>([])
   const [notice, setNotice] = useState<MailNotice | null>(null)
+  const [retryNotices, setRetryNotices] = useState<RetryNotice[]>([])
+  const retryCount = useRef(0)
+  const dismissRetryNotice = (id: number) => setRetryNotices(current => current.filter(item => item.id !== id))
   const [permissionNotice, setPermissionNotice] = useState<string | null>(null)
   const dismissPermissionNotice = () => setPermissionNotice(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -63,7 +69,12 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     setEntries(next)
     schedule(next)
   }
-  const notify = (text: string, tone: 'danger' | 'success' = 'danger', wrap = false) => {
+  const notify = (text: string, tone: 'danger' | 'success' = 'danger', wrap = false, retry?: Retry) => {
+    if (retry) {
+      const id = ++retryCount.current
+      setRetryNotices(current => [...current, { id, text, label: retry.label, retry: () => retry.resume(() => dismissRetryNotice(id)) }])
+      return
+    }
     setNotice({ text, tone, wrap })
     if (noticeTimer.current !== undefined) clock.clearTimeout(noticeTimer.current)
     noticeTimer.current = clock.setTimeout(() => { noticeTimer.current = undefined; setNotice(null) }, 10_000)
@@ -118,13 +129,24 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     notify(texts.inbox.undoCapacity)
     return false
   }
-  const run = (id: string, kind: Kind, options?: { silent?: boolean }) => {
+  const subjectFor = (id: string, changes: Change[]) =>
+    changes.find(change => change.row.id === id)?.row.subject ?? client.getQueryData<MessageDetailOut>(['message', id])?.subject
+  const retryLabel = (kind: Kind, subjects: (string | undefined)[], bulk: boolean, undo = false) => {
+    const action = texts.inbox.retryActions[kind]
+    const target = bulk ? texts.inbox.retrySelection(action, subjects.length,
+      subjects.filter((subject): subject is string => subject !== undefined).slice(0, 2))
+      : texts.inbox.retryMail(action, subjects[0] ?? '')
+    return texts.inbox.retryAction(undo ? texts.inbox.undoAction(target) : target)
+  }
+  const run = (id: string, kind: Kind, options?: { silent?: boolean; subject?: string; onAdmitted?: () => void }) => {
     // Refused before anything changed: nothing was removed, so nothing came back.
     if (!options?.silent && !checkCapacity()) return Promise.resolve(false)
     if (!options?.silent) { reservations.current++; setReserved(reservations.current) }
-    return enqueue(id, () => execute(id, kind, options))
+    const work = enqueue(id, () => execute(id, kind, options))
+    options?.onAdmitted?.()
+    return work
   }
-  const execute = async (id: string, kind: Kind, options?: { silent?: boolean }) => {
+  const execute = async (id: string, kind: Kind, options?: { silent?: boolean; subject?: string }) => {
     ++pending.current
     const changes: Change[] = []
     const removal = removes(kind)
@@ -146,6 +168,11 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
           if (row.id === id) changes.push({ key, page: pageIndex, index, row })
         }))
       }
+      const subject = options?.subject ?? subjectFor(id, changes)
+      const retry: Retry = {
+        label: retryLabel(kind, [subject], false),
+        resume: onAdmitted => { void run(id, kind, { subject, onAdmitted }) },
+      }
       update(id, kind)
       const result = await mailMessageAction({ path: { message_id: id }, body: { kind } })
       const code = errorCode(result.error)
@@ -156,7 +183,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       if (result.response?.status === 404) {
         update(id, 'remove')
         if (!options?.silent) notify(texts.proposalErrors.item_gone)
-      } else if (result.response?.status === 409 && (code === 'provider_partial' || code === 'provider_permission_missing')) {
+      } else if (result.response?.status === 409 && (code === 'provider_partial' || code === 'provider_permission_missing' || code === 'provider_rate_limited')) {
         const parsed = partialFolder.safeParse(result.error)
         const folder = parsed.success ? parsed.data.detail.folder : undefined
         const retained = folder && changes.filter(change => inFolder(change, folder))
@@ -166,7 +193,12 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         const partial = reconciled ? texts.inbox.providerReconciled : folder ? texts.inbox.providerPartial[folder] : texts.errors.provider_partial
         if (code === 'provider_permission_missing') notifyPermission()
         if (!options?.silent || code === 'provider_permission_missing') {
-          notify(partial, 'danger', reconciled || code === 'provider_permission_missing')
+          const limited = code === 'provider_rate_limited'
+          const canRetry = limited && rateLimit.safeParse(result.error).success
+          const reason = canRetry ? texts.errors.provider_rate_limited : texts.inbox.providerRateUnconfirmed
+          notify(limited ? `${partial} ${reason}` : partial, 'danger',
+            reconciled || limited || code === 'provider_permission_missing',
+            canRetry ? retry : undefined)
         }
         void client.invalidateQueries({ queryKey: ['summary'] })
         void client.invalidateQueries({ queryKey: ['message', id] })
@@ -181,14 +213,18 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       } else if (!result.data || result.response?.status !== 200) {
         rollback()
         if (code === 'provider_permission_missing') notifyPermission()
-        else if (!options?.silent) notify(result.response?.status === 502 && code === 'provider_failed' ? texts.errors.provider_failed : texts.errors.action_uncertain)
+        else if (!options?.silent && code === 'provider_rate_limited') {
+          const canRetry = rateLimit.safeParse(result.error).success
+          notify(canRetry ? texts.errors.provider_rate_limited : texts.inbox.providerRateUnconfirmed,
+            'danger', true, canRetry ? retry : undefined)
+        } else if (!options?.silent) notify(result.response?.status === 502 && code === 'provider_failed' ? texts.errors.provider_failed : texts.errors.action_uncertain)
         return changes.length > 0
       } else {
         if (removal) reconcile.current = true
         if (!options?.silent) {
           const text = breakpoint === 'mobile' ? texts.inbox.doneShort[kind] : texts.inbox.done[kind](result.data.message.subject)
           setNotice(null)
-          publish([...entriesRef.current, { actionId: result.data.action_id, messageId: id, kind, changes, previousRead, text, label: texts.inbox.done[kind](result.data.message.subject), deadline: clock.now() + 10_000, pending: false }])
+          publish([...entriesRef.current, { actionId: result.data.action_id, messageId: id, kind, changes, previousRead, subject: result.data.message.subject, text, label: texts.inbox.done[kind](result.data.message.subject), deadline: clock.now() + 10_000, pending: false }])
         }
         void client.invalidateQueries({ queryKey: ['summary'] })
         void client.invalidateQueries({ queryKey: ['message', id] })
@@ -202,7 +238,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
       settle()
     }
   }
-  const runBulk = (ids: string[], kind: Kind) => {
+  const runBulk = (ids: string[], kind: Kind, savedSubjects?: Map<string, string | undefined>, onAdmitted?: () => void) => {
     if (!ids.length || !checkCapacity()) return Promise.resolve()
     reservations.current++; setReserved(reservations.current)
     const previous = ids.map(id => queues.current.get(id)).filter((p): p is Promise<unknown> => Boolean(p))
@@ -233,6 +269,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
             if (ids.includes(row.id)) changes.push({ key, page: pageIndex, index, row })
           }))
         }
+        const subjects = savedSubjects ?? new Map(ids.map(id => [id, subjectFor(id, changes)]))
         for (const id of ids) update(id, kind)
         const result = await mailMessagesBulkAction({ body: { message_ids: ids, kind } })
         const code = errorCode(result.error)
@@ -251,7 +288,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         const failed = result.data.results.filter(row => row.status === 'failed' || row.status === 'unsupported').map(row => row.message_id)
         rollback(failed)
         for (const row of result.data.results) if (row.status === 'not_found') { update(row.message_id, 'remove'); void client.invalidateQueries({ queryKey: ['message', row.message_id], exact: true }) }
-        const group = result.data.results.filter(row => row.status === 'done' && row.action_id).map(row => ({ actionId: row.action_id!, messageId: row.message_id, changes: changes.filter(change => change.row.id === row.message_id), previousRead: reads.get(row.message_id) }))
+        const group = result.data.results.filter(row => row.status === 'done' && row.action_id).map(row => ({ actionId: row.action_id!, messageId: row.message_id, changes: changes.filter(change => change.row.id === row.message_id), previousRead: reads.get(row.message_id), subject: subjects.get(row.message_id) }))
         const partial = result.data.results.filter(row => row.status === 'partial')
         const partialFolders = new Map(partial.map(row => [row.message_id, row.folder]))
         const retained = changes.filter(change => {
@@ -268,10 +305,20 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         const text = [base, partlyChanged ? texts.inbox.bulkProviderPartial(partlyChanged) : '',
           reconciled ? texts.inbox.bulkProviderReconciled(reconciled) : ''].filter(Boolean).join(' ')
         if (permissionMissing) notifyPermission()
+        const limited = result.data.results.filter(row => row.error_code === 'provider_rate_limited')
+        const retryIds = limited.filter(row => row.retryable && (row.status === 'failed' || row.status === 'partial')).map(row => row.message_id)
         if (group.length) {
           setNotice(null)
           publish([...entriesRef.current, { ...group[0]!, group, partial: group.length < ids.length, wrap, kind, text, label: text, deadline: clock.now() + 10_000, pending: false }])
-        } else notify(text, 'danger', wrap)
+        }
+        if (limited.length) {
+          const throttled = limited.length > retryIds.length ? texts.inbox.providerRateUnconfirmed : texts.errors.provider_rate_limited
+          notify([group.length ? '' : text, throttled].filter(Boolean).join(' '), 'danger', true,
+            retryIds.length ? {
+              label: retryLabel(kind, retryIds.map(id => subjects.get(id)), true),
+              resume: onAdmitted => { void runBulk(retryIds, kind, subjects, onAdmitted) },
+            } : undefined)
+        } else if (!group.length) notify(text, 'danger', wrap)
         reconcile.current = true
         void client.invalidateQueries({ queryKey: ['summary'] })
       } catch {
@@ -286,6 +333,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     for (const id of ids) queues.current.set(id, work)
     setQueueVersion(version => version + 1)
     void work.finally(() => { for (const id of ids) if (queues.current.get(id) === work) queues.current.delete(id); setQueueVersion(version => version + 1) })
+    onAdmitted?.()
     return work
   }
   const undo = (actionId?: string) => {
@@ -293,7 +341,19 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     if (!selected || selected.pending) return Promise.resolve()
     if (clock.now() >= selected.deadline) { publish(entriesRef.current.filter(entry => entry !== selected)); return Promise.resolve() }
     publish(entriesRef.current.map(entry => entry === selected ? { ...entry, pending: true } : entry))
-    const group = selected.group ?? [{ actionId: selected.actionId, messageId: selected.messageId, changes: selected.changes, previousRead: selected.previousRead }]
+    const group = selected.group ?? [{ actionId: selected.actionId, messageId: selected.messageId, changes: selected.changes, previousRead: selected.previousRead, subject: selected.subject }]
+    return submitUndo(selected, group)
+  }
+  const notifyUndoRetry = (selected: UndoEntry, group: GroupItem[], text: string) => {
+    notify(text, 'danger', true, {
+      label: retryLabel(selected.kind, group.map(item => item.subject), !!selected.group, true),
+      resume: onAdmitted => {
+        void submitUndo(selected, group, true)
+        onAdmitted()
+      },
+    })
+  }
+  const submitUndo = (selected: UndoEntry, group: GroupItem[], manualRetry = false): Promise<void> => {
     const executeUndo = async () => {
       ++pending.current
       const controller = new AbortController()
@@ -310,31 +370,41 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
         const result = await Promise.race([mailActionsUndo({ body: { action_ids: group.map(item => item.actionId) }, signal: controller.signal }), deadline])
         const code = errorCode(result.error) ?? result.data?.error_code
         if (code === 'provider_permission_missing') void client.invalidateQueries({ queryKey: ['accounts'] })
+        const retry = group.filter(item => result.data?.retryable?.includes(item.actionId))
+        const unconfirmed = group.filter(item => result.data?.unconfirmed?.includes(item.actionId))
+        if (retry.length) notifyUndoRetry(selected, retry, texts.errors.provider_rate_limited)
         if (selected.group && result.data) {
           const restored = group.filter(item => result.data!.restored.includes(item.actionId))
           restore(restored.flatMap(item => item.changes).sort((a, b) => a.page - b.page || a.index - b.index), removes(selected.kind))
           for (const item of restored) if (!removes(selected.kind) && item.previousRead !== undefined) client.setQueryData<MessageDetailOut>(['message', item.messageId], data => data && { ...data, is_read: item.previousRead! })
           if (restored.length !== group.length) {
             const unsupported = new Set(result.data.unsupported ?? [])
-            const remaining = group.filter(item => !result.data!.restored.includes(item.actionId) && !unsupported.has(item.actionId)).length
-            if (unsupported.size) {
-              const notice = [remaining ? texts.inbox.bulkUndoFailed(remaining) : '', texts.errors.provider_action_unsupported].filter(Boolean).join(' ')
-              if (code === 'provider_permission_missing') notifyPermission()
-              notify(notice, 'danger', true)
-            } else if (code === 'provider_permission_missing') notifyPermission()
-            else notify(code === 'provider_action_unsupported' ? texts.errors.provider_action_unsupported : texts.inbox.bulkUndoFailed(remaining), 'danger', code === 'provider_action_unsupported')
+            const remaining = group.length - restored.length - unsupported.size - retry.length - unconfirmed.length
+            const feedback = [
+              remaining > 0 && (unsupported.size || !['provider_permission_missing', 'provider_action_unsupported'].includes(code ?? ''))
+                ? texts.inbox.bulkUndoFailed(remaining) : '',
+              unsupported.size || code === 'provider_action_unsupported' ? texts.errors.provider_action_unsupported : '',
+              unconfirmed.length ? texts.inbox.providerRateUnconfirmed : '',
+            ].filter(Boolean)
+            if (code === 'provider_permission_missing') notifyPermission()
+            if (feedback.length) notify(feedback.join(' '), 'danger', !!unsupported.size || unconfirmed.length > 0)
           }
         } else if (result.data?.restored.includes(selected.actionId)) {
           restore(selected.changes, removes(selected.kind))
           if (!removes(selected.kind) && selected.previousRead !== undefined) client.setQueryData<MessageDetailOut>(['message', selected.messageId], data => data && { ...data, is_read: selected.previousRead! })
-        } else if (result.data?.skipped.includes(selected.actionId)) notify(texts.inbox.undoSkipped)
-        else if (result.data?.expired.includes(selected.actionId)) notify(texts.inbox.undoExpired)
-        else if (code === 'provider_permission_missing') notifyPermission()
-        else if (code === 'provider_action_unsupported') notify(texts.errors.provider_action_unsupported, 'danger', true)
-        else if (result.data?.failed.includes(selected.actionId)) notify(texts.inbox.undoFailed)
-        else notify(texts.inbox.undoUncertain)
-      } catch { notify(timedOut ? texts.inbox.undoTimeout : texts.inbox.undoUncertain) }
-      finally {
+        } else if (!retry.length) {
+          if (unconfirmed.length) notify(texts.inbox.providerRateUnconfirmed, 'danger', true)
+          else if (result.data?.skipped.includes(selected.actionId)) notify(texts.inbox.undoSkipped)
+          else if (result.data?.expired.includes(selected.actionId)) notify(texts.inbox.undoExpired)
+          else if (code === 'provider_permission_missing') notifyPermission()
+          else if (code === 'provider_action_unsupported') notify(texts.errors.provider_action_unsupported, 'danger', true)
+          else if (result.data?.failed.includes(selected.actionId)) notify(texts.inbox.undoFailed)
+          else notify(texts.inbox.undoUncertain)
+        }
+      } catch {
+        if (timedOut && manualRetry) notifyUndoRetry(selected, group, texts.inbox.undoTimeout)
+        else notify(timedOut ? texts.inbox.undoTimeout : texts.inbox.undoUncertain)
+      } finally {
         if (timeout !== undefined) clock.clearTimeout(timeout)
         publish(timedOut
           ? entriesRef.current.map(entry => entry.actionId === selected.actionId ? { ...entry, pending: false, deadline: clock.now() + 10_000 } : entry)
@@ -353,7 +423,7 @@ export function useMailActions({ clock = systemClock }: { clock?: Clock } = {}) 
     void work.finally(() => { for (const item of group) if (queues.current.get(item.messageId) === work) queues.current.delete(item.messageId); setQueueVersion(version => version + 1) })
     return work
   }
-  return { run, runBulk, undo, notify, notice, permissionNotice, dismissPermissionNotice, entries, checkCapacity, isBusy: (id: string) => queues.current.has(id), capacityAvailable: entries.filter(entry => entry.pending || entry.deadline > clock.now()).length + reserved < LIMIT }
+  return { run, runBulk, undo, notify, notice, retryNotices, dismissRetryNotice, permissionNotice, dismissPermissionNotice, entries, checkCapacity, isBusy: (id: string) => queues.current.has(id), capacityAvailable: entries.filter(entry => entry.pending || entry.deadline > clock.now()).length + reserved < LIMIT }
 }
 
 const MailActionsContext = createContext<ReturnType<typeof useMailActions> | null>(null)

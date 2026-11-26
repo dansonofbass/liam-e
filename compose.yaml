@@ -1,0 +1,133 @@
+# One-command local start: PostgreSQL, a one-time migration and seed, the API and the web dev
+# server, with the synthetic sample data from api.mail.dev_seed and without a Mistral account.
+#
+#   docker compose up --build --watch
+#
+# Then open http://localhost:3001. Needs Docker with BuildKit (the buildx plugin); the web image
+# does not build with Podman's buildah yet. Guide: docs/local-development.md.
+#
+# Network: every service joins the network namespace of `db`, like the containers of one pod, so
+# they all reach each other on loopback. That is what keeps the seed's database guard intact: it
+# accepts only localhost, 127.0.0.1 and ::1, and here the database really is on 127.0.0.1.
+# Postgres listens on that loopback only. The browser needs only the UI port 3001: it calls `/api`
+# on that same origin, and the Vite dev server proxies those requests to the API on 127.0.0.1:3000
+# (apps/web/vite-plugins/fastapi-tanstack-start.ts). Port 3000 is published too, for direct API
+# checks; both ports reach the host's loopback alone. .devcontainer/ reuses this file.
+#
+# Nothing here holds a secret. The database password is a disposable value for this local
+# instance, and no Mistral, OAuth or IMAP credential is passed in: the root `.env` is neither
+# read by these services nor copied into the images (.dockerignore).
+
+x-api: &api
+  build:
+    context: .
+    dockerfile: deploy/docker/Dockerfile.api
+    target: api-dev
+  network_mode: service:db
+  environment:
+    DATABASE_URL: postgresql+asyncpg://postgres:test-only@127.0.0.1:5432/liam_e_dev
+    # The sample accounts never reach a provider; without the worker they are not synced either.
+    MAIL_WORKER_ENABLED: "false"
+    MISTRAL_SECRETS_ENABLED: "false"
+    TELEMETRY_ENABLED: "false"
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.0-pg16@sha256:a132765ec351c65111b5b675928a3a0515a466a40f97277329db8b8209ad8bc9
+    environment:
+      POSTGRES_PASSWORD: test-only
+      POSTGRES_DB: liam_e_dev
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1"]
+    # The ports of the whole namespace are published here, on its owner: the API and the web UI.
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      # TCP on 127.0.0.1 answers only once the final server runs, not during the image's init.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "liam_e_dev"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Runs on every `up` and exits: `alembic upgrade heads`, then the seed. Both are idempotent; a
+  # repeated seed replaces only its own rows and their insight, sync and chat rows.
+  seed:
+    <<: *api
+    command:
+      - sh
+      - -c
+      - bash tools/db.sh migrate && bash tools/uv.sh run --no-sync python -m api.mail.dev_seed
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *api
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(urllib.request.urlopen('http://127.0.0.1:3000/api/health/live', timeout=5).status != 200)"
+      interval: 3s
+      timeout: 6s
+      retries: 40
+    # `--watch` copies edits into the container, where uvicorn reloads; a lockfile change rebuilds.
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/api/src
+          target: /app/apps/api/src
+        - action: sync
+          path: ./packages/py
+          target: /app/packages/py
+        - action: rebuild
+          path: ./uv.lock
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.web
+      target: dev
+    network_mode: service:db
+    environment:
+      # Empty: the UI calls the API same-origin, through the dev server's `/api` proxy. No second
+      # origin, so the API's CORS_ORIGIN does not matter here, whatever host serves the UI.
+      VITE_API_URL: ""
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 3s
+      timeout: 10s
+      retries: 60
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web/src
+          target: /app/apps/web/src
+        - action: sync
+          path: ./apps/web/public
+          target: /app/apps/web/public
+        - action: sync+restart
+          path: ./apps/web/vite.config.ts
+          target: /app/apps/web/vite.config.ts
+        - action: sync+restart
+          path: ./apps/web/vite-plugins
+          target: /app/apps/web/vite-plugins
+        - action: rebuild
+          path: ./bun.lock
+
+volumes:
+  db-data:
