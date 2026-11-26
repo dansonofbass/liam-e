@@ -33,7 +33,7 @@ def test_active_sync_job_without_sync_state(job_status):
     assert account_status(SimpleNamespace(), None, job) == AccountStatus("syncing", "", None)
 
 
-@pytest.mark.parametrize("job_status", ["done", "error"])
+@pytest.mark.parametrize("job_status", ["done", "failed"])
 def test_finished_sync_job_does_not_force_syncing(job_status):
     sync_state = SimpleNamespace(status="ok", last_error="", last_sync_at=None)
     job = SimpleNamespace(kind="sync", status=job_status)
