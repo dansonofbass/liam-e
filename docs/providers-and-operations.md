@@ -19,11 +19,12 @@ and other IMAP providers are available through “Anderer Anbieter” (UI text).
 | Fastmail through IMAP/SMTP | Presets for Fastmail's published domains, including `fastmail.com`, `fastmail.fm` and regional domains. Uses the shared IMAP/SMTP path. | Settings and domain list verified against official documentation; no live authentication or provider connectivity tested. |
 | Other IMAP/SMTP providers | The same IMAP/SMTP path with own allowed hosts. Different ports and SMTP STARTTLS are configurable through the API. Folder actions depend on identifiable system folders and server capabilities. | Check host approval, public DNS resolution, TLS, login and folder behavior with the respective provider. |
 
-Fastmail's 130 provider-owned domains are listed explicitly in the
+Fastmail's provider-owned domains are listed explicitly in the
 [provider registry](../apps/api/src/api/mail/providers.py), following its official
 [domain list](https://www.fastmail.help/hc/en-us/articles/6239365719055-What-domains-can-I-use-with-Fastmail).
-Custom domains and unlisted subdomains are not inferred; pass the server settings explicitly
-for those addresses. Only the two standard mail servers are added to the default host allowlist:
+Custom domains and unlisted subdomains are not inferred; explicit server settings for those
+addresses can be submitted through the API. Only the two standard mail servers are added to
+the default host allowlist:
 
 | Protocol | Server | Port | Encryption |
 | --- | --- | --- | --- |
@@ -31,7 +32,11 @@ for those addresses. Only the two standard mail servers are added to the default
 | SMTP | `smtp.fastmail.com` | 465 | Implicit TLS, not STARTTLS |
 
 These are Fastmail's [official server settings](https://www.fastmail.help/hc/en-us/articles/1500000278342-Server-names-and-ports).
-SMTP port 587 with STARTTLS remains available through explicit configuration; the preset uses 465.
+For SMTP port 587 with STARTTLS, submit `smtp_host`, `smtp_port` and `smtp_starttls` through
+the API; the web form does not expose port or STARTTLS fields. The preset uses port 465.
+Connect with the account's full Fastmail sign-up/login address: liam-e uses that address as
+the login username, and Fastmail does not accept aliases for authentication. A matching
+preset domain selects server settings; it does not make an alias a valid login address.
 External access requires an app-specific password, not the normal account password, and is
 unavailable on Basic plans. See [IMAP, POP, and SMTP](https://www.fastmail.help/hc/en-us/articles/1500000279921-IMAP-POP-and-SMTP).
 
