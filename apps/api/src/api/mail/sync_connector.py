@@ -172,12 +172,15 @@ class PendingLabelChecks:
         self.binding = binding
         self.by_thread: dict[str, set[str]] = {}
         self.uids: set[str] = set()
+        self.point_only_uids: set[str] = set()
         self.observed: dict[str, dict[str, list[str]]] = {}
         for target in self.targets.values():
             if target["binding"] == binding:
                 uid = target["provider_uid"]
                 self.by_thread.setdefault(target["thread_id"], set()).add(uid)
                 self.uids.add(uid)
+                if target.get("source") != mail_job.DEFERRED_SYNC_LABEL_CHECK:
+                    self.point_only_uids.add(uid)
 
     def results(self) -> list[LabelCheck]:
         return [
@@ -192,20 +195,25 @@ async def confirm_trash_conflicts(
     pending: PendingLabelChecks | None = None, defer_probes: bool = False,
 ) -> None:
     """Verify Trash conflicts and pending deliveries with one point read per thread."""
+    if defer_probes:
+        # The checkpoint may publish without a point read. Hold back conflicting rows and flags.
+        exclude_label_observations(changes, set(candidates))
+        return
     rows = {row["provider_uid"]: row for row in changes.upserts}
     by_thread: dict[str, set[str]] = {}
     uncertain = set()
     for uid, thread in candidates.items():
         by_thread.setdefault(rows.get(uid, {}).get("thread_id") or thread, set()).add(uid)
-    if pending is not None and not defer_probes:
+    if pending is not None:
         for thread in pending.by_thread:
             by_thread.setdefault(thread, set())
+    point_only = pending.point_only_uids if pending is not None else set()
     for thread, trash_uids in by_thread.items():
         pending_uids = pending.by_thread.get(thread, set()) if pending is not None else set()
         latest: dict[str, list[str]] = {}
-        # Leave shared checks for the normal pass so the checkpoint can be verified first.
-        if thread and not (defer_probes and pending_uids):
-            latest = await _sync_thread_labels(account.provider, thread, trash_uids, pending_uids)
+        if thread:
+            latest = await _sync_thread_labels(
+                account.provider, thread, trash_uids, pending_uids, point_only_uids=pending_uids & point_only)
             if pending is not None and pending_uids:
                 pending.observed[thread] = latest
         for uid in trash_uids:
@@ -223,7 +231,7 @@ async def confirm_trash_conflicts(
 
 
 async def _sync_thread_labels(
-    provider: str, thread: str, trash_uids: set[str], pending_uids: set[str],
+    provider: str, thread: str, trash_uids: set[str], pending_uids: set[str], *, point_only_uids: set[str],
 ) -> dict[str, list[str]]:
     uids = trash_uids | pending_uids
     point_labels: dict[str, list[str]] | None = None
@@ -234,14 +242,14 @@ async def _sync_thread_labels(
             point_labels = observed.copy()
 
     try:
-        return await connectors.thread_labels(provider, thread, uids, point_only_uids=pending_uids,
+        return await connectors.thread_labels(provider, thread, uids, point_only_uids=point_only_uids,
             on_read=remember_point if pending_uids else None)
     except httpx.HTTPStatusError as error:
         status = error.response.status_code
         if status == 404:
             if point_labels is None:  # The MINIMAL read itself confirmed the thread is gone.
                 return dict.fromkeys(uids, [])
-            return dict.fromkeys(trash_uids, []) | point_labels
+            return dict.fromkeys(uids - point_only_uids, []) | point_labels
         if status in (401, 403) or (trash_uids and status not in (400, 410, 422)):
             raise
     except json.JSONDecodeError:
@@ -253,11 +261,10 @@ async def _sync_thread_labels(
     return point_labels or {}
 
 
-def protect_pending_label_checks(changes: SyncChanges, uids: set[str]) -> None:
+def exclude_label_observations(changes: SyncChanges, uids: set[str]) -> None:
+    """Hold back deliveries whose folder and flags require a point read."""
     if not uids:
         return
-    # A stale page cannot replace an indexed delivery or trigger rules for it while
-    # a pending point read owns its folder and flags.
     changes.upserts = [row for row in changes.upserts if row["provider_uid"] not in uids]
     changes.moved_out = [uid for uid in changes.moved_out if uid not in uids]
     changes.confirmed_inbox.difference_update(uids)
