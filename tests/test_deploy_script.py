@@ -14,6 +14,7 @@ import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -33,6 +34,8 @@ call="$FAKE_MISTRAL_LOG/$(find "$FAKE_MISTRAL_LOG" -mindepth 1 -maxdepth 1 | wc 
 mkdir -p "$call"
 printf '%s\\n' "$@" >"$call/args"
 pwd >"$call/cwd"
+printf '%s\\n' "${TMPDIR:-/tmp}" >"$call/tmpdir"
+python3 -c 'import os, stat; print(oct(stat.S_IMODE(os.stat(os.environ.get("TMPDIR", "/tmp")).st_mode)))' >"$call/tmpmode"
 if [ "$1 ${2:-}" = "apps list" ]; then
   printf '%s' "$FAKE_APPS_JSON"
 elif [ "$1" = deploy ]; then
@@ -79,6 +82,8 @@ class Repo:
             entry: dict[str, Any] = {
                 "args": (call / "args").read_text().splitlines(),
                 "cwd": (call / "cwd").read_text().strip(),
+                "tmpdir": Path((call / "tmpdir").read_text().strip()),
+                "tmpmode": (call / "tmpmode").read_text().strip(),
             }
             for name in ("files", "push"):
                 if (call / name).exists():
@@ -90,16 +95,16 @@ class Repo:
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> Repo:
-    home, tmpdir, log, fakebin = (tmp_path / name for name in ("home", "tmp", "log", "bin"))
+def repo(deploy_tmp_path: Path) -> Repo:
+    home, tmpdir, log, fakebin = (deploy_tmp_path / name for name in ("home", "tmp", "log", "bin"))
     for path in (home, tmpdir, fakebin):
         path.mkdir()
-    gitconfig = tmp_path / "gitconfig"
+    gitconfig = deploy_tmp_path / "gitconfig"
     gitconfig.write_text("[user]\n\tname = Test\n\temail = test@example.org\n[init]\n\tdefaultBranch = main\n")
     mistral = fakebin / "mistral"
     mistral.write_text(FAKE_MISTRAL)
     mistral.chmod(mistral.stat().st_mode | stat.S_IXUSR)
-    env = {key: value for key, value in os.environ.items() if not key.startswith(("GIT_", "LIAM_E_"))}
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("GIT_", "LIAM_E_")) and key != "XDG_CACHE_HOME"}
     env.update(
         HOME=str(home),
         TMPDIR=str(tmpdir),
@@ -109,12 +114,13 @@ def repo(tmp_path: Path) -> Repo:
         FAKE_MISTRAL_LOG=str(log),
         FAKE_APPS_JSON=json.dumps({"apps": [{"id": APP, "name": "liam-e"}]}),
     )
-    origin, work = tmp_path / "origin.git", tmp_path / "work"
+    origin, work = deploy_tmp_path / "origin.git", deploy_tmp_path / "work"
     subprocess.run(["git", "init", "--quiet", "--bare", str(origin)], env=env, check=True)
     subprocess.run(["git", "clone", "--quiet", str(origin), str(work)], env=env, check=True, capture_output=True)
     repo = Repo(work=work, origin=origin, tmpdir=tmpdir, log=log, env=env)
     (work / "tools").mkdir()
     shutil.copy(SCRIPT, work / "tools" / "deploy.sh")
+    shutil.copy(ROOT / "tools" / "deploy_temp.py", work / "tools" / "deploy_temp.py")
     (work / "mistral.json").write_text(json.dumps(MANIFEST, indent=2) + "\n")
     (work / ".gitignore").write_text(".env\n/mistral.deployment.json\n")
     repo.git("add", ".")
@@ -125,6 +131,29 @@ def repo(tmp_path: Path) -> Repo:
     return repo
 
 
+def test_deploy_fixture_skips_a_noexec_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    noexec = getattr(os, "ST_NOEXEC", None)
+    if noexec is None:
+        pytest.skip("mount execution flags are unavailable")
+    (tmp_path / ".git").mkdir()
+    noexec_mount = Path("/var/tmp").resolve()
+    statvfs = os.statvfs
+
+    def with_noexec(path: Path) -> SimpleNamespace:
+        flags = statvfs(path).f_flag
+        if Path(path).resolve().is_relative_to(noexec_mount):
+            flags |= noexec
+        return SimpleNamespace(f_flag=flags)
+
+    monkeypatch.setattr(os, "statvfs", with_noexec)
+    base = request.getfixturevalue("deploy_tmp_path")
+
+    assert not (os.statvfs(base).f_flag & noexec)
+
+
+@pytest.mark.parametrize("deploy_tmp_path", [False, True], indirect=True, ids=["normal", "ancestor-git"])
 def test_deploys_a_clean_copy_of_the_commit_without_yes(repo: Repo) -> None:
     sha = repo.git("rev-parse", "HEAD")
     manifest_before = (repo.work / "mistral.json").read_text()
@@ -141,13 +170,46 @@ def test_deploys_a_clean_copy_of_the_commit_without_yes(repo: Repo) -> None:
     assert not copy.exists() and list(repo.tmpdir.iterdir()) == []
     assert deploy["manifest"] == {**MANIFEST, "deployment": IDS}
     assert list(deploy["manifest"]) == ["schemaVersion", "kind", "name", "deployment", "modules"]
-    assert deploy["files"] == ["./.gitignore", "./mistral.json", "./tools/deploy.sh"]
+    assert deploy["files"] == ["./.gitignore", "./mistral.json", "./tools/deploy.sh", "./tools/deploy_temp.py"]
     assert deploy["push"] == ["refused"]
     assert repo.git("ls-remote", str(repo.origin)).count("refs/heads/") == 1
     assert (repo.work / "mistral.json").read_text() == manifest_before
     assert repo.git("status", "--porcelain") == ""
     for value in IDS.values():
         assert value not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("deploy_tmp_path", [False, True], indirect=True, ids=["normal", "ancestor-git"])
+def test_unset_tmpdir_uses_private_cache_removed_after_deploy(repo: Repo) -> None:
+    del repo.env["TMPDIR"]
+
+    result = repo.deploy(repo.git("rev-parse", "HEAD"))
+
+    assert result.returncode == 0, result.stderr
+    listing, deploy = repo.calls()
+    staging = deploy["tmpdir"]
+    assert staging.parent == Path(repo.env["HOME"]) / ".cache" / "liam-e"
+    assert listing["tmpdir"] == staging and listing["tmpmode"] == deploy["tmpmode"] == "0o700"
+    assert Path(deploy["cwd"]).parent == staging
+    assert not staging.exists()
+
+
+def test_git_above_explicit_tmpdir_stops_before_the_cli(repo: Repo) -> None:
+    outer = repo.tmpdir / "outer"
+    requested = outer / "nested"
+    requested.mkdir(parents=True)
+    marker = outer / ".git"
+    marker.mkdir()
+    repo.env["TMPDIR"] = str(requested)
+
+    result = repo.deploy(repo.git("rev-parse", "HEAD"))
+
+    assert result.returncode == 1
+    assert "a .git sits in a parent directory" in result.stderr and "TMPDIR" in result.stderr
+    assert str(requested) not in result.stderr
+    assert repo.calls() == []
+    assert list(requested.iterdir()) == []
+    assert marker.is_dir()
 
 
 def test_missing_deployment_file_stops_before_the_cli(repo: Repo) -> None:

@@ -128,6 +128,11 @@ In the Studio probe on 13.11.2026 the same process was still running at the end 
    ```
 
    Without that file the script stops, because a deploy without the block creates a new app.
+   Disk deploy and probe staging uses a private directory under `$XDG_CACHE_HOME/liam-e`
+   (default `$HOME/.cache/liam-e`) or an explicit `TMPDIR`. The CLI receives the private
+   directory as its own `TMPDIR` and the wrapper removes it on exit. A `.git` entry anywhere
+   above the staging directory stops the deploy before any CLI request. Allocate staging
+   for a sandboxed release preflight before launching the sandbox, as shown below.
    It clones the commit into a temporary directory outside the working tree (tracked files
    only, so no `.env`), writes the block into that copy's `mistral.json`, checks with
    `mistral apps list` that the app exists and runs `mistral deploy --from-disk` there without
@@ -151,3 +156,60 @@ Studio provides the app and its API. Releasing operations as MCP tools is a sepa
 The full OpenAPI also includes operations that perform actions. For HTTP connectors follow
 the read-only allowlist in the [agent rules](../AGENTS.md#security) and the
 [MCP inventory](../apps/api/tests/test_mcp_exposure.py).
+
+### Sandboxed release preflight
+
+Define this function in a Bash shell outside the sandbox. Start in the release checkout at
+the revision to check, with a home directory outside the shared system temporary directory.
+The helper checks the staging ancestry and creates a `0700` directory under
+`$HOME/.cache/liam-e`. The function sets `TMPDIR` before it creates the checkout or starts
+the sandbox launcher, and removes the staging directory when the launcher exits.
+
+```bash
+sandboxed_release_preflight() (
+  staging="$(env -u TMPDIR -u XDG_CACHE_HOME python3 -I tools/deploy_temp.py liam-e-preflight)" || exit
+  trap 'rm -rf -- "$staging"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  export TMPDIR="$staging"
+  git clone --quiet --no-local -- . "$TMPDIR/checkout" || exit
+  cd -- "$TMPDIR/checkout" || exit
+  "$@"
+)
+```
+
+Pass your sandbox launcher and its arguments to `sandboxed_release_preflight`. Run the
+launcher in the foreground. If it sets its own working directory or environment, give it
+the current checkout and a temporary directory writable inside the sandbox.
+
+On Linux, `sandbox_workspace_write.exclude_slash_tmp=true` removes the host `/tmp` from
+Codex's default writable roots. Codex 0.149.0 can still mount a protected `.git` at an
+exported `TMPDIR` that it treats as a writable root. The staging helper rejects that
+marker. [Codex configuration reference](https://developers.openai.com/codex/config-reference/),
+[Codex writable-root selection](https://github.com/openai/codex/blob/rust-v0.149.0/codex-rs/protocol/src/permissions.rs),
+[Linux metadata mounts](https://github.com/openai/codex/blob/rust-v0.149.0/codex-rs/linux-sandbox/src/bwrap.rs).
+
+Use a private, marker-free guest `/tmp` for the Gitless staging check. This Linux example
+uses Bubblewrap, system Bash and Python 3, and requires permission to create namespaces.
+It mounts the checkout read-only, isolates the network, and verifies that the helper
+creates a `0700` directory inside the guest `TMPDIR`.
+
+```bash
+gitless_staging_check() {
+  bwrap --unshare-all --die-with-parent --clearenv \
+    --ro-bind /usr /usr --ro-bind /bin /bin --ro-bind /lib /lib \
+    --ro-bind-try /lib64 /lib64 --dev /dev \
+    --ro-bind "$PWD" /checkout --tmpfs /tmp --setenv TMPDIR /tmp \
+    --chdir /checkout /bin/bash -eu -c '
+      test ! -e "$TMPDIR/.git"
+      stage="$(/usr/bin/python3 -I tools/deploy_temp.py liam-e-preflight-check)"
+      test -d "$stage"
+      test "$(/usr/bin/stat -c %a "$stage")" = 700
+      printf "Gitless staging check passed.\n"
+    '
+}
+sandboxed_release_preflight gitless_staging_check
+```
+
+The guest `/tmp` disappears with the sandbox. The outer function removes its checkout
+after the launcher exits.
