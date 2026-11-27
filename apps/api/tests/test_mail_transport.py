@@ -48,6 +48,7 @@ async def test_sync_ignores_stored_false(monkeypatch, fake_store):
 async def test_sync_stores_missing_workspace_secret(monkeypatch, fake_store):
     account = await fake_store.create_account(provider="imap", auth_type="imap_password", email_address="me@gmail.com")
     monkeypatch.setattr(service, "load_credentials", AsyncMock(return_value={"imap_host": "imap.gmail.com", "password_secret": "gmail-app-password"}))
+    monkeypatch.setattr(transport, "resolve_public", AsyncMock(return_value=["8.8.8.8"]))
     monkeypatch.setattr(service, "imap_password", AsyncMock(side_effect=secrets.WorkspaceSecretNotFoundError("missing")))
     result = await sync.sync_account(account.id)
     assert result.error_code == "secret_not_found"
