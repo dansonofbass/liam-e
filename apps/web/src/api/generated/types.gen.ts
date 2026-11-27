@@ -235,6 +235,44 @@ export type AccountsResult = {
 };
 
 /**
+ * AgentAccessEnable
+ *
+ * Turning access on; the owner scope and identity are not part of the contract.
+ */
+export type AgentAccessEnable = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+};
+
+/**
+ * AgentAccessOut
+ */
+export type AgentAccessOut = {
+    /**
+     * Changed At
+     */
+    changed_at: string | null;
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Owner Bound
+     */
+    owner_bound: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Verifier Configured
+     */
+    verifier_configured: boolean;
+};
+
+/**
  * ApplyIn
  */
 export type ApplyIn = {
@@ -5133,7 +5171,7 @@ export type LiamMailAccountsErrors = {
      */
     401: ReadError;
     /**
-     * Insufficient account scope
+     * Outside agent access disabled (agent_access_disabled) or insufficient account scope
      */
     403: ReadError;
     /**
@@ -5144,6 +5182,10 @@ export type LiamMailAccountsErrors = {
      * Invalid parameters
      */
     422: ReadError;
+    /**
+     * Outside agent access state unavailable (agent_access_unavailable)
+     */
+    503: ReadError;
 };
 
 export type LiamMailAccountsError = LiamMailAccountsErrors[keyof LiamMailAccountsErrors];
@@ -5187,7 +5229,7 @@ export type LiamMailSearchErrors = {
      */
     401: ReadError;
     /**
-     * Insufficient account scope
+     * Outside agent access disabled (agent_access_disabled) or insufficient account scope
      */
     403: ReadError;
     /**
@@ -5198,6 +5240,10 @@ export type LiamMailSearchErrors = {
      * Invalid parameters
      */
     422: ReadError;
+    /**
+     * Outside agent access state unavailable (agent_access_unavailable)
+     */
+    503: ReadError;
 };
 
 export type LiamMailSearchError = LiamMailSearchErrors[keyof LiamMailSearchErrors];
@@ -5229,7 +5275,7 @@ export type LiamMailReadErrors = {
      */
     401: ReadError;
     /**
-     * Insufficient account scope
+     * Outside agent access disabled (agent_access_disabled) or insufficient account scope
      */
     403: ReadError;
     /**
@@ -5240,6 +5286,10 @@ export type LiamMailReadErrors = {
      * Invalid parameters
      */
     422: ReadError;
+    /**
+     * Outside agent access state unavailable (agent_access_unavailable)
+     */
+    503: ReadError;
 };
 
 export type LiamMailReadError = LiamMailReadErrors[keyof LiamMailReadErrors];
@@ -5271,7 +5321,7 @@ export type LiamMailSummaryErrors = {
      */
     401: ReadError;
     /**
-     * Insufficient account scope
+     * Outside agent access disabled (agent_access_disabled) or insufficient account scope
      */
     403: ReadError;
     /**
@@ -5282,6 +5332,10 @@ export type LiamMailSummaryErrors = {
      * Invalid parameters
      */
     422: ReadError;
+    /**
+     * Outside agent access state unavailable (agent_access_unavailable)
+     */
+    503: ReadError;
 };
 
 export type LiamMailSummaryError = LiamMailSummaryErrors[keyof LiamMailSummaryErrors];
@@ -7908,6 +7962,87 @@ export type SettingsUpdateResponses = {
 };
 
 export type SettingsUpdateResponse = SettingsUpdateResponses[keyof SettingsUpdateResponses];
+
+export type AgentAccessGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/agent-access';
+};
+
+export type AgentAccessGetErrors = {
+    /**
+     * The switch cannot be read or changed; outside access stays refused
+     */
+    503: unknown;
+};
+
+export type AgentAccessGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentAccessOut;
+};
+
+export type AgentAccessGetResponse = AgentAccessGetResponses[keyof AgentAccessGetResponses];
+
+export type AgentAccessDisableData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/agent-access/disable';
+};
+
+export type AgentAccessDisableErrors = {
+    /**
+     * The switch cannot be read or changed; outside access stays refused
+     */
+    503: unknown;
+};
+
+export type AgentAccessDisableResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentAccessOut;
+};
+
+export type AgentAccessDisableResponse = AgentAccessDisableResponses[keyof AgentAccessDisableResponses];
+
+export type AgentAccessEnableData = {
+    body: AgentAccessEnable;
+    path?: never;
+    query?: never;
+    url: '/api/v1/settings/agent-access/enable';
+};
+
+export type AgentAccessEnableErrors = {
+    /**
+     * Not the bound owner's own browser session
+     */
+    403: unknown;
+    /**
+     * No owner binding, or the expected revision is stale
+     */
+    409: unknown;
+    /**
+     * Invalid body; the rejected payload is not echoed
+     */
+    422: unknown;
+    /**
+     * The switch cannot be read or changed; outside access stays refused
+     */
+    503: unknown;
+};
+
+export type AgentAccessEnableResponses = {
+    /**
+     * Successful Response
+     */
+    200: AgentAccessOut;
+};
+
+export type AgentAccessEnableResponse = AgentAccessEnableResponses[keyof AgentAccessEnableResponses];
 
 export type CalendarSettingsGetData = {
     body?: never;
