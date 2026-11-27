@@ -47,6 +47,44 @@ _OAUTH: dict[str, dict[str, str]] = {
     },
 }
 
+# Fastmail's documented servers and exact provider-owned domains.
+# https://www.fastmail.help/hc/en-us/articles/1500000278342-Server-names-and-ports
+# https://www.fastmail.help/hc/en-us/articles/6239365719055-What-domains-can-I-use-with-Fastmail
+_FASTMAIL: tuple[str, int, str, int, bool] = (
+    "imap.fastmail.com", 993, "smtp.fastmail.com", 465, False,
+)
+_FASTMAIL_DOMAINS = (
+    "123mail.org", "150mail.com", "150ml.com", "16mail.com", "2-mail.com",
+    "4email.net", "50mail.com", "airpost.net", "aliencamel.com", "allmail.net",
+    "cluemail.com", "elitemail.org", "emailcorner.net", "emailengine.net",
+    "emailengine.org", "emailgroups.net", "emailplus.org", "emailuser.net", "eml.cc",
+    "f-m.fm", "fast-email.com", "fast-mail.org", "fastem.com", "fastemailer.com",
+    "fastest.cc", "fastimap.com", "fastmail.ca", "fastmail.cn", "fastmail.com",
+    "fastmail.com.au", "fastmail.fm", "fastmail.im", "fastmail.in", "fastmail.jp",
+    "fastmail.mx", "fastmail.net", "fastmail.org", "fastmail.to", "fastmail.tw",
+    "fastmailbox.net", "fastmessaging.com", "fea.st", "fmailbox.com", "fmgirl.com",
+    "fmguy.com", "foobox.com", "foobox.net", "ftml.net", "hailmail.net",
+    "imap-mail.com", "imap.cc", "imapmail.org", "immerbox.com", "immermail.com",
+    "inoutbox.com", "internet-e-mail.com", "internet-mail.org", "internetemails.net",
+    "internetmailing.net", "jetemail.net", "justemail.net", "letterboxes.org",
+    "lifetimeaddress.com", "mail-central.com", "mail-page.com", "mailas.com",
+    "mailbolt.com", "mailc.net", "mailcan.com", "mailforce.net", "mailhaven.com",
+    "mailingaddress.org", "mailite.com", "mailmight.com", "mailnew.com",
+    "mailsent.net", "mailservice.ms", "mailup.net", "mailworks.org", "mailzone.com",
+    "ml1.net", "mm.st", "myfastmail.com", "mymacmail.com", "nospammail.net",
+    "onepost.net", "ownmail.net", "penguinmail.com", "permanentmail.com", "petml.com",
+    "pobox.com", "postinbox.com", "postpro.net", "proinbox.com", "promessage.com",
+    "realemail.net", "reallyfast.biz", "reallyfast.info", "rushpost.com", "sent.as",
+    "sent.at", "sent.com", "siemprebox.com", "siempremail.com", "speedpost.net",
+    "speedymail.org", "ssl-mail.com", "swift-mail.com", "the-fastest.net",
+    "the-quickest.com", "theinternetemail.com", "veribox.net", "veryfast.biz",
+    "veryspeedy.net", "warpmail.net", "xsmail.com", "yepmail.net", "your-mail.com",
+    "fastmail.co.uk", "fastmail.de", "fastmail.es", "fastmail.fr", "fastmail.nl",
+    "fastmail.se", "fastmail.uk", "fmail.co.uk", "bestmail.us", "fastemail.us",
+    "fastmail.us", "h-mail.us",
+)
+
+
 # mail domain -> (imap host, imap port, smtp host, smtp port, smtp starttls instead of implicit TLS)
 IMAP_PRESETS: dict[str, tuple[str, int, str, int, bool]] = {
     "gmail.com": ("imap.gmail.com", 993, "smtp.gmail.com", 465, False),
@@ -60,6 +98,7 @@ IMAP_PRESETS: dict[str, tuple[str, int, str, int, bool]] = {
     "outlook.com": ("outlook.office365.com", 993, "smtp.office365.com", 587, True),
     "hotmail.com": ("outlook.office365.com", 993, "smtp.office365.com", 587, True),
     "live.com": ("outlook.office365.com", 993, "smtp.office365.com", 587, True),
+    **dict.fromkeys(_FASTMAIL_DOMAINS, _FASTMAIL),
 }
 
 

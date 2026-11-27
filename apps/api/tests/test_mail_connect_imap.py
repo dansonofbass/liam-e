@@ -54,6 +54,27 @@ def test_connect_imap_stores_reference_only(setup, fake_store):
     assert "imap_use_ssl" not in payload
 
 
+def test_connect_fastmail_stores_preset_without_server_overrides(setup, fake_store, monkeypatch):
+    client, login, resolve = setup
+    monkeypatch.setattr(transport.mail_env, "mail_imap_allowed_hosts", "")
+
+    response = client.post("/accounts/imap", json={
+        "email_address": "me@fastmail.com", "password_secret": "fastmail-app-password",
+    })
+
+    assert response.status_code == 201
+    login.assert_awaited_once_with(
+        email_address="me@fastmail.com", password="test-password-value", host="imap.fastmail.com", port=993,
+    )
+    resolve.assert_awaited_once_with("fastmail-app-password")
+    payload = crypto.decrypt_payload(next(iter(fake_store.credentials.values())))
+    assert payload == {
+        "imap_host": "imap.fastmail.com", "imap_port": 993,
+        "smtp_host": "smtp.fastmail.com", "smtp_port": 465, "smtp_starttls": False,
+        "password_secret": "fastmail-app-password",
+    }
+
+
 @pytest.mark.anyio
 async def test_sync_refuses_stored_host_no_longer_allowed(setup, fake_store, monkeypatch):
     account = await fake_store.create_account(provider="imap", auth_type="imap_password", email_address="me@example.org")
